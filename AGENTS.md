@@ -29,6 +29,24 @@ fix: handle empty response from API
 docs: clarify setup steps in README
 ```
 
+## Testing
+
+- **TDD is mandatory.** Default to a test-first workflow: write a failing test,
+  watch it fail, write the minimal code to pass, then refactor.
+- **End-to-end client-side validation is a top priority.** Features must be
+  validated from the real user's perspective, not just at the unit level.
+- The Superpowers `test-driven-development` skill enforces unit-level
+  RED-GREEN-REFACTOR. It does **not** provide an e2e/browser harness — the e2e
+  stack (e.g. Playwright) is wired up separately and used to validate client flows.
+
+## Tooling & plugins
+
+- The [Superpowers](https://github.com/obra/superpowers) plugin is enabled at the
+  repo level via `.claude/settings.json` (`extraKnownMarketplaces` +
+  `enabledPlugins`), so cloning the repo makes the same skills available. If the
+  install prompt doesn't fire on folder trust, run:
+  `claude plugin install superpowers@superpowers-marketplace`.
+
 ## Branching & pull requests
 
 The `main` branch is protected: **direct pushes are blocked (even for admins)** and
