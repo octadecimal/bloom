@@ -16,15 +16,14 @@ comfyui/
     ai_slots_transparent.json      # FLUX-schnell + BiRefNet matting -> transparent RGBA
     ai_slots_dev_transparent.json  # FLUX-dev (premium) + BiRefNet matting -> transparent RGBA
   scripts/
-    run_api.bat                    # foreground launch (visible console)
-    start_comfyui.ps1              # hidden launch + file logging (paths via $PSScriptRoot)
-    start_comfyui_hidden.vbs       # no-flash wrapper for the scheduled task
+    run_api.bat                    # foreground launch (visible console), for manual runs
+    run_comfyui.pyw                # windowless launch + file logging (run by pythonw.exe)
     register_task.ps1              # register logon auto-start task (needs admin)
     make_fw_rule.ps1               # open the API port to the LAN (needs admin)
 ```
 
-The `scripts/` (except `run_api.bat`/`start_comfyui*`) are **machine-level** helpers; they're
-parameterized but still touch the Task Scheduler / firewall and require elevation.
+`register_task.ps1` and `make_fw_rule.ps1` are **machine-level** helpers; they're parameterized
+but touch the Task Scheduler / firewall and require elevation.
 
 ## Prerequisites
 
@@ -63,13 +62,14 @@ The API binds to `0.0.0.0:8188` with CORS enabled. **No authentication** — onl
 trusted network.
 
 - **Quick / visible:** copy `scripts\run_api.bat` into the portable root and run it.
-- **Background + logging:** copy `scripts\start_comfyui.ps1` into the portable root.
-- **Auto-start at logon (hidden):** copy `start_comfyui.ps1` + `start_comfyui_hidden.vbs` into
-  the portable root, then from an **elevated** shell:
+- **Auto-start at logon (hidden, with logging):** copy `scripts\run_comfyui.pyw` into the
+  portable root, then from an **elevated** shell:
   ```powershell
   .\register_task.ps1 -ComfyUIRoot "C:\path\to\ComfyUI_windows_portable"
   ```
-  Logon (not boot) is deliberate — CUDA needs an active user session.
+  The task runs `pythonw.exe run_comfyui.pyw` — `pythonw` is the windowless interpreter, so
+  there's no console window or flash at logon, and the launcher redirects output to
+  `comfyui-server.log`. Logon (not boot) is deliberate — CUDA needs an active user session.
 - **LAN access:** from an **elevated** shell, `.\make_fw_rule.ps1` opens TCP 8188 to the local subnet.
 
 Sanity check once running: `GET http://127.0.0.1:8188/system_stats`.
