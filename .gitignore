@@ -1,0 +1,9 @@
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
