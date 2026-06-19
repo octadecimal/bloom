@@ -74,6 +74,13 @@ gh pr merge --squash --delete-branch   # 0 approvals required; self-merge is OK
 - PRs require no approvals, so a solo author can self-merge once checks pass.
 - Force pushes and branch deletions on `main` are disabled.
 
+## Session hygiene
+
+- At **sub-project boundaries** — after a PR merges, or once a spec or plan is
+  committed — suggest the user run `/clear` so the next unit of work starts with a
+  clean context window. This matches the repo's spec → plan → build rhythm
+  (see `docs/superpowers/`).
+
 ## Environment notes
 
 - Tooling is Windows + PowerShell. `git` and `gh` (GitHub CLI) are installed via winget.
