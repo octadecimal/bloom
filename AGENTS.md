@@ -39,9 +39,13 @@ docs: clarify setup steps in README
   truth for desired client behavior.** They encode the behavioral contract: when
   prose and the suite disagree, the suite decides. Unit tests (TDD) cover the pure
   logic beneath; e2e covers observable behavior, exhaustively.
-- **e2e is currently NOT run in CI** — it is too time/money-expensive to gate every
-  PR. Run it locally (e.g. `just e2e`) until that calculus changes. This does not lower
-  its status as the source of truth; it only changes *where* it runs.
+- **CI cost policy (repo-wide):** expensive suites stay out of CI until the cost
+  calculus changes. **Browser e2e (Playwright) is NOT run in CI** — it is too
+  time/money-expensive to gate every PR; run it locally (e.g. `just e2e`). Cheaper
+  suites — unit tests and **non-browser e2e (e.g. a Python API/service suite)** — are
+  expected to be CI-affordable and SHOULD run in CI once a pipeline exists. Keeping a
+  suite out of CI does **not** lower its status as the source of truth; it only changes
+  *where* it runs.
 - The Superpowers `test-driven-development` skill enforces unit-level
   RED-GREEN-REFACTOR. It does **not** provide an e2e/browser harness — the e2e
   stack (Playwright) is wired up per client project and used to validate client flows.
