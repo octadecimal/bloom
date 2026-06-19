@@ -50,6 +50,7 @@ export function setupWorkbench() {
     onReady: (a: DockviewApi) => {
       api = a;
       layoutService.attach(a);
+      if (!import.meta.env.PROD) (window as unknown as { __wbApi?: unknown }).__wbApi = a;
     },
   };
 }

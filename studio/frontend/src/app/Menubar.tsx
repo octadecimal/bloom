@@ -12,7 +12,7 @@ export function AppMenubar() {
   return (
     <Menubar>
       <MenubarMenu>
-        <MenubarTrigger>File</MenubarTrigger>
+        <MenubarTrigger data-testid="menu-file">File</MenubarTrigger>
         <MenubarContent>
           <MenubarItem
             data-testid="menu-reset-layout"
