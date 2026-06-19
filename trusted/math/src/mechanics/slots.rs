@@ -56,4 +56,29 @@ mod tests {
             assert!(model.reels[i].contains(sym));
         }
     }
+
+    #[test]
+    fn same_seed_same_row_repeatably() {
+        let model = sample_model();
+        let first = expand(&model, 999);
+        for _ in 0..10_000 {
+            assert_eq!(expand(&model, 999), first);
+        }
+    }
+
+    #[test]
+    fn distribution_reflects_multiplicity() {
+        // A reel weighted 3:1 toward symbol 0 should land on 0 far more often.
+        let model = SlotModel {
+            reels: vec![vec![0, 0, 0, 1]],
+        };
+        let mut zeros = 0u32;
+        for seed in 0..10_000u64 {
+            if expand(&model, seed)[0] == 0 {
+                zeros += 1;
+            }
+        }
+        // Expected ~7500; assert a wide, deterministic-safe band.
+        assert!(zeros > 6500 && zeros < 8500, "zeros = {}", zeros);
+    }
 }
