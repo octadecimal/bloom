@@ -35,9 +35,13 @@ docs: clarify setup steps in README
   watch it fail, write the minimal code to pass, then refactor.
 - **End-to-end client-side validation is a top priority.** Features must be
   validated from the real user's perspective, not just at the unit level.
+- **Playwright e2e suites MUST be exhaustive and are the authoritative source of
+  truth for desired client behavior.** They encode the behavioral contract: when
+  prose and the suite disagree, the suite decides. Unit tests (TDD) cover the pure
+  logic beneath; e2e covers observable behavior, exhaustively.
 - The Superpowers `test-driven-development` skill enforces unit-level
   RED-GREEN-REFACTOR. It does **not** provide an e2e/browser harness — the e2e
-  stack (e.g. Playwright) is wired up separately and used to validate client flows.
+  stack (Playwright) is wired up per client project and used to validate client flows.
 
 ## Coding standards
 
