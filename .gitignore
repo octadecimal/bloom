@@ -1,9 +1,12 @@
-# Claude Code local settings (machine-specific)
-.claude/settings.local.json
+# Rust
+/target
+**/target
 
-# OS files
-Thumbs.db
-.DS_Store
+# Node / TypeScript (future)
+node_modules
+.nx/cache
 
-# Logs
-*.log
+# Python (future)
+__pycache__/
+.venv/
+*.pyc
