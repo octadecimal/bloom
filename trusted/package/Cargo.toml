@@ -1,0 +1,9 @@
+[package]
+name = "bloom-package"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["use-std"] }
+ed25519-dalek = "2"
