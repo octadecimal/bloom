@@ -31,9 +31,9 @@ two throwaway demo plugins. It contains **no real authoring features**.
 ## 2. Locked decisions
 
 1. **Stack:** React + TypeScript, **dockview-react** (docking surface), **shadcn/ui** +
-   **Tailwind** (components/styling), **hookstate** (state). Build tooling is **Nx** (React
-   app, Vite executor), honoring umbrella §12. The shadcn-in-Nx setup is handled explicitly
-   (see §11), not discovered.
+   **Tailwind v4** (CSS-first; components/styling), **hookstate** (state). Build tooling is
+   **Nx** (React app, Vite executor), honoring umbrella §12. The shadcn-in-Nx setup is handled
+   explicitly (see §11), not discovered.
 
 2. **Plugin model — hybrid: static now, dynamic-ready.** Plugins register from a static
    array today, but the `IPlugin` manifest + `IPluginHost` API are the **stable contract**
@@ -99,7 +99,7 @@ A layered workbench:
 
 ```
 studio/frontend/
-├─ project.json · vite.config.ts · tailwind.config.* · components.json (shadcn)
+├─ project.json · vite.config.ts · src/styles.css (Tailwind v4, CSS-first) · components.json (shadcn)
 ├─ playwright.config.ts · e2e/
 ├─ src/
 │  ├─ app/                 # workbench shell: chrome + dockview mount
@@ -188,14 +188,22 @@ before `init`). Commands are flat/always-enabled this slice (a `when`/`enablemen
 deferred and additive). Raw direct access to the root store is a discouraged escape hatch; the
 typed per-plugin hooks are the contract.
 
+**Module boundaries (no import cycle):** `host/` depends on `state/` (the host reads and seeds
+`rootStore`). `makePluginHooks` lives in `state/` and reaches the host singleton via **late
+binding**, never a static import back into `host/`.
+
+**Type seam:** the `as State<TState>` cast in `usePluginState` is the single, contained type
+assertion. A plugin declares `TState` once via `initialState: TState`; there is no pervasive
+`any`. A globally-typed plugin registry is deliberately avoided — it would fight the
+dynamic-plugin future.
+
 ---
 
 ## 5. State model
 
 ```ts
 interface IWorkspaceState {
-  theme: 'light' | 'dark';
-  activePaneId: string | null;        // lightweight focus hint; dockview OWNS layout
+  theme: 'light' | 'dark';            // dockview owns layout AND active-pane state
 }
 
 interface IRootState {
@@ -205,14 +213,14 @@ interface IRootState {
 
 // created once, at module scope — not in React, never in a Context
 export const rootStore = hookstate<IRootState>({
-  workspace: { theme: 'dark', activePaneId: null },
+  workspace: { theme: 'dark' },
   plugins: {},
 });
 ```
 
 **Ownership boundaries (no double sources of truth):**
 - **dockview** owns the layout tree → serialized by the layout service, not mirrored here.
-- **`workspace`** owns cross-cutting shell state only (theme, active-pane hint).
+- **`workspace`** owns cross-cutting shell state only (theme). Active-pane state stays in dockview.
 - **`plugins[id]`** owns each plugin's data; seeded from `IPlugin.initialState`; reached only
   through that plugin's typed `usePluginState()`.
 
@@ -222,13 +230,16 @@ actually read. Never call `useHookstate` on a broad parent node inside a pane.
 access-tracking re-renders that component only when that leaf changes.
 
 **Persistence (this slice):**
-- `workspace.theme` → localStorage.
-- dockview layout → localStorage via the layout service, as `{ version, layout }`, with
-  fallback-to-default on parse error / version mismatch.
-- Plugin slices: only those with `persist: true` are persisted (same `{ version, blob }` +
-  fallback codec). This is **UI-preference** persistence. `demo-counter` opts in (count
-  survives reload); `demo-scratch` is ephemeral. Authoring-document persistence is **out of
-  scope** here and is a separate backend-bound mechanism.
+- **Keys** are namespaced: `bloom.studio.workspace` (theme) and `bloom.studio.<pluginId>`
+  (opted-in slices). Each value is `{ version, data }`; one `version` constant per codec.
+- **Writes** are debounced subscriptions to the relevant hookstate node (plain values
+  extracted via `.get()`), so rapid edits coalesce.
+- `workspace.theme` and opted-in plugin slices **hydrate at boot**; parse error / version
+  mismatch on any key → discard that key, fall back to default / `initialState`. Never crash.
+- Only `persist: true` slices persist. This is **UI-preference** persistence. `demo-counter`
+  opts in (count survives reload); `demo-scratch` is ephemeral. **Authoring-document
+  persistence is out of scope** here — a separate, deferred, backend-bound mechanism.
+- dockview layout persists via the layout service (see §6).
 
 ---
 
@@ -242,6 +253,9 @@ The pane registry **is** dockview's component map (one source):
   onReady={(event) => layoutService.attach(event.api)}
 />
 ```
+
+`asComponentMap()` must return a **stable reference** (memoized once) — a fresh object each
+render makes dockview re-instantiate panels.
 
 **`openPane(paneId)` — strict-singleton:**
 ```ts
@@ -259,9 +273,10 @@ typed hooks, so dockview params and the store never compete.
   `api.fromJSON(layout)`; else apply `DEFAULT_LAYOUT`.
 - **On change:** `api.onDidLayoutChange` → debounce → persist `{ version, layout: api.toJSON() }`.
 - **`resetLayout()`:** clear the key, re-apply `DEFAULT_LAYOUT`.
-- **Validation:** restored panel ids are validated against the live pane registry; unknown
-  panels are dropped; if the result is empty → `DEFAULT_LAYOUT`. Any parse error / version
-  mismatch → `DEFAULT_LAYOUT`. Never crash.
+- **Validation (validate-or-default):** all restored panel ids are checked against the live
+  pane registry; if every id is known → restore; if **any** is unknown (or on parse error /
+  version mismatch) → fall back to `DEFAULT_LAYOUT` and log the dropped ids. We do **not**
+  surgically edit dockview's serialized tree. Never crash.
 
 `DEFAULT_LAYOUT` for this slice: the demo panes arranged in a sensible default grouping.
 
@@ -277,14 +292,18 @@ All shadcn + Tailwind, all reading/writing hookstate (no Context):
 - **View menu:** generated from `host.listPanes()`; each entry calls `host.openPane(paneId)`
   (singleton focus). Plus "Reset layout."
 - **Theme toggle:** flips `rootStore.workspace.theme`; a single module-scope effect subscribes
-  to that leaf and toggles the `.dark` class on `<html>`. **No `ThemeProvider`, no
-  `next-themes`.**
+  to that leaf and (a) toggles the `.dark` class on `<html>` for shadcn/Tailwind, and (b) swaps
+  dockview's theme class (`dockview-theme-dark` / `dockview-theme-light`) on the dock container
+  so the docking surface follows. **No `ThemeProvider`, no `next-themes`.**
 
 ```ts
-function useApplyTheme() {
+function useApplyTheme(dockEl: HTMLElement) {
   const theme = useHookstate(rootStore.workspace.theme);
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme.get() === 'dark');
+    const dark = theme.get() === 'dark';
+    document.documentElement.classList.toggle('dark', dark);          // shadcn / Tailwind
+    dockEl.classList.toggle('dockview-theme-dark', dark);             // dockview surface
+    dockEl.classList.toggle('dockview-theme-light', !dark);
   }, [theme.get()]);
 }
 ```
@@ -315,6 +334,9 @@ Isolation so nothing kills the shell:
 - **Plugin `init` throws** → log, skip that plugin (its panes/commands don't register); the
   workbench still boots. One bad plugin can't take down the workbench (also the dynamic-unload
   safety net).
+- **A pane throws during render** → a per-pane **React error boundary** (class component, not
+  Context) catches it and shows a fallback inside that pane; the rest of the workbench is
+  unaffected. The render-time analog of plugin-`init` isolation.
 - **Restored layout references an unknown pane** → drop it (validated against the registry);
   empty result → `DEFAULT_LAYOUT`.
 - **Corrupt/incompatible persisted blob** (layout or plugin slice) → version mismatch / parse
@@ -333,8 +355,12 @@ scoping.
 
 **e2e (Playwright — exhaustive, source of truth).** This slice **wires Playwright** (config,
 dev-server fixture, `data-testid` conventions, a render-counter test hook exposed only in test
-builds). Native dockview drag/drop is driven via stable `data-testid`s + dockview's API, not
-raw mouse simulation. Coverage matrix:
+builds). Most docking assertions are driven via dockview's API (stable); **one real
+simulated-drag smoke test** (via `data-testid`s) honors user-perspective validation, isolated
+so its flakiness can't destabilize the suite. Playwright runs locally via **justfile** targets
+(`just e2e`); **CI/PR gating is deferred** — the repo has no CI yet, and e2e is currently too
+time/money-expensive to run per-PR. The suite is still the behavioral source of truth; it is
+just run locally for now. Coverage matrix:
 
 | # | Behavior asserted |
 |---|---|
@@ -344,18 +370,22 @@ raw mouse simulation. Coverage matrix:
 | 4 | View menu lists panes; open; re-open focuses, no duplicate (singleton) |
 | 5 | Counter increments; MirrorPane reflects; reload → count persists |
 | 6 | Scratch text entered; reload → text gone (ephemeral) |
-| 7 | Dock interactions: drag/split/move; close pane; reopen via View menu |
+| 7 | Dock interactions via dockview API (move/split/close) + reopen via View menu; **plus one real simulated-drag smoke test** |
 | 8 | Rearrange → reload → layout restored; Reset layout → default |
 | 9 | Corrupt localStorage layout → falls back to default, no crash |
 | 10 | Increment counter → only CounterPane + MirrorPane re-render; ScratchPane + menubar do not (render-counter assertion) |
+| 11 | A plugin whose `init` throws is skipped; the workbench still boots |
+| 12 | Corrupt persisted plugin-slice blob → falls back to `initialState`, no crash |
+| 13 | Unknown command id is a no-op (warn); no crash |
 
 ---
 
 ## 11. Build slice (this round's deliverable)
 
-1. **Nx workspace** with `studio/frontend` as an Nx React app (Vite executor); Tailwind +
-   **shadcn/ui** wired (the Nx-shadcn setup handled explicitly: `components.json`, path aliases,
-   the `cn` util).
+1. **Nx workspace** with `studio/frontend` as an Nx React app (Vite executor); **Tailwind v4
+   (CSS-first)** + **shadcn/ui** wired (the Nx-shadcn setup handled explicitly: `components.json`,
+   path aliases, the `cn` util). Nx is added at the repo root alongside the existing **Cargo
+   workspace** without disturbing it (Rust stays out of Nx).
 2. **State layer:** `rootStore`, `makePluginHooks`, the persistence codec (`{ version, blob }`
    + fallback), `useApplyTheme`.
 3. **Host layer:** `IPluginHost`, pane + command registries, the layout service (restore /
@@ -363,8 +393,11 @@ raw mouse simulation. Coverage matrix:
 4. **dockview** mounted; `openPane` singleton semantics; `DEFAULT_LAYOUT`.
 5. **Chrome:** menu bar, command palette (⌘/Ctrl-K), View menu, theme toggle — all shadcn.
 6. **Plugin registry** + the two demo plugins.
-7. **Playwright** wired and the full coverage matrix (§10) implemented; unit tests for the
-   pure logic.
+7. **Playwright** wired and the full coverage matrix (§10) implemented; unit tests (Vitest) for
+   the pure logic. Run via **justfile** targets (`just e2e`, `just test`); **no GitHub Actions**
+   this slice.
+8. **Cross-cutting robustness:** per-pane **React error boundaries**, dockview **theme-class
+   sync**, and the persistence **key scheme** + debounced writes.
 
 ---
 
@@ -379,6 +412,8 @@ raw mouse simulation. Coverage matrix:
 - **Command enablement (`when`) predicates** — flat/always-enabled now.
 - **The studio backend and simulator** — their own sub-projects; this slice mocks all data.
 - **Nx as cross-language orchestrator** — Nx owns the TS layer only (umbrella §13).
+- **CI / PR gating (GitHub Actions)** — deferred; e2e is currently too time/money-expensive to
+  run in CI, so Playwright runs locally via the justfile until that calculus changes.
 
 ---
 
