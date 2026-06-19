@@ -18,7 +18,7 @@ export function createHost(deps: IHostDeps): IPluginHost {
       if (!api) return;
       const existing = api.getPanel(paneId);
       if (existing) { existing.api.setActive(); return; }
-      api.addPanel({ id: paneId, component: paneId, params: { paneId } });
+      api.addPanel({ id: paneId, component: paneId, title: deps.paneRegistry.get(paneId)?.title ?? paneId, params: { paneId } });
     },
     runCommand(commandId) {
       const cmd = deps.commandRegistry.get(commandId);

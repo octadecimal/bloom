@@ -9,9 +9,19 @@ import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persist
 import { PLUGINS } from '../plugins';
 import type { DockviewApi } from 'dockview-react';
 
-function DEFAULT_LAYOUT(api: DockviewApi): void {
+function DEFAULT_LAYOUT(
+  api: DockviewApi,
+  paneRegistry: { get(id: string): { title?: string } | undefined },
+): void {
   const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
-    if (!api.getPanel(id)) api.addPanel({ id, component: id, params: { paneId: id }, position: ref });
+    if (!api.getPanel(id))
+      api.addPanel({
+        id,
+        component: id,
+        title: paneRegistry.get(id)?.title ?? id,
+        params: { paneId: id },
+        position: ref,
+      });
   };
   add('demo-counter/editor');
   add('demo-counter/mirror', { direction: 'right', referencePanel: 'demo-counter/editor' });
@@ -25,7 +35,7 @@ export function setupWorkbench() {
 
   const layoutService = createLayoutService({
     paneRegistry,
-    defaultLayout: (a) => DEFAULT_LAYOUT(a),
+    defaultLayout: (a) => DEFAULT_LAYOUT(a, paneRegistry),
   });
 
   const host = createHost({
@@ -34,7 +44,7 @@ export function setupWorkbench() {
     getApi: () => api,
     resetLayout: () => {
       layoutService.reset();
-      if (api) DEFAULT_LAYOUT(api);
+      if (api) DEFAULT_LAYOUT(api, paneRegistry);
     },
   });
 

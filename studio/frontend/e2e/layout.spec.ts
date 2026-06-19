@@ -34,9 +34,8 @@ test('a corrupt saved layout falls back to default without crashing (row 9)', as
 
 test('real drag smoke: a tab can be dragged to a new group (row 7)', async ({ page }) => {
   await page.goto('/');
-  // Dockview renders the panel ID as the tab label when no title is passed to addPanel.
-  // Use the dockview tab element; fall back to a broad text match.
-  const source = page.locator('.dv-tab', { hasText: 'demo-scratch/main' }).first();
+  // Dockview now renders the human title from IPaneDef.title.
+  const source = page.locator('.dv-tab', { hasText: 'Scratch' }).first();
   const target = page.getByTestId('counter-pane');
   // Best-effort drag — dockview HTML5 drag behaviour varies; the assertion is
   // a no-crash / presence check: scratch-pane must still be in the DOM.
