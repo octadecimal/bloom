@@ -5,8 +5,12 @@
   "scripts": {},
   "private": true,
   "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.21.0",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@nx/devkit": "23.0.0",
@@ -17,6 +21,7 @@
     "@nx/web": "23.0.0",
     "@playwright/test": "^1.37.0",
     "@swc/helpers": "~0.5.18",
+    "@tailwindcss/vite": "^4.3.1",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
@@ -24,6 +29,7 @@
     "jiti": "2.4.2",
     "nx": "23.0.0",
     "prettier": "~3.6.2",
+    "tailwindcss": "^4.3.1",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "vite": "^8.0.0"
