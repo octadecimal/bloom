@@ -11,11 +11,11 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/studio/frontend',
   server:{
     port: 4200,
-    host: 'localhost',
+    host: '0.0.0.0',
   },
   preview:{
     port: 4200,
-    host: 'localhost',
+    host: '0.0.0.0',
   },
   plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
   resolve: {
