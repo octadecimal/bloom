@@ -10,3 +10,9 @@ node_modules
 __pycache__/
 .venv/
 *.pyc
+
+# Editor / OS / local
+.claude/settings.local.json
+Thumbs.db
+.DS_Store
+*.log
