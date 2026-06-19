@@ -9,6 +9,19 @@
   --primary: oklch(0.55 0.2 264);
   --primary-foreground: oklch(0.98 0 0);
   --border: oklch(0.9 0 0);
+  /* popover — same as background in light mode */
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+  /* muted — slightly off-white for subtle backgrounds */
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  /* accent — slightly off-white for hover/focus states */
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: oklch(0.15 0 0);
+  /* ring — matches primary */
+  --ring: oklch(0.55 0.2 264);
+  /* input — same as border */
+  --input: oklch(0.9 0 0);
 }
 .dark {
   --background: oklch(0.15 0 0);
@@ -16,6 +29,19 @@
   --primary: oklch(0.65 0.2 264);
   --primary-foreground: oklch(0.15 0 0);
   --border: oklch(0.3 0 0);
+  /* popover — same as background in dark mode */
+  --popover: oklch(0.15 0 0);
+  --popover-foreground: oklch(0.98 0 0);
+  /* muted — slightly lighter than background */
+  --muted: oklch(0.22 0 0);
+  --muted-foreground: oklch(0.65 0 0);
+  /* accent — slightly lighter than background for hover/focus */
+  --accent: oklch(0.25 0 0);
+  --accent-foreground: oklch(0.98 0 0);
+  /* ring — matches primary */
+  --ring: oklch(0.65 0.2 264);
+  /* input — same as border */
+  --input: oklch(0.3 0 0);
 }
 
 @theme inline {
@@ -24,6 +50,14 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-border: var(--border);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
 }
 
 body { background: var(--background); color: var(--foreground); margin: 0; }
