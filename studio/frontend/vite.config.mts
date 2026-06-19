@@ -35,4 +35,10 @@ export default defineConfig(() => ({
       transformMixedEsModules: true,
     },
   },
+  test: {
+    globals: true,
+    environment: 'node',
+    include: ['src/**/*.{spec,test}.{ts,tsx}'],
+    reporters: ['default'],
+  },
 }));
