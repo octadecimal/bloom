@@ -1,11 +1,14 @@
-import type { ComponentType } from 'react';
+import type { FunctionComponent } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import type { IPaneDef } from './types';
 import { PaneErrorBoundary } from '../app/PaneErrorBoundary';
 
 export function createPaneRegistry() {
   const panes = new Map<string, IPaneDef>();
-  let cache: Record<string, ComponentType<IDockviewPanelProps>> | null = null;
+  // The cached values are arrow-function wrappers, so they are always
+  // FunctionComponents — which is exactly what DockviewReact's `components` wants.
+  let cache: Record<string, FunctionComponent<IDockviewPanelProps>> | null =
+    null;
 
   return {
     register(def: IPaneDef) {
