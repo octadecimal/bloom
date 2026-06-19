@@ -55,6 +55,9 @@
   },
   "9": {
     "class_type": "SaveImage",
-    "inputs": { "images": ["10", 0], "filename_prefix": "AISlots_FINAL_transparent" }
+    "inputs": {
+      "images": ["10", 0],
+      "filename_prefix": "AISlots_FINAL_transparent"
+    }
   }
 }

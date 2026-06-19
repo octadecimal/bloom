@@ -24,7 +24,10 @@ export function registerSlicePersistence(plugins: IPlugin[]): () => void {
   // Register a single root-store change listener. Path-agnostic: fires on any
   // mutation anywhere in the tree, but only persists the slices opted in.
   const unsubscribe = onRootStoreSet(() => {
-    const pluginsMap = rootStore.plugins.get({ noproxy: true }) as Record<string, unknown>;
+    const pluginsMap = rootStore.plugins.get({ noproxy: true }) as Record<
+      string,
+      unknown
+    >;
     savers.forEach((save, id) => {
       if (id in pluginsMap) {
         save(pluginsMap[id]);

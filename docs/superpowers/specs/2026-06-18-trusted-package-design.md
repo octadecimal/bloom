@@ -28,8 +28,8 @@ in the caller**, never inside the crate — consistent with `trusted/` purity ru
    Mechanic-specific data rides as **opaque byte blobs** the container never parses:
    - `math_payload` — interpreted only by the **math engine**.
    - `presentation` — forwarded by the server to the **client renderer**.
-   Adding a future mechanic never reopens this crate. `bloom-package` therefore depends
-   on **neither `bloom-math` nor any mechanic**.
+     Adding a future mechanic never reopens this crate. `bloom-package` therefore depends
+     on **neither `bloom-math` nor any mechanic**.
 
 2. **Server-mediated; Rust-only readers.** Only Rust touches the package file — the
    simulator writes it, the server reads it. The **client never reads a package**; it

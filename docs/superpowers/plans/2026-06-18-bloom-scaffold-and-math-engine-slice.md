@@ -18,7 +18,7 @@
 
 - **Determinism is sacred** (spec §4, §9): in the math/outcome path use **integer-only** arithmetic — **no floats**, no clock/time, no I/O, no platform-dependent operations. The same `(model, seed)` MUST produce the same outcome on any machine, forever.
 - **Dependency rule** (spec §3): nothing in `trusted/` may depend on `studio/`. The math engine depends on nothing in the repo.
-- **Mechanics are append-only** (spec §7): a behavior change is a new mechanic *version*, never an edit to a shipped one.
+- **Mechanics are append-only** (spec §7): a behavior change is a new mechanic _version_, never an edit to a shipped one.
 - **Rust edition:** `2021`.
 - **Commits:** Conventional Commits format (`type(scope): description`), per `AGENTS.md`.
 - **No AI/automated free-editing inside `trusted/`** (spec §14) — this is certified-grade code.
@@ -30,6 +30,7 @@
 Stands up the three-domain skeleton and writes the plane rules into per-domain `AGENTS.md`. No code yet; the reviewable deliverable is "the structure exists and the laws are written down."
 
 **Files:**
+
 - Create: `studio/AGENTS.md`
 - Create: `trusted/AGENTS.md`
 - Create: `runtime/AGENTS.md`
@@ -38,6 +39,7 @@ Stands up the three-domain skeleton and writes the plane rules into per-domain `
 - Modify: `README.md` (replace the single-line stub)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: the directory structure and governance files that later tasks live inside.
 
@@ -159,12 +161,14 @@ git commit -m "chore: scaffold Bloom domains and governance metadata"
 Creates the Cargo workspace and the `bloom-math` crate, and implements the deterministic integer-only PRNG that all seed expansion is built on.
 
 **Files:**
+
 - Create: `Cargo.toml` (workspace root)
 - Create: `trusted/math/Cargo.toml`
 - Create: `trusted/math/src/lib.rs`
 - Create: `trusted/math/src/rng.rs`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `bloom_math::rng::SplitMix64` with `SplitMix64::new(seed: u64) -> SplitMix64`
@@ -277,11 +281,13 @@ git commit -m "feat(math): add deterministic SplitMix64 PRNG"
 Implements mechanic #1 (slots): expand one seed into one visible row of symbols, one per reel. Probability is encoded by symbol multiplicity within each reel strip.
 
 **Files:**
+
 - Create: `trusted/math/src/mechanics/mod.rs`
 - Create: `trusted/math/src/mechanics/slots.rs`
 - Modify: `trusted/math/src/lib.rs` (add `pub mod mechanics;`)
 
 **Interfaces:**
+
 - Consumes: `bloom_math::rng::SplitMix64` (from Task 2).
 - Produces:
   - `bloom_math::mechanics::slots::Symbol` = `u8`.
@@ -407,9 +413,11 @@ git commit -m "feat(math): add slot mechanic seed expansion"
 The headline of the vertical slice (spec §15): prove that the same seed always yields the same outcome, repeatably. This is the contract the entire predetermined-seed-pool model rests on.
 
 **Files:**
+
 - Modify: `trusted/math/src/mechanics/slots.rs` (add to the existing `#[cfg(test)] mod tests`)
 
 **Interfaces:**
+
 - Consumes: `expand`, `SlotModel`, `Symbol` (from Task 3).
 - Produces: no new public API — adds the determinism regression tests.
 
@@ -466,12 +474,13 @@ git commit -m "test(math): prove deterministic seed expansion and multiplicity w
 ## Self-Review
 
 **1. Spec coverage (against §15 — this round's deliverable):**
+
 - Repo scaffold → Task 1. ✓
 - Per-domain `AGENTS.md` (the governance metadata) → Task 1, Steps 1–3. ✓
 - Rust workspace → Task 2. ✓
 - Math engine expands a trivial slot seed → Task 3. ✓
 - Bit-reproducibility test passes → Task 4. ✓
-- *Deferred (flagged in scope note):* Nx/TS and uv/Python wiring → their own sub-projects. Not a gap; an explicit deferral.
+- _Deferred (flagged in scope note):_ Nx/TS and uv/Python wiring → their own sub-projects. Not a gap; an explicit deferral.
 
 **2. Placeholder scan:** No "TBD"/"TODO"/"handle edge cases"; every code step shows complete code; every test step shows the assertions; every run step states expected output. The determinism guarantee is proven with value-independent assertions (no fabricated golden vectors). ✓
 

@@ -9,15 +9,20 @@ import path from 'node:path';
 export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: '../../node_modules/.vite/studio/frontend',
-  server:{
+  server: {
     port: 4200,
     host: '0.0.0.0',
   },
-  preview:{
+  preview: {
     port: 4200,
     host: '0.0.0.0',
   },
-  plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
+  plugins: [
+    react(),
+    tailwindcss(),
+    nxViteTsPaths(),
+    nxCopyAssetsPlugin(['*.md']),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

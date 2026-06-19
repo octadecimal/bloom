@@ -18,7 +18,15 @@ export function Workbench() {
       style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}
     >
       {/* Top header bar */}
-      <div style={{ flexShrink: 0, padding: '0 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          flexShrink: 0,
+          padding: '0 8px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         {/* Left group: title + menubar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <h1 style={{ margin: 0, fontSize: '1rem' }}>Bloom Studio</h1>

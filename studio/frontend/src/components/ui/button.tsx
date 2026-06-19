@@ -21,5 +21,10 @@ export interface IButtonProps
     VariantProps<typeof buttonVariants> {}
 
 export function Button({ className, variant, size, ...props }: IButtonProps) {
-  return <button className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  return (
+    <button
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
 }

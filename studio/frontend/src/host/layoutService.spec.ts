@@ -21,7 +21,9 @@ describe('panelIdsFromLayout', () => {
 
 describe('layoutService restore', () => {
   const known = new Set(['p/a']);
-  const paneRegistry = { get: (id: string) => (known.has(id) ? { id } : undefined) } as never;
+  const paneRegistry = {
+    get: (id: string) => (known.has(id) ? { id } : undefined),
+  } as never;
 
   it('restores when all saved panel ids are known', () => {
     savePersisted('layout', 1, { panels: { 'p/a': {} } });

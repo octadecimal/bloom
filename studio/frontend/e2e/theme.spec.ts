@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test('theme toggle flips dark/light and persists across reload', async ({ page }) => {
+test('theme toggle flips dark/light and persists across reload', async ({
+  page,
+}) => {
   await page.goto('/');
   const html = page.locator('html');
   // Default theme is dark

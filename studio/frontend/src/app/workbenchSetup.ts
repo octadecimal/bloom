@@ -5,7 +5,10 @@ import { createLayoutService } from '../host/layoutService';
 import { boot } from '../host/boot';
 import { setHost } from '../state/hostRef';
 import { registerSlicePersistence } from '../state/persistSlices';
-import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persistWorkspace';
+import {
+  hydrateWorkspace,
+  registerWorkspacePersistence,
+} from '../state/persistWorkspace';
 import { PLUGINS } from '../plugins';
 import type { IPlugin } from '../host/types';
 import type { DockviewApi } from 'dockview-react';
@@ -14,7 +17,10 @@ function DEFAULT_LAYOUT(
   api: DockviewApi,
   paneRegistry: { get(id: string): { title?: string } | undefined },
 ): void {
-  const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
+  const add = (
+    id: string,
+    ref?: { direction: 'right' | 'below'; referencePanel: string },
+  ) => {
     if (!api.getPanel(id))
       api.addPanel({
         id,
@@ -25,8 +31,14 @@ function DEFAULT_LAYOUT(
       });
   };
   add('demo-counter/editor');
-  add('demo-counter/mirror', { direction: 'right', referencePanel: 'demo-counter/editor' });
-  add('demo-scratch/main', { direction: 'below', referencePanel: 'demo-counter/editor' });
+  add('demo-counter/mirror', {
+    direction: 'right',
+    referencePanel: 'demo-counter/editor',
+  });
+  add('demo-scratch/main', {
+    direction: 'below',
+    referencePanel: 'demo-counter/editor',
+  });
 }
 
 export function setupWorkbench() {
@@ -50,11 +62,16 @@ export function setupWorkbench() {
   });
 
   setHost(host);
-  if (!import.meta.env.PROD) (window as unknown as { __host?: unknown }).__host = host;
+  if (!import.meta.env.PROD)
+    (window as unknown as { __host?: unknown }).__host = host;
 
   let extra: IPlugin[] = [];
-  if (!import.meta.env.PROD && (window as unknown as { __injectPlugins?: IPlugin[] }).__injectPlugins) {
-    extra = (window as unknown as { __injectPlugins?: IPlugin[] }).__injectPlugins!;
+  if (
+    !import.meta.env.PROD &&
+    (window as unknown as { __injectPlugins?: IPlugin[] }).__injectPlugins
+  ) {
+    extra = (window as unknown as { __injectPlugins?: IPlugin[] })
+      .__injectPlugins!;
   }
   boot([...PLUGINS, ...extra], host);
   registerSlicePersistence(PLUGINS);
@@ -67,7 +84,8 @@ export function setupWorkbench() {
     onReady: (a: DockviewApi) => {
       api = a;
       layoutService.attach(a);
-      if (!import.meta.env.PROD) (window as unknown as { __wbApi?: unknown }).__wbApi = a;
+      if (!import.meta.env.PROD)
+        (window as unknown as { __wbApi?: unknown }).__wbApi = a;
     },
   };
 }

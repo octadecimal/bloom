@@ -7,7 +7,9 @@ import { getHost } from './hostRef';
 export function makePluginHooks<TState>(pluginId: string) {
   return {
     usePluginState: () =>
-      useHookstate(rootStore.plugins.nested(pluginId)) as unknown as State<TState>,
+      useHookstate(
+        rootStore.plugins.nested(pluginId),
+      ) as unknown as State<TState>,
     useHost: () => getHost(),
   };
 }

@@ -125,24 +125,24 @@ for one plugin at runtime; `dispose()` reverses them.
 
 ```ts
 interface IPlugin<TState = unknown> {
-  id: string;                         // e.g. "demo-counter"
+  id: string; // e.g. "demo-counter"
   title: string;
-  initialState?: TState;              // seeds rootStore.plugins[id] before init()
-  persist?: boolean;                  // default false; opt into UI-preference persistence
-  panes: IPaneDef[];                  // pane types this plugin contributes
-  commands?: ICommandDef[];           // optional palette/menu entries
-  init?(host: IPluginHost): void;     // optional extra wiring at registration
-  dispose?(host: IPluginHost): void;  // unregister/detach — for dynamic unload
+  initialState?: TState; // seeds rootStore.plugins[id] before init()
+  persist?: boolean; // default false; opt into UI-preference persistence
+  panes: IPaneDef[]; // pane types this plugin contributes
+  commands?: ICommandDef[]; // optional palette/menu entries
+  init?(host: IPluginHost): void; // optional extra wiring at registration
+  dispose?(host: IPluginHost): void; // unregister/detach — for dynamic unload
 }
 
 interface IPaneDef {
-  id: string;                         // namespaced: `${pluginId}/${key}`
+  id: string; // namespaced: `${pluginId}/${key}`
   title: string;
-  component: React.ComponentType<DockviewPanelProps>;  // external dockview type
+  component: React.ComponentType<DockviewPanelProps>; // external dockview type
 }
 
 interface ICommandDef {
-  id: string;                         // namespaced
+  id: string; // namespaced
   title: string;
   run(host: IPluginHost): void;
 }
@@ -150,10 +150,10 @@ interface ICommandDef {
 interface IPluginHost {
   registerPane(def: IPaneDef): void;
   registerCommand(def: ICommandDef): void;
-  openPane(paneId: string): void;     // singleton: focus if open, else create
+  openPane(paneId: string): void; // singleton: focus if open, else create
   runCommand(commandId: string): void;
-  listPanes(): IPaneDef[];            // backs the View menu
-  listCommands(): ICommandDef[];      // backs the command palette
+  listPanes(): IPaneDef[]; // backs the View menu
+  listCommands(): ICommandDef[]; // backs the command palette
   resetLayout(): void;
 }
 ```
@@ -166,8 +166,9 @@ store:
 // state/makePluginHooks.ts
 export function makePluginHooks<TState>(pluginId: string) {
   return {
-    usePluginState: () => useHookstate(rootStore.plugins[pluginId]) as State<TState>,
-    useHost: () => host,              // module-scope singleton, NOT Context
+    usePluginState: () =>
+      useHookstate(rootStore.plugins[pluginId]) as State<TState>,
+    useHost: () => host, // module-scope singleton, NOT Context
   };
 }
 ```
@@ -203,12 +204,12 @@ dynamic-plugin future.
 
 ```ts
 interface IWorkspaceState {
-  theme: 'light' | 'dark';            // dockview owns layout AND active-pane state
+  theme: 'light' | 'dark'; // dockview owns layout AND active-pane state
 }
 
 interface IRootState {
   workspace: IWorkspaceState;
-  plugins: Record<string, unknown>;   // plugins[id] = that plugin's slice; typed at the hook
+  plugins: Record<string, unknown>; // plugins[id] = that plugin's slice; typed at the hook
 }
 
 // created once, at module scope — not in React, never in a Context
@@ -219,6 +220,7 @@ export const rootStore = hookstate<IRootState>({
 ```
 
 **Ownership boundaries (no double sources of truth):**
+
 - **dockview** owns the layout tree → serialized by the layout service, not mirrored here.
 - **`workspace`** owns cross-cutting shell state only (theme). Active-pane state stays in dockview.
 - **`plugins[id]`** owns each plugin's data; seeded from `IPlugin.initialState`; reached only
@@ -230,6 +232,7 @@ actually read. Never call `useHookstate` on a broad parent node inside a pane.
 access-tracking re-renders that component only when that leaf changes.
 
 **Persistence (this slice):**
+
 - **Keys** are namespaced: `bloom.studio.workspace` (theme) and `bloom.studio.<pluginId>`
   (opted-in slices). Each value is `{ version, data }`; one `version` constant per codec.
 - **Writes** are debounced subscriptions to the relevant hookstate node (plain values
@@ -258,6 +261,7 @@ The pane registry **is** dockview's component map (one source):
 render makes dockview re-instantiate panels.
 
 **`openPane(paneId)` — strict-singleton:**
+
 ```ts
 openPane(paneId) {
   const existing = api.getPanel(paneId);
@@ -265,10 +269,12 @@ openPane(paneId) {
   api.addPanel({ id: paneId, component: paneId, params: { paneId } });  // identity only
 }
 ```
+
 `params` carries **identity only** (`paneId`), never live state — panels pull state through
 typed hooks, so dockview params and the store never compete.
 
 **Layout lifecycle (dockview owns the tree):**
+
 - **Boot:** read localStorage → valid `{ version, layout }` for the current version →
   `api.fromJSON(layout)`; else apply `DEFAULT_LAYOUT`.
 - **On change:** `api.onDidLayoutChange` → debounce → persist `{ version, layout: api.toJSON() }`.
@@ -301,8 +307,8 @@ function useApplyTheme(dockEl: HTMLElement) {
   const theme = useHookstate(rootStore.workspace.theme);
   useEffect(() => {
     const dark = theme.get() === 'dark';
-    document.documentElement.classList.toggle('dark', dark);          // shadcn / Tailwind
-    dockEl.classList.toggle('dockview-theme-dark', dark);             // dockview surface
+    document.documentElement.classList.toggle('dark', dark); // shadcn / Tailwind
+    dockEl.classList.toggle('dockview-theme-dark', dark); // dockview surface
     dockEl.classList.toggle('dockview-theme-light', !dark);
   }, [theme.get()]);
 }
@@ -323,7 +329,7 @@ Two plugins that, between them, exercise every architectural claim:
 - **`demo-scratch`** — `persist: false`, state `{ text: string }`. One `ScratchPane` (text
   input). Proves per-plugin persistence opt-out (text gone after reload) and an independent slice.
 
-Cross-*plugin* state sharing is **not** built into the demo (not needed to prove the shell);
+Cross-_plugin_ state sharing is **not** built into the demo (not needed to prove the shell);
 it is a deferred, make-it-explicit-when-real concern.
 
 ---
@@ -331,6 +337,7 @@ it is a deferred, make-it-explicit-when-real concern.
 ## 9. Error handling
 
 Isolation so nothing kills the shell:
+
 - **Plugin `init` throws** → log, skip that plugin (its panes/commands don't register); the
   workbench still boots. One bad plugin can't take down the workbench (also the dynamic-unload
   safety net).
@@ -362,21 +369,21 @@ so its flakiness can't destabilize the suite. Playwright runs locally via **just
 time/money-expensive to run per-PR. The suite is still the behavioral source of truth; it is
 just run locally for now. Coverage matrix:
 
-| # | Behavior asserted |
-|---|---|
-| 1 | Boot renders chrome + default layout |
-| 2 | Theme toggle flips dark/light; persists across reload; `.dark` applied |
-| 3 | ⌘/Ctrl-K opens palette; filter; run command → pane opens |
-| 4 | View menu lists panes; open; re-open focuses, no duplicate (singleton) |
-| 5 | Counter increments; MirrorPane reflects; reload → count persists |
-| 6 | Scratch text entered; reload → text gone (ephemeral) |
-| 7 | Dock interactions via dockview API (move/split/close) + reopen via View menu; **plus one real simulated-drag smoke test** |
-| 8 | Rearrange → reload → layout restored; Reset layout → default |
-| 9 | Corrupt localStorage layout → falls back to default, no crash |
-| 10 | Increment counter → only CounterPane + MirrorPane re-render; ScratchPane + menubar do not (render-counter assertion) |
-| 11 | A plugin whose `init` throws is skipped; the workbench still boots |
-| 12 | Corrupt persisted plugin-slice blob → falls back to `initialState`, no crash |
-| 13 | Unknown command id is a no-op (warn); no crash |
+| #   | Behavior asserted                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Boot renders chrome + default layout                                                                                      |
+| 2   | Theme toggle flips dark/light; persists across reload; `.dark` applied                                                    |
+| 3   | ⌘/Ctrl-K opens palette; filter; run command → pane opens                                                                  |
+| 4   | View menu lists panes; open; re-open focuses, no duplicate (singleton)                                                    |
+| 5   | Counter increments; MirrorPane reflects; reload → count persists                                                          |
+| 6   | Scratch text entered; reload → text gone (ephemeral)                                                                      |
+| 7   | Dock interactions via dockview API (move/split/close) + reopen via View menu; **plus one real simulated-drag smoke test** |
+| 8   | Rearrange → reload → layout restored; Reset layout → default                                                              |
+| 9   | Corrupt localStorage layout → falls back to default, no crash                                                             |
+| 10  | Increment counter → only CounterPane + MirrorPane re-render; ScratchPane + menubar do not (render-counter assertion)      |
+| 11  | A plugin whose `init` throws is skipped; the workbench still boots                                                        |
+| 12  | Corrupt persisted plugin-slice blob → falls back to `initialState`, no crash                                              |
+| 13  | Unknown command id is a no-op (warn); no crash                                                                            |
 
 ---
 
@@ -387,7 +394,7 @@ just run locally for now. Coverage matrix:
    path aliases, the `cn` util). Nx is added at the repo root alongside the existing **Cargo
    workspace** without disturbing it (Rust stays out of Nx).
 2. **State layer:** `rootStore`, `makePluginHooks`, the persistence codec (`{ version, blob }`
-   + fallback), `useApplyTheme`.
+   - fallback), `useApplyTheme`.
 3. **Host layer:** `IPluginHost`, pane + command registries, the layout service (restore /
    persist / reset / validate).
 4. **dockview** mounted; `openPane` singleton semantics; `DEFAULT_LAYOUT`.

@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-18
 - **Status:** Approved (architecture); decomposes into per-component sub-specs
-- **Scope of this doc:** the *umbrella* architecture for the whole platform. It is
+- **Scope of this doc:** the _umbrella_ architecture for the whole platform. It is
   intentionally too large for a single implementation plan. Each component gets its
   own spec → plan → build cycle (see §16). This round's concrete deliverable is in §15.
 
@@ -27,17 +27,17 @@ families are additive, not rewrites (see §7).
 
 ## 2. Glossary (locked vocabulary)
 
-| Term | What it is | Path |
-|---|---|---|
-| **Bloom** | the platform | the repo |
-| **the studio** | authoring environment: designer UI + AI orchestration + simulator | `studio/` |
-| **the math engine** | certified kernel — deterministically turns a *seed* into one round's outcome; holds the mechanics | `trusted/math/` |
-| **a game package** | the signed, frozen artifact; the versioned public contract between studio and runtime | `trusted/package/` |
-| **the game server** | authoritative runtime — loads a package, draws a seed, evaluates via the math engine, writes the audit log | `runtime/server/` |
-| **the game client** | browser renderer — plays back the outcome the server dictates | `runtime/client/` |
-| **simulator** | the studio's tool that plays millions of rounds and curates the winning seed set, then builds a package | `studio/simulator/` |
-| **seeds** | the curated PRNG seeds; each maps to one predetermined outcome | data |
-| **mechanic** | the logic for one game family — `(math_model, seed) → outcome` (slots = mechanic #1) | inside the math engine |
+| Term                | What it is                                                                                                 | Path                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------- |
+| **Bloom**           | the platform                                                                                               | the repo               |
+| **the studio**      | authoring environment: designer UI + AI orchestration + simulator                                          | `studio/`              |
+| **the math engine** | certified kernel — deterministically turns a _seed_ into one round's outcome; holds the mechanics          | `trusted/math/`        |
+| **a game package**  | the signed, frozen artifact; the versioned public contract between studio and runtime                      | `trusted/package/`     |
+| **the game server** | authoritative runtime — loads a package, draws a seed, evaluates via the math engine, writes the audit log | `runtime/server/`      |
+| **the game client** | browser renderer — plays back the outcome the server dictates                                              | `runtime/client/`      |
+| **simulator**       | the studio's tool that plays millions of rounds and curates the winning seed set, then builds a package    | `studio/simulator/`    |
+| **seeds**           | the curated PRNG seeds; each maps to one predetermined outcome                                             | data                   |
+| **mechanic**        | the logic for one game family — `(math_model, seed) → outcome` (slots = mechanic #1)                       | inside the math engine |
 
 ---
 
@@ -51,15 +51,15 @@ shared by both:
 - **`runtime/` (the authoritative plane):** game server + game client.
   Deterministic, **zero AI**, authoritative, audited.
 - **`trusted/` (the shared certified heart):** the math engine + the game-package format.
-  Bit-reproducible, audited, and depended on by *both* planes.
+  Bit-reproducible, audited, and depended on by _both_ planes.
 
 > **The only thing that crosses `studio/` → `runtime/` is a signed game package,
 > and it crosses through a human sign-off gate.**
 
-**Compliance story (the reason the law matters):** *No LLM, no ML, no nondeterminism
+**Compliance story (the reason the law matters):** _No LLM, no ML, no nondeterminism
 ever touches a real-money outcome. AI only helps humans design games; everything it
 produces is frozen into a signed package and human-approved before it can decide a
-single round.* Guard this sentence ruthlessly — it is the platform's regulatory posture.
+single round._ Guard this sentence ruthlessly — it is the platform's regulatory posture.
 
 **Dependency rule (lintable):** everything may depend on `trusted/`; **nothing may
 depend on `studio/`.**
@@ -72,7 +72,7 @@ depend on `studio/`.**
    deterministically expands (via the **math engine**) into one round's outcome.
 2. It measures the aggregate math characteristics — **RTP, volatility, bonus hit rate**, etc.
 3. It **curates**: keeps the seeds whose collective distribution hits the targets,
-   discards the rest. The surviving seeds *are* the game.
+   discards the rest. The surviving seeds _are_ the game.
 4. The curated seeds are frozen into a **game package**.
 5. At runtime, the **game server** draws a seed from the package **uniformly at random,
    with replacement** (a pool, not a depleting deck), and expands it via the **same**
@@ -80,7 +80,7 @@ depend on `studio/`.**
 
 **Consequences:**
 
-- **The runtime RNG's only job is to pick an index** in `[0, pool_size)`. *All* of the
+- **The runtime RNG's only job is to pick an index** in `[0, pool_size)`. _All_ of the
   game's probability lives in the **composition of the pool** — a common outcome is
   represented by many seeds, a jackpot by few. Uniform draw + multiplicity = the entire
   distribution. The pool is a **flat list**, drawn uniformly, with **no per-seed weights**
@@ -106,15 +106,15 @@ A three-language product (the job needs all three):
   orchestrates the simulator. **All AI lives here and only here.**
 - **`studio/simulator/` — sims + curation (Rust).** Plays millions of rounds via the math
   engine, curates the seed set to hit targets, and **builds + signs the game package**.
-  - *Does not:* run real-money play; its sims are advisory until frozen + approved.
-  - *In → out:* designer intent + AI assistance → a signed game package.
+  - _Does not:_ run real-money play; its sims are advisory until frozen + approved.
+  - _In → out:_ designer intent + AI assistance → a signed game package.
 
 ### the math engine — `trusted/math/` (Rust)
 
 - **Essence:** the pure, deterministic, certified kernel. A library, not a service.
 - **Does:** holds the certified **mechanics** (slots = #1) and the deterministic
   evaluation `(math_model, seed) → outcome`. Bit-reproducible. Consumed by **both** the
-  simulator (curation) and the server (live evaluation) — *the identical compiled logic*.
+  simulator (curation) and the server (live evaluation) — _the identical compiled logic_.
 - **Does not:** generate its own randomness (the index is supplied); touch wallets,
   sessions, persistence, or network; contain game-specific data; contain any AI.
 
@@ -122,7 +122,7 @@ A three-language product (the job needs all three):
 
 - **Essence:** the signed, frozen artifact — the only thing crossing the gate. See §8.
 - **Does:** carry the curated seeds, the mechanic-specific math payload, a presentation
-  manifest (asset *references*, not blobs), the mechanic + version it targets, and
+  manifest (asset _references_, not blobs), the mechanic + version it targets, and
   certification/provenance + a signature. Immutable once signed.
 - **Does not:** contain logic (it is data), contain AI, or be editable in the runtime plane.
 
@@ -139,7 +139,7 @@ A three-language product (the job needs all three):
 
 - **Essence:** the player's browser game — a beautiful playback surface.
 - **Does:** load presentation data from the package, connect to the server, send the bet,
-  and animate to *exactly* the outcome the server returns.
+  and animate to _exactly_ the outcome the server returns.
 - **Does not:** decide outcomes, compute wins authoritatively, or hold the real math. It
   is **untrusted**; the server is authoritative. Anything it computes is cosmetic.
 
@@ -175,7 +175,7 @@ A **mechanic** is the logic for one game family: `(math_model, seed) → outcome
 
 - **the math engine** — a registry of mechanics. **Mechanics are append-only and immutable
   once shipped**; an old package must keep playing identically for years. New behavior =
-  a new mechanic *version*, never an edit. (Changing a mechanic = a re-certification event.)
+  a new mechanic _version_, never an edit. (Changing a mechanic = a re-certification event.)
 - **the game package** — a **common envelope** (id, version, mechanic ref, seeds, signature,
   presentation) **+ a mechanic-specific math payload**.
 - **the server → client outcome contract** — a **tagged union keyed by mechanic** (a slot
@@ -184,7 +184,7 @@ A **mechanic** is the logic for one game family: `(math_model, seed) → outcome
 
 **We build only slots (mechanic #1).** The registry has one entry; the outcome type has
 one variant; the `match` on mechanic has one arm. The rule is **labels and placement, not
-machinery**: we name and locate the slot-specific parts so a second mechanic is *additive*,
+machinery**: we name and locate the slot-specific parts so a second mechanic is _additive_,
 and we build **no** plugin system, loader, or abstract framework until a second mechanic
 is real.
 
@@ -200,7 +200,7 @@ The package is the single most important interface in Bloom because it is load-b
 
 1. the **studio ↔ runtime** boundary,
 2. the **licensing contract** — `trusted/` + `runtime/` can be licensed without `studio/`,
-   and a licensee feeds the server *their* packages,
+   and a licensee feeds the server _their_ packages,
 3. the **certification artifact**.
 
 Therefore the package format gets **explicit versioning + a back-compat policy from v1**,
@@ -302,7 +302,7 @@ organization wins at the directory level). Nx only knows the two TS projects.
   cross-language seam (`package` → `client`) without full polyglot Nx.
 
 **Revisit Nx-as-orchestrator only** if the TS surface grows large, Nx Cloud is adopted, or
-cross-language `affected` becomes a *measured* CI bottleneck.
+cross-language `affected` becomes a _measured_ CI bottleneck.
 
 ---
 
@@ -339,7 +339,7 @@ Everything else is deferred to the per-component sub-specs.
 
 Foundation-up; each gets its own spec → plan → build:
 
-1. **the math engine** (`trusted/math`) — kernel + slot mechanic + determinism tests *(the vertical slice starts here)*
+1. **the math engine** (`trusted/math`) — kernel + slot mechanic + determinism tests _(the vertical slice starts here)_
 2. **the game package** (`trusted/package`) — format, build, sign, verify, TS type generation
 3. **the game server** (`runtime/server`) — load/verify, draw, evaluate, audit, operator edge
 4. **the studio** (`studio/simulator`, then `backend`, then `frontend`) — curation, AI orchestration, designer UI
@@ -353,16 +353,16 @@ Foundation-up; each gets its own spec → plan → build:
 designs against them):
 
 - **More game types** via new mechanics (roulette, scratch/instant-win, crash, wheel, bingo).
-- **Decision games** (blackjack, video poker) — a future *mechanic class*: the seed encodes the
+- **Decision games** (blackjack, video poker) — a future _mechanic class_: the seed encodes the
   shuffle/card-sequence and curation assumes an optimal-strategy EV. Fits the model; needs its
   own math treatment.
 - **Progressives / shared jackpots** — a runtime shared-state component + the two-layer outcome
   (§10); audit records the pool snapshot at win time.
-- **Multiplayer / shared-outcome games** — a future *round topology* (one draw, many participants);
+- **Multiplayer / shared-outcome games** — a future _round topology_ (one draw, many participants);
   keep the round/draw concept separable from the bet. WS transport already allows it.
 - **Jurisdiction & RTP variants** — sibling packages (§8); jurisdiction compliance config lives at
   the server's operator edge, not in the package.
-- **Provably-fair / commit-reveal** (crypto markets) — a future *draw-strategy* behind an interface;
+- **Provably-fair / commit-reveal** (crypto markets) — a future _draw-strategy_ behind an interface;
   do not hardcode the single CSPRNG-index-draw assumption.
 - **Studio as multi-tenant SaaS / marketplace** — packages trade freely (signed, attributable);
   **mechanics cannot** (they live inside the certified core, so third-party mechanics mean entering
