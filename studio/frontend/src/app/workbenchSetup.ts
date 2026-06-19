@@ -7,6 +7,7 @@ import { setHost } from '../state/hostRef';
 import { registerSlicePersistence } from '../state/persistSlices';
 import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persistWorkspace';
 import { PLUGINS } from '../plugins';
+import type { IPlugin } from '../host/types';
 import type { DockviewApi } from 'dockview-react';
 
 function DEFAULT_LAYOUT(
@@ -49,7 +50,13 @@ export function setupWorkbench() {
   });
 
   setHost(host);
-  boot(PLUGINS, host);
+  if (!import.meta.env.PROD) (window as unknown as { __host?: unknown }).__host = host;
+
+  let extra: IPlugin[] = [];
+  if (!import.meta.env.PROD && (window as unknown as { __injectPlugins?: IPlugin[] }).__injectPlugins) {
+    extra = (window as unknown as { __injectPlugins?: IPlugin[] }).__injectPlugins!;
+  }
+  boot([...PLUGINS, ...extra], host);
   registerSlicePersistence(PLUGINS);
   hydrateWorkspace();
   registerWorkspacePersistence();
