@@ -5,6 +5,7 @@ import { createLayoutService } from '../host/layoutService';
 import { boot } from '../host/boot';
 import { setHost } from '../state/hostRef';
 import { registerSlicePersistence } from '../state/persistSlices';
+import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persistWorkspace';
 import { PLUGINS } from '../plugins';
 import type { DockviewApi } from 'dockview-react';
 
@@ -38,6 +39,8 @@ export function setupWorkbench() {
   setHost(host);
   boot(PLUGINS, host);
   registerSlicePersistence(PLUGINS);
+  hydrateWorkspace();
+  registerWorkspacePersistence();
 
   return {
     host,
