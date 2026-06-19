@@ -39,6 +39,13 @@ docs: clarify setup steps in README
   RED-GREEN-REFACTOR. It does **not** provide an e2e/browser harness — the e2e
   stack (e.g. Playwright) is wired up separately and used to validate client flows.
 
+## Coding standards
+
+- Durable, repo-wide coding standards live in [`docs/coding-standards.md`](docs/coding-standards.md)
+  and **MUST** be followed. Add new standards there as they are agreed.
+- Current highlights: **TypeScript interfaces always use an `I` prefix** (`IPlugin`,
+  `IPaneDef`). See the doc for the full, authoritative list.
+
 ## Tooling & plugins
 
 - The [Superpowers](https://github.com/obra/superpowers) plugin is enabled at the
