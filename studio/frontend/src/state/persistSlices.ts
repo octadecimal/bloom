@@ -1,23 +1,34 @@
 import type { IPlugin } from '../host/types';
+import { rootStore, onRootStoreSet } from './rootStore';
+import { makeDebouncedSaver } from './persistence';
 
-// TODO(Task 13): Wire per-slice debounced persistence.
+// Change-driven slice persistence using hookstate v4's Extension API.
 //
-// Hookstate v4 (4.0.2) does not expose a post-creation subscribe/attach API.
-// The v3 `.attach(() => ({ id, init, onSet }))` pattern does not exist in v4.
-// The v4 Extension mechanism is passed to `hookstate()` at creation time only;
-// because `rootStore` is created without an extension there is no hook point
-// available after the fact.
-//
-// Options for Task 13:
-//  a) Re-create rootStore with an `onSet` Extension that calls makeDebouncedSaver
-//     when the path matches a plugin slice with persist:true.
-//  b) Have each persist:true plugin's init() register its own watcher via a
-//     thin wrapper that re-exports rootStore with a persistence extension.
-//
-// For now this function is a deliberate no-op so the rest of Task 9 (dockview
-// mount, boot wiring, e2e) can land cleanly.
+// rootStore is created with a notifyExtension whose onSet fires all listeners
+// registered via onRootStoreSet(). Here we register one listener that calls
+// each persist:true plugin's debounced saver with the current plain snapshot
+// of that plugin's slice. Debouncing coalesces rapid mutations; plugins with
+// persist:false are simply not wired up and are never saved.
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function registerSlicePersistence(_plugins: IPlugin[]): void {
-  // no-op: see TODO above
+const SLICE_VERSION = 1;
+
+export function registerSlicePersistence(plugins: IPlugin[]): void {
+  const persistPlugins = plugins.filter((p) => p.persist === true);
+  if (persistPlugins.length === 0) return;
+
+  // Create one debounced saver per persist:true plugin.
+  const savers = new Map(
+    persistPlugins.map((p) => [p.id, makeDebouncedSaver(p.id, SLICE_VERSION)]),
+  );
+
+  // Register a single root-store change listener. Path-agnostic: fires on any
+  // mutation anywhere in the tree, but only persists the slices opted in.
+  onRootStoreSet(() => {
+    const pluginsMap = rootStore.plugins.get({ noproxy: true }) as Record<string, unknown>;
+    savers.forEach((save, id) => {
+      if (id in pluginsMap) {
+        save(pluginsMap[id]);
+      }
+    });
+  });
 }
