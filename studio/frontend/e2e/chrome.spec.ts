@@ -7,6 +7,7 @@ test('Ctrl-K opens the palette and runs a command', async ({ page }) => {
   await expect(page.getByTestId('command-input')).toBeVisible();
   // Type to filter to the demo command, then press Enter to run it.
   await page.getByTestId('command-input').fill('Increment');
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   // The Increment Counter command increments the counter — assert observable effect.
   await expect(page.getByTestId('counter-value')).toHaveText('1');
