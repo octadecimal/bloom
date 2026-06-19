@@ -14,14 +14,17 @@ beforeEach(() => {
   rootStore.plugins.set({});
 });
 
+let cleanup: (() => void) | undefined;
 afterEach(() => {
+  cleanup?.();
+  cleanup = undefined;
   vi.useRealTimers();
 });
 
 describe('registerSlicePersistence', () => {
   it('saves a persist:true slice to localStorage after debounce, leaves persist:false untouched', () => {
     rootStore.plugins.merge({ keep: { n: 0 }, skip: { n: 0 } });
-    registerSlicePersistence([keepPlugin, skipPlugin]);
+    cleanup = registerSlicePersistence([keepPlugin, skipPlugin]);
 
     // Mutate the persist:true slice
     rootStore.plugins.nested('keep').set({ n: 5 });
@@ -40,7 +43,7 @@ describe('registerSlicePersistence', () => {
 
   it('coalesces rapid mutations to a single save of the final value', () => {
     rootStore.plugins.merge({ keep: { n: 0 } });
-    registerSlicePersistence([keepPlugin]);
+    cleanup = registerSlicePersistence([keepPlugin]);
 
     rootStore.plugins.nested('keep').set({ n: 1 });
     rootStore.plugins.nested('keep').set({ n: 2 });
