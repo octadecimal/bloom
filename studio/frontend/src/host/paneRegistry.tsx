@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import type { IPaneDef } from './types';
+import { PaneErrorBoundary } from '../app/PaneErrorBoundary';
 
 export function createPaneRegistry() {
   const panes = new Map<string, IPaneDef>();
@@ -16,7 +17,14 @@ export function createPaneRegistry() {
     asComponentMap() {
       if (!cache) {
         cache = {};
-        for (const [id, def] of panes) cache[id] = def.component;
+        for (const [id, def] of panes) {
+          const Comp = def.component;
+          cache[id] = (props: IDockviewPanelProps) => (
+            <PaneErrorBoundary>
+              <Comp {...props} />
+            </PaneErrorBoundary>
+          );
+        }
       }
       return cache;
     },
