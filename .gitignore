@@ -16,3 +16,12 @@ __pycache__/
 Thumbs.db
 .DS_Store
 *.log
+
+vite.config.*.timestamp*
+dist
+.nx/workspace-data
+test-output
+test-results
+playwright-report
+blob-report
+.playwright
