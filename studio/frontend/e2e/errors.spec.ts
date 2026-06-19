@@ -18,14 +18,16 @@ test('a corrupt persisted plugin slice falls back to initialState (row 12)', asy
 
 test('an unknown command id is a no-op, no crash (row 13)', async ({ page }) => {
   await page.goto('/');
-  const ok = await page.evaluate(() => {
+  const result = await page.evaluate(() => {
+    const host = (window as unknown as { __host?: { runCommand(id: string): void } }).__host;
+    if (!host) return 'no-host';
     try {
-      (window as unknown as { __host?: { runCommand(id: string): void } }).__host?.runCommand('does/not-exist');
-      return true;
+      host.runCommand('does/not-exist');
+      return 'ok';
     } catch {
-      return false;
+      return 'threw';
     }
   });
-  expect(ok).toBe(true);
+  expect(result).toBe('ok');
   await expect(page.getByTestId('counter-pane')).toBeVisible();
 });
