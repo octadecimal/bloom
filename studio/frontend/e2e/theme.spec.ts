@@ -9,7 +9,10 @@ test('theme toggle flips dark/light and persists across reload', async ({ page }
   await page.getByTestId('theme-toggle').click();
   await expect(html).not.toHaveClass(/dark/);
   // Allow the debounced saver (50 ms) to flush before we reload
-  await page.waitForTimeout(150);
+  await page.waitForFunction(() => {
+    const v = localStorage.getItem('bloom.studio.workspace');
+    return v != null && v.includes('"theme":"light"');
+  });
   // Persist: reload and still light
   await page.reload();
   await expect(html).not.toHaveClass(/dark/);

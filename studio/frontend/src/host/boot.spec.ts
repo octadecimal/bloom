@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../state/rootStore';
 import { savePersisted } from '../state/persistence';
 import { createPaneRegistry } from './paneRegistry';
