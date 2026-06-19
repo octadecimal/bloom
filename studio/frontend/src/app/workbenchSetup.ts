@@ -9,11 +9,13 @@ import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persist
 import { PLUGINS } from '../plugins';
 import type { DockviewApi } from 'dockview-react';
 
-// Opens the temp pane as the default layout until Task 13 wires real panes.
 function DEFAULT_LAYOUT(api: DockviewApi): void {
-  if (!api.getPanel('temp/main')) {
-    api.addPanel({ id: 'temp/main', component: 'temp/main', params: { paneId: 'temp/main' } });
-  }
+  const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
+    if (!api.getPanel(id)) api.addPanel({ id, component: id, params: { paneId: id }, position: ref });
+  };
+  add('demo-counter/editor');
+  add('demo-counter/mirror', { direction: 'right', referencePanel: 'demo-counter/editor' });
+  add('demo-scratch/main', { direction: 'below', referencePanel: 'demo-counter/editor' });
 }
 
 export function setupWorkbench() {
