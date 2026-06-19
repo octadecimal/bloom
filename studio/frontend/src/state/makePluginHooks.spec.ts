@@ -18,8 +18,6 @@ describe('makePluginHooks', () => {
     const { result } = renderHook(() => usePluginState());
     expect(result.current.count.get()).toBe(0);
     act(() => result.current.count.set(3));
-    expect(
-      (rootStore.plugins.get() as Record<string, ICounter>).probe.count,
-    ).toBe(3);
+    expect((rootStore.plugins.get() as Record<string, ICounter>).probe.count).toBe(3);
   });
 });

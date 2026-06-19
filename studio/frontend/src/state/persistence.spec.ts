@@ -1,19 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  loadPersisted,
-  savePersisted,
-  makeDebouncedSaver,
-  STORAGE_PREFIX,
-} from './persistence';
+import { loadPersisted, savePersisted, makeDebouncedSaver, STORAGE_PREFIX } from './persistence';
 
 beforeEach(() => localStorage.clear());
 
 describe('persistence codec', () => {
   it('round-trips data under a prefixed key', () => {
     savePersisted('workspace', 1, { theme: 'light' });
-    expect(localStorage.getItem(STORAGE_PREFIX + 'workspace')).toContain(
-      '"version":1',
-    );
+    expect(localStorage.getItem(STORAGE_PREFIX + 'workspace')).toContain('"version":1');
     expect(loadPersisted('workspace', 1, { theme: 'dark' })).toEqual({
       theme: 'light',
     });

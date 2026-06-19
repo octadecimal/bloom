@@ -7,8 +7,7 @@ export function createPaneRegistry() {
   const panes = new Map<string, IPaneDef>();
   // The cached values are arrow-function wrappers, so they are always
   // FunctionComponents — which is exactly what DockviewReact's `components` wants.
-  let cache: Record<string, FunctionComponent<IDockviewPanelProps>> | null =
-    null;
+  let cache: Record<string, FunctionComponent<IDockviewPanelProps>> | null = null;
 
   return {
     register(def: IPaneDef) {

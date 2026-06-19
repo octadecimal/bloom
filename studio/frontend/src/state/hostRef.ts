@@ -7,7 +7,6 @@ export function setHost(h: IPluginHost): void {
 }
 
 export function getHost(): IPluginHost {
-  if (!current)
-    throw new Error('Host not initialised — call setHost() during boot.');
+  if (!current) throw new Error('Host not initialised — call setHost() during boot.');
   return current;
 }

@@ -166,8 +166,7 @@ store:
 // state/makePluginHooks.ts
 export function makePluginHooks<TState>(pluginId: string) {
   return {
-    usePluginState: () =>
-      useHookstate(rootStore.plugins[pluginId]) as State<TState>,
+    usePluginState: () => useHookstate(rootStore.plugins[pluginId]) as State<TState>,
     useHost: () => host, // module-scope singleton, NOT Context
   };
 }

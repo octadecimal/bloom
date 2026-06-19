@@ -26,11 +26,7 @@ export function loadPersisted<T>(key: string, version: number, fallback: T): T {
   }
 }
 
-export function makeDebouncedSaver<T>(
-  key: string,
-  version: number,
-  delayMs = 250,
-): (data: T) => void {
+export function makeDebouncedSaver<T>(key: string, version: number, delayMs = 250): (data: T) => void {
   let handle: ReturnType<typeof setTimeout> | undefined;
   return (data: T) => {
     if (handle) clearTimeout(handle);

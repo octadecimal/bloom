@@ -27,9 +27,7 @@ export const demoCounter: IPlugin<ICounterState> = {
       id: 'demo-counter/increment',
       title: 'Increment Counter',
       run: () => {
-        const slice = rootStore.plugins.nested(
-          'demo-counter',
-        ) as unknown as State<ICounterState>;
+        const slice = rootStore.plugins.nested('demo-counter') as unknown as State<ICounterState>;
         slice.count.set((c) => c + 1);
       },
     },

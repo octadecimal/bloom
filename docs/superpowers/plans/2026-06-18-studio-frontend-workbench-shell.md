@@ -109,9 +109,7 @@ import { test, expect } from '@playwright/test';
 test('workbench boots and renders the app root', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('workbench')).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Bloom Studio' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bloom Studio' })).toBeVisible();
 });
 ```
 
@@ -294,31 +292,21 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50',
-  {
-    variants: {
-      variant: {
-        default: 'bg-primary text-primary-foreground hover:opacity-90',
-        outline: 'border border-border bg-transparent hover:bg-primary/10',
-      },
-      size: { default: 'h-9 px-4 py-2', icon: 'h-9 w-9' },
+const buttonVariants = cva('inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50', {
+  variants: {
+    variant: {
+      default: 'bg-primary text-primary-foreground hover:opacity-90',
+      outline: 'border border-border bg-transparent hover:bg-primary/10',
     },
-    defaultVariants: { variant: 'default', size: 'default' },
+    size: { default: 'h-9 px-4 py-2', icon: 'h-9 w-9' },
   },
-);
+  defaultVariants: { variant: 'default', size: 'default' },
+});
 
-export interface IButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+export interface IButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export function Button({ className, variant, size, ...props }: IButtonProps) {
-  return (
-    <button
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  );
+  return <button className={cn(buttonVariants({ variant, size, className }))} {...props} />;
 }
 ```
 
@@ -343,9 +331,7 @@ export function Workbench() {
 ```ts
 import { test, expect } from '@playwright/test';
 
-test('shadcn Button renders with Tailwind utility classes applied', async ({
-  page,
-}) => {
+test('shadcn Button renders with Tailwind utility classes applied', async ({ page }) => {
   await page.goto('/');
   const btn = page.getByTestId('probe-button');
   await expect(btn).toBeVisible();
@@ -402,9 +388,7 @@ describe('rootStore', () => {
 
   it('allows seeding a plugin slice by id', () => {
     rootStore.plugins.merge({ probe: { n: 1 } });
-    expect(
-      (rootStore.plugins.get() as Record<string, { n: number }>).probe.n,
-    ).toBe(1);
+    expect((rootStore.plugins.get() as Record<string, { n: number }>).probe.n).toBe(1);
   });
 });
 ```
@@ -474,21 +458,14 @@ A pure localStorage codec: `{ version, data }` write/read with fallback-to-defau
 
 ```ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  loadPersisted,
-  savePersisted,
-  makeDebouncedSaver,
-  STORAGE_PREFIX,
-} from './persistence';
+import { loadPersisted, savePersisted, makeDebouncedSaver, STORAGE_PREFIX } from './persistence';
 
 beforeEach(() => localStorage.clear());
 
 describe('persistence codec', () => {
   it('round-trips data under a prefixed key', () => {
     savePersisted('workspace', 1, { theme: 'light' });
-    expect(localStorage.getItem(STORAGE_PREFIX + 'workspace')).toContain(
-      '"version":1',
-    );
+    expect(localStorage.getItem(STORAGE_PREFIX + 'workspace')).toContain('"version":1');
     expect(loadPersisted('workspace', 1, { theme: 'dark' })).toEqual({
       theme: 'light',
     });
@@ -558,11 +535,7 @@ export function loadPersisted<T>(key: string, version: number, fallback: T): T {
   }
 }
 
-export function makeDebouncedSaver<T>(
-  key: string,
-  version: number,
-  delayMs = 250,
-): (data: T) => void {
+export function makeDebouncedSaver<T>(key: string, version: number, delayMs = 250): (data: T) => void {
   let handle: ReturnType<typeof setTimeout> | undefined;
   return (data: T) => {
     if (handle) clearTimeout(handle);
@@ -622,9 +595,7 @@ describe('makePluginHooks', () => {
     const { result } = renderHook(() => usePluginState());
     expect(result.current.count.get()).toBe(0);
     act(() => result.current.count.set(3));
-    expect(
-      (rootStore.plugins.get() as Record<string, ICounter>).probe.count,
-    ).toBe(3);
+    expect((rootStore.plugins.get() as Record<string, ICounter>).probe.count).toBe(3);
   });
 });
 ```
@@ -653,8 +624,7 @@ export function setHost(h: IPluginHost): void {
 }
 
 export function getHost(): IPluginHost {
-  if (!current)
-    throw new Error('Host not initialised — call setHost() during boot.');
+  if (!current) throw new Error('Host not initialised — call setHost() during boot.');
   return current;
 }
 ```
@@ -670,10 +640,7 @@ import { getHost } from './hostRef';
 // root store. The `as State<TState>` cast is the single, contained type seam.
 export function makePluginHooks<TState>(pluginId: string) {
   return {
-    usePluginState: () =>
-      useHookstate(
-        rootStore.plugins.nested(pluginId),
-      ) as unknown as State<TState>,
+    usePluginState: () => useHookstate(rootStore.plugins.nested(pluginId)) as unknown as State<TState>,
     useHost: () => getHost(),
   };
 }
@@ -949,18 +916,11 @@ interface IPaneRegistryLike {
   get(id: string): unknown | undefined;
 }
 
-export function createLayoutService(deps: {
-  paneRegistry: IPaneRegistryLike;
-  defaultLayout: (api: any) => void;
-}) {
+export function createLayoutService(deps: { paneRegistry: IPaneRegistryLike; defaultLayout: (api: any) => void }) {
   const save = makeDebouncedSaver<unknown>(LAYOUT_KEY, LAYOUT_VERSION);
 
   function restore(api: any): void {
-    const saved = loadPersisted<unknown | null>(
-      LAYOUT_KEY,
-      LAYOUT_VERSION,
-      null,
-    );
+    const saved = loadPersisted<unknown | null>(LAYOUT_KEY, LAYOUT_VERSION, null);
     if (saved == null) return deps.defaultLayout(api);
     const ids = panelIdsFromLayout(saved);
     const unknown = ids.filter((id) => !deps.paneRegistry.get(id));
@@ -1054,9 +1014,7 @@ describe('boot', () => {
       panes: [{ id: 'demo/main', title: 'Main', component: Dummy }],
     };
     boot([p], host);
-    expect(
-      (rootStore.plugins.get() as Record<string, { n: number }>).demo.n,
-    ).toBe(7);
+    expect((rootStore.plugins.get() as Record<string, { n: number }>).demo.n).toBe(7);
     expect(host.listPanes().map((x) => x.id)).toEqual(['demo/main']);
   });
 
@@ -1092,9 +1050,7 @@ describe('boot', () => {
       panes: [],
     };
     boot([p], host);
-    expect(
-      (rootStore.plugins.get() as Record<string, { n: number }>).demo.n,
-    ).toBe(99);
+    expect((rootStore.plugins.get() as Record<string, { n: number }>).demo.n).toBe(99);
   });
 });
 ```
@@ -1173,23 +1129,14 @@ export const pluginStorageKey = (id: string) => id;
 export function boot(plugins: IPlugin[], host: IPluginHost): void {
   for (const p of plugins) {
     try {
-      const seed = p.persist
-        ? loadPersisted(
-            pluginStorageKey(p.id),
-            SLICE_VERSION,
-            p.initialState ?? {},
-          )
-        : (p.initialState ?? {});
+      const seed = p.persist ? loadPersisted(pluginStorageKey(p.id), SLICE_VERSION, p.initialState ?? {}) : (p.initialState ?? {});
       rootStore.plugins.nested(p.id).set(seed as never);
 
       p.panes.forEach((pane) => host.registerPane(pane));
       p.commands?.forEach((cmd) => host.registerCommand(cmd));
       p.init?.(host);
     } catch (err) {
-      console.error(
-        `[boot] plugin "${p.id}" failed to initialise — skipping`,
-        err,
-      );
+      console.error(`[boot] plugin "${p.id}" failed to initialise — skipping`, err);
     }
   }
 }
@@ -1250,8 +1197,7 @@ export function registerSlicePersistence(plugins: IPlugin[]): void {
         ({
           id: Symbol(p.id),
           init: () => ({}),
-          onSet: () =>
-            save(rootStore.plugins.nested(p.id).get({ noproxy: true })),
+          onSet: () => save(rootStore.plugins.nested(p.id).get({ noproxy: true })),
         }) as never,
     );
   }
@@ -1365,15 +1311,8 @@ export function Workbench() {
   const components = useMemo(() => wb.paneRegistry.asComponentMap(), [wb]);
 
   return (
-    <div
-      data-testid="workbench"
-      className="dockview-theme-dark"
-      style={{ height: '100vh' }}
-    >
-      <DockviewReact
-        components={components}
-        onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)}
-      />
+    <div data-testid="workbench" className="dockview-theme-dark" style={{ height: '100vh' }}>
+      <DockviewReact components={components} onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)} />
     </div>
   );
 }
@@ -1386,9 +1325,7 @@ export function Workbench() {
 ```ts
 import { test, expect } from '@playwright/test';
 
-test('the docking surface mounts and shows the default pane', async ({
-  page,
-}) => {
+test('the docking surface mounts and shows the default pane', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('temp-pane')).toBeVisible();
 });
@@ -1440,11 +1377,7 @@ export function hydrateWorkspace(): void {
 }
 
 export function registerWorkspacePersistence(): void {
-  const save = makeDebouncedSaver<{ theme: 'light' | 'dark' }>(
-    WS_KEY,
-    WS_VERSION,
-    50,
-  );
+  const save = makeDebouncedSaver<{ theme: 'light' | 'dark' }>(WS_KEY, WS_VERSION, 50);
   rootStore.workspace.attach(
     () =>
       ({
@@ -1492,12 +1425,7 @@ import { rootStore } from '../state/rootStore';
 export function ThemeToggle() {
   const theme = useHookstate(rootStore.workspace.theme);
   return (
-    <Button
-      data-testid="theme-toggle"
-      variant="outline"
-      size="icon"
-      onClick={() => theme.set((t) => (t === 'dark' ? 'light' : 'dark'))}
-    >
+    <Button data-testid="theme-toggle" variant="outline" size="icon" onClick={() => theme.set((t) => (t === 'dark' ? 'light' : 'dark'))}>
       {theme.get() === 'dark' ? '🌙' : '☀️'}
     </Button>
   );
@@ -1522,18 +1450,12 @@ export function Workbench() {
   useApplyTheme(dockEl);
 
   return (
-    <div
-      data-testid="workbench"
-      style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}
-    >
+    <div data-testid="workbench" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 4 }}>
         <ThemeToggle />
       </div>
       <div ref={setDockEl} style={{ flex: 1 }}>
-        <DockviewReact
-          components={components}
-          onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)}
-        />
+        <DockviewReact components={components} onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)} />
       </div>
     </div>
   );
@@ -1547,9 +1469,7 @@ export function Workbench() {
 ```ts
 import { test, expect } from '@playwright/test';
 
-test('theme toggle flips dark/light and persists across reload', async ({
-  page,
-}) => {
+test('theme toggle flips dark/light and persists across reload', async ({ page }) => {
   await page.goto('/');
   const html = page.locator('html');
   await expect(html).toHaveClass(/dark/);
@@ -1599,13 +1519,7 @@ Run inside `studio/frontend`: `npx shadcn@latest add command menubar` (or vendor
 
 ```tsx
 import { useEffect, useState } from 'react';
-import {
-  CommandDialog,
-  CommandInput,
-  CommandList,
-  CommandItem,
-  CommandEmpty,
-} from '@/components/ui/command';
+import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
 import { getHost } from '../state/hostRef';
 
 export function CommandPalette() {
@@ -1650,13 +1564,7 @@ export function CommandPalette() {
 `studio/frontend/src/app/Menubar.tsx`:
 
 ```tsx
-import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-} from '@/components/ui/menubar';
+import { Menubar, MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } from '@/components/ui/menubar';
 import { getHost } from '../state/hostRef';
 
 export function AppMenubar() {
@@ -1666,10 +1574,7 @@ export function AppMenubar() {
       <MenubarMenu>
         <MenubarTrigger>File</MenubarTrigger>
         <MenubarContent>
-          <MenubarItem
-            data-testid="menu-reset-layout"
-            onClick={() => host.resetLayout()}
-          >
+          <MenubarItem data-testid="menu-reset-layout" onClick={() => host.resetLayout()}>
             Reset layout
           </MenubarItem>
         </MenubarContent>
@@ -1678,11 +1583,7 @@ export function AppMenubar() {
         <MenubarTrigger data-testid="menu-view">View</MenubarTrigger>
         <MenubarContent>
           {host.listPanes().map((p) => (
-            <MenubarItem
-              key={p.id}
-              data-testid={`view-open-${p.id}`}
-              onClick={() => host.openPane(p.id)}
-            >
+            <MenubarItem key={p.id} data-testid={`view-open-${p.id}`} onClick={() => host.openPane(p.id)}>
               {p.title}
             </MenubarItem>
           ))}
@@ -1711,9 +1612,7 @@ test('Ctrl-K opens the palette and runs a command', async ({ page }) => {
   // a demo command (added in Task 13) opens a pane — asserted there; here assert the palette opens.
 });
 
-test('View menu opens a pane and re-opening focuses (no duplicate)', async ({
-  page,
-}) => {
+test('View menu opens a pane and re-opening focuses (no duplicate)', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('menu-view').click();
   // pane ids resolved against the demo plugins in Task 13; this test is completed there.
@@ -1794,10 +1693,7 @@ interface IPaneErrorBoundaryState {
   error: Error | null;
 }
 
-export class PaneErrorBoundary extends Component<
-  IPaneErrorBoundaryProps,
-  IPaneErrorBoundaryState
-> {
+export class PaneErrorBoundary extends Component<IPaneErrorBoundaryProps, IPaneErrorBoundaryState> {
   state: IPaneErrorBoundaryState = { error: null };
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -1822,9 +1718,7 @@ In `paneRegistry.ts`, change `asComponentMap` to wrap each component:
 ```tsx
 // at top: import { PaneErrorBoundary } from '../app/PaneErrorBoundary';
 // inside asComponentMap, when building cache:
-cache[id] = (props: IDockviewPanelProps) => (
-  <PaneErrorBoundary>{def.component(props) as never}</PaneErrorBoundary>
-);
+cache[id] = (props: IDockviewPanelProps) => <PaneErrorBoundary>{def.component(props) as never}</PaneErrorBoundary>;
 ```
 
 (Rename `paneRegistry.ts` → `paneRegistry.tsx` since it now contains JSX. Update imports.)
@@ -1905,10 +1799,7 @@ export function CounterPane() {
   return (
     <div data-testid="counter-pane" style={{ padding: 12 }}>
       <span data-testid="counter-value">{s.count.get()}</span>
-      <Button
-        data-testid="counter-inc"
-        onClick={() => s.count.set((c) => c + 1)}
-      >
+      <Button data-testid="counter-inc" onClick={() => s.count.set((c) => c + 1)}>
         +
       </Button>
     </div>
@@ -1984,11 +1875,7 @@ export function ScratchPane() {
   bumpRenderCount('ScratchPane');
   return (
     <div data-testid="scratch-pane" style={{ padding: 12 }}>
-      <input
-        data-testid="scratch-input"
-        value={s.text.get()}
-        onChange={(e) => s.text.set(e.target.value)}
-      />
+      <input data-testid="scratch-input" value={s.text.get()} onChange={(e) => s.text.set(e.target.value)} />
     </div>
   );
 }
@@ -2032,10 +1919,7 @@ In `workbenchSetup.ts`, replace `DEFAULT_LAYOUT`:
 
 ```ts
 function DEFAULT_LAYOUT(api: DockviewApi) {
-  const add = (
-    id: string,
-    ref?: { direction: 'right' | 'below'; referencePanel: string },
-  ) => {
+  const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
     if (!api.getPanel(id))
       api.addPanel({
         id,
@@ -2063,9 +1947,7 @@ function DEFAULT_LAYOUT(api: DockviewApi) {
 ```ts
 import { test, expect } from '@playwright/test';
 
-test('counter increments, mirror reflects, and count persists across reload (rows 5)', async ({
-  page,
-}) => {
+test('counter increments, mirror reflects, and count persists across reload (rows 5)', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('counter-inc').click();
   await page.getByTestId('counter-inc').click();
@@ -2082,9 +1964,7 @@ test('scratch text is ephemeral across reload (row 6)', async ({ page }) => {
   await expect(page.getByTestId('scratch-input')).toHaveValue(''); // persist:false
 });
 
-test('incrementing re-renders only counter + mirror, not scratch (row 10)', async ({
-  page,
-}) => {
+test('incrementing re-renders only counter + mirror, not scratch (row 10)', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => (window.__renderCounts = {}));
   await page.getByTestId('counter-inc').click();
@@ -2094,9 +1974,7 @@ test('incrementing re-renders only counter + mirror, not scratch (row 10)', asyn
   expect(counts['ScratchPane'] ?? 0).toBe(0); // scoped subscription: scratch must not re-render
 });
 
-test('View menu opens a pane and re-opening focuses, not duplicates (row 4)', async ({
-  page,
-}) => {
+test('View menu opens a pane and re-opening focuses, not duplicates (row 4)', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('demo-counter/editor' === 'x' ? '' : 'counter-inc'); // ensure app booted
   // close, then reopen via the View menu, then reopen again — still exactly one
@@ -2143,10 +2021,7 @@ Complete the layout coverage (rows 7, 8, 9): API-driven dock changes + persisten
 import type { Page } from '@playwright/test';
 
 export async function seedLocalStorage(page: Page, key: string, value: string) {
-  await page.addInitScript(
-    ([k, v]) => localStorage.setItem(k, v),
-    [key, value],
-  );
+  await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [key, value]);
 }
 ```
 
@@ -2158,14 +2033,10 @@ export async function seedLocalStorage(page: Page, key: string, value: string) {
 import { test, expect } from '@playwright/test';
 import { seedLocalStorage } from './helpers';
 
-test('layout persists across reload and Reset restores default (row 8)', async ({
-  page,
-}) => {
+test('layout persists across reload and Reset restores default (row 8)', async ({ page }) => {
   await page.goto('/');
   // close the scratch pane via dockview API, reload, assert it stays closed (layout persisted)
-  await page.evaluate(() =>
-    (window as any).__wbApi?.getPanel('demo-scratch/main')?.api.close(),
-  );
+  await page.evaluate(() => (window as any).__wbApi?.getPanel('demo-scratch/main')?.api.close());
   await expect(page.getByTestId('scratch-pane')).toHaveCount(0);
   await page.reload();
   await expect(page.getByTestId('scratch-pane')).toHaveCount(0);
@@ -2174,17 +2045,13 @@ test('layout persists across reload and Reset restores default (row 8)', async (
   await expect(page.getByTestId('scratch-pane')).toHaveCount(1);
 });
 
-test('a corrupt saved layout falls back to default without crashing (row 9)', async ({
-  page,
-}) => {
+test('a corrupt saved layout falls back to default without crashing (row 9)', async ({ page }) => {
   await seedLocalStorage(page, 'bloom.studio.layout', '{not valid json');
   await page.goto('/');
   await expect(page.getByTestId('counter-pane')).toBeVisible(); // default layout applied, no crash
 });
 
-test('real drag smoke: a tab can be dragged to a new group (row 7)', async ({
-  page,
-}) => {
+test('real drag smoke: a tab can be dragged to a new group (row 7)', async ({ page }) => {
   await page.goto('/');
   const source = page.getByText('Scratch', { exact: true }).first();
   const target = page.getByTestId('counter-pane');
@@ -2228,8 +2095,7 @@ In `workbenchSetup.ts`, before `boot`, allow an injected extra plugin from a glo
 
 ```ts
 let extra: any[] = [];
-if (!import.meta.env.PROD && (window as any).__injectPlugins)
-  extra = (window as any).__injectPlugins;
+if (!import.meta.env.PROD && (window as any).__injectPlugins) extra = (window as any).__injectPlugins;
 boot([...PLUGINS, ...extra], host);
 ```
 
@@ -2240,9 +2106,7 @@ boot([...PLUGINS, ...extra], host);
 ```ts
 import { test, expect } from '@playwright/test';
 
-test('a plugin whose init throws is skipped; the workbench still boots (row 11)', async ({
-  page,
-}) => {
+test('a plugin whose init throws is skipped; the workbench still boots (row 11)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as any).__injectPlugins = [
       {
@@ -2259,19 +2123,13 @@ test('a plugin whose init throws is skipped; the workbench still boots (row 11)'
   await expect(page.getByTestId('counter-pane')).toBeVisible(); // good plugins still loaded
 });
 
-test('a corrupt persisted plugin slice falls back to initialState (row 12)', async ({
-  page,
-}) => {
-  await page.addInitScript(() =>
-    localStorage.setItem('bloom.studio.demo-counter', '{bad json'),
-  );
+test('a corrupt persisted plugin slice falls back to initialState (row 12)', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('bloom.studio.demo-counter', '{bad json'));
   await page.goto('/');
   await expect(page.getByTestId('counter-value')).toHaveText('0'); // initialState, no crash
 });
 
-test('an unknown command id is a no-op, no crash (row 13)', async ({
-  page,
-}) => {
+test('an unknown command id is a no-op, no crash (row 13)', async ({ page }) => {
   await page.goto('/');
   const ok = await page.evaluate(() => {
     try {

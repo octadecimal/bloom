@@ -13,10 +13,7 @@ export function Workbench() {
   useApplyTheme(dockEl);
 
   return (
-    <div
-      data-testid="workbench"
-      style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}
-    >
+    <div data-testid="workbench" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Top header bar */}
       <div
         style={{
@@ -41,10 +38,7 @@ export function Workbench() {
 
       {/* Dockview surface — fills remaining height; theme class managed by useApplyTheme */}
       <div ref={setDockEl} style={{ flex: 1, overflow: 'hidden' }}>
-        <DockviewReact
-          components={components}
-          onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)}
-        />
+        <DockviewReact components={components} onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)} />
       </div>
     </div>
   );

@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { seedLocalStorage } from './helpers';
 
-test('layout persists across reload and Reset restores default (row 8)', async ({
-  page,
-}) => {
+test('layout persists across reload and Reset restores default (row 8)', async ({ page }) => {
   await page.goto('/');
   // Close the scratch pane via dockview API (dev/test-only window exposure).
   await page.evaluate(() =>
@@ -34,18 +32,14 @@ test('layout persists across reload and Reset restores default (row 8)', async (
   await expect(page.getByTestId('scratch-pane')).toHaveCount(1);
 });
 
-test('a corrupt saved layout falls back to default without crashing (row 9)', async ({
-  page,
-}) => {
+test('a corrupt saved layout falls back to default without crashing (row 9)', async ({ page }) => {
   await seedLocalStorage(page, 'bloom.studio.layout', '{not valid json');
   await page.goto('/');
   // Default layout applied, no crash.
   await expect(page.getByTestId('counter-pane')).toBeVisible();
 });
 
-test('real drag smoke: a tab can be dragged to a new group (row 7)', async ({
-  page,
-}) => {
+test('real drag smoke: a tab can be dragged to a new group (row 7)', async ({ page }) => {
   await page.goto('/');
   // Dockview now renders the human title from IPaneDef.title.
   const source = page.locator('.dv-tab', { hasText: 'Scratch' }).first();

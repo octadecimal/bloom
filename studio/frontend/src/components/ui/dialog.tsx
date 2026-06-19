@@ -8,13 +8,9 @@ const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
-export interface IDialogOverlayProps
-  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay> {}
+export interface IDialogOverlayProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay> {}
 
-const DialogOverlay = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Overlay>,
-  IDialogOverlayProps
->(({ className, ...props }, ref) => (
+const DialogOverlay = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Overlay>, IDialogOverlayProps>(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
@@ -26,13 +22,9 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
-export interface IDialogContentProps
-  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {}
+export interface IDialogContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {}
 
-const DialogContent = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Content>,
-  IDialogContentProps
->(({ className, children, ...props }, ref) => (
+const DialogContent = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Content>, IDialogContentProps>(({ className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -53,11 +45,4 @@ const DialogContent = React.forwardRef<
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
-export {
-  Dialog,
-  DialogPortal,
-  DialogOverlay,
-  DialogClose,
-  DialogTrigger,
-  DialogContent,
-};
+export { Dialog, DialogPortal, DialogOverlay, DialogClose, DialogTrigger, DialogContent };

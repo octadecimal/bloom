@@ -8,23 +8,14 @@ export const pluginStorageKey = (id: string) => id;
 export function boot(plugins: IPlugin[], host: IPluginHost): void {
   for (const p of plugins) {
     try {
-      const seed = p.persist
-        ? loadPersisted(
-            pluginStorageKey(p.id),
-            SLICE_VERSION,
-            p.initialState ?? {},
-          )
-        : (p.initialState ?? {});
+      const seed = p.persist ? loadPersisted(pluginStorageKey(p.id), SLICE_VERSION, p.initialState ?? {}) : (p.initialState ?? {});
       rootStore.plugins.nested(p.id).set(seed as never);
 
       p.panes.forEach((pane) => host.registerPane(pane));
       p.commands?.forEach((cmd) => host.registerCommand(cmd));
       p.init?.(host);
     } catch (err) {
-      console.error(
-        `[boot] plugin "${p.id}" failed to initialise — skipping`,
-        err,
-      );
+      console.error(`[boot] plugin "${p.id}" failed to initialise — skipping`, err);
     }
   }
 }

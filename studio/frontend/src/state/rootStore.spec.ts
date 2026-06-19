@@ -13,8 +13,6 @@ describe('rootStore', () => {
 
   it('allows seeding a plugin slice by id', () => {
     rootStore.plugins.merge({ probe: { n: 1 } });
-    expect(
-      (rootStore.plugins.get() as Record<string, { n: number }>).probe.n,
-    ).toBe(1);
+    expect((rootStore.plugins.get() as Record<string, { n: number }>).probe.n).toBe(1);
   });
 });

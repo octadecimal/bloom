@@ -13,18 +13,11 @@ interface IPaneRegistryLike {
   get(id: string): unknown | undefined;
 }
 
-export function createLayoutService(deps: {
-  paneRegistry: IPaneRegistryLike;
-  defaultLayout: (api: any) => void;
-}) {
+export function createLayoutService(deps: { paneRegistry: IPaneRegistryLike; defaultLayout: (api: any) => void }) {
   const save = makeDebouncedSaver<unknown>(LAYOUT_KEY, LAYOUT_VERSION);
 
   function restore(api: any): void {
-    const saved = loadPersisted<unknown | null>(
-      LAYOUT_KEY,
-      LAYOUT_VERSION,
-      null,
-    );
+    const saved = loadPersisted<unknown | null>(LAYOUT_KEY, LAYOUT_VERSION, null);
     if (saved == null) return deps.defaultLayout(api);
     const ids = panelIdsFromLayout(saved);
     const unknown = ids.filter((id) => !deps.paneRegistry.get(id));

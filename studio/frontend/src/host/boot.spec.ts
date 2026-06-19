@@ -33,9 +33,7 @@ describe('boot', () => {
       panes: [{ id: 'demo/main', title: 'Main', component: Dummy }],
     };
     boot([p], host);
-    expect(
-      (rootStore.plugins.get() as Record<string, { n: number }>).demo.n,
-    ).toBe(7);
+    expect((rootStore.plugins.get() as Record<string, { n: number }>).demo.n).toBe(7);
     expect(host.listPanes().map((x) => x.id)).toEqual(['demo/main']);
   });
 
@@ -72,8 +70,6 @@ describe('boot', () => {
       panes: [],
     };
     boot([p], host);
-    expect(
-      (rootStore.plugins.get() as Record<string, { n: number }>).demo.n,
-    ).toBe(99);
+    expect((rootStore.plugins.get() as Record<string, { n: number }>).demo.n).toBe(99);
   });
 });

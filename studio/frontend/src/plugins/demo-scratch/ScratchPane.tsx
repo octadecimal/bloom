@@ -6,11 +6,7 @@ export function ScratchPane() {
   bumpRenderCount('ScratchPane');
   return (
     <div data-testid="scratch-pane" style={{ padding: 12 }}>
-      <input
-        data-testid="scratch-input"
-        value={s.text.get()}
-        onChange={(e) => s.text.set(e.target.value)}
-      />
+      <input data-testid="scratch-input" value={s.text.get()} onChange={(e) => s.text.set(e.target.value)} />
     </div>
   );
 }

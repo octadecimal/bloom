@@ -8,31 +8,16 @@ const MenubarPortal = MenubarPrimitive.Portal;
 const MenubarSub = MenubarPrimitive.Sub;
 const MenubarRadioGroup = MenubarPrimitive.RadioGroup;
 
-export interface IMenubarProps
-  extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Root> {}
+export interface IMenubarProps extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Root> {}
 
-const Menubar = React.forwardRef<
-  React.ComponentRef<typeof MenubarPrimitive.Root>,
-  IMenubarProps
->(({ className, ...props }, ref) => (
-  <MenubarPrimitive.Root
-    ref={ref}
-    className={cn(
-      'flex h-10 items-center space-x-1 rounded-md border border-border bg-background p-1',
-      className,
-    )}
-    {...props}
-  />
+const Menubar = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive.Root>, IMenubarProps>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.Root ref={ref} className={cn('flex h-10 items-center space-x-1 rounded-md border border-border bg-background p-1', className)} {...props} />
 ));
 Menubar.displayName = MenubarPrimitive.Root.displayName;
 
-export interface IMenubarTriggerProps
-  extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Trigger> {}
+export interface IMenubarTriggerProps extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Trigger> {}
 
-const MenubarTrigger = React.forwardRef<
-  React.ComponentRef<typeof MenubarPrimitive.Trigger>,
-  IMenubarTriggerProps
->(({ className, ...props }, ref) => (
+const MenubarTrigger = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive.Trigger>, IMenubarTriggerProps>(({ className, ...props }, ref) => (
   <MenubarPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -44,17 +29,10 @@ const MenubarTrigger = React.forwardRef<
 ));
 MenubarTrigger.displayName = MenubarPrimitive.Trigger.displayName;
 
-export interface IMenubarContentProps
-  extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Content> {}
+export interface IMenubarContentProps extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Content> {}
 
-const MenubarContent = React.forwardRef<
-  React.ComponentRef<typeof MenubarPrimitive.Content>,
-  IMenubarContentProps
->(
-  (
-    { className, align = 'start', alignOffset = -4, sideOffset = 8, ...props },
-    ref,
-  ) => (
+const MenubarContent = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive.Content>, IMenubarContentProps>(
+  ({ className, align = 'start', alignOffset = -4, sideOffset = 8, ...props }, ref) => (
     <MenubarPrimitive.Portal>
       <MenubarPrimitive.Content
         ref={ref}
@@ -72,15 +50,11 @@ const MenubarContent = React.forwardRef<
 );
 MenubarContent.displayName = MenubarPrimitive.Content.displayName;
 
-export interface IMenubarItemProps
-  extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Item> {
+export interface IMenubarItemProps extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Item> {
   inset?: boolean;
 }
 
-const MenubarItem = React.forwardRef<
-  React.ComponentRef<typeof MenubarPrimitive.Item>,
-  IMenubarItemProps
->(({ className, inset, ...props }, ref) => (
+const MenubarItem = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive.Item>, IMenubarItemProps>(({ className, inset, ...props }, ref) => (
   <MenubarPrimitive.Item
     ref={ref}
     className={cn(
@@ -93,30 +67,11 @@ const MenubarItem = React.forwardRef<
 ));
 MenubarItem.displayName = MenubarPrimitive.Item.displayName;
 
-export interface IMenubarSeparatorProps
-  extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Separator> {}
+export interface IMenubarSeparatorProps extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Separator> {}
 
-const MenubarSeparator = React.forwardRef<
-  React.ComponentRef<typeof MenubarPrimitive.Separator>,
-  IMenubarSeparatorProps
->(({ className, ...props }, ref) => (
-  <MenubarPrimitive.Separator
-    ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-muted', className)}
-    {...props}
-  />
+const MenubarSeparator = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive.Separator>, IMenubarSeparatorProps>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-muted', className)} {...props} />
 ));
 MenubarSeparator.displayName = MenubarPrimitive.Separator.displayName;
 
-export {
-  Menubar,
-  MenubarMenu,
-  MenubarGroup,
-  MenubarPortal,
-  MenubarSub,
-  MenubarRadioGroup,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-  MenubarSeparator,
-};
+export { Menubar, MenubarMenu, MenubarGroup, MenubarPortal, MenubarSub, MenubarRadioGroup, MenubarTrigger, MenubarContent, MenubarItem, MenubarSeparator };

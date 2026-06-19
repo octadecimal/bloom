@@ -13,9 +13,7 @@ test('Ctrl-K opens the palette and runs a command', async ({ page }) => {
   await expect(page.getByTestId('counter-value')).toHaveText('1');
 });
 
-test('View menu opens a pane and re-opening focuses (no duplicate)', async ({
-  page,
-}) => {
+test('View menu opens a pane and re-opening focuses (no duplicate)', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('counter-pane')).toBeVisible();
   await page.getByTestId('menu-view').click();

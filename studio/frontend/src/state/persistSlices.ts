@@ -17,17 +17,12 @@ export function registerSlicePersistence(plugins: IPlugin[]): () => void {
   if (persistPlugins.length === 0) return () => {};
 
   // Create one debounced saver per persist:true plugin.
-  const savers = new Map(
-    persistPlugins.map((p) => [p.id, makeDebouncedSaver(p.id, SLICE_VERSION)]),
-  );
+  const savers = new Map(persistPlugins.map((p) => [p.id, makeDebouncedSaver(p.id, SLICE_VERSION)]));
 
   // Register a single root-store change listener. Path-agnostic: fires on any
   // mutation anywhere in the tree, but only persists the slices opted in.
   const unsubscribe = onRootStoreSet(() => {
-    const pluginsMap = rootStore.plugins.get({ noproxy: true }) as Record<
-      string,
-      unknown
-    >;
+    const pluginsMap = rootStore.plugins.get({ noproxy: true }) as Record<string, unknown>;
     savers.forEach((save, id) => {
       if (id in pluginsMap) {
         save(pluginsMap[id]);
