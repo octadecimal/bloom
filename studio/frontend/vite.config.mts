@@ -37,7 +37,7 @@ export default defineConfig(() => ({
   },
   test: {
     globals: true,
-    environment: 'node',
+    environment: 'jsdom',
     include: ['src/**/*.{spec,test}.{ts,tsx}'],
     reporters: ['default'],
   },
