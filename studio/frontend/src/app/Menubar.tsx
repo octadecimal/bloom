@@ -1,10 +1,4 @@
-import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-} from '@/components/ui/menubar';
+import { Menubar, MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } from '@/components/ui/menubar';
 import { getHost } from '../state/hostRef';
 
 export function AppMenubar() {
@@ -14,10 +8,7 @@ export function AppMenubar() {
       <MenubarMenu>
         <MenubarTrigger data-testid="menu-file">File</MenubarTrigger>
         <MenubarContent>
-          <MenubarItem
-            data-testid="menu-reset-layout"
-            onClick={() => host.resetLayout()}
-          >
+          <MenubarItem data-testid="menu-reset-layout" onClick={() => host.resetLayout()}>
             Reset layout
           </MenubarItem>
         </MenubarContent>
@@ -26,11 +17,7 @@ export function AppMenubar() {
         <MenubarTrigger data-testid="menu-view">View</MenubarTrigger>
         <MenubarContent>
           {host.listPanes().map((p) => (
-            <MenubarItem
-              key={p.id}
-              data-testid={`view-open-${p.id}`}
-              onClick={() => host.openPane(p.id)}
-            >
+            <MenubarItem key={p.id} data-testid={`view-open-${p.id}`} onClick={() => host.openPane(p.id)}>
               {p.title}
             </MenubarItem>
           ))}

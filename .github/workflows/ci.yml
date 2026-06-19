@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref so pushes don't pile up.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, build, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace
+
+      - name: Test
+        run: cargo test --workspace
+
+  frontend:
+    name: Frontend (prettier, typecheck, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Repo-wide formatting gate (Prettier covers more than just the frontend,
+      # but it needs Node, so it lives here).
+      - name: Prettier
+        run: npx prettier --check .
+
+      - name: Typecheck
+        run: npx nx typecheck frontend
+
+      - name: Test
+        run: npx nx test frontend
+
+      - name: Build
+        run: npx nx build frontend
+
+  # NOTE: Playwright browser e2e (just e2e) is intentionally NOT run in CI.
+  # Per the repo CI cost policy (AGENTS.md), browser e2e is too expensive to
+  # gate every PR and is run locally instead.

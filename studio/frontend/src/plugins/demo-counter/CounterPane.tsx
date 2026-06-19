@@ -8,7 +8,9 @@ export function CounterPane() {
   return (
     <div data-testid="counter-pane" style={{ padding: 12 }}>
       <span data-testid="counter-value">{s.count.get()}</span>
-      <Button data-testid="counter-inc" onClick={() => s.count.set((c) => c + 1)}>+</Button>
+      <Button data-testid="counter-inc" onClick={() => s.count.set((c) => c + 1)}>
+        +
+      </Button>
     </div>
   );
 }

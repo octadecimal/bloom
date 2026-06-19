@@ -7,5 +7,11 @@ export const demoScratch: IPlugin<IScratchState> = {
   title: 'Scratch',
   persist: false,
   initialState: { text: '' },
-  panes: [{ id: 'demo-scratch/main', title: 'Scratch', component: ScratchPane as never }],
+  panes: [
+    {
+      id: 'demo-scratch/main',
+      title: 'Scratch',
+      component: ScratchPane as never,
+    },
+  ],
 };

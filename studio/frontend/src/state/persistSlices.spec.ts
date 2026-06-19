@@ -5,8 +5,18 @@ import { registerSlicePersistence } from './persistSlices';
 import type { IPlugin } from '../host/types';
 
 // Minimal IPlugin stubs
-const keepPlugin: IPlugin = { id: 'keep', title: 'Keep', panes: [], persist: true };
-const skipPlugin: IPlugin = { id: 'skip', title: 'Skip', panes: [], persist: false };
+const keepPlugin: IPlugin = {
+  id: 'keep',
+  title: 'Keep',
+  panes: [],
+  persist: true,
+};
+const skipPlugin: IPlugin = {
+  id: 'skip',
+  title: 'Skip',
+  panes: [],
+  persist: false,
+};
 
 beforeEach(() => {
   vi.useFakeTimers();

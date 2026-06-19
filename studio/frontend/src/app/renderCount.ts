@@ -1,5 +1,9 @@
 // Test-only instrumentation: counts renders per named component.
-declare global { interface Window { __renderCounts?: Record<string, number> } }
+declare global {
+  interface Window {
+    __renderCounts?: Record<string, number>;
+  }
+}
 
 export function bumpRenderCount(name: string): void {
   if (import.meta.env.PROD) return;

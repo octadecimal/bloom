@@ -5,8 +5,15 @@ test('layout persists across reload and Reset restores default (row 8)', async (
   await page.goto('/');
   // Close the scratch pane via dockview API (dev/test-only window exposure).
   await page.evaluate(() =>
-    (window as unknown as { __wbApi?: { getPanel: (id: string) => { api: { close: () => void } } | undefined } })
-      .__wbApi?.getPanel('demo-scratch/main')?.api.close()
+    (
+      window as unknown as {
+        __wbApi?: {
+          getPanel: (id: string) => { api: { close: () => void } } | undefined;
+        };
+      }
+    ).__wbApi
+      ?.getPanel('demo-scratch/main')
+      ?.api.close(),
   );
   await expect(page.getByTestId('scratch-pane')).toHaveCount(0);
   // Wait deterministically for the debounced (~250ms) layout save to flush before reloading.

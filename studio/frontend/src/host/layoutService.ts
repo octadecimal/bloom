@@ -13,10 +13,7 @@ interface IPaneRegistryLike {
   get(id: string): unknown | undefined;
 }
 
-export function createLayoutService(deps: {
-  paneRegistry: IPaneRegistryLike;
-  defaultLayout: (api: any) => void;
-}) {
+export function createLayoutService(deps: { paneRegistry: IPaneRegistryLike; defaultLayout: (api: any) => void }) {
   const save = makeDebouncedSaver<unknown>(LAYOUT_KEY, LAYOUT_VERSION);
 
   function restore(api: any): void {

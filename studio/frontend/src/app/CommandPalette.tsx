@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  CommandDialog,
-  CommandInput,
-  CommandList,
-  CommandItem,
-  CommandEmpty,
-} from '@/components/ui/command';
+import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
 import { getHost } from '../state/hostRef';
 
 export function CommandPalette() {

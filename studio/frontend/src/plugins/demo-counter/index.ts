@@ -11,8 +11,16 @@ export const demoCounter: IPlugin<ICounterState> = {
   persist: true,
   initialState: { count: 0 },
   panes: [
-    { id: 'demo-counter/editor', title: 'Counter', component: CounterPane as never },
-    { id: 'demo-counter/mirror', title: 'Mirror', component: MirrorPane as never },
+    {
+      id: 'demo-counter/editor',
+      title: 'Counter',
+      component: CounterPane as never,
+    },
+    {
+      id: 'demo-counter/mirror',
+      title: 'Mirror',
+      component: MirrorPane as never,
+    },
   ],
   commands: [
     {

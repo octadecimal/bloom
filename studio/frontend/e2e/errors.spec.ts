@@ -3,7 +3,14 @@ import { test, expect } from '@playwright/test';
 test('a plugin whose init throws is skipped; the workbench still boots (row 11)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __injectPlugins?: unknown[] }).__injectPlugins = [
-      { id: 'bad', title: 'Bad', panes: [], init: () => { throw new Error('boom'); } },
+      {
+        id: 'bad',
+        title: 'Bad',
+        panes: [],
+        init: () => {
+          throw new Error('boom');
+        },
+      },
     ];
   });
   await page.goto('/');

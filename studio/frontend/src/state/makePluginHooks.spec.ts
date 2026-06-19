@@ -3,10 +3,14 @@ import { renderHook, act } from '@testing-library/react';
 import { rootStore } from './rootStore';
 import { makePluginHooks } from './makePluginHooks';
 
-interface ICounter { count: number }
+interface ICounter {
+  count: number;
+}
 
 describe('makePluginHooks', () => {
-  afterEach(() => { rootStore.plugins.set({}); });
+  afterEach(() => {
+    rootStore.plugins.set({});
+  });
 
   it('reads and writes the plugin-scoped slice', () => {
     rootStore.plugins.merge({ probe: { count: 0 } });

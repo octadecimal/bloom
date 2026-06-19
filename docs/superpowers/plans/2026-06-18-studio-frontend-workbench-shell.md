@@ -30,12 +30,14 @@
 Stand up the Nx workspace at the repo root (coexisting with the Cargo workspace), generate the `studio-frontend` React app on Vite, wire Playwright, and prove the app boots with one smoke e2e. Folds in all toolchain setup so the deliverable is "the app runs and a real browser sees it."
 
 **Files:**
+
 - Create (generated): root `package.json`, `nx.json`, `tsconfig.base.json`, `.nvmrc`, `.prettierrc`
 - Create (generated): `studio/frontend/project.json`, `vite.config.ts`, `tsconfig*.json`, `index.html`, `src/main.tsx`, `src/app/Workbench.tsx`
 - Create: `studio/frontend/playwright.config.ts`, `studio/frontend/e2e/smoke.spec.ts`
 - Modify: `justfile`, `.gitignore`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: a runnable Nx app served at `http://localhost:4200`; `<Workbench>` placeholder rendering a `data-testid="workbench"` root.
 
@@ -177,11 +179,13 @@ git commit -m "build(frontend): scaffold Nx React app + Playwright smoke test"
 Wire Tailwind v4 (CSS-first) and shadcn into the Nx app, and prove a styled shadcn `Button` renders. This is the highest-risk setup step (Tailwind v4 + Nx + shadcn is the least-worn combination) — isolate it so a reviewer can reject just this.
 
 **Files:**
+
 - Modify: `studio/frontend/vite.config.ts`, `studio/frontend/src/main.tsx`
 - Create: `studio/frontend/src/styles.css`, `studio/frontend/components.json`, `studio/frontend/src/lib/utils.ts`, `studio/frontend/src/components/ui/button.tsx`
 - Create: `studio/frontend/e2e/styling.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the app from Task 1.
 - Produces: `cn(...classes)` in `src/lib/utils.ts`; shadcn `Button` in `src/components/ui/button.tsx`; the `.dark` class toggles dark theme tokens.
 
@@ -233,7 +237,11 @@ plugins: [react(), tailwindcss(), /* ...existing Nx plugins... */],
   --color-border: var(--border);
 }
 
-body { background: var(--background); color: var(--foreground); margin: 0; }
+body {
+  background: var(--background);
+  color: var(--foreground);
+  margin: 0;
+}
 ```
 
 Import it in `src/main.tsx` (top): `import './styles.css';`
@@ -248,8 +256,16 @@ Import it in `src/main.tsx` (top): `import './styles.css';`
   "style": "new-york",
   "rsc": false,
   "tsx": true,
-  "tailwind": { "css": "src/styles.css", "baseColor": "neutral", "cssVariables": true },
-  "aliases": { "components": "@/components", "utils": "@/lib/utils", "ui": "@/components/ui" },
+  "tailwind": {
+    "css": "src/styles.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui"
+  },
   "iconLibrary": "lucide"
 }
 ```
@@ -276,23 +292,18 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50',
-  {
-    variants: {
-      variant: {
-        default: 'bg-primary text-primary-foreground hover:opacity-90',
-        outline: 'border border-border bg-transparent hover:bg-primary/10',
-      },
-      size: { default: 'h-9 px-4 py-2', icon: 'h-9 w-9' },
+const buttonVariants = cva('inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50', {
+  variants: {
+    variant: {
+      default: 'bg-primary text-primary-foreground hover:opacity-90',
+      outline: 'border border-border bg-transparent hover:bg-primary/10',
     },
-    defaultVariants: { variant: 'default', size: 'default' },
+    size: { default: 'h-9 px-4 py-2', icon: 'h-9 w-9' },
   },
-);
+  defaultVariants: { variant: 'default', size: 'default' },
+});
 
-export interface IButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+export interface IButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export function Button({ className, variant, size, ...props }: IButtonProps) {
   return <button className={cn(buttonVariants({ variant, size, className }))} {...props} />;
@@ -349,9 +360,11 @@ git commit -m "build(frontend): wire Tailwind v4 (CSS-first) + shadcn/ui"
 Create the single module-scope store and its types. Pure data; unit-tested.
 
 **Files:**
+
 - Create: `studio/frontend/src/state/rootStore.ts`, `studio/frontend/src/state/rootStore.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `rootStore` (a hookstate `State<IRootState>`), `IRootState`, `IWorkspaceState`.
 
@@ -427,9 +440,11 @@ git commit -m "feat(frontend): add hookstate root store"
 A pure localStorage codec: `{ version, data }` write/read with fallback-to-default on parse error or version mismatch, plus a debounced saver. The basis for theme + opted-in plugin slices + layout.
 
 **Files:**
+
 - Create: `studio/frontend/src/state/persistence.ts`, `studio/frontend/src/state/persistence.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `loadPersisted<T>(key: string, version: number, fallback: T): T`
@@ -451,7 +466,9 @@ describe('persistence codec', () => {
   it('round-trips data under a prefixed key', () => {
     savePersisted('workspace', 1, { theme: 'light' });
     expect(localStorage.getItem(STORAGE_PREFIX + 'workspace')).toContain('"version":1');
-    expect(loadPersisted('workspace', 1, { theme: 'dark' })).toEqual({ theme: 'light' });
+    expect(loadPersisted('workspace', 1, { theme: 'dark' })).toEqual({
+      theme: 'light',
+    });
   });
 
   it('falls back when the key is absent', () => {
@@ -546,9 +563,11 @@ git commit -m "feat(frontend): add versioned localStorage persistence codec"
 Break the `host/` ↔ `state/` cycle with a late-bound host holder, and build `makePluginHooks` — the public contract panels use to reach their slice (scoped) and the host (no Context).
 
 **Files:**
+
 - Create: `studio/frontend/src/state/hostRef.ts`, `studio/frontend/src/state/makePluginHooks.ts`, `studio/frontend/src/state/makePluginHooks.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `rootStore` (Task 3).
 - Produces:
   - `setHost(h: IPluginHost): void`, `getHost(): IPluginHost` (throws if unset).
@@ -565,7 +584,9 @@ import { renderHook, act } from '@testing-library/react';
 import { rootStore } from './rootStore';
 import { makePluginHooks } from './makePluginHooks';
 
-interface ICounter { count: number }
+interface ICounter {
+  count: number;
+}
 
 describe('makePluginHooks', () => {
   it('reads and writes the plugin-scoped slice', () => {
@@ -619,8 +640,7 @@ import { getHost } from './hostRef';
 // root store. The `as State<TState>` cast is the single, contained type seam.
 export function makePluginHooks<TState>(pluginId: string) {
   return {
-    usePluginState: () =>
-      useHookstate(rootStore.plugins.nested(pluginId)) as unknown as State<TState>,
+    usePluginState: () => useHookstate(rootStore.plugins.nested(pluginId)) as unknown as State<TState>,
     useHost: () => getHost(),
   };
 }
@@ -645,9 +665,11 @@ git commit -m "feat(frontend): add late-bound host ref + typed plugin hooks"
 Define the stable contract (`IPlugin`, `IPaneDef`, `ICommandDef`, `IPluginHost`) and the two registries. Registries are pure maps; unit-tested.
 
 **Files:**
+
 - Create: `studio/frontend/src/host/types.ts`, `studio/frontend/src/host/paneRegistry.ts`, `studio/frontend/src/host/commandRegistry.ts`, `studio/frontend/src/host/registries.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (types only).
 - Produces:
   - `IPlugin<TState>`, `IPaneDef`, `ICommandDef`, `IPluginHost` (see code).
@@ -802,9 +824,11 @@ git commit -m "feat(frontend): add plugin contract types + pane/command registri
 Encapsulate all dockview-layout concerns: attach to the api, persist on change (debounced), restore with **validate-or-default**, and reset. Unit-tested against a fake `DockviewApi`.
 
 **Files:**
+
 - Create: `studio/frontend/src/host/layoutService.ts`, `studio/frontend/src/host/layoutService.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `loadPersisted`/`makeDebouncedSaver` (Task 4); pane registry (Task 6).
 - Produces: `createLayoutService(deps: { paneRegistry; defaultLayout(api): void }): { attach(api): void; reset(): void }`. Internally: on `onDidLayoutChange` it debounce-saves `api.toJSON()`; on attach it restores. Restore validates every panel id in the saved JSON against `paneRegistry`; if all known → `api.fromJSON`; else → `defaultLayout(api)` and log dropped ids.
 
@@ -836,7 +860,9 @@ describe('panelIdsFromLayout', () => {
 
 describe('layoutService restore', () => {
   const known = new Set(['p/a']);
-  const paneRegistry = { get: (id: string) => (known.has(id) ? { id } : undefined) } as never;
+  const paneRegistry = {
+    get: (id: string) => (known.has(id) ? { id } : undefined),
+  } as never;
 
   it('restores when all saved panel ids are known', () => {
     savePersisted('layout', 1, { panels: { 'p/a': {} } });
@@ -890,10 +916,7 @@ interface IPaneRegistryLike {
   get(id: string): unknown | undefined;
 }
 
-export function createLayoutService(deps: {
-  paneRegistry: IPaneRegistryLike;
-  defaultLayout: (api: any) => void;
-}) {
+export function createLayoutService(deps: { paneRegistry: IPaneRegistryLike; defaultLayout: (api: any) => void }) {
   const save = makeDebouncedSaver<unknown>(LAYOUT_KEY, LAYOUT_VERSION);
 
   function restore(api: any): void {
@@ -941,9 +964,11 @@ git commit -m "feat(frontend): add layout service with validate-or-default resto
 Assemble the `IPluginHost` (delegating `openPane` to a dockview api set at mount) and the boot sequence (seed → register → init → hydrate). `init` failures are isolated. Unit-tested.
 
 **Files:**
+
 - Create: `studio/frontend/src/host/host.ts`, `studio/frontend/src/host/boot.ts`, `studio/frontend/src/host/boot.spec.ts`
 
 **Interfaces:**
+
 - Consumes: registries (Task 6), `rootStore` (Task 3), persistence (Task 4), `setHost` (Task 5).
 - Produces:
   - `createHost(deps): IPluginHost` where `deps = { paneRegistry, commandRegistry, getApi: () => DockviewApi | null, resetLayout: () => void }`.
@@ -983,7 +1008,9 @@ describe('boot', () => {
   it('seeds plugin slices and registers panes', () => {
     const host = freshHost();
     const p: IPlugin<{ n: number }> = {
-      id: 'demo', title: 'Demo', initialState: { n: 7 },
+      id: 'demo',
+      title: 'Demo',
+      initialState: { n: 7 },
       panes: [{ id: 'demo/main', title: 'Main', component: Dummy }],
     };
     boot([p], host);
@@ -993,8 +1020,19 @@ describe('boot', () => {
 
   it('isolates a plugin whose init throws; others still register', () => {
     const host = freshHost();
-    const bad: IPlugin = { id: 'bad', title: 'Bad', panes: [], init: () => { throw new Error('boom'); } };
-    const good: IPlugin = { id: 'good', title: 'Good', panes: [{ id: 'good/p', title: 'P', component: Dummy }] };
+    const bad: IPlugin = {
+      id: 'bad',
+      title: 'Bad',
+      panes: [],
+      init: () => {
+        throw new Error('boom');
+      },
+    };
+    const good: IPlugin = {
+      id: 'good',
+      title: 'Good',
+      panes: [{ id: 'good/p', title: 'P', component: Dummy }],
+    };
     expect(() => boot([bad, good], host)).not.toThrow();
     expect(host.listPanes().map((x) => x.id)).toEqual(['good/p']);
   });
@@ -1005,7 +1043,10 @@ describe('boot', () => {
     savePersisted('demo', 1, { n: 99 });
     const host = freshHost();
     const p: IPlugin<{ n: number }> = {
-      id: 'demo', title: 'Demo', persist: true, initialState: { n: 0 },
+      id: 'demo',
+      title: 'Demo',
+      persist: true,
+      initialState: { n: 0 },
       panes: [],
     };
     boot([p], host);
@@ -1029,8 +1070,16 @@ Expected: FAIL — cannot find `./host` / `./boot`.
 import type { IPluginHost, IPaneDef, ICommandDef } from './types';
 
 interface IHostDeps {
-  paneRegistry: { register(d: IPaneDef): void; get(id: string): IPaneDef | undefined; list(): IPaneDef[] };
-  commandRegistry: { register(d: ICommandDef): void; get(id: string): ICommandDef | undefined; list(): ICommandDef[] };
+  paneRegistry: {
+    register(d: IPaneDef): void;
+    get(id: string): IPaneDef | undefined;
+    list(): IPaneDef[];
+  };
+  commandRegistry: {
+    register(d: ICommandDef): void;
+    get(id: string): ICommandDef | undefined;
+    list(): ICommandDef[];
+  };
   getApi: () => any | null; // DockviewApi once mounted
   resetLayout: () => void;
 }
@@ -1045,12 +1094,18 @@ export function createHost(deps: IHostDeps): IPluginHost {
       const api = deps.getApi();
       if (!api) return;
       const existing = api.getPanel(paneId);
-      if (existing) { existing.api.setActive(); return; }
+      if (existing) {
+        existing.api.setActive();
+        return;
+      }
       api.addPanel({ id: paneId, component: paneId, params: { paneId } });
     },
     runCommand(commandId) {
       const cmd = deps.commandRegistry.get(commandId);
-      if (!cmd) { console.warn('[host] unknown command:', commandId); return; }
+      if (!cmd) {
+        console.warn('[host] unknown command:', commandId);
+        return;
+      }
       cmd.run(host);
     },
     resetLayout: () => deps.resetLayout(),
@@ -1074,9 +1129,7 @@ export const pluginStorageKey = (id: string) => id;
 export function boot(plugins: IPlugin[], host: IPluginHost): void {
   for (const p of plugins) {
     try {
-      const seed = p.persist
-        ? loadPersisted(pluginStorageKey(p.id), SLICE_VERSION, p.initialState ?? {})
-        : (p.initialState ?? {});
+      const seed = p.persist ? loadPersisted(pluginStorageKey(p.id), SLICE_VERSION, p.initialState ?? {}) : (p.initialState ?? {});
       rootStore.plugins.nested(p.id).set(seed as never);
 
       p.panes.forEach((pane) => host.registerPane(pane));
@@ -1108,12 +1161,14 @@ git commit -m "feat(frontend): add plugin host + isolated boot sequence"
 Replace the Workbench placeholder with the real docking surface, wire boot + host + layout service, and add per-plugin slice persistence-on-change. Proven by an e2e that the demo panes (added in Task 13) appear — for now, a single temporary demo pane proves the wiring.
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/Workbench.tsx`
 - Create: `studio/frontend/src/app/workbenchSetup.ts`, `studio/frontend/src/state/persistSlices.ts`
 - Create: `studio/frontend/e2e/dockview.spec.ts`
 - Create (temporary): `studio/frontend/src/plugins/index.ts` (a one-pane temp plugin; replaced in Task 13)
 
 **Interfaces:**
+
 - Consumes: everything in Tasks 3–8; `DockviewReact` from `dockview-react`.
 - Produces: a mounted workbench; `setupWorkbench()` returning `{ host, paneRegistry, layoutService, onReady }`; `registerSlicePersistence(plugins)` subscribing opted-in slices to debounced saves.
 
@@ -1137,11 +1192,14 @@ export function registerSlicePersistence(plugins: IPlugin[]): void {
   for (const p of plugins) {
     if (!p.persist) continue;
     const save = makeDebouncedSaver(p.id, SLICE_VERSION);
-    rootStore.plugins.nested(p.id).attach(() => ({
-      id: Symbol(p.id),
-      init: () => ({}),
-      onSet: () => save(rootStore.plugins.nested(p.id).get({ noproxy: true })),
-    }) as never);
+    rootStore.plugins.nested(p.id).attach(
+      () =>
+        ({
+          id: Symbol(p.id),
+          init: () => ({}),
+          onSet: () => save(rootStore.plugins.nested(p.id).get({ noproxy: true })),
+        }) as never,
+    );
   }
 }
 ```
@@ -1177,7 +1235,10 @@ export function setupWorkbench() {
     paneRegistry,
     commandRegistry,
     getApi: () => api,
-    resetLayout: () => { layoutService.reset(); if (api) DEFAULT_LAYOUT(api); },
+    resetLayout: () => {
+      layoutService.reset();
+      if (api) DEFAULT_LAYOUT(api);
+    },
   });
 
   setHost(host);
@@ -1187,7 +1248,10 @@ export function setupWorkbench() {
   return {
     host,
     paneRegistry,
-    onReady: (a: DockviewApi) => { api = a; layoutService.attach(a); },
+    onReady: (a: DockviewApi) => {
+      api = a;
+      layoutService.attach(a);
+    },
   };
 }
 
@@ -1211,7 +1275,11 @@ import type { IPlugin } from '../host/types';
 const TempPane = () => <div data-testid="temp-pane">temp</div>;
 
 export const PLUGINS: IPlugin[] = [
-  { id: 'temp', title: 'Temp', panes: [{ id: 'temp/main', title: 'Temp', component: TempPane as never }] },
+  {
+    id: 'temp',
+    title: 'Temp',
+    panes: [{ id: 'temp/main', title: 'Temp', component: TempPane as never }],
+  },
 ];
 ```
 
@@ -1220,7 +1288,11 @@ Update `DEFAULT_LAYOUT` in `workbenchSetup.ts` to add `temp/main`:
 ```ts
 function DEFAULT_LAYOUT(api: DockviewApi) {
   if (!api.getPanel('temp/main')) {
-    api.addPanel({ id: 'temp/main', component: 'temp/main', params: { paneId: 'temp/main' } });
+    api.addPanel({
+      id: 'temp/main',
+      component: 'temp/main',
+      params: { paneId: 'temp/main' },
+    });
   }
 }
 ```
@@ -1240,10 +1312,7 @@ export function Workbench() {
 
   return (
     <div data-testid="workbench" className="dockview-theme-dark" style={{ height: '100vh' }}>
-      <DockviewReact
-        components={components}
-        onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)}
-      />
+      <DockviewReact components={components} onReady={(e: DockviewReadyEvent) => wb.onReady(e.api)} />
     </div>
   );
 }
@@ -1281,11 +1350,13 @@ git commit -m "feat(frontend): mount dockview surface and wire host/boot/layout"
 The theme effect drives both shadcn (`.dark` on `<html>`) and dockview (`dockview-theme-*` on the dock container); the toggle flips the leaf; theme persists.
 
 **Files:**
+
 - Create: `studio/frontend/src/app/useApplyTheme.ts`, `studio/frontend/src/app/ThemeToggle.tsx`, `studio/frontend/src/state/persistWorkspace.ts`
 - Modify: `studio/frontend/src/app/Workbench.tsx`
 - Create: `studio/frontend/e2e/theme.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `rootStore` (Task 3), persistence (Task 4).
 - Produces: `useApplyTheme(dockEl: HTMLElement | null)`; `<ThemeToggle/>`; `registerWorkspacePersistence()` (persists + hydrates `workspace.theme`).
 
@@ -1307,11 +1378,14 @@ export function hydrateWorkspace(): void {
 
 export function registerWorkspacePersistence(): void {
   const save = makeDebouncedSaver<{ theme: 'light' | 'dark' }>(WS_KEY, WS_VERSION, 50);
-  rootStore.workspace.attach(() => ({
-    id: Symbol('workspace-persist'),
-    init: () => ({}),
-    onSet: () => save(rootStore.workspace.get({ noproxy: true })),
-  }) as never);
+  rootStore.workspace.attach(
+    () =>
+      ({
+        id: Symbol('workspace-persist'),
+        init: () => ({}),
+        onSet: () => save(rootStore.workspace.get({ noproxy: true })),
+      }) as never,
+  );
 }
 ```
 
@@ -1351,12 +1425,7 @@ import { rootStore } from '../state/rootStore';
 export function ThemeToggle() {
   const theme = useHookstate(rootStore.workspace.theme);
   return (
-    <Button
-      data-testid="theme-toggle"
-      variant="outline"
-      size="icon"
-      onClick={() => theme.set((t) => (t === 'dark' ? 'light' : 'dark'))}
-    >
+    <Button data-testid="theme-toggle" variant="outline" size="icon" onClick={() => theme.set((t) => (t === 'dark' ? 'light' : 'dark'))}>
       {theme.get() === 'dark' ? '🌙' : '☀️'}
     </Button>
   );
@@ -1430,11 +1499,13 @@ git commit -m "feat(frontend): add theme toggle with dockview sync and persisten
 The ⌘/Ctrl-K command palette and a View menu, both views over the registries. Uses shadcn `command` + `menubar`.
 
 **Files:**
+
 - Create: `studio/frontend/src/components/ui/command.tsx`, `studio/frontend/src/components/ui/menubar.tsx` (shadcn), `studio/frontend/src/app/CommandPalette.tsx`, `studio/frontend/src/app/Menubar.tsx`
 - Modify: `studio/frontend/src/app/Workbench.tsx`
 - Create: `studio/frontend/e2e/chrome.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `host` (Task 8) via `getHost()`.
 - Produces: `<CommandPalette/>` (opens on ⌘/Ctrl-K, runs commands), `<Menubar/>` (File → Reset layout, View → pane list).
 
@@ -1471,7 +1542,14 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>No commands.</CommandEmpty>
         {host.listCommands().map((c) => (
-          <CommandItem key={c.id} value={c.title} onSelect={() => { host.runCommand(c.id); setOpen(false); }}>
+          <CommandItem
+            key={c.id}
+            value={c.title}
+            onSelect={() => {
+              host.runCommand(c.id);
+              setOpen(false);
+            }}
+          >
             {c.title}
           </CommandItem>
         ))}
@@ -1561,11 +1639,13 @@ git commit -m "feat(frontend): add command palette and View menu chrome"
 Wrap every pane so a render-time throw shows a fallback in that pane instead of killing the workbench.
 
 **Files:**
+
 - Create: `studio/frontend/src/app/PaneErrorBoundary.tsx`
 - Modify: `studio/frontend/src/host/paneRegistry.ts` (wrap components in `asComponentMap`)
 - Create: `studio/frontend/src/app/PaneErrorBoundary.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `PaneErrorBoundary` (class component); `asComponentMap()` now wraps each registered component in it.
 
@@ -1578,11 +1658,17 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PaneErrorBoundary } from './PaneErrorBoundary';
 
-function Boom(): never { throw new Error('boom'); }
+function Boom(): never {
+  throw new Error('boom');
+}
 
 describe('PaneErrorBoundary', () => {
   it('renders a fallback instead of propagating a render error', () => {
-    render(<PaneErrorBoundary><Boom /></PaneErrorBoundary>);
+    render(
+      <PaneErrorBoundary>
+        <Boom />
+      </PaneErrorBoundary>,
+    );
     expect(screen.getByTestId('pane-error')).toBeTruthy();
   });
 });
@@ -1600,15 +1686,25 @@ Expected: FAIL — cannot find `./PaneErrorBoundary`.
 ```tsx
 import { Component, type ReactNode } from 'react';
 
-interface IPaneErrorBoundaryProps { children: ReactNode }
-interface IPaneErrorBoundaryState { error: Error | null }
+interface IPaneErrorBoundaryProps {
+  children: ReactNode;
+}
+interface IPaneErrorBoundaryState {
+  error: Error | null;
+}
 
 export class PaneErrorBoundary extends Component<IPaneErrorBoundaryProps, IPaneErrorBoundaryState> {
   state: IPaneErrorBoundaryState = { error: null };
-  static getDerivedStateFromError(error: Error) { return { error }; }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
   render() {
     if (this.state.error) {
-      return <div data-testid="pane-error" style={{ padding: 12 }}>This pane failed to render.</div>;
+      return (
+        <div data-testid="pane-error" style={{ padding: 12 }}>
+          This pane failed to render.
+        </div>
+      );
     }
     return this.props.children;
   }
@@ -1622,9 +1718,7 @@ In `paneRegistry.ts`, change `asComponentMap` to wrap each component:
 ```tsx
 // at top: import { PaneErrorBoundary } from '../app/PaneErrorBoundary';
 // inside asComponentMap, when building cache:
-cache[id] = (props: IDockviewPanelProps) => (
-  <PaneErrorBoundary>{def.component(props) as never}</PaneErrorBoundary>
-);
+cache[id] = (props: IDockviewPanelProps) => <PaneErrorBoundary>{def.component(props) as never}</PaneErrorBoundary>;
 ```
 
 (Rename `paneRegistry.ts` → `paneRegistry.tsx` since it now contains JSX. Update imports.)
@@ -1648,6 +1742,7 @@ git commit -m "feat(frontend): isolate pane render errors with a per-pane error 
 Replace the temp plugin with `demo-counter` (persist) and `demo-scratch` (ephemeral), finalize `DEFAULT_LAYOUT`, add the render-counter test hook, and assert the behavior matrix (rows 5, 6, 10, plus completing rows 3–4).
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/demo-counter/{index.ts,state.ts,CounterPane.tsx,MirrorPane.tsx}`
 - Create: `studio/frontend/src/plugins/demo-scratch/{index.ts,state.ts,ScratchPane.tsx}`
 - Modify: `studio/frontend/src/plugins/index.ts`, `studio/frontend/src/app/workbenchSetup.ts` (final `DEFAULT_LAYOUT`)
@@ -1655,6 +1750,7 @@ Replace the temp plugin with `demo-counter` (persist) and `demo-scratch` (epheme
 - Create: `studio/frontend/e2e/panes.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `makePluginHooks` (Task 5), the host/boot/layout wiring.
 - Produces: `PLUGINS = [demoCounter, demoScratch]`; `bumpRenderCount(name)` exposed on `window.__renderCounts` in dev/test builds.
 
@@ -1664,7 +1760,11 @@ Replace the temp plugin with `demo-counter` (persist) and `demo-scratch` (epheme
 
 ```ts
 // Test-only instrumentation: counts renders per named component.
-declare global { interface Window { __renderCounts?: Record<string, number> } }
+declare global {
+  interface Window {
+    __renderCounts?: Record<string, number>;
+  }
+}
 
 export function bumpRenderCount(name: string): void {
   if (import.meta.env.PROD) return;
@@ -1680,7 +1780,9 @@ export function bumpRenderCount(name: string): void {
 
 ```ts
 import { makePluginHooks } from '../../state/makePluginHooks';
-export interface ICounterState { count: number }
+export interface ICounterState {
+  count: number;
+}
 export const counterHooks = makePluginHooks<ICounterState>('demo-counter');
 ```
 
@@ -1697,7 +1799,9 @@ export function CounterPane() {
   return (
     <div data-testid="counter-pane" style={{ padding: 12 }}>
       <span data-testid="counter-value">{s.count.get()}</span>
-      <Button data-testid="counter-inc" onClick={() => s.count.set((c) => c + 1)}>+</Button>
+      <Button data-testid="counter-inc" onClick={() => s.count.set((c) => c + 1)}>
+        +
+      </Button>
     </div>
   );
 }
@@ -1712,7 +1816,11 @@ import { bumpRenderCount } from '../../app/renderCount';
 export function MirrorPane() {
   const s = counterHooks.usePluginState();
   bumpRenderCount('MirrorPane');
-  return <div data-testid="mirror-pane" style={{ padding: 12 }}>count is {s.count.get()}</div>;
+  return (
+    <div data-testid="mirror-pane" style={{ padding: 12 }}>
+      count is {s.count.get()}
+    </div>
+  );
 }
 ```
 
@@ -1730,8 +1838,16 @@ export const demoCounter: IPlugin<ICounterState> = {
   persist: true,
   initialState: { count: 0 },
   panes: [
-    { id: 'demo-counter/editor', title: 'Counter', component: CounterPane as never },
-    { id: 'demo-counter/mirror', title: 'Mirror', component: MirrorPane as never },
+    {
+      id: 'demo-counter/editor',
+      title: 'Counter',
+      component: CounterPane as never,
+    },
+    {
+      id: 'demo-counter/mirror',
+      title: 'Mirror',
+      component: MirrorPane as never,
+    },
   ],
 };
 ```
@@ -1742,7 +1858,9 @@ export const demoCounter: IPlugin<ICounterState> = {
 
 ```ts
 import { makePluginHooks } from '../../state/makePluginHooks';
-export interface IScratchState { text: string }
+export interface IScratchState {
+  text: string;
+}
 export const scratchHooks = makePluginHooks<IScratchState>('demo-scratch');
 ```
 
@@ -1775,7 +1893,13 @@ export const demoScratch: IPlugin<IScratchState> = {
   title: 'Scratch',
   persist: false,
   initialState: { text: '' },
-  panes: [{ id: 'demo-scratch/main', title: 'Scratch', component: ScratchPane as never }],
+  panes: [
+    {
+      id: 'demo-scratch/main',
+      title: 'Scratch',
+      component: ScratchPane as never,
+    },
+  ],
 };
 ```
 
@@ -1796,11 +1920,23 @@ In `workbenchSetup.ts`, replace `DEFAULT_LAYOUT`:
 ```ts
 function DEFAULT_LAYOUT(api: DockviewApi) {
   const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
-    if (!api.getPanel(id)) api.addPanel({ id, component: id, params: { paneId: id }, position: ref });
+    if (!api.getPanel(id))
+      api.addPanel({
+        id,
+        component: id,
+        params: { paneId: id },
+        position: ref,
+      });
   };
   add('demo-counter/editor');
-  add('demo-counter/mirror', { direction: 'right', referencePanel: 'demo-counter/editor' });
-  add('demo-scratch/main', { direction: 'below', referencePanel: 'demo-counter/editor' });
+  add('demo-counter/mirror', {
+    direction: 'right',
+    referencePanel: 'demo-counter/editor',
+  });
+  add('demo-scratch/main', {
+    direction: 'below',
+    referencePanel: 'demo-counter/editor',
+  });
 }
 ```
 
@@ -1869,10 +2005,12 @@ git commit -m "feat(frontend): add demo plugins, render-counter, and behavior e2
 Complete the layout coverage (rows 7, 8, 9): API-driven dock changes + persistence, reset, corrupt-blob fallback, and one real-drag smoke.
 
 **Files:**
+
 - Create: `studio/frontend/e2e/layout.spec.ts`
 - Create: `studio/frontend/e2e/helpers.ts` (localStorage seeding helper)
 
 **Interfaces:**
+
 - Consumes: the mounted workbench; `STORAGE_PREFIX` semantics (key `bloom.studio.layout`).
 
 - [ ] **Step 1: Add a storage helper**
@@ -1943,10 +2081,12 @@ git commit -m "test(frontend): cover layout persistence, reset, corrupt fallback
 Complete the error-path coverage (rows 11, 12, 13), which the source-of-truth suite must encode.
 
 **Files:**
+
 - Create: `studio/frontend/e2e/errors.spec.ts`
 - Create (test-only): a fault-injection switch so e2e can register a throwing plugin / unknown command without polluting production code.
 
 **Interfaces:**
+
 - Consumes: boot isolation (Task 8), command no-op (Task 8), slice persistence fallback (Tasks 4/8).
 
 - [ ] **Step 1: Add a test-only fault-injection hook**
@@ -1969,7 +2109,14 @@ import { test, expect } from '@playwright/test';
 test('a plugin whose init throws is skipped; the workbench still boots (row 11)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as any).__injectPlugins = [
-      { id: 'bad', title: 'Bad', panes: [], init: () => { throw new Error('boom'); } },
+      {
+        id: 'bad',
+        title: 'Bad',
+        panes: [],
+        init: () => {
+          throw new Error('boom');
+        },
+      },
     ];
   });
   await page.goto('/');
@@ -1985,7 +2132,12 @@ test('a corrupt persisted plugin slice falls back to initialState (row 12)', asy
 test('an unknown command id is a no-op, no crash (row 13)', async ({ page }) => {
   await page.goto('/');
   const ok = await page.evaluate(() => {
-    try { (window as any).__host?.runCommand('does/not-exist'); return true; } catch { return false; }
+    try {
+      (window as any).__host?.runCommand('does/not-exist');
+      return true;
+    } catch {
+      return false;
+    }
   });
   expect(ok).toBe(true);
   await expect(page.getByTestId('counter-pane')).toBeVisible();
@@ -2016,6 +2168,7 @@ git commit -m "test(frontend): cover bad-plugin isolation, corrupt slice, unknow
 ## Self-Review
 
 **1. Spec coverage (against the spec's build slice §11 and e2e matrix §10):**
+
 - Nx React app + Tailwind v4 + shadcn → Tasks 1–2. ✓
 - State layer (rootStore, makePluginHooks, persistence codec, theme effect) → Tasks 3, 4, 5, 10. ✓
 - Host layer (IPluginHost, pane + command registries, layout service) → Tasks 6, 7, 8. ✓

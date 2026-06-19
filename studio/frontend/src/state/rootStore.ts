@@ -33,7 +33,4 @@ const notifyExtension: ExtensionFactory<IRootState, {}, {}> = () => ({
 });
 
 // Created once, at module scope — not in React, never in a Context.
-export const rootStore = hookstate<IRootState, {}>(
-  { workspace: { theme: 'dark' }, plugins: {} },
-  notifyExtension,
-);
+export const rootStore = hookstate<IRootState, {}>({ workspace: { theme: 'dark' }, plugins: {} }, notifyExtension);

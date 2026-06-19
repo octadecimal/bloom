@@ -33,10 +33,10 @@ but touch the Task Scheduler / firewall and require elevation.
 
 2. **Models** — download into `ComfyUI\models\checkpoints\`:
 
-   | File | Size | License | Used by |
-   |------|------|---------|---------|
-   | [`flux1-schnell-fp8.safetensors`](https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors) | ~16 GB | Apache-2.0 | `ai_slots_neon`, `ai_slots_transparent` |
-   | [`flux1-dev-fp8.safetensors`](https://huggingface.co/Comfy-Org/flux1-dev/resolve/main/flux1-dev-fp8.safetensors) | ~16 GB | **Non-commercial** | `ai_slots_dev_transparent` |
+   | File                                                                                                                         | Size   | License            | Used by                                 |
+   | ---------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------ | --------------------------------------- |
+   | [`flux1-schnell-fp8.safetensors`](https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors) | ~16 GB | Apache-2.0         | `ai_slots_neon`, `ai_slots_transparent` |
+   | [`flux1-dev-fp8.safetensors`](https://huggingface.co/Comfy-Org/flux1-dev/resolve/main/flux1-dev-fp8.safetensors)             | ~16 GB | **Non-commercial** | `ai_slots_dev_transparent`              |
 
    Both are all-in-one fp8 checkpoints (transformer + CLIP + T5 + VAE) loadable via the
    standard `CheckpointLoaderSimple` node. FLUX renders legible in-image text far better than

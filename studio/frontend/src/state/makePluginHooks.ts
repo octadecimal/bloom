@@ -6,8 +6,7 @@ import { getHost } from './hostRef';
 // root store. The `as State<TState>` cast is the single, contained type seam.
 export function makePluginHooks<TState>(pluginId: string) {
   return {
-    usePluginState: () =>
-      useHookstate(rootStore.plugins.nested(pluginId)) as unknown as State<TState>,
+    usePluginState: () => useHookstate(rootStore.plugins.nested(pluginId)) as unknown as State<TState>,
     useHost: () => getHost(),
   };
 }

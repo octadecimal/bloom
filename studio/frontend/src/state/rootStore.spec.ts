@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { rootStore } from './rootStore';
 
 describe('rootStore', () => {
-  afterEach(() => { rootStore.plugins.set({}); });
+  afterEach(() => {
+    rootStore.plugins.set({});
+  });
 
   it('starts with a dark theme and an empty plugins map', () => {
     expect(rootStore.workspace.theme.get()).toBe('dark');

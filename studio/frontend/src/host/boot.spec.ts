@@ -27,7 +27,9 @@ describe('boot', () => {
   it('seeds plugin slices and registers panes', () => {
     const host = freshHost();
     const p: IPlugin<{ n: number }> = {
-      id: 'demo', title: 'Demo', initialState: { n: 7 },
+      id: 'demo',
+      title: 'Demo',
+      initialState: { n: 7 },
       panes: [{ id: 'demo/main', title: 'Main', component: Dummy }],
     };
     boot([p], host);
@@ -38,8 +40,19 @@ describe('boot', () => {
   it('isolates a plugin whose init throws; others still register', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const host = freshHost();
-    const bad: IPlugin = { id: 'bad', title: 'Bad', panes: [], init: () => { throw new Error('boom'); } };
-    const good: IPlugin = { id: 'good', title: 'Good', panes: [{ id: 'good/p', title: 'P', component: Dummy }] };
+    const bad: IPlugin = {
+      id: 'bad',
+      title: 'Bad',
+      panes: [],
+      init: () => {
+        throw new Error('boom');
+      },
+    };
+    const good: IPlugin = {
+      id: 'good',
+      title: 'Good',
+      panes: [{ id: 'good/p', title: 'P', component: Dummy }],
+    };
     expect(() => boot([bad, good], host)).not.toThrow();
     expect(host.listPanes().map((x) => x.id)).toEqual(['good/p']);
     expect(consoleSpy).toHaveBeenCalled();
@@ -50,7 +63,10 @@ describe('boot', () => {
     savePersisted('demo', 1, { n: 99 });
     const host = freshHost();
     const p: IPlugin<{ n: number }> = {
-      id: 'demo', title: 'Demo', persist: true, initialState: { n: 0 },
+      id: 'demo',
+      title: 'Demo',
+      persist: true,
+      initialState: { n: 0 },
       panes: [],
     };
     boot([p], host);

@@ -7,8 +7,7 @@ test('counter increments, mirror reflects, and count persists across reload (row
   await expect(page.getByTestId('counter-value')).toHaveText('2');
   await expect(page.getByTestId('mirror-pane')).toHaveText('count is 2');
   // Wait deterministically for the 250ms debounced save to flush before reloading.
-  await page.waitForFunction(() =>
-    localStorage.getItem('bloom.studio.demo-counter')?.includes('"count":2'));
+  await page.waitForFunction(() => localStorage.getItem('bloom.studio.demo-counter')?.includes('"count":2'));
   await page.reload();
   await expect(page.getByTestId('counter-value')).toHaveText('2'); // persist:true
 });
@@ -24,7 +23,9 @@ test('incrementing re-renders only counter + mirror, not scratch (row 10)', asyn
   await page.goto('/');
   await expect(page.getByTestId('counter-pane')).toBeVisible();
   // Reset counts after mount so StrictMode double-invocations don't skew results.
-  await page.evaluate(() => { window.__renderCounts = {}; });
+  await page.evaluate(() => {
+    window.__renderCounts = {};
+  });
   await page.getByTestId('counter-inc').click();
   const counts = await page.evaluate(() => window.__renderCounts ?? {});
   expect(counts['CounterPane'] ?? 0).toBeGreaterThanOrEqual(1);

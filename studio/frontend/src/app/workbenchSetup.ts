@@ -10,10 +10,7 @@ import { PLUGINS } from '../plugins';
 import type { IPlugin } from '../host/types';
 import type { DockviewApi } from 'dockview-react';
 
-function DEFAULT_LAYOUT(
-  api: DockviewApi,
-  paneRegistry: { get(id: string): { title?: string } | undefined },
-): void {
+function DEFAULT_LAYOUT(api: DockviewApi, paneRegistry: { get(id: string): { title?: string } | undefined }): void {
   const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
     if (!api.getPanel(id))
       api.addPanel({
@@ -25,8 +22,14 @@ function DEFAULT_LAYOUT(
       });
   };
   add('demo-counter/editor');
-  add('demo-counter/mirror', { direction: 'right', referencePanel: 'demo-counter/editor' });
-  add('demo-scratch/main', { direction: 'below', referencePanel: 'demo-counter/editor' });
+  add('demo-counter/mirror', {
+    direction: 'right',
+    referencePanel: 'demo-counter/editor',
+  });
+  add('demo-scratch/main', {
+    direction: 'below',
+    referencePanel: 'demo-counter/editor',
+  });
 }
 
 export function setupWorkbench() {
