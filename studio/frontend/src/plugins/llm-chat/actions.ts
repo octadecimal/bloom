@@ -1,0 +1,98 @@
+import { chatSlice } from './state';
+import * as realRest from './restClient';
+import { getSocketClient, initSocketClient, type SocketClient } from './socketClient';
+import { loadPrefs, savePrefs as realSavePrefs } from './prefs';
+
+interface IRestDeps {
+  getRooms: typeof realRest.getRooms;
+  createRoom: typeof realRest.createRoom;
+  getMessages: typeof realRest.getMessages;
+}
+
+// Injectable deps so actions are unit-testable without the module singletons.
+let rest: IRestDeps = realRest;
+let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping'> | null = null;
+let savePrefs = realSavePrefs;
+
+export function __setDeps(deps: { rest?: IRestDeps; socket?: typeof socket; savePrefs?: typeof savePrefs }): void {
+  if (deps.rest) rest = deps.rest;
+  if (deps.socket) socket = deps.socket;
+  if (deps.savePrefs) savePrefs = deps.savePrefs;
+}
+
+function sock() {
+  return socket ?? getSocketClient();
+}
+
+function persist(): void {
+  const s = chatSlice();
+  savePrefs({ displayName: s.displayName.get(), activeRoomId: s.activeRoomId.get() });
+}
+
+export async function loadRooms(): Promise<void> {
+  chatSlice().roomsStatus.set('loading');
+  try {
+    const rooms = await rest.getRooms();
+    chatSlice().rooms.set(rooms);
+    chatSlice().roomsStatus.set('idle');
+  } catch {
+    chatSlice().roomsStatus.set('error');
+  }
+}
+
+export async function openRoom(roomId: string): Promise<void> {
+  const s = chatSlice();
+  if (s.activeRoomId.get() === roomId) return;
+
+  const prev = s.activeRoomId.get();
+  if (prev) sock().leaveRoom(prev);
+
+  s.activeRoomId.set(roomId);
+  s.messages.set([]);
+  s.members.set([]);
+  s.typing.set([]);
+  s.aiStatus.set({ state: 'idle', queueDepth: 0 });
+  s.roomLoadStatus.set('loading');
+  persist();
+
+  try {
+    const history = await rest.getMessages(roomId);
+    s.messages.set(history);
+    s.roomLoadStatus.set('idle');
+  } catch {
+    s.roomLoadStatus.set('error');
+  }
+  sock().joinRoom(roomId);
+}
+
+export async function createRoom(name: string, model?: string): Promise<void> {
+  const room = await rest.createRoom(name, model);
+  chatSlice().rooms.merge([room]);
+  await openRoom(room.id);
+}
+
+export function sendPrompt(text: string): void {
+  const roomId = chatSlice().activeRoomId.get();
+  if (roomId) sock().sendPrompt(roomId, text);
+}
+
+export function setTyping(isTyping: boolean): void {
+  const roomId = chatSlice().activeRoomId.get();
+  if (roomId) sock().setTyping(roomId, isTyping);
+}
+
+export function setDisplayName(name: string): void {
+  chatSlice().displayName.set(name);
+  persist();
+  sock().reconnectWith(name);
+}
+
+export function initChat(): void {
+  const prefs = loadPrefs();
+  const s = chatSlice();
+  s.displayName.set(prefs.displayName);
+  initSocketClient();
+  getSocketClient().connect(prefs.displayName);
+  void loadRooms();
+  if (prefs.activeRoomId) void openRoom(prefs.activeRoomId);
+}
