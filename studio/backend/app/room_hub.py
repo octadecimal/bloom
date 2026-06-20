@@ -11,9 +11,32 @@ class RoomHub:
         self._queues: dict[str, list[str]] = {}
         self._busy: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
+        # room_id -> {"messageId", "content", "state"} while a generation streams
+        self._active: dict[str, dict] = {}
 
     def _lock(self, room_id: str) -> asyncio.Lock:
         return self._locks.setdefault(room_id, asyncio.Lock())
+
+    def active_snapshot(self, room_id: str) -> dict | None:
+        active = self._active.get(room_id)
+        if active is None:
+            return None
+        return {
+            "roomId": room_id,
+            "messageId": active["messageId"],
+            "content": active["content"],
+            "state": active["state"],
+        }
+
+    async def attach_subscriber(self, room_id: str, sid: str) -> None:
+        # Atomic wrt the token loop: either a token is in the snapshot (and this
+        # client was not yet in the room for its live emit) or it is excluded and
+        # this client is in the room to receive it live — never both, never neither.
+        async with self._lock(room_id):
+            await self._sio.enter_room(sid, room_id)
+            snapshot = self.active_snapshot(room_id)
+            if snapshot is not None:
+                await self._sio.emit("stream_snapshot", snapshot, to=sid)
 
     async def handle_prompt(self, room_id: str, author: str, text: str) -> None:
         user_msg = await self._store.add_message(room_id, author, "user", text, "complete")
@@ -57,14 +80,27 @@ class RoomHub:
         history = await self._store.list_messages(room_id)
         context = [m for m in history if m.id != assistant.id]
 
+        async with self._lock(room_id):
+            self._active[room_id] = {
+                "messageId": assistant.id,
+                "content": "",
+                "state": "generating",
+            }
+
         content = ""
-        async for token in self._chat.stream(context, room.model):
-            content += token
-            await self._sio.emit(
-                "token",
-                {"roomId": room_id, "messageId": assistant.id, "delta": token},
-                room=room_id,
-            )
+        try:
+            async for token in self._chat.stream(context, room.model):
+                content += token
+                async with self._lock(room_id):
+                    self._active[room_id]["content"] = content
+                    await self._sio.emit(
+                        "token",
+                        {"roomId": room_id, "messageId": assistant.id, "delta": token},
+                        room=room_id,
+                    )
+        finally:
+            async with self._lock(room_id):
+                self._active.pop(room_id, None)
 
         await self._store.complete_message(assistant.id, content)
         await self._sio.emit(

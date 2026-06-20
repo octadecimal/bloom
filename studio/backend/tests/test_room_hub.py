@@ -10,9 +10,13 @@ from app.room_hub import RoomHub
 class FakeSio:
     def __init__(self):
         self.events: list[tuple] = []
+        self.entered: list[tuple] = []
 
-    async def emit(self, event, data=None, room=None):
+    async def emit(self, event, data=None, room=None, to=None, skip_sid=None):
         self.events.append((event, data, room))
+
+    async def enter_room(self, sid, room):
+        self.entered.append((sid, room))
 
     def names(self):
         return [e[0] for e in self.events]
@@ -161,3 +165,69 @@ async def test_generation_error_emits_error_and_keeps_draining():
     assert len(completed) == 1  # only the successful second generation completes
     statuses = [d["state"] for e, d, _ in sio.events if e == "ai_status"]
     assert statuses[-1] == "idle"  # room not deadlocked
+
+
+class StepChatService:
+    """Yields tokens one at a time, each gated, so a test can observe mid-stream state."""
+
+    def __init__(self, tokens):
+        self._tokens = tokens
+        self.go = [asyncio.Event() for _ in tokens]
+        self.emitted = [asyncio.Event() for _ in tokens]
+
+    async def stream(self, messages, model):
+        for i, tok in enumerate(self._tokens):
+            await self.go[i].wait()
+            yield tok
+            self.emitted[i].set()
+
+
+@pytest.mark.asyncio
+async def test_active_snapshot_tracks_then_clears():
+    sio, store, chat = FakeSio(), FakeStore(), StepChatService(["a", "b"])
+    hub = RoomHub(sio, store, chat)
+
+    await hub.handle_prompt("r1", "Alice", "hi")
+    chat.go[0].set()
+    await asyncio.wait_for(chat.emitted[0].wait(), timeout=1)
+
+    snap = hub.active_snapshot("r1")
+    assert snap is not None
+    assert snap["content"] == "a"
+    assert snap["state"] == "generating"
+    assert snap["messageId"] == "msg2"  # msg1 = user prompt, msg2 = assistant
+
+    chat.go[1].set()
+    await asyncio.wait_for(_wait_event(sio, "message_completed"), timeout=1)
+    assert hub.active_snapshot("r1") is None
+
+
+@pytest.mark.asyncio
+async def test_attach_subscriber_emits_snapshot_to_late_joiner():
+    sio, store, chat = FakeSio(), FakeStore(), StepChatService(["a", "b"])
+    hub = RoomHub(sio, store, chat)
+
+    await hub.handle_prompt("r1", "Alice", "hi")
+    chat.go[0].set()
+    await asyncio.wait_for(chat.emitted[0].wait(), timeout=1)
+
+    await hub.attach_subscriber("r1", "sidCarol")
+    assert ("sidCarol", "r1") in sio.entered
+    snaps = [d for e, d, _ in sio.events if e == "stream_snapshot"]
+    assert snaps, "late joiner must receive a stream_snapshot during generation"
+    assert snaps[-1]["messageId"] == "msg2"
+    assert snaps[-1]["content"] == "a"
+    assert snaps[-1]["state"] == "generating"
+
+    chat.go[1].set()
+    await asyncio.wait_for(_wait_event(sio, "message_completed"), timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_attach_subscriber_when_idle_enters_without_snapshot():
+    sio, store, chat = FakeSio(), FakeStore(), StepChatService(["a"])
+    hub = RoomHub(sio, store, chat)
+
+    await hub.attach_subscriber("r1", "sidEarly")
+    assert ("sidEarly", "r1") in sio.entered
+    assert [e for e, _, _ in sio.events if e == "stream_snapshot"] == []

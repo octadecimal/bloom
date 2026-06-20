@@ -101,3 +101,51 @@ async def test_concurrent_prompts_serialize_into_two_answers(live_server):
 
     await alice.disconnect()
     await bob.disconnect()
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_late_joiner_resumes_in_flight_stream(live_server):
+    room_id = await _make_room(live_server)
+    alice = socketio.AsyncClient()
+    ra = Recorder(alice)
+    await alice.connect(live_server, auth={"displayName": "Alice"})
+    await alice.emit("join_room", {"roomId": room_id})
+    await asyncio.sleep(0.2)
+
+    await alice.emit("send_prompt", {"roomId": room_id, "text": "hello"})
+
+    # Wait until the stream is genuinely mid-flight: Alice has >=1 token, no completion yet.
+    deadline = asyncio.get_event_loop().time() + 5
+    while (len(ra.tokens) < 1 or ra.completed) and asyncio.get_event_loop().time() < deadline:
+        await asyncio.sleep(0.02)
+    assert ra.tokens and not ra.completed, "need an in-flight stream to resume"
+
+    # Carol joins mid-stream and must catch up via stream_snapshot.
+    carol = socketio.AsyncClient()
+    snapshots: list[dict] = []
+    carol.on("stream_snapshot", lambda d: snapshots.append(d))
+    rc = Recorder(carol)
+    await carol.connect(live_server, auth={"displayName": "Carol"})
+    await carol.emit("join_room", {"roomId": room_id})
+
+    deadline = asyncio.get_event_loop().time() + 5
+    while (not ra.completed or not rc.completed) and asyncio.get_event_loop().time() < deadline:
+        await asyncio.sleep(0.05)
+    assert rc.completed, "late joiner must see completion"
+
+    assistant_id = ra.completed[-1]["messageId"]
+    assert snapshots, "late joiner must receive a stream_snapshot"
+    snap = snapshots[-1]
+    assert snap["messageId"] == assistant_id
+    assert snap["state"] == "generating"
+    assert snap["content"], "snapshot carries the partial content accumulated so far"
+
+    full = "echo: Alice: hello"
+    # snapshot content + tokens Carol received AFTER joining == full text, exactly (no gap/dup)
+    assert (snap["content"] + rc.text_for(assistant_id)).strip() == full
+    # and Alice (present from the start) reconstructs the same text
+    assert ra.text_for(assistant_id).strip() == full
+
+    await alice.disconnect()
+    await carol.disconnect()
