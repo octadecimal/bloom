@@ -93,6 +93,56 @@ describe('layoutPresets.apply', () => {
   });
 });
 
+describe('layoutPresets.onPresetsChange', () => {
+  it('fires after a successful saveAs', () => {
+    const { deps } = makeDeps();
+    const svc = createLayoutPresetsService(deps);
+    const cb = vi.fn();
+    svc.onPresetsChange(cb);
+    svc.saveAs('New view');
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires after a delete that removes an existing user preset', () => {
+    const { deps } = makeDeps();
+    const svc = createLayoutPresetsService(deps);
+    svc.saveAs('temp');
+    const cb = vi.fn();
+    svc.onPresetsChange(cb);
+    svc.delete('temp');
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT fire on a no-op delete (built-in or missing name)', () => {
+    const { deps } = makeDeps();
+    const svc = createLayoutPresetsService(deps);
+    const cb = vi.fn();
+    svc.onPresetsChange(cb);
+    svc.delete('Chat'); // built-in — no-op
+    svc.delete('ghost'); // missing — no-op
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('does NOT fire on a rejected saveAs (empty name)', () => {
+    const { deps } = makeDeps();
+    const svc = createLayoutPresetsService(deps);
+    const cb = vi.fn();
+    svc.onPresetsChange(cb);
+    svc.saveAs('');
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('stops firing after the returned unsubscribe function is called', () => {
+    const { deps } = makeDeps();
+    const svc = createLayoutPresetsService(deps);
+    const cb = vi.fn();
+    const unsub = svc.onPresetsChange(cb);
+    unsub();
+    svc.saveAs('after unsub');
+    expect(cb).not.toHaveBeenCalled();
+  });
+});
+
 describe('layoutPresets.list / delete', () => {
   it('lists built-ins first, then user presets alphabetically', () => {
     const { deps } = makeDeps();

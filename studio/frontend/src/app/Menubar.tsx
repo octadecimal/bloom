@@ -13,8 +13,9 @@ export function AppMenubar() {
 
   useEffect(() => {
     setSaveLayoutOpener(() => setSaveOpen(true));
-    return presets.onPresetsChange(() => setPresetsVersion((v) => v + 1));
-  }, [presets]);
+  }, []);
+
+  useEffect(() => presets.onPresetsChange(() => setPresetsVersion((v) => v + 1)), [presets]);
 
   const all = presets.list();
   const userPresets = all.filter((p) => p.kind === 'user');

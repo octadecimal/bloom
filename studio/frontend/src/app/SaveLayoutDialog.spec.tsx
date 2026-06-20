@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 const saveAs = vi.fn();
 vi.mock('../state/layoutPresetsRef', () => ({
-  getLayoutPresets: () => ({ saveAs, apply: vi.fn(), list: () => [], delete: vi.fn() }),
+  getLayoutPresets: () => ({ saveAs, apply: vi.fn(), list: () => [], delete: vi.fn(), onPresetsChange: vi.fn(() => () => {}) }),
 }));
 
 import { SaveLayoutDialog } from './SaveLayoutDialog';
