@@ -5,8 +5,13 @@ import socketio
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from app.chat_service import ChatService
 from app.config import Settings, get_settings
+from app.presence import PresenceRegistry
+from app.providers import build_provider
 from app.rest import router
+from app.room_hub import RoomHub
+from app.sockets import register_socket_handlers
 from app.store import ConversationStore
 
 
@@ -17,11 +22,15 @@ class AppContext:
     sio: socketio.AsyncServer
     asgi_app: Any
     store: ConversationStore
+    chat_service: ChatService
+    hub: RoomHub
+    presence: PresenceRegistry
 
 
 def build(settings: Settings) -> AppContext:
     mongo = AsyncIOMotorClient(settings.mongo_url)
     store = ConversationStore(mongo[settings.mongo_db])
+    chat_service = ChatService(build_provider(settings))
 
     fastapi_app = FastAPI(title="Bloom Studio Backend")
     fastapi_app.state.store = store
@@ -29,6 +38,10 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.include_router(router)
 
     sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+    presence = PresenceRegistry()
+    hub = RoomHub(sio, store, chat_service)
+    register_socket_handlers(sio, hub, presence)
+
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
     return AppContext(
@@ -37,6 +50,9 @@ def build(settings: Settings) -> AppContext:
         sio=sio,
         asgi_app=asgi_app,
         store=store,
+        chat_service=chat_service,
+        hub=hub,
+        presence=presence,
     )
 
 
