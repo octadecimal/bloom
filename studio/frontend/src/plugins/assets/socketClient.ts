@@ -26,7 +26,7 @@ function registerInboundHandlers(s: ISocketLike): void {
     const { gameId, assetId, status } = p as { gameId: string; assetId: string; status: IAsset['status'] };
     if (!isActive(gameId)) return;
     const arr = slice().assets;
-    const idx = arr.get({ noproxy: true }).findIndex((x: IAsset) => x.id === assetId);
+    const idx = (arr.get({ noproxy: true }) as IAsset[]).findIndex((x) => x.id === assetId);
     if (idx >= 0) arr[idx].status.set(status);
   });
   s.on('asset_progress', (p) => {
@@ -34,7 +34,7 @@ function registerInboundHandlers(s: ISocketLike): void {
     if (!isActive(gameId)) return;
     // Scoped node write: only the subscribed AssetCard re-renders, not the whole board.
     const arr = slice().assets;
-    const idx = arr.get({ noproxy: true }).findIndex((x: IAsset) => x.id === assetId);
+    const idx = (arr.get({ noproxy: true }) as IAsset[]).findIndex((x) => x.id === assetId);
     if (idx >= 0) arr[idx].progress.set({ value, max });
   });
   s.on('asset_completed', (p) => {
