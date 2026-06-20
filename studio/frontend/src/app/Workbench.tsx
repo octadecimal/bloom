@@ -5,6 +5,7 @@ import { useApplyTheme } from './useApplyTheme';
 import { ThemeToggle } from './ThemeToggle';
 import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
+import { SwitchUser } from './SwitchUser';
 
 export function Workbench() {
   const app = useApp();
@@ -18,7 +19,10 @@ export function Workbench() {
           <h1 style={{ margin: 0, fontSize: '1rem' }}>Bloom Studio</h1>
           <AppMenubar />
         </div>
-        <ThemeToggle />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SwitchUser />
+          <ThemeToggle />
+        </div>
       </div>
       <CommandPalette />
       <div ref={setDockEl} style={{ flex: 1, overflow: 'hidden' }}>
