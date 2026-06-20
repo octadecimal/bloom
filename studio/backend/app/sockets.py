@@ -13,7 +13,7 @@ def register_socket_handlers(sio, hub, presence):
     async def join_room(sid, data):
         room_id = data["roomId"]
         session = await sio.get_session(sid)
-        await sio.enter_room(sid, room_id)
+        await hub.attach_subscriber(room_id, sid)
         presence.join(room_id, sid, session["displayName"])
         await sio.emit("presence", {"roomId": room_id, "members": presence.members(room_id)}, room=room_id)
 
