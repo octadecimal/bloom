@@ -67,6 +67,17 @@ export async function openRoom(roomId: string): Promise<void> {
   sock().joinRoom(roomId);
 }
 
+export function closeRoom(): void {
+  const s = chatSlice();
+  const prev = s.activeRoomId.get();
+  if (prev) sock().leaveRoom(prev);
+  s.activeRoomId.set(null);
+  s.messages.set([]);
+  s.members.set([]);
+  s.typing.set([]);
+  persist();
+}
+
 export async function createRoom(name: string, model?: string): Promise<void> {
   const room = await rest.createRoom(name, model);
   chatSlice().rooms.merge([room]);
