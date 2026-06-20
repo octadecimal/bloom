@@ -5,6 +5,7 @@ import { useApplyTheme } from './useApplyTheme';
 import { ThemeToggle } from './ThemeToggle';
 import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
+import { Toaster } from '@/components/ui/sonner';
 
 export function Workbench() {
   const wb = useMemo(() => setupWorkbench(), []);
@@ -35,6 +36,9 @@ export function Workbench() {
 
       {/* Command palette — mounted once, renders a closed dialog + installs Ctrl-K listener */}
       <CommandPalette />
+
+      {/* App-wide toast outlet — single instance for all plugins via the notify seam */}
+      <Toaster />
 
       {/* Dockview surface — fills remaining height; theme class managed by useApplyTheme */}
       <div ref={setDockEl} style={{ flex: 1, overflow: 'hidden' }}>
