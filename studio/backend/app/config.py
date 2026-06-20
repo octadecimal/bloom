@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     mongo_db: str = "bloom_studio"
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    default_model: str = "meta-llama/llama-3.2-3b-instruct:free"
+    default_model: str = "openai/gpt-4o-mini"
     llm_backend: str = "openrouter"  # "openrouter" | "fake"
     fake_token_delay: float = 0.0
 
