@@ -25,34 +25,37 @@
 ## File Structure
 
 **Backend (`studio/backend/`):**
-- `app/games.py` — *create* — `Game` model + `GameStore` (games collection).
-- `app/assets/__init__.py` — *create* — package marker.
-- `app/assets/models.py` — *create* — `Asset`, `Generation` wire models + `asset_wire`.
-- `app/assets/store.py` — *create* — `AssetStore` (assets collection): CRUD, status, generations.
-- `app/assets/graph.py` — *create* — workflow registry + pure graph patching + `random_seed`.
-- `app/assets/workflows/*.json` — *create* — bundled copies of the three base graphs.
-- `app/assets/comfy.py` — *create* — `ComfyProvider` Protocol, `FakeComfyProvider`, `RealComfyProvider`, `build_provider`, event types.
-- `app/assets/media.py` — *create* — `MediaStore` (save bytes → relative URL).
-- `app/assets/hub.py` — *create* — `AssetHub` (queue/lock/active + generation flow).
-- `app/assets/sockets.py` — *create* — `register_asset_handlers`.
-- `app/assets/rest.py` — *create* — games (read) + assets (CRUD) router.
-- `app/store.py`, `app/rest.py`, `app/main.py`, `app/config.py` — *modify* — game-on-room-create, wiring, settings.
-- `tests/test_games.py`, `tests/test_assets_store.py`, `tests/test_graph.py`, `tests/test_comfy.py`, `tests/test_media.py`, `tests/test_asset_hub.py`, `tests/test_assets_rest.py` — *create* — unit.
-- `tests/e2e/test_assets.py` — *create* — non-browser socket e2e.
-- `tests/conftest.py`, `tests/e2e/conftest.py` — *modify* — clean new collections; pass `COMFY_BACKEND=fake`.
+
+- `app/games.py` — _create_ — `Game` model + `GameStore` (games collection).
+- `app/assets/__init__.py` — _create_ — package marker.
+- `app/assets/models.py` — _create_ — `Asset`, `Generation` wire models + `asset_wire`.
+- `app/assets/store.py` — _create_ — `AssetStore` (assets collection): CRUD, status, generations.
+- `app/assets/graph.py` — _create_ — workflow registry + pure graph patching + `random_seed`.
+- `app/assets/workflows/*.json` — _create_ — bundled copies of the three base graphs.
+- `app/assets/comfy.py` — _create_ — `ComfyProvider` Protocol, `FakeComfyProvider`, `RealComfyProvider`, `build_provider`, event types.
+- `app/assets/media.py` — _create_ — `MediaStore` (save bytes → relative URL).
+- `app/assets/hub.py` — _create_ — `AssetHub` (queue/lock/active + generation flow).
+- `app/assets/sockets.py` — _create_ — `register_asset_handlers`.
+- `app/assets/rest.py` — _create_ — games (read) + assets (CRUD) router.
+- `app/store.py`, `app/rest.py`, `app/main.py`, `app/config.py` — _modify_ — game-on-room-create, wiring, settings.
+- `tests/test_games.py`, `tests/test_assets_store.py`, `tests/test_graph.py`, `tests/test_comfy.py`, `tests/test_media.py`, `tests/test_asset_hub.py`, `tests/test_assets_rest.py` — _create_ — unit.
+- `tests/e2e/test_assets.py` — _create_ — non-browser socket e2e.
+- `tests/conftest.py`, `tests/e2e/conftest.py` — _modify_ — clean new collections; pass `COMFY_BACKEND=fake`.
 
 **Frontend (`studio/frontend/src/`):**
-- `plugins/assets/{state.ts,reducers.ts,config.ts,restClient.ts,socketClient.ts,actions.ts,AssetBoardPane.tsx,AssetCard.tsx,index.ts}` — *create*.
-- `plugins/index.ts`, `app/workbenchSetup.ts` — *modify* — register plugin + default layout.
-- `plugins/assets/*.spec.ts` — *create* — vitest unit.
-- `e2e/assets.spec.ts` — *create* — Playwright (local-only).
-- `justfile` — *modify* — add `e2e-assets` recipe.
+
+- `plugins/assets/{state.ts,reducers.ts,config.ts,restClient.ts,socketClient.ts,actions.ts,AssetBoardPane.tsx,AssetCard.tsx,index.ts}` — _create_.
+- `plugins/index.ts`, `app/workbenchSetup.ts` — _modify_ — register plugin + default layout.
+- `plugins/assets/*.spec.ts` — _create_ — vitest unit.
+- `e2e/assets.spec.ts` — _create_ — Playwright (local-only).
+- `justfile` — _modify_ — add `e2e-assets` recipe.
 
 ---
 
 ## Task 1: Shared Game spine + game-on-room-create
 
 **Files:**
+
 - Create: `studio/backend/app/games.py`
 - Modify: `studio/backend/app/store.py` (`ConversationStore.create_room`)
 - Modify: `studio/backend/app/rest.py` (`create_room` handler)
@@ -61,6 +64,7 @@
 - Test: `studio/backend/tests/test_games.py`
 
 **Interfaces:**
+
 - Produces: `Game(id, name, created_at)`; `game_wire(game) -> dict`; `GameStore(db)` with
   `async create_game(name: str) -> Game`, `async list_games() -> list[Game]`, `async get_game(game_id: str) -> Game | None`.
 - Consumes: nothing (foundation).
@@ -233,6 +237,7 @@ git commit -m "feat(backend): add Game spine and create a game on room creation"
 ## Task 2: Asset models + AssetStore
 
 **Files:**
+
 - Create: `studio/backend/app/assets/__init__.py` (empty)
 - Create: `studio/backend/app/assets/models.py`
 - Create: `studio/backend/app/assets/store.py`
@@ -240,6 +245,7 @@ git commit -m "feat(backend): add Game spine and create a game on room creation"
 - Test: `studio/backend/tests/test_assets_store.py`
 
 **Interfaces:**
+
 - Produces:
   - `Generation(id, seed, image_ref, created_at)`, `Asset(id, game_id, name, category, prompt, width, height, workflow, seed, status, generations, selected_generation_id, error)`, `asset_wire(asset) -> dict`.
   - `AssetStore(db)` with:
@@ -484,11 +490,13 @@ git commit -m "feat(backend): add Asset/Generation models and AssetStore"
 ## Task 3: Workflow registry + graph patching
 
 **Files:**
+
 - Create: `studio/backend/app/assets/workflows/ai_slots_neon.json`, `ai_slots_transparent.json`, `ai_slots_dev_transparent.json` (copies of `comfyui/workflows/*.json`)
 - Create: `studio/backend/app/assets/graph.py`
 - Test: `studio/backend/tests/test_graph.py`
 
 **Interfaces:**
+
 - Produces: `WORKFLOWS: dict[str,str]`; `random_seed() -> int`; `patch_graph(base: dict, prompt, width, height, seed) -> dict` (pure, deep-copies); `build_graph(workflow, prompt, width, height, seed) -> dict`.
 - Consumes: nothing.
 
@@ -602,11 +610,13 @@ git commit -m "feat(backend): add ComfyUI workflow registry and graph patching"
 ## Task 4: ComfyUI provider seam + settings
 
 **Files:**
+
 - Create: `studio/backend/app/assets/comfy.py`
 - Modify: `studio/backend/app/config.py` (new settings)
 - Test: `studio/backend/tests/test_comfy.py`
 
 **Interfaces:**
+
 - Produces:
   - `@dataclass ProgressEvent(value: int, max: int)`, `@dataclass ImageEvent(data: bytes)`, `ComfyEvent = ProgressEvent | ImageEvent`.
   - `class ComfyProvider(Protocol): def generate(self, graph: dict) -> AsyncIterator[ComfyEvent]: ...`
@@ -791,10 +801,12 @@ git commit -m "feat(backend): add ComfyUI provider seam with fake provider"
 ## Task 5: MediaStore
 
 **Files:**
+
 - Create: `studio/backend/app/assets/media.py`
 - Test: `studio/backend/tests/test_media.py`
 
 **Interfaces:**
+
 - Produces: `MediaStore(root: str | Path)` with `save(game_id, asset_id, gen_id, data: bytes) -> str` returning the relative URL `/media/<game>/<asset>/<gen>.png`, and `root: Path` attribute (for the StaticFiles mount).
 - Consumes: nothing.
 
@@ -855,10 +867,12 @@ git commit -m "feat(backend): add MediaStore for generated images"
 ## Task 6: AssetHub (queue + generation flow + resume)
 
 **Files:**
+
 - Create: `studio/backend/app/assets/hub.py`
 - Test: `studio/backend/tests/test_asset_hub.py`
 
 **Interfaces:**
+
 - Consumes: `AssetStore` (Task 2), `build_graph`/`random_seed` (Task 3), `ComfyProvider`/`ProgressEvent`/`ImageEvent` (Task 4), `MediaStore` (Task 5), `asset_wire` (Task 2).
 - Produces: `AssetHub(sio, asset_store, comfy, media)` with:
   - `async request_generation(game_id, asset_id) -> None`
@@ -1089,10 +1103,12 @@ git commit -m "feat(backend): add AssetHub generation orchestration with progres
 ## Task 7: Assets REST router (games read + assets CRUD)
 
 **Files:**
+
 - Create: `studio/backend/app/assets/rest.py`
 - Test: `studio/backend/tests/test_assets_rest.py`
 
 **Interfaces:**
+
 - Consumes: `request.app.state.game_store` (`GameStore`), `request.app.state.asset_store` (`AssetStore`).
 - Produces an `APIRouter` with:
   - `GET /games` → `[game_wire]`
@@ -1260,11 +1276,13 @@ git commit -m "feat(backend): add assets REST router (games read + asset CRUD + 
 ## Task 8: Asset socket handlers + full app wiring
 
 **Files:**
+
 - Create: `studio/backend/app/assets/sockets.py`
 - Modify: `studio/backend/app/main.py` (build asset stores/provider/hub, register handlers, include router, mount media)
 - Test: covered by Task 9 e2e (this task's deliverable is wiring; verify via app boot + existing suite)
 
 **Interfaces:**
+
 - Produces: `register_asset_handlers(sio, hub)` registering `join_game`, `leave_game`, `generate_asset`.
 - `AppContext` gains `game_store`, `asset_store`, `asset_hub`; `app.state.game_store` / `app.state.asset_store` are set for the REST router; `/media` is a `StaticFiles` mount.
 
@@ -1353,10 +1371,12 @@ git commit -m "feat(backend): wire asset sockets, REST, hub, and media serving i
 ## Task 9: Backend non-browser e2e (socket flow + resume)
 
 **Files:**
+
 - Modify: `studio/backend/tests/e2e/conftest.py` (pass `COMFY_BACKEND=fake`, clean media)
 - Create: `studio/backend/tests/e2e/test_assets.py`
 
 **Interfaces:**
+
 - Consumes: the `live_server` fixture (spawns `uvicorn app.main:app`).
 
 - [ ] **Step 1: Make the live server use the fake ComfyUI provider**
@@ -1444,12 +1464,14 @@ git commit -m "test(backend): non-browser e2e for asset generation over Socket.I
 ## Task 10: Frontend state slice + reducers
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/config.ts`
 - Create: `studio/frontend/src/plugins/assets/state.ts`
 - Create: `studio/frontend/src/plugins/assets/reducers.ts`
 - Test: `studio/frontend/src/plugins/assets/reducers.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `IGeneration {id, seed, imageRef, createdAt}`, `IAsset {...}`, `IGame {id, name, createdAt}`, `IAssetsState`, `ASSETS_PLUGIN_ID = 'assets'`, `makeInitialState()`, `assetsHooks`, `assetsSlice()`.
   - Pure reducers: `upsertAsset(assets, asset)`, `setAssetStatus(assets, assetId, status, queueDepth?)`, `setAssetProgress(assets, assetId, value, max)`.
@@ -1464,10 +1486,20 @@ import type { IAsset } from './state';
 import { upsertAsset, setAssetStatus, setAssetProgress } from './reducers';
 
 const base: IAsset = {
-  id: 'a1', gameId: 'g1', name: 'Wild', category: null,
-  prompt: 'p', width: 64, height: 64, workflow: 'schnell-transparent',
-  seed: null, status: 'idle', generations: [], selectedGenerationId: null,
-  error: null, progress: null,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'Wild',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-transparent',
+  seed: null,
+  status: 'idle',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: null,
 };
 
 describe('assets reducers', () => {
@@ -1501,8 +1533,7 @@ Expected: FAIL — cannot resolve `./state` / `./reducers`.
 
 ```ts
 // studio/frontend/src/plugins/assets/config.ts
-export const BACKEND_URL: string =
-  (import.meta.env.VITE_BLOOM_BACKEND_URL as string | undefined) ?? 'http://localhost:8000';
+export const BACKEND_URL: string = (import.meta.env.VITE_BLOOM_BACKEND_URL as string | undefined) ?? 'http://localhost:8000';
 ```
 
 ```ts
@@ -1626,10 +1657,12 @@ git commit -m "feat(frontend): add assets plugin state slice and pure reducers"
 ## Task 11: Frontend REST client
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/restClient.ts`
 - Test: `studio/frontend/src/plugins/assets/restClient.spec.ts`
 
 **Interfaces:**
+
 - Produces: `getGames()`, `getAssets(gameId)`, `createAsset(gameId, input)`, `updateAsset(assetId, patch)`, `deleteAsset(assetId)`, `selectGeneration(assetId, generationId)` and `ICreateAssetInput`.
 - Consumes: `BACKEND_URL`, `IGame`, `IAsset`.
 
@@ -1750,10 +1783,12 @@ git commit -m "feat(frontend): add assets REST client"
 ## Task 12: Frontend socket client
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/socketClient.ts`
 - Test: `studio/frontend/src/plugins/assets/socketClient.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `assetsSlice`, reducers (Task 10), `notify` (`../../lib/notify`), `ISocketLike` pattern (mirrors chat).
 - Produces: `createSocketClient(makeSocket)` returning `{ connect, disconnect, getSocket, joinGame, leaveGame, generateAsset }`; `initSocketClient()`, `getSocketClient()`, `ISocketLike`, `SocketClient`.
 
@@ -1782,7 +1817,9 @@ function fakeSocket(): ISocketLike & { fire: (e: string, p: unknown) => void } {
   return {
     auth: {},
     connected: true,
-    on: (e, cb) => { handlers[e] = cb; },
+    on: (e, cb) => {
+      handlers[e] = cb;
+    },
     emit: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
@@ -1791,9 +1828,20 @@ function fakeSocket(): ISocketLike & { fire: (e: string, p: unknown) => void } {
 }
 
 const asset: IAsset = {
-  id: 'a1', gameId: 'g1', name: 'W', category: null, prompt: 'p', width: 64, height: 64,
-  workflow: 'schnell-opaque', seed: null, status: 'idle', generations: [],
-  selectedGenerationId: null, error: null, progress: null,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'W',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-opaque',
+  seed: null,
+  status: 'idle',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: null,
 };
 
 beforeEach(() => {
@@ -1953,10 +2001,12 @@ git commit -m "feat(frontend): add assets socket client wiring events to reducer
 ## Task 13: Frontend actions (orchestration)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/actions.ts`
 - Test: `studio/frontend/src/plugins/assets/actions.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `assetsSlice`, `restClient` (Task 11), `socketClient` (Task 12), `upsertAsset`.
 - Produces: `initAssets()`, `loadGames()`, `openGame(gameId)`, `createAsset(input)`, `updateAsset(assetId, patch)`, `deleteAsset(assetId)`, `generateAsset(assetId)`, `selectGeneration(assetId, generationId)`, and `__setDeps(...)` for tests.
 
@@ -1970,9 +2020,20 @@ import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './
 import * as actions from './actions';
 
 const asset: IAsset = {
-  id: 'a1', gameId: 'g1', name: 'W', category: null, prompt: 'p', width: 64, height: 64,
-  workflow: 'schnell-opaque', seed: null, status: 'idle', generations: [],
-  selectedGenerationId: null, error: null, progress: null,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'W',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-opaque',
+  seed: null,
+  status: 'idle',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: null,
 };
 
 beforeEach(() => {
@@ -1983,7 +2044,14 @@ describe('assets actions', () => {
   it('openGame loads assets, sets active, and joins the game', async () => {
     const joinGame = vi.fn();
     actions.__setDeps({
-      rest: { getGames: vi.fn(), getAssets: vi.fn().mockResolvedValue([asset]), createAsset: vi.fn(), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn() },
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([asset]),
+        createAsset: vi.fn(),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
       socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame, leaveGame: vi.fn(), generateAsset: vi.fn() },
     });
     await actions.openGame('g1');
@@ -1995,7 +2063,14 @@ describe('assets actions', () => {
   it('generateAsset emits via the socket for the asset', async () => {
     const generateAsset = vi.fn();
     actions.__setDeps({
-      rest: { getGames: vi.fn(), getAssets: vi.fn().mockResolvedValue([asset]), createAsset: vi.fn(), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn() },
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([asset]),
+        createAsset: vi.fn(),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
       socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame: vi.fn(), generateAsset },
     });
     await actions.openGame('g1');
@@ -2006,12 +2081,23 @@ describe('assets actions', () => {
   it('createAsset appends the new asset to the slice', async () => {
     const created = { ...asset, id: 'a2' };
     actions.__setDeps({
-      rest: { getGames: vi.fn(), getAssets: vi.fn().mockResolvedValue([]), createAsset: vi.fn().mockResolvedValue(created), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn() },
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([]),
+        createAsset: vi.fn().mockResolvedValue(created),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
       socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame: vi.fn(), generateAsset: vi.fn() },
     });
     await actions.openGame('g1');
     await actions.createAsset({ name: 'W', prompt: 'p', width: 64, height: 64, workflow: 'schnell-opaque' });
-    expect(assetsSlice().assets.get({ noproxy: true }).map((a) => a.id)).toContain('a2');
+    expect(
+      assetsSlice()
+        .assets.get({ noproxy: true })
+        .map((a) => a.id),
+    ).toContain('a2');
   });
 });
 ```
@@ -2150,11 +2236,13 @@ git commit -m "feat(frontend): add assets actions (game open, CRUD, generate, se
 ## Task 14: Asset Board pane + Asset card
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/AssetCard.tsx`
 - Create: `studio/frontend/src/plugins/assets/AssetBoardPane.tsx`
 - Test: `studio/frontend/src/plugins/assets/AssetCard.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `assetsHooks`, `assetsSlice`, actions (Task 13), `BACKEND_URL`.
 - Produces: `AssetBoardPane` (default-exported-style component used in the manifest), `AssetCard`.
 
@@ -2172,13 +2260,28 @@ import { setAssetProgress } from './reducers';
 import { AssetCard } from './AssetCard';
 
 vi.mock('./actions', () => ({
-  generateAsset: vi.fn(), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn(),
+  generateAsset: vi.fn(),
+  updateAsset: vi.fn(),
+  deleteAsset: vi.fn(),
+  selectGeneration: vi.fn(),
 }));
 
 const mk = (over: Partial<IAsset>): IAsset => ({
-  id: 'a1', gameId: 'g1', name: 'Wild', category: null, prompt: 'p', width: 64, height: 64,
-  workflow: 'schnell-opaque', seed: null, status: 'generating', generations: [],
-  selectedGenerationId: null, error: null, progress: { value: 2, max: 4 }, ...over,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'Wild',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-opaque',
+  seed: null,
+  status: 'generating',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: { value: 2, max: 4 },
+  ...over,
 });
 
 beforeEach(() => {
@@ -2195,7 +2298,12 @@ describe('AssetCard', () => {
 
   it('shows the selected generation image when done', () => {
     assetsSlice().assets.set([
-      mk({ status: 'done', generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }], selectedGenerationId: 'gen1', progress: null }),
+      mk({
+        status: 'done',
+        generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
     ]);
     render(<AssetCard index={0} />);
     const img = screen.getByTestId('asset-selected-image') as HTMLImageElement;
@@ -2267,9 +2375,7 @@ export function AssetCard({ index }: { index: number }) {
         />
       )}
 
-      {status === 'generating' && progress && (
-        <progress data-testid="asset-progress" value={progress.value} max={progress.max} />
-      )}
+      {status === 'generating' && progress && <progress data-testid="asset-progress" value={progress.value} max={progress.max} />}
       {status === 'queued' && <span data-testid="asset-queued">queued…</span>}
       {status === 'error' && <span data-testid="asset-error">{a.error.get() ?? 'error'}</span>}
 
@@ -2331,11 +2437,7 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
     <div className="asset-board" style={{ padding: 12 }}>
       <label>
         Game:{' '}
-        <select
-          data-testid="game-select"
-          value={activeGameId ?? ''}
-          onChange={(e) => void openGame(e.target.value)}
-        >
+        <select data-testid="game-select" value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
           <option value="" disabled>
             Select a game…
           </option>
@@ -2349,7 +2451,6 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
       <button data-testid="refresh-games" onClick={() => void loadGames()}>
         ↻ Refresh games
       </button>
-
       {activeGameId && (
         <form
           data-testid="new-asset-form"
@@ -2373,7 +2474,6 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
           <button type="submit">Add asset</button>
         </form>
       )}
-
       <div className="asset-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
         {Array.from({ length: assetCount }, (_, i) => (
           <AssetCard key={i} index={i} />
@@ -2401,12 +2501,14 @@ git commit -m "feat(frontend): add Asset Board pane and Asset card with candidat
 ## Task 15: Plugin manifest + registration + default layout
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/index.ts`
 - Create: `studio/frontend/src/plugins/assets/index.spec.ts`
 - Modify: `studio/frontend/src/plugins/index.ts` (add `assets` to `PLUGINS`)
 - Modify: `studio/frontend/src/app/workbenchSetup.ts` (add the board to the default layout)
 
 **Interfaces:**
+
 - Produces: `export const assets: IPlugin<IAssetsState>` with id `assets`, one pane `assets/board`, one command `assets/open-board`, `init: () => initAssets()`.
 
 - [ ] **Step 1: Write the failing manifest test**
@@ -2463,7 +2565,7 @@ export const PLUGINS: IPlugin[] = [demoCounter, demoScratch, llmChat, assets];
 
 ```ts
 // studio/frontend/src/app/workbenchSetup.ts — add inside DEFAULT_LAYOUT, after the chat panels
-  add('assets/board', { direction: 'below', referencePanel: 'llm-chat/room' });
+add('assets/board', { direction: 'below', referencePanel: 'llm-chat/room' });
 ```
 
 - [ ] **Step 5: Run manifest test + full frontend unit suite**
@@ -2486,10 +2588,12 @@ git commit -m "feat(frontend): register assets plugin and add Asset Board to def
 ## Task 16: Browser e2e (Playwright, local-only)
 
 **Files:**
+
 - Create: `studio/frontend/e2e/assets.spec.ts`
 - Modify: `justfile` (add `e2e-assets` recipe)
 
 **Interfaces:**
+
 - Consumes: the running frontend (Playwright config) + a backend started with `LLM_BACKEND=fake COMFY_BACKEND=fake`.
 
 - [ ] **Step 1: Add a justfile recipe**

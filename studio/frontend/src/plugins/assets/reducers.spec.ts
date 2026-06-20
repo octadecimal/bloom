@@ -4,10 +4,20 @@ import type { IAsset } from './state';
 import { upsertAsset } from './reducers';
 
 const base: IAsset = {
-  id: 'a1', gameId: 'g1', name: 'Wild', category: null,
-  prompt: 'p', width: 64, height: 64, workflow: 'schnell-transparent',
-  seed: null, status: 'idle', generations: [], selectedGenerationId: null,
-  error: null, progress: null,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'Wild',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-transparent',
+  seed: null,
+  status: 'idle',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: null,
 };
 
 describe('assets reducers', () => {

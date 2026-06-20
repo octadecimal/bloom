@@ -5,13 +5,28 @@ import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './
 import { AssetCard } from './AssetCard';
 
 vi.mock('./actions', () => ({
-  generateAsset: vi.fn(), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn(),
+  generateAsset: vi.fn(),
+  updateAsset: vi.fn(),
+  deleteAsset: vi.fn(),
+  selectGeneration: vi.fn(),
 }));
 
 const mk = (over: Partial<IAsset>): IAsset => ({
-  id: 'a1', gameId: 'g1', name: 'Wild', category: null, prompt: 'p', width: 64, height: 64,
-  workflow: 'schnell-opaque', seed: null, status: 'generating', generations: [],
-  selectedGenerationId: null, error: null, progress: { value: 2, max: 4 }, ...over,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'Wild',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-opaque',
+  seed: null,
+  status: 'generating',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: { value: 2, max: 4 },
+  ...over,
 });
 
 beforeEach(() => {
@@ -28,7 +43,12 @@ describe('AssetCard', () => {
 
   it('shows the selected generation image when done', () => {
     assetsSlice().assets.set([
-      mk({ status: 'done', generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }], selectedGenerationId: 'gen1', progress: null }),
+      mk({
+        status: 'done',
+        generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
     ]);
     render(<AssetCard index={0} />);
     const img = screen.getByTestId('asset-selected-image') as HTMLImageElement;

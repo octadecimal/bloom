@@ -5,9 +5,20 @@ import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './
 import * as actions from './actions';
 
 const asset: IAsset = {
-  id: 'a1', gameId: 'g1', name: 'W', category: null, prompt: 'p', width: 64, height: 64,
-  workflow: 'schnell-opaque', seed: null, status: 'idle', generations: [],
-  selectedGenerationId: null, error: null, progress: null,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'W',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-opaque',
+  seed: null,
+  status: 'idle',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: null,
 };
 
 beforeEach(() => {
@@ -18,7 +29,14 @@ describe('assets actions', () => {
   it('openGame loads assets, sets active, and joins the game', async () => {
     const joinGame = vi.fn();
     actions.__setDeps({
-      rest: { getGames: vi.fn(), getAssets: vi.fn().mockResolvedValue([asset]), createAsset: vi.fn(), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn() },
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([asset]),
+        createAsset: vi.fn(),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
       socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame, leaveGame: vi.fn(), generateAsset: vi.fn() },
     });
     await actions.openGame('g1');
@@ -30,7 +48,14 @@ describe('assets actions', () => {
   it('generateAsset emits via the socket for the asset', async () => {
     const generateAsset = vi.fn();
     actions.__setDeps({
-      rest: { getGames: vi.fn(), getAssets: vi.fn().mockResolvedValue([asset]), createAsset: vi.fn(), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn() },
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([asset]),
+        createAsset: vi.fn(),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
       socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame: vi.fn(), generateAsset },
     });
     await actions.openGame('g1');
@@ -41,11 +66,22 @@ describe('assets actions', () => {
   it('createAsset appends the new asset to the slice', async () => {
     const created = { ...asset, id: 'a2' };
     actions.__setDeps({
-      rest: { getGames: vi.fn(), getAssets: vi.fn().mockResolvedValue([]), createAsset: vi.fn().mockResolvedValue(created), updateAsset: vi.fn(), deleteAsset: vi.fn(), selectGeneration: vi.fn() },
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([]),
+        createAsset: vi.fn().mockResolvedValue(created),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
       socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame: vi.fn(), generateAsset: vi.fn() },
     });
     await actions.openGame('g1');
     await actions.createAsset({ name: 'W', prompt: 'p', width: 64, height: 64, workflow: 'schnell-opaque' });
-    expect(assetsSlice().assets.get({ noproxy: true }).map((a) => a.id)).toContain('a2');
+    expect(
+      assetsSlice()
+        .assets.get({ noproxy: true })
+        .map((a) => a.id),
+    ).toContain('a2');
   });
 });

@@ -26,11 +26,7 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
     <div className="asset-board" style={{ padding: 12 }}>
       <label>
         Game:{' '}
-        <select
-          data-testid="game-select"
-          value={activeGameId ?? ''}
-          onChange={(e) => void openGame(e.target.value)}
-        >
+        <select data-testid="game-select" value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
           <option value="" disabled>
             Select a game…
           </option>
@@ -44,7 +40,6 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
       <button data-testid="refresh-games" onClick={() => void loadGames()}>
         ↻ Refresh games
       </button>
-
       {activeGameId && (
         <form
           data-testid="new-asset-form"
@@ -68,7 +63,6 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
           <button type="submit">Add asset</button>
         </form>
       )}
-
       <div className="asset-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
         {Array.from({ length: assetCount }, (_, i) => (
           <AssetCard key={i} index={i} />

@@ -11,7 +11,9 @@ function fakeSocket(): ISocketLike & { fire: (e: string, p: unknown) => void } {
   return {
     auth: {},
     connected: true,
-    on: (e, cb) => { handlers[e] = cb; },
+    on: (e, cb) => {
+      handlers[e] = cb;
+    },
     emit: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
@@ -20,9 +22,20 @@ function fakeSocket(): ISocketLike & { fire: (e: string, p: unknown) => void } {
 }
 
 const asset: IAsset = {
-  id: 'a1', gameId: 'g1', name: 'W', category: null, prompt: 'p', width: 64, height: 64,
-  workflow: 'schnell-opaque', seed: null, status: 'idle', generations: [],
-  selectedGenerationId: null, error: null, progress: null,
+  id: 'a1',
+  gameId: 'g1',
+  name: 'W',
+  category: null,
+  prompt: 'p',
+  width: 64,
+  height: 64,
+  workflow: 'schnell-opaque',
+  seed: null,
+  status: 'idle',
+  generations: [],
+  selectedGenerationId: null,
+  error: null,
+  progress: null,
 };
 
 beforeEach(() => {

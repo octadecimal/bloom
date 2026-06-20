@@ -37,9 +37,7 @@ export function AssetCard({ index }: { index: number }) {
         />
       )}
 
-      {status === 'generating' && progress && (
-        <progress data-testid="asset-progress" value={progress.value} max={progress.max} />
-      )}
+      {status === 'generating' && progress && <progress data-testid="asset-progress" value={progress.value} max={progress.max} />}
       {status === 'queued' && <span data-testid="asset-queued">queued…</span>}
       {status === 'error' && <span data-testid="asset-error">{a.error.get() ?? 'error'}</span>}
 

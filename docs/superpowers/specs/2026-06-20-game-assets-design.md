@@ -31,7 +31,7 @@ scoped-subscription render discipline, and the `notify` (sonner) toast seam.
 
 ## 2. Decisions resolved in brainstorming
 
-1. **Scope = authoring *and* generation (not authoring-only).** The deliverable
+1. **Scope = authoring _and_ generation (not authoring-only).** The deliverable
    includes the ComfyUI generation pipeline with live progress, not just CRUD.
 2. **Entities are grouped under a Game** (not a flat list). The Game is the
    top-level design object; assets are its first facet (math/seeds/package come
@@ -89,7 +89,7 @@ Generation  { id, seed, imageRef, createdAt }
 
 The `Game` model + `GameStore` live in a small **shared `app/games.py`** module
 (the Game is a cross-domain spine, owned by neither chat nor assets). Chat depends
-on it to create a game on room creation; assets depends on it only to *read* the
+on it to create a game on room creation; assets depends on it only to _read_ the
 game list.
 
 ## 5. Backend architecture
@@ -216,7 +216,7 @@ where a `byGame` map would appear). Reducers in `reducers.ts` are pure and
 unit-tested; all socket handlers are guarded by `gameId === activeGameId` (stray
 events ignored), mirroring chat's `roomId === activeRoomId` guard.
 
-| Event             | Reducer                                                          |
+| Event             | Reducer                                                         |
 | ----------------- | --------------------------------------------------------------- |
 | `asset_status`    | set that asset's `status` (+ board `queueDepth`)                |
 | `asset_progress`  | set that asset's `{value,max}` progress                         |
