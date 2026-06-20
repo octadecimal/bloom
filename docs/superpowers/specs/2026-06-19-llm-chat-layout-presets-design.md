@@ -92,7 +92,7 @@ interface ILayoutPresetsService {
   `false`). Reject a name that collides with a **built-in** name (reserved /
   non-overwritable → `notify.error`, return `false`). Otherwise capture `api.toJSON()`
   into the user map (an existing **user** name overwrites), persist, return `true`. No-op
-  + `false` if `getApi()` is null.
+  - `false` if `getApi()` is null.
 - **`apply(name)`** —
   - **built-in** → `api.clear()` then run `builtins[name](api, paneRegistry)` (full
     replace);

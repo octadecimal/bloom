@@ -26,16 +26,26 @@
 ### Task 1: `layoutPresets` service
 
 **Files:**
+
 - Create: `studio/frontend/src/host/layoutPresets.ts`
 - Test: `studio/frontend/src/host/layoutPresets.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `panelIdsFromLayout` from `./layoutService`; `savePersisted`, `loadPersisted` from `../state/persistence`.
 - Produces:
+
   ```ts
-  export interface ILayoutPresetInfo { name: string; kind: 'builtin' | 'user'; }
-  export interface IPaneRegistryLike { get(id: string): unknown | undefined; }
-  export interface ILayoutBuilder { (api: any, paneRegistry: IPaneRegistryLike): void; }
+  export interface ILayoutPresetInfo {
+    name: string;
+    kind: 'builtin' | 'user';
+  }
+  export interface IPaneRegistryLike {
+    get(id: string): unknown | undefined;
+  }
+  export interface ILayoutBuilder {
+    (api: any, paneRegistry: IPaneRegistryLike): void;
+  }
   export interface ILayoutPresetsDeps {
     getApi: () => any | null;
     paneRegistry: IPaneRegistryLike;
@@ -310,10 +320,12 @@ git commit -m "feat(studio): layoutPresets service (save/apply/list/delete)"
 ### Task 2: Built-in presets
 
 **Files:**
+
 - Create: `studio/frontend/src/app/layoutPresets.builtins.ts`
 - Test: `studio/frontend/src/app/layoutPresets.builtins.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from prior tasks at runtime (structurally compatible with `ILayoutBuilder` from Task 1 — `(api, paneRegistry) => void`).
 - Produces: `export const LAYOUT_BUILTINS: Record<string, (api: DockviewApi, reg: IPaneRegistryLikeLocal) => void>` with keys `Chat` and `Focus`.
 
@@ -370,12 +382,7 @@ interface IPaneRegistryLikeLocal {
 
 // Mirrors the DEFAULT_LAYOUT add idiom; kept separate so Reset's default and
 // the preset built-ins stay decoupled.
-function addPane(
-  api: DockviewApi,
-  reg: IPaneRegistryLikeLocal,
-  id: string,
-  position?: { direction: 'right' | 'below'; referencePanel: string },
-): void {
+function addPane(api: DockviewApi, reg: IPaneRegistryLikeLocal, id: string, position?: { direction: 'right' | 'below'; referencePanel: string }): void {
   if (!api.getPanel(id)) {
     api.addPanel({ id, component: id, title: reg.get(id)?.title ?? id, params: { paneId: id }, position });
   }
@@ -409,11 +416,13 @@ git commit -m "feat(studio): built-in layout presets (Chat, Focus)"
 ### Task 3: Shell module refs
 
 **Files:**
+
 - Create: `studio/frontend/src/state/layoutPresetsRef.ts`
 - Create: `studio/frontend/src/state/saveLayoutDialogRef.ts`
 - Test: `studio/frontend/src/state/layoutPresetsRef.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `ILayoutPresetsService` from `../host/layoutPresets`.
 - Produces:
   - `setLayoutPresets(s: ILayoutPresetsService): void`, `getLayoutPresets(): ILayoutPresetsService` (throws if unset, mirroring `hostRef`).
@@ -511,10 +520,12 @@ git commit -m "feat(studio): shell refs for layout presets + save-dialog opener"
 ### Task 4: Wire the service + shell commands in `setupApp`
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/setupApp.ts`
 - Test: `studio/frontend/src/app/setupApp.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `createLayoutPresetsService` (Task 1), `LAYOUT_BUILTINS` (Task 2), `setLayoutPresets` + `openSaveLayoutDialog` (Task 3), `notify` (`../lib/notify`).
 - Produces: after `setupApp()`, `getLayoutPresets()` returns a service and `host.listCommands()` includes `shell/save-layout` and `shell/reset-layout`.
 
@@ -530,7 +541,9 @@ Then add inside the `describe('setupApp', ...)` block:
 
 ```ts
 it('registers shell layout commands in the palette', () => {
-  const ids = setupApp().host.listCommands().map((c) => c.id);
+  const ids = setupApp()
+    .host.listCommands()
+    .map((c) => c.id);
   expect(ids).toContain('shell/save-layout');
   expect(ids).toContain('shell/reset-layout');
 });
@@ -538,7 +551,11 @@ it('registers shell layout commands in the palette', () => {
 it('exposes the layout presets service via the ref', () => {
   setupApp();
   expect(getLayoutPresets()).toBeTruthy();
-  expect(getLayoutPresets().list().some((p) => p.kind === 'builtin')).toBe(true);
+  expect(
+    getLayoutPresets()
+      .list()
+      .some((p) => p.kind === 'builtin'),
+  ).toBe(true);
 });
 ```
 
@@ -562,16 +579,16 @@ import { notify } from '../lib/notify';
 Then, immediately **after** the `setHost(host);` line and **before** the `let extra: IPlugin[] = [];` line, insert:
 
 ```ts
-  const layoutPresets = createLayoutPresetsService({
-    getApi: () => api,
-    paneRegistry,
-    builtins: LAYOUT_BUILTINS,
-    notify,
-  });
-  setLayoutPresets(layoutPresets);
+const layoutPresets = createLayoutPresetsService({
+  getApi: () => api,
+  paneRegistry,
+  builtins: LAYOUT_BUILTINS,
+  notify,
+});
+setLayoutPresets(layoutPresets);
 
-  host.registerCommand({ id: 'shell/save-layout', title: 'Save arrangement…', run: () => openSaveLayoutDialog() });
-  host.registerCommand({ id: 'shell/reset-layout', title: 'Reset layout', run: (h) => h.resetLayout() });
+host.registerCommand({ id: 'shell/save-layout', title: 'Save arrangement…', run: () => openSaveLayoutDialog() });
+host.registerCommand({ id: 'shell/reset-layout', title: 'Reset layout', run: (h) => h.resetLayout() });
 ```
 
 (`api` is the `let api: DockviewApi | null` already declared in `setupApp`; the `getApi` closure reads its latest value, exactly like the host's `getApi`.)
@@ -593,10 +610,12 @@ git commit -m "feat(studio): wire layoutPresets service + shell layout commands"
 ### Task 5: `SaveLayoutDialog` component
 
 **Files:**
+
 - Create: `studio/frontend/src/app/SaveLayoutDialog.tsx`
 - Test: `studio/frontend/src/app/SaveLayoutDialog.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `getLayoutPresets` (Task 3) — calls `.saveAs(name)`; shadcn `Dialog`/`DialogContent` (`@/components/ui/dialog`), `Button` (`@/components/ui/button`).
 - Produces: `export interface ISaveLayoutDialogProps { open: boolean; onOpenChange(open: boolean): void; }` and `export function SaveLayoutDialog(props: ISaveLayoutDialogProps): JSX.Element`.
 
@@ -716,11 +735,13 @@ git commit -m "feat(studio): SaveLayoutDialog name prompt"
 ### Task 6: "Layout" menu in `Menubar` (+ fix the existing layout e2e)
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/Menubar.tsx`
 - Modify: `studio/frontend/e2e/layout.spec.ts:34` (the `menu-file` click → `menu-layout`)
 - Test: `studio/frontend/src/app/Menubar.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `getHost` (`../state/hostRef`), `getLayoutPresets` (Task 3), `setSaveLayoutOpener` (Task 3), `SaveLayoutDialog` (Task 5), shadcn `menubar` parts.
 - Produces: `AppMenubar` renders a **Layout** menu (`menu-layout`) containing `layout-save`, one `layout-apply-<name>` per preset, one `layout-delete-<name>` per user preset, and `menu-reset-layout`. The **File** menu is removed.
 
@@ -873,13 +894,13 @@ Expected: PASS.
 In `studio/frontend/e2e/layout.spec.ts`, change line 34 from:
 
 ```ts
-  await page.getByTestId('menu-file').click();
+await page.getByTestId('menu-file').click();
 ```
 
 to:
 
 ```ts
-  await page.getByTestId('menu-layout').click();
+await page.getByTestId('menu-layout').click();
 ```
 
 (The next line, `menu-reset-layout`, is unchanged — Reset now lives under Layout.)
@@ -896,9 +917,11 @@ git commit -m "feat(studio): Layout menu (save/apply/delete/reset)"
 ### Task 7: Browser e2e — save, apply, delete (local-only)
 
 **Files:**
+
 - Create: `studio/frontend/e2e/layout-presets.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `gotoWorkbench` from `./helpers` (hermetic — stubs `/rooms` and messages; no backend needed); testids `menu-layout`, `layout-save`, `save-layout-name`, `save-layout-confirm`, `layout-apply-<name>`, `layout-delete-<name>`, `menu-reset-layout`; pane testids `chat-room-pane`, `chat-settings-pane`; `window.__wbApi` (exposed in dev by `setupApp.attachDockview`).
 
 - [ ] **Step 1: Write the e2e test**
@@ -986,4 +1009,4 @@ git commit -m "test(studio): browser e2e for layout presets (save/apply/delete)"
 - **Singleton `setupApp`:** the `setupApp` tests share one memoized instance per Vitest file; assert presence of commands/service, not re-initialization.
 - **Radix menus in jsdom:** `userEvent.click` on the `menu-layout` trigger opens the portalled content so the items become queryable (the existing pattern). If an item isn't found, ensure the menu was re-opened (Radix closes on item select).
 - **No `IPlugin`/`IPluginHost` changes** — verify the diff touches none of `host/types.ts`.
-</content>
+  </content>
