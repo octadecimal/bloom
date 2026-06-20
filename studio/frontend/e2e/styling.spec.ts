@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { gotoWorkbench } from './helpers';
 
 test('shadcn Button renders with Tailwind utility classes applied', async ({ page }) => {
-  await page.goto('/');
+  await gotoWorkbench(page);
   const themeToggle = page.getByTestId('theme-toggle');
   await expect(themeToggle).toBeVisible();
   // variant="outline" gives the button a visible border; a non-zero borderTopWidth
