@@ -18,6 +18,7 @@ This is **Plan A** of two. Plan B (frontend `llm-chat` plugin) is written after 
 - **CI cost policy:** the Python Socket.IO suite is **non-browser e2e** and IS run in CI (it is the authoritative contract). No browser/Playwright in this plan.
 - **Identity is ephemeral:** display name only; no auth, no user persistence.
 - **Single-worker assumption:** the in-memory `RoomHub` assumes one `uvicorn` worker. Multi-worker (Redis pub/sub + distributed lock) is explicitly out of scope.
+- **Local MongoDB:** native MongoDB Windows service (installed via `winget MongoDB.Server`, service name `MongoDB`, listening on `mongodb://localhost:27017`), **not Docker Compose**. This is a deliberate deviation from ADR-0001's Compose orchestration — the datastore choice (MongoDB) is unchanged, only how it runs locally. CI (Task 8) still uses a Mongo **service container** on the Linux runner, which is unaffected.
 - **Provider:** OpenRouter is the only real backend; key from `OPENROUTER_API_KEY` env, server-side only, never sent to clients.
 - **Wire format:** all Socket.IO event payloads and REST JSON use **camelCase** keys (`roomId`, `messageId`, `isTyping`, `createdAt`). Python models are snake_case internally and serialized to camelCase via Pydantic alias generators.
 - **Repo Prettier gate:** CI runs `npx prettier --check .` across the repo. Any YAML/JSON/Markdown added here must be Prettier-clean (run `npx prettier --write <files>` before committing). Prettier ignores `.py` files.
@@ -60,9 +61,8 @@ studio/backend/
 │       ├── conftest.py         # live_server fixture (subprocess uvicorn)
 │       ├── test_sockets.py     # single-client: join/presence/typing
 │       └── test_realtime.py    # AUTHORITATIVE two-client streaming + serialization
-compose.yaml                    # repo-root: mongo service
-justfile                        # add backend-* targets
-.github/workflows/ci.yml        # add backend job (Mongo service)
+justfile                        # add backend-* targets (incl. native mongo service control)
+.github/workflows/ci.yml        # add backend job (Mongo service container, CI only)
 ```
 
 ---
@@ -75,8 +75,7 @@ Stand up the `uv` project, the settings layer, Mongo via Compose, the `just` tar
 - Create: `studio/backend/pyproject.toml`, `studio/backend/.python-version`, `studio/backend/.env.example`, `studio/backend/.gitignore`, `studio/backend/README.md`
 - Create: `studio/backend/app/__init__.py`, `studio/backend/app/config.py`, `studio/backend/app/rest.py`, `studio/backend/app/main.py`
 - Create: `studio/backend/tests/__init__.py`, `studio/backend/tests/conftest.py`, `studio/backend/tests/test_health.py`
-- Create: `compose.yaml` (repo root)
-- Modify: `justfile` (add backend targets)
+- Modify: `justfile` (add backend targets, incl. native Mongo service control)
 
 **Interfaces:**
 - Produces: `app.config.Settings`, `app.config.get_settings() -> Settings`
@@ -157,7 +156,7 @@ Shared, multi-user, multi-room LLM chat. FastAPI + Socket.IO + MongoDB + Langcha
 
 ## Run
 
-    just mongo-up            # start MongoDB (Docker)
+    just mongo-up            # ensure native MongoDB service is running
     cd studio/backend && uv sync
     cp .env.example .env     # fill OPENROUTER_API_KEY
     just backend-serve       # uvicorn on :8000
@@ -299,30 +298,18 @@ cd studio/backend && uv run pytest tests/test_health.py -v
 ```
 Expected: PASS.
 
-- [ ] **Step 7: Add Compose + justfile targets**
+- [ ] **Step 7: Add justfile targets (native Mongo, no Docker)**
 
-`compose.yaml` (repo root):
-```yaml
-services:
-  mongo:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - bloom-mongo-data:/data/db
-
-volumes:
-  bloom-mongo-data:
-```
+MongoDB is installed natively as a Windows service named `MongoDB` (via `winget MongoDB.Server`), listening on `mongodb://localhost:27017`. It auto-starts on boot; the `mongo-up`/`mongo-down` targets just ensure the service is in the desired state. No `compose.yaml` is created (deliberate deviation from ADR-0001 — see Global Constraints).
 
 Append to `justfile`:
 ```
 # Python / studio backend
 mongo-up:
-    docker compose up -d mongo
+    powershell -NoProfile -Command "if ((Get-Service MongoDB).Status -ne 'Running') { Start-Service MongoDB }"
 
 mongo-down:
-    docker compose down
+    powershell -NoProfile -Command "Stop-Service MongoDB"
 
 backend-install:
     cd studio/backend && uv sync
@@ -337,15 +324,16 @@ backend-e2e:
     cd studio/backend && uv run pytest -m e2e
 ```
 
-Run Prettier on the new YAML so the CI gate stays green:
+Verify the target works (service should already be running post-install):
 ```bash
-npx prettier --write compose.yaml
+just mongo-up
 ```
+Expected: no error (service running).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add studio/backend compose.yaml justfile
+git add studio/backend justfile
 git commit -m "feat(backend): scaffold studio backend with health endpoint"
 ```
 
@@ -1857,7 +1845,7 @@ Expected: the `Backend (pytest unit + e2e)` check passes alongside `rust` and `f
 | §7 Turn-based lock/queue (4 steps) | Task 5 (`RoomHub`), Task 7 (serialization contract) |
 | §8 Provider/config (OpenRouter env, per-room model) | Task 1 (`Settings`), Task 3 (per-room `model`), Task 4 (providers) |
 | §10 Testing (pytest unit + Python Socket.IO e2e, CI-gated) | Tasks 2,4,5 (unit), Tasks 6,7 (e2e), Task 8 (CI) |
-| §11 Scope (Mongo via Compose, justfile, uv) | Task 1 (compose/justfile/uv) |
+| §11 Scope (Mongo, justfile, uv) | Task 1 (native Mongo service, justfile, uv) |
 | §11 Scaling seam documented (single worker) | Global Constraints + this plan's header |
 
 Frontend plugin (§9) is intentionally Plan B — not in scope here.
