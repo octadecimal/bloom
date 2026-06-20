@@ -21,6 +21,9 @@ export default defineConfig(() => ({
       '/models': { target: 'http://localhost:8000', changeOrigin: true },
       '/health': { target: 'http://localhost:8000', changeOrigin: true },
       '/socket.io': { target: 'http://localhost:8000', changeOrigin: true, ws: true },
+      '/games': { target: 'http://localhost:8000', changeOrigin: true },
+      '/assets': { target: 'http://localhost:8000', changeOrigin: true },
+      '/media': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
   preview: {

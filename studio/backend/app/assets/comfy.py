@@ -99,5 +99,7 @@ class RealComfyProvider:
 
 def build_provider(settings: Settings) -> ComfyProvider:
     if settings.comfy_backend == "fake":
-        return FakeComfyProvider()
+        # Small delay so browser e2e tests can observe the progress indicator
+        # before generation completes.  Unit tests pass explicit params and are unaffected.
+        return FakeComfyProvider(delay=0.05)
     return RealComfyProvider(base_url=settings.comfyui_url)
