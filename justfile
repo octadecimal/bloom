@@ -23,3 +23,22 @@ e2e:
 
 serve-frontend:
     npx nx serve frontend
+
+# Python / studio backend
+mongo-up:
+    powershell -NoProfile -Command "if ((Get-Service MongoDB).Status -ne 'Running') { Start-Service MongoDB }"
+
+mongo-down:
+    powershell -NoProfile -Command "Stop-Service MongoDB"
+
+backend-install:
+    cd studio/backend && uv sync
+
+backend-serve:
+    cd studio/backend && uv run uvicorn app.main:app --reload --port 8000
+
+backend-test:
+    cd studio/backend && uv run pytest -m "not e2e"
+
+backend-e2e:
+    cd studio/backend && uv run pytest -m e2e
