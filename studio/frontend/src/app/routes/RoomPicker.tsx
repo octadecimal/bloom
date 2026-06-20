@@ -11,6 +11,7 @@ export function RoomPicker() {
   const [rooms, setRooms] = useState<IRoom[]>([]);
   const [status, setStatus] = useState<Status>('loading');
   const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   async function load() {
     setStatus('loading');
@@ -30,11 +31,15 @@ export function RoomPicker() {
     e.preventDefault();
     const name = newName.trim();
     if (!name) return;
+    setCreating(true);
     try {
       const room = await createRoom(name);
+      setNewName('');
       navigate(`/room/${room.id}`);
     } catch {
       notify.error('Could not create room');
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -43,7 +48,9 @@ export function RoomPicker() {
       <h1 style={{ fontSize: '1.25rem' }}>Rooms</h1>
       <form onSubmit={onCreate} style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
         <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New room name…" style={{ flex: 1 }} />
-        <button type="submit">Create</button>
+        <button type="submit" disabled={creating}>
+          Create
+        </button>
       </form>
       {status === 'loading' && <p>Loading rooms…</p>}
       {status === 'error' && (

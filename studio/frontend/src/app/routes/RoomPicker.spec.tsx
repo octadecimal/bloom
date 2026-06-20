@@ -44,6 +44,18 @@ describe('RoomPicker', () => {
     await userEvent.click(screen.getByRole('button', { name: /create/i }));
     expect(await screen.findByText('ROOM')).toBeInTheDocument();
   });
+  it('clears the input after a successful create', async () => {
+    getRooms.mockResolvedValue([]);
+    createRoom.mockResolvedValue({ id: 'r-new', name: 'Beta', model: 'm', gameId: null, createdAt: 't' });
+    render(tree());
+    await waitFor(() => expect(getRooms).toHaveBeenCalled());
+    const input = screen.getByPlaceholderText(/new room/i);
+    await userEvent.type(input, 'Beta');
+    expect(input).toHaveValue('Beta');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+    await screen.findByText('ROOM');
+    expect(input).toHaveValue('');
+  });
   it('shows retry on error', async () => {
     getRooms.mockRejectedValue(new Error('down'));
     render(tree());
