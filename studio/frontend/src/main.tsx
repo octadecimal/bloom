@@ -1,15 +1,21 @@
 import './styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import { AppProvider } from './app/AppContext';
-import { Workbench } from './app/Workbench';
+import { SessionProvider } from './session/SessionContext';
+import { AppRoutes } from './app/routes/AppRoutes';
 import { Toaster } from './components/ui/sonner';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProvider>
-      <Toaster />
-      <Workbench />
+      <SessionProvider>
+        <Toaster />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </SessionProvider>
     </AppProvider>
   </StrictMode>,
 );
