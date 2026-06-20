@@ -31,7 +31,7 @@ test('layout persists across reload and Reset restores default (row 8)', async (
   await expect(page.getByTestId('chat-settings-pane')).toHaveCount(0);
 
   // Open File menu → Reset layout.
-  await page.getByTestId('menu-file').click();
+  await page.getByTestId('menu-layout').click();
   await page.getByTestId('menu-reset-layout').click();
 
   // After reset: add-if-missing re-adds chat-settings-pane — proves reset re-applied the default.
