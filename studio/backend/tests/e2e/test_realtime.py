@@ -90,5 +90,14 @@ async def test_concurrent_prompts_serialize_into_two_answers(live_server):
     assert roles.count("assistant") == 2
     assert all(m["status"] == "complete" for m in history)
 
+    # Serialization: the two assistant token streams must NOT interleave.
+    # Collapse ra.tokens' messageId sequence into contiguous runs; correct
+    # per-room serialization yields exactly two runs (msg1 fully, then msg2).
+    runs = []
+    for t in ra.tokens:
+        if not runs or runs[-1] != t["messageId"]:
+            runs.append(t["messageId"])
+    assert len(runs) == 2, f"assistant token streams interleaved: {runs}"
+
     await alice.disconnect()
     await bob.disconnect()
