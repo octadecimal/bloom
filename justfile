@@ -42,3 +42,12 @@ backend-test:
 
 backend-e2e:
     cd studio/backend && uv run pytest -m e2e
+
+# Run the backend with the fake LLM provider for browser e2e (no API key needed).
+backend-serve-fake:
+    cd studio/backend && LLM_BACKEND=fake uv run uvicorn app.main:app --port 8000
+
+# Browser e2e for the chat plugin. Start `just backend-serve-fake` in another
+# terminal first (Playwright starts only the frontend). Local-only; not in CI.
+e2e-chat:
+    npx playwright test --config=studio/frontend/playwright.config.ts llm-chat
