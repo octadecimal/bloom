@@ -36,7 +36,12 @@ async def test_generate_streams_status_progress_completed(live_server):
             break
         await asyncio.sleep(0.05)
 
-    assert got["status"] and got["progress"] and got["completed"]
+    if not got["completed"]:
+        pytest.fail(f"generation did not complete in time; got={got}")
+
+    assert got["status"], f"no asset_status events; got={got}"
+    assert got["progress"], f"no asset_progress events; got={got}"
+    assert got["completed"], f"no asset_completed events; got={got}"
     asset = got["completed"][-1]["asset"]
     assert asset["status"] == "done"
     assert asset["generations"][0]["seed"] == 3
