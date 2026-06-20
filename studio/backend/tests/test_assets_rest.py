@@ -67,3 +67,55 @@ async def test_games_and_asset_crud_flow(mongo_db):
 
         after_delete = await client.get(f"/games/{game.id}/assets")
         assert after_delete.json() == []
+
+
+@pytest.mark.asyncio
+async def test_patch_nulls_seed_and_category(mongo_db):
+    app = _app(mongo_db)
+    store = AssetStore(mongo_db)
+    asset = await store.create_asset(
+        game_id="g1", name="Wild", prompt="p", width=64, height=64,
+        workflow="schnell-transparent", seed=7, category="reels",
+    )
+    async with _client(app) as client:
+        # Explicit JSON nulls clear seed (→ random) and category (→ uncategorised).
+        resp = await client.patch(f"/assets/{asset.id}", json={"seed": None, "category": None})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["seed"] is None
+        assert body["category"] is None
+
+
+@pytest.mark.asyncio
+async def test_patch_leaves_omitted_fields_untouched(mongo_db):
+    app = _app(mongo_db)
+    store = AssetStore(mongo_db)
+    asset = await store.create_asset(
+        game_id="g1", name="Wild", prompt="p", width=64, height=64,
+        workflow="schnell-transparent", seed=7, category="reels",
+    )
+    async with _client(app) as client:
+        # Omitting seed/category must NOT clear them (distinct from sending null).
+        resp = await client.patch(f"/assets/{asset.id}", json={"prompt": "edited"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["prompt"] == "edited"
+        assert body["seed"] == 7
+        assert body["category"] == "reels"
+
+
+@pytest.mark.asyncio
+async def test_patch_cannot_null_required_fields(mongo_db):
+    app = _app(mongo_db)
+    store = AssetStore(mongo_db)
+    asset = await store.create_asset(
+        game_id="g1", name="Wild", prompt="p", width=64, height=64,
+        workflow="schnell-transparent",
+    )
+    async with _client(app) as client:
+        # A null for a non-nullable field is ignored, never written.
+        resp = await client.patch(f"/assets/{asset.id}", json={"name": None, "prompt": "still here"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["name"] == "Wild"
+        assert body["prompt"] == "still here"

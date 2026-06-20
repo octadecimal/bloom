@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, Link } from 'react-router-dom';
 import { getRooms } from '../../plugins/llm-chat/restClient';
 import { openRoom, closeRoom } from '../../plugins/llm-chat/actions';
 import { notify } from '../../lib/notify';
@@ -42,7 +42,13 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
   if (state === 'invalid' || !roomId) return <Navigate to="/" replace />;
   return (
     <ActiveRoomProvider roomId={roomId}>
-      <Workbench />
+      <Workbench
+        leading={
+          <Link to="/" title="Back to rooms">
+            ← Rooms
+          </Link>
+        }
+      />
       {children}
     </ActiveRoomProvider>
   );

@@ -3,7 +3,7 @@ import asyncio
 
 import pytest
 
-from app.assets.comfy import FakeComfyProvider
+from app.assets.comfy import FAKE_PNG, FakeComfyProvider, ImageEvent, ProgressEvent
 from app.assets.hub import AssetHub
 from app.assets.media import MediaStore
 from app.assets.store import AssetStore
@@ -28,6 +28,15 @@ async def _wait_for(sio, event, timeout=2.0):
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"event {event} not emitted; got {[e[0] for e in sio.events]}")
+
+
+async def _wait_until(predicate, timeout=2.0):
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.005)
+    raise AssertionError("predicate not satisfied within timeout")
 
 
 @pytest.mark.asyncio
@@ -77,6 +86,44 @@ async def test_failure_sets_error_status(mongo_db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_failed_generation_does_not_wedge_next_queued(mongo_db, tmp_path):
+    """A generation that raises must not stall the rest of the game's queue."""
+    store = AssetStore(mongo_db)
+    bad = await store.create_asset(game_id="g1", name="Bad", prompt="p", width=64, height=64, workflow="schnell-opaque", seed=1)
+    good = await store.create_asset(game_id="g1", name="Good", prompt="p", width=64, height=64, workflow="schnell-opaque", seed=2)
+
+    class FlakyProvider:
+        """Explodes on the first generation, succeeds on every one after."""
+
+        def __init__(self):
+            self.calls = 0
+
+        async def generate(self, graph):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("first one explodes")
+                yield  # pragma: no cover
+            yield ProgressEvent(value=1, max=1)
+            yield ImageEvent(data=FAKE_PNG)
+
+    sio = FakeSio()
+    hub = AssetHub(sio, store, FlakyProvider(), MediaStore(tmp_path))
+
+    await hub.request_generation("g1", bad.id)
+    await hub.request_generation("g1", good.id)
+    await _wait_for(sio, "asset_completed")
+
+    # the second (good) asset completed despite the first failing
+    completed = next(e for e in sio.events if e[0] == "asset_completed")
+    assert completed[1]["asset"]["id"] == good.id
+    assert completed[1]["asset"]["status"] == "done"
+
+    # the first (bad) asset is left in an error state, not stuck "generating"
+    refreshed_bad = await store.get_asset(bad.id)
+    assert refreshed_bad.status == "error"
+
+
+@pytest.mark.asyncio
 async def test_attach_subscriber_replays_active_progress(mongo_db, tmp_path):
     store = AssetStore(mongo_db)
     asset = await store.create_asset(game_id="g1", name="W", prompt="p", width=64, height=64, workflow="schnell-opaque", seed=1)
@@ -85,7 +132,9 @@ async def test_attach_subscriber_replays_active_progress(mongo_db, tmp_path):
     hub = AssetHub(sio, store, FakeComfyProvider(ticks=3, delay=0.05), MediaStore(tmp_path))
 
     await hub.request_generation("g1", asset.id)
-    await asyncio.sleep(0.06)  # at least one progress tick recorded
+    # Wait until at least one real progress tick has been recorded, rather than
+    # racing a fixed sleep against the provider's tick cadence.
+    await _wait_until(lambda: (hub.active_snapshot("g1") or {}).get("value", 0) >= 1)
     await hub.attach_subscriber("g1", "sid-late")
 
     snap_to_sid = [e for e in sio.events if e[0] == "asset_progress" and e[2] == "sid-late"]

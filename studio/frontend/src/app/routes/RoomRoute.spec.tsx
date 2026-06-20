@@ -9,7 +9,9 @@ const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
-vi.mock('../Workbench', () => ({ Workbench: () => <div data-testid="workbench">WB</div> }));
+vi.mock('../Workbench', () => ({
+  Workbench: ({ leading }: { leading?: React.ReactNode }) => <div data-testid="workbench">{leading}WB</div>,
+}));
 
 import { RoomRoute } from './RoomRoute';
 import { useActiveRoomId } from './activeRoom';
@@ -49,6 +51,12 @@ describe('RoomRoute', () => {
     expect(await screen.findByTestId('workbench')).toBeInTheDocument();
     expect(openRoom).toHaveBeenCalledWith('r1');
     expect(screen.getByTestId('rid')).toHaveTextContent('r1');
+  });
+  it('valid room → renders a back-to-rooms link pointing at /', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: null, createdAt: 't' }]);
+    render(tree('/room/r1'));
+    const back = await screen.findByRole('link', { name: /rooms/i });
+    expect(back).toHaveAttribute('href', '/');
   });
   it('unknown room → picker + toast', async () => {
     getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: null, createdAt: 't' }]);

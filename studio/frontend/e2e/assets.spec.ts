@@ -67,8 +67,10 @@ test('two clients in the same game both see a generation live', async ({ browser
   await selectGameOnBoard(a, name);
   await addAsset(a);
 
-  // bob opens the same game on his board.
+  // bob opens the picker, enters the same room by its unique name, then uses the board.
   await openApp(b, 'bob');
+  await b.getByTestId('room-picker').getByText(name, { exact: true }).click();
+  await expect(b.getByTestId('chat-room-pane')).toBeVisible();
   await selectGameOnBoard(b, name);
 
   // bob's board fetches assets when the game is selected; wait for alice's asset to appear.

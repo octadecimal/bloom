@@ -7,6 +7,11 @@ from app.games import game_wire
 
 router = APIRouter()
 
+# Authoring fields a PATCH may explicitly set to null. The remaining authoring
+# fields are non-nullable on the model, so a null for them is ignored rather than
+# written (which would corrupt the asset).
+NULLABLE_FIELDS = {"seed", "category"}
+
 
 class CreateAssetBody(BaseModel):
     name: str
@@ -58,7 +63,10 @@ async def create_asset(game_id: str, body: CreateAssetBody, request: Request) ->
 
 @router.patch("/assets/{asset_id}")
 async def update_asset(asset_id: str, body: UpdateAssetBody, request: Request) -> dict:
-    fields = body.model_dump(exclude_none=True)
+    # exclude_unset keeps an explicit `null` (clear the field) while dropping omitted
+    # fields (leave them as-is); we then refuse nulls for non-nullable fields.
+    fields = body.model_dump(exclude_unset=True)
+    fields = {k: v for k, v in fields.items() if v is not None or k in NULLABLE_FIELDS}
     asset = await request.app.state.asset_store.update_asset(asset_id, **fields)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")

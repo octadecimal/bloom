@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react';
 import { useApp } from './AppContext';
 import { useApplyTheme } from './useApplyTheme';
@@ -7,7 +7,7 @@ import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
 import { SwitchUser } from './SwitchUser';
 
-export function Workbench() {
+export function Workbench({ leading }: { leading?: ReactNode }) {
   const app = useApp();
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   useApplyTheme(dockEl);
@@ -16,6 +16,7 @@ export function Workbench() {
     <div data-testid="workbench" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, padding: '0 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {leading}
           <h1 style={{ margin: 0, fontSize: '1rem' }}>Bloom Studio</h1>
           <AppMenubar />
         </div>
