@@ -123,3 +123,41 @@ async def _wait_calls(chat, n):
 async def _wait_event(sio, name):
     while name not in sio.names():
         await asyncio.sleep(0.01)
+
+
+class ExplodingChatService:
+    """Fails the first generation, succeeds afterwards."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def stream(self, messages, model):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("boom")
+        for tok in ["ok"]:
+            yield tok
+
+
+@pytest.mark.asyncio
+async def test_generation_error_emits_error_and_keeps_draining():
+    sio, store, chat = FakeSio(), FakeStore(), ExplodingChatService()
+    hub = RoomHub(sio, store, chat)
+
+    await hub.handle_prompt("r1", "Alice", "first")   # this generation will fail
+    await hub.handle_prompt("r1", "Bob", "second")    # queued; must still run
+
+    # an error event must be emitted for the failed generation
+    await asyncio.wait_for(_wait_event(sio, "error"), timeout=1)
+    # the second (queued) generation must still complete despite the first failing
+    await asyncio.wait_for(_wait_event(sio, "message_completed"), timeout=1)
+    # let the drain settle to idle
+    await asyncio.sleep(0.05)
+
+    assert chat.calls == 2, "second prompt must still be generated after the first errors"
+    errors = [d for e, d, _ in sio.events if e == "error"]
+    assert errors and errors[0]["roomId"] == "r1"
+    completed = [d for e, d, _ in sio.events if e == "message_completed"]
+    assert len(completed) == 1  # only the successful second generation completes
+    statuses = [d["state"] for e, d, _ in sio.events if e == "ai_status"]
+    assert statuses[-1] == "idle"  # room not deadlocked

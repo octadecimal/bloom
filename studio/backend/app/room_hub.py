@@ -29,21 +29,23 @@ class RoomHub:
         asyncio.create_task(self._drain(room_id))
 
     async def _drain(self, room_id: str) -> None:
-        try:
-            while True:
-                async with self._lock(room_id):
-                    queue = self._queues.get(room_id, [])
-                    if not queue:
-                        self._busy.discard(room_id)
-                        await self._emit_status(room_id, "idle")
-                        return
-                    queue.pop(0)
-                await self._run_generation(room_id)
-        except Exception:
+        while True:
             async with self._lock(room_id):
-                self._busy.discard(room_id)
-            await self._emit_status(room_id, "idle")
-            raise
+                queue = self._queues.get(room_id, [])
+                if not queue:
+                    self._busy.discard(room_id)
+                    await self._emit_status(room_id, "idle")
+                    return
+                queue.pop(0)
+            try:
+                await self._run_generation(room_id)
+            except Exception:
+                await self._sio.emit(
+                    "error",
+                    {"roomId": room_id, "message": "generation failed"},
+                    room=room_id,
+                )
+                # keep draining remaining queued prompts rather than orphaning them
 
     async def _run_generation(self, room_id: str) -> None:
         room = await self._store.get_room(room_id)
