@@ -81,6 +81,28 @@ describe('actions', () => {
     expect(socket.reconnectWith).toHaveBeenCalledWith('alice');
   });
 
+  describe('closeRoom', () => {
+    it('leaves the active room, clears state, and persists', () => {
+      chatSlice().activeRoomId.set('r1');
+      chatSlice().messages.set([{ id: 'm1', roomId: 'r1', author: 'a', role: 'user', content: 'hi', status: 'complete', createdAt: 't' }] as never);
+      chatSlice().members.set([{ id: 'u1', displayName: 'alice' }] as never);
+      chatSlice().typing.set(['alice']);
+      actions.closeRoom();
+      expect(socket.leaveRoom).toHaveBeenCalledWith('r1');
+      expect(chatSlice().activeRoomId.get()).toBeNull();
+      expect(chatSlice().messages.get()).toHaveLength(0);
+      expect(chatSlice().members.get()).toHaveLength(0);
+      expect(chatSlice().typing.get()).toHaveLength(0);
+      expect(savePrefs).toHaveBeenCalled();
+    });
+
+    it('does NOT call socket.leaveRoom when activeRoomId is already null', () => {
+      expect(chatSlice().activeRoomId.get()).toBeNull();
+      actions.closeRoom();
+      expect(socket.leaveRoom).not.toHaveBeenCalled();
+    });
+  });
+
   it('openRoom guards against room-switch race: superseded fetch does not overwrite newer room history', async () => {
     // Arrange: two deferred promises for room A and room B history
     let resolveA!: (msgs: unknown[]) => void;

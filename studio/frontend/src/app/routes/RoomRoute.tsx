@@ -34,11 +34,12 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
   // Leave the room when the route unmounts (back to picker / different room).
   useEffect(() => () => closeRoom(), []);
 
+  useEffect(() => {
+    if (state === 'invalid') notify.error('That room no longer exists.');
+  }, [state]);
+
   if (state === 'checking') return <div data-testid="room-loading">Opening room…</div>;
-  if (state === 'invalid' || !roomId) {
-    notify.error('That room no longer exists.');
-    return <Navigate to="/" replace />;
-  }
+  if (state === 'invalid' || !roomId) return <Navigate to="/" replace />;
   return (
     <ActiveRoomProvider roomId={roomId}>
       <Workbench />
