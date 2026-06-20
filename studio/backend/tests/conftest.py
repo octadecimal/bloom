@@ -8,7 +8,7 @@ from app.main import build
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(llm_backend="fake", mongo_db="bloom_studio_test")
+    return Settings(provider_mode="replay", mongo_db="bloom_studio_test")
 
 
 @pytest.fixture

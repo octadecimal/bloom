@@ -51,8 +51,8 @@ class LangchainOpenRouterProvider:
 
 
 def build_provider(settings: Settings) -> LLMProvider:
-    if settings.llm_backend == "fake":
-        return FakeProvider(delay=settings.fake_token_delay)
+    if settings.provider_mode == "replay":
+        return FakeProvider(delay=settings.replay_token_delay)
     return LangchainOpenRouterProvider(
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
