@@ -49,7 +49,9 @@ export function RoomPicker() {
       {status === 'error' && (
         <p>
           Couldn't load rooms.{' '}
-          <button type="button" onClick={() => void load()}>Retry</button>
+          <button type="button" onClick={() => void load()}>
+            Retry
+          </button>
         </p>
       )}
       {status === 'ready' && (

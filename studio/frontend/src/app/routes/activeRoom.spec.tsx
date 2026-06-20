@@ -8,7 +8,11 @@ function Probe() {
 
 describe('useActiveRoomId', () => {
   it('exposes the provided id', () => {
-    render(<ActiveRoomProvider roomId="r-42"><Probe /></ActiveRoomProvider>);
+    render(
+      <ActiveRoomProvider roomId="r-42">
+        <Probe />
+      </ActiveRoomProvider>,
+    );
     expect(screen.getByTestId('rid')).toHaveTextContent('r-42');
   });
   it('throws outside a room route', () => {

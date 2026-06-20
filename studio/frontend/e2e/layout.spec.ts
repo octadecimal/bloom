@@ -5,9 +5,7 @@ test('layout persists across reload and Reset restores default (row 8)', async (
   await gotoWorkbench(page);
 
   // Close a DEFAULT pane (chat-settings-pane) via __wbApi so it's missing from the layout.
-  await page.evaluate(() =>
-    (window as any).__wbApi?.getPanel('llm-chat/settings')?.api.close(),
-  );
+  await page.evaluate(() => (window as any).__wbApi?.getPanel('llm-chat/settings')?.api.close());
   await page.getByTestId('chat-settings-pane').waitFor({ state: 'detached' });
 
   // Wait for the debounced (~250ms) layout save to flush — layout must NOT include the closed pane.
@@ -24,9 +22,7 @@ test('layout persists across reload and Reset restores default (row 8)', async (
       body: JSON.stringify([{ id: 'r1', name: 'Test Room', model: 'm', gameId: null, createdAt: 't' }]),
     }),
   );
-  await page.route('**/rooms/*/messages', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-  );
+  await page.route('**/rooms/*/messages', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
 
   await page.reload();
 
@@ -49,9 +45,7 @@ test('a corrupt saved layout falls back to default without crashing (row 9)', as
   await expect(page.getByTestId('chat-room-pane')).toBeVisible();
 });
 
-test('real drag smoke: a tab can be dragged without crashing the workbench (row 7)', async ({
-  page,
-}) => {
+test('real drag smoke: a tab can be dragged without crashing the workbench (row 7)', async ({ page }) => {
   await gotoWorkbench(page);
   // Best-effort drag of 'Chat Settings' tab onto the Chat Room pane area.
   // Dockview drops inactive-tab panel content from the DOM, so after the drag the two panes

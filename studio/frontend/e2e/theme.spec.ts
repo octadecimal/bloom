@@ -22,9 +22,7 @@ test('theme toggle flips dark/light and persists across reload', async ({ page }
       body: JSON.stringify([{ id: 'r1', name: 'Test Room', model: 'm', gameId: null, createdAt: 't' }]),
     }),
   );
-  await page.route('**/rooms/*/messages', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-  );
+  await page.route('**/rooms/*/messages', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.reload();
   await expect(html).not.toHaveClass(/dark/);
 });

@@ -8,11 +8,7 @@ import { seedLocalStorage } from './helpers';
 
 async function openChat(page: Page, username: string) {
   // Seed the session so the app navigates to the room-picker directly.
-  await seedLocalStorage(
-    page,
-    'bloom.studio.session',
-    JSON.stringify({ version: 1, data: { username } }),
-  );
+  await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username } }));
   await page.goto('/');
   await expect(page.getByTestId('room-picker')).toBeVisible();
 }
@@ -39,9 +35,7 @@ test('create a room, send a prompt, and watch the assistant stream', async ({ pa
   await expect(assistant).toHaveAttribute('data-status', 'complete', { timeout: 15_000 });
 });
 
-test('two clients in one room both see the stream and each other in presence', async ({
-  browser,
-}) => {
+test('two clients in one room both see the stream and each other in presence', async ({ browser }) => {
   const room = `Shared ${Date.now()}`;
   const a = await browser.newPage();
   const b = await browser.newPage();
@@ -51,11 +45,7 @@ test('two clients in one room both see the stream and each other in presence', a
   await createRoom(a, room);
 
   // bob seeds session, navigates to the picker, then clicks the room by its unique name
-  await seedLocalStorage(
-    b,
-    'bloom.studio.session',
-    JSON.stringify({ version: 1, data: { username: 'bob' } }),
-  );
+  await seedLocalStorage(b, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username: 'bob' } }));
   await b.goto('/');
   await expect(b.getByTestId('room-picker')).toBeVisible();
   await b.getByTestId('room-picker').getByText(room, { exact: true }).click();

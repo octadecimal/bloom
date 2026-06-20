@@ -29,7 +29,14 @@ function tree(initial: string) {
     <MemoryRouter initialEntries={[initial]}>
       <Routes>
         <Route path="/" element={<div>PICKER</div>} />
-        <Route path="/room/:roomId" element={<RoomRoute><Echo /></RoomRoute>} />
+        <Route
+          path="/room/:roomId"
+          element={
+            <RoomRoute>
+              <Echo />
+            </RoomRoute>
+          }
+        />
       </Routes>
     </MemoryRouter>
   );

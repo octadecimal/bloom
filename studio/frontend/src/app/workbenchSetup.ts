@@ -1,9 +1,6 @@
 import type { DockviewApi } from 'dockview-react';
 
-export function DEFAULT_LAYOUT(
-  api: DockviewApi,
-  paneRegistry: { get(id: string): { title?: string } | undefined },
-): void {
+export function DEFAULT_LAYOUT(api: DockviewApi, paneRegistry: { get(id: string): { title?: string } | undefined }): void {
   const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
     if (!api.getPanel(id))
       api.addPanel({

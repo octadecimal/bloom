@@ -7,7 +7,13 @@ export function SwitchUser() {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
       <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{username}</span>
-      <button type="button" onClick={() => { logout(); navigate('/login', { replace: true }); }}>
+      <button
+        type="button"
+        onClick={() => {
+          logout();
+          navigate('/login', { replace: true });
+        }}
+      >
         Switch user
       </button>
     </span>

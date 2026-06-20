@@ -23,17 +23,11 @@ async function stubRooms(page: Page, initialRooms = [ROOM]) {
       body: JSON.stringify(rooms),
     });
   });
-  await page.route('**/rooms/*/messages', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-  );
+  await page.route('**/rooms/*/messages', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
 }
 
 function loggedIn(page: Page, username = 'ada') {
-  return seedLocalStorage(
-    page,
-    'bloom.studio.session',
-    JSON.stringify({ version: 1, data: { username } }),
-  );
+  return seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username } }));
 }
 
 test('unauthenticated → /login', async ({ page }) => {

@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { gotoWorkbench } from './helpers';
 
-test('a plugin whose init throws is skipped; the workbench still boots (row 11)', async ({
-  page,
-}) => {
+test('a plugin whose init throws is skipped; the workbench still boots (row 11)', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __injectPlugins?: unknown[] }).__injectPlugins = [
       {
@@ -23,9 +21,7 @@ test('a plugin whose init throws is skipped; the workbench still boots (row 11)'
 });
 
 test('a corrupt persisted plugin slice falls back to initialState (row 12)', async ({ page }) => {
-  await page.addInitScript(() =>
-    localStorage.setItem('bloom.studio.demo-counter', '{bad json'),
-  );
+  await page.addInitScript(() => localStorage.setItem('bloom.studio.demo-counter', '{bad json'));
   await gotoWorkbench(page);
   // Open the counter pane via the View menu to observe the initialState value.
   await page.getByTestId('menu-view').click();
@@ -36,9 +32,7 @@ test('a corrupt persisted plugin slice falls back to initialState (row 12)', asy
 test('an unknown command id is a no-op, no crash (row 13)', async ({ page }) => {
   await gotoWorkbench(page);
   const result = await page.evaluate(() => {
-    const host = (
-      window as unknown as { __host?: { runCommand(id: string): void } }
-    ).__host;
+    const host = (window as unknown as { __host?: { runCommand(id: string): void } }).__host;
     if (!host) return 'no-host';
     try {
       host.runCommand('does/not-exist');

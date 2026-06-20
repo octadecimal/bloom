@@ -14,7 +14,12 @@ function Probe() {
     </div>
   );
 }
-const renderProbe = () => render(<SessionProvider><Probe /></SessionProvider>);
+const renderProbe = () =>
+  render(
+    <SessionProvider>
+      <Probe />
+    </SessionProvider>,
+  );
 
 describe('SessionContext', () => {
   it('starts anon', () => {

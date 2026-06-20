@@ -15,9 +15,7 @@ async function activateTab(page: Page, tabText: string) {
   await page.locator('.dv-tab', { hasText: tabText }).first().click();
 }
 
-test('counter increments, mirror reflects, and count persists across reload (row 5)', async ({
-  page,
-}) => {
+test('counter increments, mirror reflects, and count persists across reload (row 5)', async ({ page }) => {
   await gotoWorkbench(page);
   // Demo panes are no longer in the default layout — open them via the View menu.
   await openDemoPane(page, 'view-open-demo-counter/editor', 'counter-pane');
@@ -37,9 +35,7 @@ test('counter increments, mirror reflects, and count persists across reload (row
   await expect(page.getByTestId('mirror-pane')).toHaveText('count is 2');
 
   // Wait for the 250ms debounced counter-state save to flush before reloading.
-  await page.waitForFunction(() =>
-    localStorage.getItem('bloom.studio.demo-counter')?.includes('"count":2'),
-  );
+  await page.waitForFunction(() => localStorage.getItem('bloom.studio.demo-counter')?.includes('"count":2'));
   // Also wait for the debounced layout save to flush, so counter+mirror panes persist.
   await page.waitForFunction(() => {
     const val = localStorage.getItem('bloom.studio.layout');
