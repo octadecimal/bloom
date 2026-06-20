@@ -13,6 +13,7 @@ __pycache__/
 
 # Editor / OS / local
 .claude/settings.local.json
+.env*.local
 Thumbs.db
 .DS_Store
 *.log

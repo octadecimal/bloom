@@ -21,6 +21,10 @@ ts-test:
 e2e:
     npx playwright test --config=studio/frontend/playwright.config.ts
 
+# Dev server binds 0.0.0.0 and proxies the API + WebSocket to the backend (see
+# vite.config.mts), so the app is reachable from other devices on your LAN at
+# http://<this-machine-ip>:4200 — just run `backend-serve` alongside it. No need
+# to expose the backend port; the browser only ever talks to :4200.
 serve-frontend:
     npx nx serve frontend
 
