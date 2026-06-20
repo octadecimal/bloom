@@ -50,5 +50,6 @@ export default defineConfig(() => ({
     environment: 'jsdom',
     include: ['src/**/*.{spec,test}.{ts,tsx}'],
     reporters: ['default'],
+    setupFiles: ['./vitest.setup.ts'],
   },
 }));
