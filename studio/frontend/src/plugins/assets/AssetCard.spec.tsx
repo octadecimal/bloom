@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { rootStore } from '../../state/rootStore';
 import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './state';
-import { setAssetProgress } from './reducers';
 import { AssetCard } from './AssetCard';
 
 vi.mock('./actions', () => ({
@@ -46,8 +45,9 @@ describe('AssetCard', () => {
     );
     window.__renderCounts = {}; // reset after mount
     act(() => {
-      const cur = assetsSlice().assets.get({ noproxy: true }) as IAsset[];
-      assetsSlice().assets.set(setAssetProgress(cur, 'a1', 1, 4));
+      // Scoped node write — the production pattern: only assets[0].progress node changes,
+      // so hookstate only re-renders the component subscribed to assets[0], not assets[1].
+      assetsSlice().assets[0].progress.set({ value: 1, max: 4 });
     });
     // Exactly one card re-rendered (the one whose node changed), not both.
     expect(window.__renderCounts['AssetCard'] ?? 0).toBe(1);

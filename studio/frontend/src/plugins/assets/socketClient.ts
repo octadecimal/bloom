@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { BACKEND_URL } from './config';
 import type { IAsset } from './state';
 import { assetsSlice } from './state';
-import { upsertAsset, setAssetStatus, setAssetProgress } from './reducers';
+import { upsertAsset } from './reducers';
 import { notify } from '../../lib/notify';
 
 export interface ISocketLike {
@@ -25,16 +25,22 @@ function registerInboundHandlers(s: ISocketLike): void {
   s.on('asset_status', (p) => {
     const { gameId, assetId, status } = p as { gameId: string; assetId: string; status: IAsset['status'] };
     if (!isActive(gameId)) return;
-    slice().assets.set(setAssetStatus(read(), assetId, status));
+    const arr = slice().assets;
+    const idx = arr.get({ noproxy: true }).findIndex((x: IAsset) => x.id === assetId);
+    if (idx >= 0) arr[idx].status.set(status);
   });
   s.on('asset_progress', (p) => {
     const { gameId, assetId, value, max } = p as { gameId: string; assetId: string; value: number; max: number };
     if (!isActive(gameId)) return;
-    slice().assets.set(setAssetProgress(read(), assetId, value, max));
+    // Scoped node write: only the subscribed AssetCard re-renders, not the whole board.
+    const arr = slice().assets;
+    const idx = arr.get({ noproxy: true }).findIndex((x: IAsset) => x.id === assetId);
+    if (idx >= 0) arr[idx].progress.set({ value, max });
   });
   s.on('asset_completed', (p) => {
     const { gameId, asset } = p as { gameId: string; asset: IAsset };
     if (!isActive(gameId)) return;
+    // Full upsert is correct here: fires once per generation and may add a new asset.
     slice().assets.set(upsertAsset(read(), { ...asset, progress: null }));
   });
   s.on('error', (p) => {
