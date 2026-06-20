@@ -91,6 +91,19 @@ gh pr merge --squash --delete-branch   # 0 approvals required; self-merge is OK
   committed — suggest the user run `/clear` so the next unit of work starts with a
   clean context window. This matches the repo's spec → plan → build rhythm
   (see `docs/superpowers/`).
+- When suggesting `/clear`, **proactively hand the user a paste-ready resume
+  prompt** for the fresh session — don't just suggest clearing. The prompt must be
+  self-contained: the relevant spec/plan file paths, the skill to use, and any
+  branch/scoping notes — nothing that relies on the about-to-be-cleared
+  conversation. Keep it tight; the skill will read the plan itself.
+
+## Plan execution
+
+- Execute implementation plans with the **Superpowers
+  `subagent-driven-development`** approach by default — fresh implementer subagent
+  per task, a task review after each, and a broad whole-branch review at the end.
+  Don't ask which execution mode to use; default to subagent-driven. Carry this
+  same default into any `/clear` resume prompt (see Session hygiene).
 
 ## Environment notes
 
