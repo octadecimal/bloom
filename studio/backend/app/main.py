@@ -13,6 +13,7 @@ from app.providers import build_provider
 from app.rest import router
 from app.room_hub import RoomHub
 from app.sockets import register_socket_handlers
+from app.games import GameStore
 from app.store import ConversationStore
 
 
@@ -26,11 +27,13 @@ class AppContext:
     chat_service: ChatService
     hub: RoomHub
     presence: PresenceRegistry
+    games: GameStore
 
 
 def build(settings: Settings) -> AppContext:
     mongo = AsyncIOMotorClient(settings.mongo_url)
-    store = ConversationStore(mongo[settings.mongo_db])
+    games = GameStore(mongo[settings.mongo_db])
+    store = ConversationStore(mongo[settings.mongo_db], games)
     chat_service = ChatService(build_provider(settings))
 
     fastapi_app = FastAPI(title="Bloom Studio Backend")
@@ -64,6 +67,7 @@ def build(settings: Settings) -> AppContext:
         chat_service=chat_service,
         hub=hub,
         presence=presence,
+        games=games,
     )
 
 

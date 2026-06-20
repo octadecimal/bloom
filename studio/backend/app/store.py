@@ -57,11 +57,15 @@ def _message_from_doc(doc: dict) -> Message:
 
 
 class ConversationStore:
-    def __init__(self, db):
+    def __init__(self, db, games=None):
         self._rooms = db["rooms"]
         self._messages = db["messages"]
+        self._games = games
 
     async def create_room(self, name: str, model: str, game_id: str | None = None) -> Room:
+        if game_id is None and self._games is not None:
+            game = await self._games.create_game(name=name)
+            game_id = game.id
         room = Room(id=_new_id(), name=name, model=model, game_id=game_id, created_at=_now())
         await self._rooms.insert_one(_room_to_doc(room))
         return room
