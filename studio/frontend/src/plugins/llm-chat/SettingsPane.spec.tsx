@@ -7,14 +7,13 @@ import * as rest from './restClient';
 import { SettingsPane } from './SettingsPane';
 
 vi.spyOn(actions, 'setDisplayName').mockReturnValue(undefined);
-vi.spyOn(rest, 'getModels').mockResolvedValue([
-  { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini', free: false },
-  { id: 'meta-llama/llama-3.2-3b-instruct:free', label: 'Llama 3.2 3B (free)', free: true },
-]);
+vi.spyOn(rest, 'getModels').mockReturnValue(new Promise(() => {}));
 
 beforeEach(() => {
   rootStore.plugins.set({ [LLM_CHAT_PLUGIN_ID]: makeInitialState('guest-0001', null) });
   vi.clearAllMocks();
+  vi.spyOn(actions, 'setDisplayName').mockReturnValue(undefined);
+  vi.spyOn(rest, 'getModels').mockReturnValue(new Promise(() => {}));
 });
 
 describe('SettingsPane', () => {
@@ -28,6 +27,10 @@ describe('SettingsPane', () => {
   });
 
   it('loads and lists models from GET /models', async () => {
+    vi.spyOn(rest, 'getModels').mockResolvedValue([
+      { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini', free: false },
+      { id: 'meta-llama/llama-3.2-3b-instruct:free', label: 'Llama 3.2 3B (free)', free: true },
+    ]);
     render(<SettingsPane />);
     await waitFor(() => expect(screen.getByTestId('settings-model')).toBeTruthy());
     expect(screen.getByText('GPT-4o mini')).toBeTruthy();
