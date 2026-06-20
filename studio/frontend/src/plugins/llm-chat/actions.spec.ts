@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../../state/rootStore';
 import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID } from './state';
 import * as actions from './actions';
+import { connectChatAs, disconnectChat, initChat, __setDeps } from './actions';
 
 const rest = {
   getRooms: vi.fn(),
@@ -49,7 +50,7 @@ describe('actions', () => {
     expect(chatSlice().activeRoomId.get()).toBe('r1');
     expect(chatSlice().messages.get()).toHaveLength(1);
     expect(socket.joinRoom).toHaveBeenCalledWith('r1');
-    expect(savePrefs).toHaveBeenCalledWith({ displayName: 'guest-0001', activeRoomId: 'r1' });
+    expect(savePrefs).toHaveBeenCalledWith({ activeRoomId: 'r1' });
   });
 
   it('openRoom is a no-op when the room is already active', async () => {
@@ -74,13 +75,6 @@ describe('actions', () => {
     expect(socket.setTyping).toHaveBeenCalledWith('r1', true);
   });
 
-  it('setDisplayName updates slice, persists, and reconnects', () => {
-    actions.setDisplayName('alice');
-    expect(chatSlice().displayName.get()).toBe('alice');
-    expect(savePrefs).toHaveBeenCalledWith({ displayName: 'alice', activeRoomId: null });
-    expect(socket.reconnectWith).toHaveBeenCalledWith('alice');
-  });
-
   describe('closeRoom', () => {
     it('leaves the active room, clears state, and persists', () => {
       chatSlice().activeRoomId.set('r1');
@@ -100,6 +94,54 @@ describe('actions', () => {
       expect(chatSlice().activeRoomId.get()).toBeNull();
       actions.closeRoom();
       expect(socket.leaveRoom).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('session-driven connection', () => {
+    it('connectChatAs sets displayName and connects', () => {
+      const socket = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnectWith: vi.fn(),
+        joinRoom: vi.fn(),
+        leaveRoom: vi.fn(),
+        sendPrompt: vi.fn(),
+        setTyping: vi.fn(),
+      };
+      __setDeps({ socket });
+      connectChatAs('ada');
+      expect(chatSlice().displayName.get()).toBe('ada');
+      expect(socket.connect).toHaveBeenCalledWith('ada');
+    });
+    it('connectChatAs reconnects when already connected once', () => {
+      const socket = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnectWith: vi.fn(),
+        joinRoom: vi.fn(),
+        leaveRoom: vi.fn(),
+        sendPrompt: vi.fn(),
+        setTyping: vi.fn(),
+      };
+      __setDeps({ socket });
+      connectChatAs('ada');
+      connectChatAs('bob');
+      expect(socket.reconnectWith).toHaveBeenLastCalledWith('bob');
+    });
+    it('initChat loads rooms but does not connect or auto-open', () => {
+      const socket = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnectWith: vi.fn(),
+        joinRoom: vi.fn(),
+        leaveRoom: vi.fn(),
+        sendPrompt: vi.fn(),
+        setTyping: vi.fn(),
+      };
+      const rest = { getRooms: vi.fn().mockResolvedValue([]), createRoom: vi.fn(), getMessages: vi.fn() };
+      __setDeps({ socket, rest });
+      initChat();
+      expect(socket.connect).not.toHaveBeenCalled();
     });
   });
 

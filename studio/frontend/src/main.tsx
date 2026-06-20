@@ -6,11 +6,13 @@ import { AppProvider } from './app/AppContext';
 import { SessionProvider } from './session/SessionContext';
 import { AppRoutes } from './app/routes/AppRoutes';
 import { Toaster } from './components/ui/sonner';
+import { SessionSync } from './app/SessionSync';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProvider>
       <SessionProvider>
+        <SessionSync />
         <Toaster />
         <BrowserRouter>
           <AppRoutes />
