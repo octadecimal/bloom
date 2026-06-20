@@ -30,6 +30,14 @@ function DEFAULT_LAYOUT(api: DockviewApi, paneRegistry: { get(id: string): { tit
     direction: 'below',
     referencePanel: 'demo-counter/editor',
   });
+  add('llm-chat/rooms', {
+    direction: 'right',
+    referencePanel: 'demo-scratch/main',
+  });
+  add('llm-chat/room', {
+    direction: 'right',
+    referencePanel: 'llm-chat/rooms',
+  });
 }
 
 export function setupWorkbench() {
