@@ -46,7 +46,7 @@ for a database later.
 ### 3. Provisioning is deferred.
 
 - **No `compose.yaml` is written yet.** The first real consumer (`studio/backend`)
-  does not exist, so this ADR records *direction only*. The Mongo + `justfile` wiring
+  does not exist, so this ADR records _direction only_. The Mongo + `justfile` wiring
   lands when `studio/backend` does.
 
 ## Explicitly open (decided NOT to decide here)
