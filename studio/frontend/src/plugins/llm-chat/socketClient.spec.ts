@@ -3,6 +3,9 @@ import { rootStore } from '../../state/rootStore';
 import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID } from './state';
 import { createSocketClient, type ISocketLike } from './socketClient';
 
+const notifyError = vi.fn();
+vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => notifyError(m), info: vi.fn() } }));
+
 // Minimal fake socket: records handlers + emits, drives connected flag.
 function makeFakeSocket() {
   const handlers: Record<string, (p: unknown) => void> = {};
@@ -88,5 +91,83 @@ describe('socketClient outbound', () => {
     client.connect('alice');
     client.reconnectWith('bob');
     expect(make).toHaveBeenLastCalledWith(expect.any(String), { displayName: 'bob' });
+  });
+});
+
+describe('socketClient inbound', () => {
+  beforeEach(() => {
+    rootStore.plugins.set({ [LLM_CHAT_PLUGIN_ID]: makeInitialState('guest-0001', null) });
+    notifyError.mockClear();
+    chatSlice().activeRoomId.set('r1');
+  });
+
+  function connected() {
+    const { sock, emitted } = makeFakeSocket();
+    const client = createSocketClient(() => sock);
+    client.connect('alice');
+    sock.fire('connect');
+    return { sock, emitted, client };
+  }
+
+  const message = (over: Record<string, unknown> = {}) => ({
+    id: 'a1',
+    roomId: 'r1',
+    author: 'assistant',
+    role: 'assistant',
+    content: '',
+    status: 'streaming',
+    createdAt: 't',
+    ...over,
+  });
+
+  it('message_created upserts into messages', () => {
+    const { sock } = connected();
+    sock.fire('message_created', { message: message({ id: 'u1', role: 'user', content: 'hi', status: 'complete' }) });
+    expect(chatSlice().messages.get()).toHaveLength(1);
+  });
+
+  it('token appends to the streaming message', () => {
+    const { sock } = connected();
+    sock.fire('message_created', { message: message({ id: 'a1' }) });
+    sock.fire('token', { roomId: 'r1', messageId: 'a1', delta: 'Hel' });
+    sock.fire('token', { roomId: 'r1', messageId: 'a1', delta: 'lo' });
+    expect(chatSlice().messages.get()[0].content).toBe('Hello');
+  });
+
+  it('ignores events for a non-active room', () => {
+    const { sock } = connected();
+    sock.fire('token', { roomId: 'OTHER', messageId: 'x', delta: 'nope' });
+    expect(chatSlice().messages.get()).toHaveLength(0);
+  });
+
+  it('stream_snapshot sets accumulated content (join mid-stream)', () => {
+    const { sock } = connected();
+    sock.fire('stream_snapshot', { roomId: 'r1', messageId: 'a1', content: 'caught up', state: 'generating' });
+    expect(chatSlice().messages.get()[0].content).toBe('caught up');
+  });
+
+  it('message_completed flips status to complete', () => {
+    const { sock } = connected();
+    sock.fire('message_created', { message: message({ id: 'a1' }) });
+    sock.fire('message_completed', { roomId: 'r1', messageId: 'a1' });
+    expect(chatSlice().messages.get()[0].status).toBe('complete');
+  });
+
+  it('presence/typing/ai_status update the slice', () => {
+    const { sock } = connected();
+    sock.fire('presence', { roomId: 'r1', members: ['alice', 'bob'] });
+    sock.fire('typing', { roomId: 'r1', author: 'bob', isTyping: true });
+    sock.fire('ai_status', { roomId: 'r1', state: 'generating', queueDepth: 2 });
+    expect(chatSlice().members.get()).toEqual(['alice', 'bob']);
+    expect(chatSlice().typing.get()).toEqual(['bob']);
+    expect(chatSlice().aiStatus.get()).toEqual({ state: 'generating', queueDepth: 2 });
+    sock.fire('typing', { roomId: 'r1', author: 'bob', isTyping: false });
+    expect(chatSlice().typing.get()).toEqual([]);
+  });
+
+  it('error event raises a toast', () => {
+    const { sock } = connected();
+    sock.fire('error', { roomId: 'r1', message: 'generation failed' });
+    expect(notifyError).toHaveBeenCalledWith('generation failed');
   });
 });

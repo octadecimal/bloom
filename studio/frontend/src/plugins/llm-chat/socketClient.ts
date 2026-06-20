@@ -1,6 +1,9 @@
 import { io } from 'socket.io-client';
 import { BACKEND_URL } from './config';
+import type { IMessage, IAiStatus } from './state';
 import { chatSlice } from './state';
+import { upsertMessage, appendToken, applySnapshot, completeMessage, addTyping, removeTyping } from './reducers';
+import { notify } from '../../lib/notify';
 
 export interface ISocketLike {
   auth: Record<string, unknown>;
@@ -12,6 +15,53 @@ export interface ISocketLike {
 }
 
 type MakeSocket = (url: string, auth: { displayName: string }) => ISocketLike;
+
+function registerInboundHandlers(s: ISocketLike): void {
+  const slice = chatSlice;
+  const isActive = (roomId: string) => slice().activeRoomId.get() === roomId;
+  const read = () => slice().messages.get({ noproxy: true }) as IMessage[];
+
+  s.on('message_created', (p) => {
+    const { message } = p as { message: IMessage };
+    if (!isActive(message.roomId)) return;
+    slice().messages.set(upsertMessage(read(), message));
+  });
+  s.on('token', (p) => {
+    const { roomId, messageId, delta } = p as { roomId: string; messageId: string; delta: string };
+    if (!isActive(roomId)) return;
+    slice().messages.set(appendToken(read(), roomId, messageId, delta));
+  });
+  s.on('stream_snapshot', (p) => {
+    const { roomId, messageId, content } = p as { roomId: string; messageId: string; content: string };
+    if (!isActive(roomId)) return;
+    slice().messages.set(applySnapshot(read(), roomId, messageId, content));
+  });
+  s.on('message_completed', (p) => {
+    const { roomId, messageId } = p as { roomId: string; messageId: string };
+    if (!isActive(roomId)) return;
+    slice().messages.set(completeMessage(read(), messageId));
+  });
+  s.on('presence', (p) => {
+    const { roomId, members } = p as { roomId: string; members: string[] };
+    if (!isActive(roomId)) return;
+    slice().members.set(members);
+  });
+  s.on('typing', (p) => {
+    const { roomId, author, isTyping } = p as { roomId: string; author: string; isTyping: boolean };
+    if (!isActive(roomId)) return;
+    const cur = slice().typing.get({ noproxy: true }) as string[];
+    slice().typing.set(isTyping ? addTyping(cur, author) : removeTyping(cur, author));
+  });
+  s.on('ai_status', (p) => {
+    const { roomId, state, queueDepth } = p as { roomId: string } & IAiStatus;
+    if (!isActive(roomId)) return;
+    slice().aiStatus.set({ state, queueDepth });
+  });
+  s.on('error', (p) => {
+    const { message } = p as { message: string };
+    notify.error(message ?? 'chat error');
+  });
+}
 
 export function createSocketClient(makeSocket: MakeSocket) {
   let sock: ISocketLike | null = null;
@@ -25,7 +75,7 @@ export function createSocketClient(makeSocket: MakeSocket) {
     s.on('disconnect', () => {
       chatSlice().connection.set('reconnecting');
     });
-    // Inbound domain events are wired in Task 7's registerInboundHandlers().
+    registerInboundHandlers(s);
   }
 
   function connect(displayName: string): void {
