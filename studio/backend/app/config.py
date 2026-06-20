@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "openai/gpt-4o-mini"
+    available_models: str = "openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
     llm_backend: str = "openrouter"  # "openrouter" | "fake"
     fake_token_delay: float = 0.0
 

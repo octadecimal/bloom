@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.catalog import build_model_catalog
 from app.models import message_wire, room_wire
 
 router = APIRouter()
@@ -14,6 +15,12 @@ class CreateRoomBody(BaseModel):
 @router.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/models")
+async def list_models(request: Request) -> list[dict]:
+    settings = request.app.state.settings
+    return build_model_catalog(settings)
 
 
 @router.get("/rooms")
