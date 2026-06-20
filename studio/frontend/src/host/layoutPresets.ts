@@ -10,7 +10,7 @@ export interface ILayoutPresetInfo {
 }
 
 export interface IPaneRegistryLike {
-  get(id: string): unknown | undefined;
+  get(id: string): { title?: string } | undefined;
 }
 
 export interface ILayoutBuilder {
