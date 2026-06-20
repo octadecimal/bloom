@@ -57,9 +57,11 @@ export async function openRoom(roomId: string): Promise<void> {
 
   try {
     const history = await rest.getMessages(roomId);
+    if (chatSlice().activeRoomId.get() !== roomId) return; // a newer openRoom won
     s.messages.set(history);
     s.roomLoadStatus.set('idle');
   } catch {
+    if (chatSlice().activeRoomId.get() !== roomId) return;
     s.roomLoadStatus.set('error');
   }
   sock().joinRoom(roomId);

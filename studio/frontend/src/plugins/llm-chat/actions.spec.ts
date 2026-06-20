@@ -80,4 +80,36 @@ describe('actions', () => {
     expect(savePrefs).toHaveBeenCalledWith({ displayName: 'alice', activeRoomId: null });
     expect(socket.reconnectWith).toHaveBeenCalledWith('alice');
   });
+
+  it('openRoom guards against room-switch race: superseded fetch does not overwrite newer room history', async () => {
+    // Arrange: two deferred promises for room A and room B history
+    let resolveA!: (msgs: unknown[]) => void;
+    let resolveB!: (msgs: unknown[]) => void;
+    const historyA = [{ id: 'mA', roomId: 'A', author: 'a', role: 'user', content: 'from A', status: 'complete', createdAt: 't' }];
+    const historyB = [{ id: 'mB', roomId: 'B', author: 'b', role: 'user', content: 'from B', status: 'complete', createdAt: 't' }];
+    const promiseA = new Promise<unknown[]>((res) => {
+      resolveA = res;
+    });
+    const promiseB = new Promise<unknown[]>((res) => {
+      resolveB = res;
+    });
+
+    rest.getMessages.mockImplementation((id: string) => (id === 'A' ? promiseA : promiseB));
+
+    // Start openRoom('A') — history fetch is pending
+    const openA = actions.openRoom('A');
+
+    // Open room B (switches activeRoomId to B) and immediately resolve B's history
+    resolveB(historyB);
+    await actions.openRoom('B');
+
+    // Now resolve A's (stale) history — should be ignored
+    resolveA(historyA);
+    await openA;
+
+    // Assert: B's history wins; activeRoomId is B
+    expect(chatSlice().activeRoomId.get()).toBe('B');
+    expect(chatSlice().messages.get()).toEqual(historyB);
+    expect(socket.joinRoom).toHaveBeenLastCalledWith('B');
+  });
 });
