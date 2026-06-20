@@ -1,23 +1,23 @@
 import { test, expect, type Page } from '@playwright/test';
+import { seedLocalStorage } from './helpers';
 
 // Drives the real UI against a running backend (:8000) + frontend (:4200).
 // Best run against the fake provider for speed/determinism (`just backend-serve-fake`),
 // but it works against any backend. Each test uses a UNIQUE room name so it is
 // deterministic regardless of rooms already present in the backend's datastore.
 
-async function openChat(page: Page, displayName: string) {
-  // Seed the display name so connect uses it deterministically.
-  await page.addInitScript(
-    ([k, v]) => localStorage.setItem(k, v),
-    ['bloom.studio.llm-chat.prefs', JSON.stringify({ version: 1, data: { displayName, activeRoomId: null } })],
-  );
+async function openChat(page: Page, username: string) {
+  // Seed the session so the app navigates to the room-picker directly.
+  await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username } }));
   await page.goto('/');
-  await expect(page.getByTestId('room-list-pane')).toBeVisible();
+  await expect(page.getByTestId('room-picker')).toBeVisible();
 }
 
 async function createRoom(page: Page, name: string) {
-  await page.getByTestId('new-room-input').fill(name);
-  await page.getByTestId('new-room-create').click();
+  await page.getByPlaceholder(/new room/i).fill(name);
+  await page.getByRole('button', { name: /create/i }).click();
+  // URL changes to /room/:id and the chat-room-pane appears inside the workbench.
+  await expect(page).toHaveURL(/\/room\//);
   await expect(page.getByTestId('chat-room-pane')).toBeVisible();
 }
 
@@ -44,9 +44,11 @@ test('two clients in one room both see the stream and each other in presence', a
   await openChat(a, 'alice');
   await createRoom(a, room);
 
-  // bob opens the SAME room by its unique name — robust to other rooms in the list
-  await openChat(b, 'bob');
-  await b.getByTestId('room-list-pane').getByText(room, { exact: true }).click();
+  // bob seeds session, navigates to the picker, then clicks the room by its unique name
+  await seedLocalStorage(b, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username: 'bob' } }));
+  await b.goto('/');
+  await expect(b.getByTestId('room-picker')).toBeVisible();
+  await b.getByTestId('room-picker').getByText(room, { exact: true }).click();
   await expect(b.getByTestId('chat-room-pane')).toBeVisible();
 
   // presence on alice's side eventually includes bob
@@ -55,8 +57,12 @@ test('two clients in one room both see the stream and each other in presence', a
   // alice sends; both clients see the assistant stream
   await a.getByTestId('chat-composer').fill('Ping');
   await a.getByTestId('chat-send').click();
-  await expect(a.locator('[data-role="assistant"]').last()).not.toHaveText('', { timeout: 15_000 });
-  await expect(b.locator('[data-role="assistant"]').last()).not.toHaveText('', { timeout: 15_000 });
+  await expect(a.locator('[data-role="assistant"]').last()).not.toHaveText('', {
+    timeout: 15_000,
+  });
+  await expect(b.locator('[data-role="assistant"]').last()).not.toHaveText('', {
+    timeout: 15_000,
+  });
 
   await a.close();
   await b.close();

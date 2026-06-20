@@ -81,7 +81,7 @@ export function ChatRoomPane() {
   if (s.activeRoomId.get() === null) {
     return (
       <div data-testid="chat-empty" style={{ padding: 12 }}>
-        Pick or create a room in the Rooms pane to start chatting.
+        No room selected — return to the room picker to choose or create a room.
       </div>
     );
   }

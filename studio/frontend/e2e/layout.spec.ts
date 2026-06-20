@@ -1,51 +1,64 @@
 import { test, expect } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { seedLocalStorage, gotoWorkbench } from './helpers';
 
 test('layout persists across reload and Reset restores default (row 8)', async ({ page }) => {
-  await page.goto('/');
-  // Close the scratch pane via dockview API (dev/test-only window exposure).
-  await page.evaluate(() =>
-    (
-      window as unknown as {
-        __wbApi?: {
-          getPanel: (id: string) => { api: { close: () => void } } | undefined;
-        };
-      }
-    ).__wbApi
-      ?.getPanel('demo-scratch/main')
-      ?.api.close(),
-  );
-  await expect(page.getByTestId('scratch-pane')).toHaveCount(0);
-  // Wait deterministically for the debounced (~250ms) layout save to flush before reloading.
-  // Require val != null so we don't pass prematurely if localStorage was empty to begin with.
+  await gotoWorkbench(page);
+
+  // Close a DEFAULT pane (chat-settings-pane) via __wbApi so it's missing from the layout.
+  await page.evaluate(() => (window as any).__wbApi?.getPanel('llm-chat/settings')?.api.close());
+  await page.getByTestId('chat-settings-pane').waitFor({ state: 'detached' });
+
+  // Wait for the debounced (~250ms) layout save to flush — layout must NOT include the closed pane.
   await page.waitForFunction(() => {
     const val = localStorage.getItem('bloom.studio.layout');
-    return val != null && !val.includes('demo-scratch/main');
+    return val != null && !val.includes('llm-chat/settings');
   });
+
+  // Re-stub routes before reload so the workbench still mounts (mirrors theme.spec pattern).
+  await page.route('**/rooms', (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ id: 'r1', name: 'Test Room', model: 'm', gameId: null, createdAt: 't' }]),
+    }),
+  );
+  await page.route('**/rooms/*/messages', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+
   await page.reload();
-  // Assert scratch stays closed (layout was persisted).
-  await expect(page.getByTestId('scratch-pane')).toHaveCount(0);
-  // Open File menu, then click Reset layout — Radix renders items in a portal only when open.
+
+  // Persistence: chat-settings-pane is STILL gone after reload (proves the closed state was saved).
+  await page.getByTestId('workbench').waitFor({ state: 'visible' });
+  await expect(page.getByTestId('chat-settings-pane')).toHaveCount(0);
+
+  // Open File menu → Reset layout.
   await page.getByTestId('menu-file').click();
   await page.getByTestId('menu-reset-layout').click();
-  // Default layout restored — scratch should be back.
-  await expect(page.getByTestId('scratch-pane')).toHaveCount(1);
+
+  // After reset: add-if-missing re-adds chat-settings-pane — proves reset re-applied the default.
+  await expect(page.getByTestId('chat-settings-pane')).toBeVisible();
 });
 
 test('a corrupt saved layout falls back to default without crashing (row 9)', async ({ page }) => {
   await seedLocalStorage(page, 'bloom.studio.layout', '{not valid json');
-  await page.goto('/');
-  // Default layout applied, no crash.
-  await expect(page.getByTestId('counter-pane')).toBeVisible();
+  await gotoWorkbench(page);
+  // Default layout applied, no crash. New default is chat-only.
+  await expect(page.getByTestId('chat-room-pane')).toBeVisible();
 });
 
-test('real drag smoke: a tab can be dragged to a new group (row 7)', async ({ page }) => {
-  await page.goto('/');
-  // Dockview now renders the human title from IPaneDef.title.
-  const source = page.locator('.dv-tab', { hasText: 'Scratch' }).first();
-  const target = page.getByTestId('counter-pane');
-  // Best-effort drag — dockview HTML5 drag behaviour varies; the assertion is
-  // a no-crash / presence check: scratch-pane must still be in the DOM.
-  await source.dragTo(target);
-  await expect(page.getByTestId('scratch-pane')).toBeVisible();
+test('real drag smoke: a tab can be dragged without crashing the workbench (row 7)', async ({ page }) => {
+  await gotoWorkbench(page);
+  // Best-effort drag of 'Chat Settings' tab onto the Chat Room pane area.
+  // Dockview drops inactive-tab panel content from the DOM, so after the drag the two panes
+  // form a tab group: both tabs are visible in the tab strip but only the active panel's
+  // content element is in the DOM. Assert no crash by checking:
+  //   1. The active pane content is still attached (chat-settings-pane — it becomes active).
+  //   2. BOTH tab-strip entries survive (proves neither panel was accidentally closed).
+  const source = page.locator('.dv-tab', { hasText: 'Chat Settings' }).first();
+  const target = page.getByTestId('chat-room-pane');
+  await source.dragTo(target, { force: true });
+  // Active panel content is attached — no crash or blank dockview.
+  await page.getByTestId('chat-settings-pane').waitFor({ state: 'attached' });
+  // Both tab-strip entries survive — neither panel was accidentally closed by the drag.
+  await expect(page.locator('.dv-tab', { hasText: 'Chat Settings' })).toHaveCount(1);
+  await expect(page.locator('.dv-tab', { hasText: 'Chat Room' })).toHaveCount(1);
 });

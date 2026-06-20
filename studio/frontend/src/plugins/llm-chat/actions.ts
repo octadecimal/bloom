@@ -1,7 +1,7 @@
 import { chatSlice } from './state';
 import * as realRest from './restClient';
 import { getSocketClient, initSocketClient, type SocketClient } from './socketClient';
-import { loadPrefs, savePrefs as realSavePrefs } from './prefs';
+import { savePrefs as realSavePrefs } from './prefs';
 
 interface IRestDeps {
   getRooms: typeof realRest.getRooms;
@@ -13,10 +13,14 @@ interface IRestDeps {
 let rest: IRestDeps = realRest;
 let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping'> | null = null;
 let savePrefs = realSavePrefs;
+let started = false;
 
 export function __setDeps(deps: { rest?: IRestDeps; socket?: typeof socket; savePrefs?: typeof savePrefs }): void {
   if (deps.rest) rest = deps.rest;
-  if (deps.socket) socket = deps.socket;
+  if (deps.socket !== undefined) {
+    socket = deps.socket;
+    started = false; // reset connection state when a new socket is injected
+  }
   if (deps.savePrefs) savePrefs = deps.savePrefs;
 }
 
@@ -26,7 +30,22 @@ function sock() {
 
 function persist(): void {
   const s = chatSlice();
-  savePrefs({ displayName: s.displayName.get(), activeRoomId: s.activeRoomId.get() });
+  savePrefs({ activeRoomId: s.activeRoomId.get() });
+}
+
+export function connectChatAs(username: string): void {
+  chatSlice().displayName.set(username);
+  if (!started) {
+    if (socket === null) initSocketClient();
+    started = true;
+    sock().connect(username);
+  } else {
+    sock().reconnectWith(username);
+  }
+}
+
+export function disconnectChat(): void {
+  if (started) sock().disconnect();
 }
 
 export async function loadRooms(): Promise<void> {
@@ -67,6 +86,17 @@ export async function openRoom(roomId: string): Promise<void> {
   sock().joinRoom(roomId);
 }
 
+export function closeRoom(): void {
+  const s = chatSlice();
+  const prev = s.activeRoomId.get();
+  if (prev) sock().leaveRoom(prev);
+  s.activeRoomId.set(null);
+  s.messages.set([]);
+  s.members.set([]);
+  s.typing.set([]);
+  persist();
+}
+
 export async function createRoom(name: string, model?: string): Promise<void> {
   const room = await rest.createRoom(name, model);
   chatSlice().rooms.merge([room]);
@@ -83,18 +113,6 @@ export function setTyping(isTyping: boolean): void {
   if (roomId) sock().setTyping(roomId, isTyping);
 }
 
-export function setDisplayName(name: string): void {
-  chatSlice().displayName.set(name);
-  persist();
-  sock().reconnectWith(name);
-}
-
 export function initChat(): void {
-  const prefs = loadPrefs();
-  const s = chatSlice();
-  s.displayName.set(prefs.displayName);
-  initSocketClient();
-  getSocketClient().connect(prefs.displayName);
   void loadRooms();
-  if (prefs.activeRoomId) void openRoom(prefs.activeRoomId);
 }
