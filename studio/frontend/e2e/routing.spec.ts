@@ -65,6 +65,16 @@ test('shareable link opens directly when logged in', async ({ page }) => {
   await expect(page.getByTestId('workbench')).toBeVisible();
 });
 
+test('room view → "Rooms" link returns to the picker page', async ({ page }) => {
+  await loggedIn(page);
+  await stubRooms(page);
+  await page.goto('/room/r1');
+  await expect(page.getByTestId('workbench')).toBeVisible();
+  await page.getByRole('link', { name: /rooms/i }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('room-picker')).toBeVisible();
+});
+
 test('stale link → picker', async ({ page }) => {
   await loggedIn(page);
   await stubRooms(page, []);
