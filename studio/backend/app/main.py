@@ -3,9 +3,11 @@ from typing import Any
 
 import socketio
 from fastapi import FastAPI
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.config import Settings, get_settings
 from app.rest import router
+from app.store import ConversationStore
 
 
 @dataclass
@@ -14,10 +16,16 @@ class AppContext:
     fastapi_app: FastAPI
     sio: socketio.AsyncServer
     asgi_app: Any
+    store: ConversationStore
 
 
 def build(settings: Settings) -> AppContext:
+    mongo = AsyncIOMotorClient(settings.mongo_url)
+    store = ConversationStore(mongo[settings.mongo_db])
+
     fastapi_app = FastAPI(title="Bloom Studio Backend")
+    fastapi_app.state.store = store
+    fastapi_app.state.settings = settings
     fastapi_app.include_router(router)
 
     sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -28,6 +36,7 @@ def build(settings: Settings) -> AppContext:
         fastapi_app=fastapi_app,
         sio=sio,
         asgi_app=asgi_app,
+        store=store,
     )
 
 
