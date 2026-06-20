@@ -1,7 +1,9 @@
 # LLM Chat — shared, multi-user, multi-room LLM interface
 
 - **Date:** 2026-06-19
-- **Status:** Design approved; ready for implementation planning
+- **Status:** Design approved. **Plan A (backend realtime core) built and merged.**
+  **Plan B (frontend plugin + supporting backend/shell additions) decisions resolved
+  in §13 below; ready for implementation planning.**
 - **Scope:** First real `studio/backend` service + a `studio/frontend` plugin
 
 ## 1. Summary
@@ -161,6 +163,10 @@ content: string, status: 'streaming' | 'complete', createdAt }`
 - `message_created { message }` — a user OR assistant message has appeared.
 - `token { roomId, messageId, delta }` — a streamed assistant token.
 - `message_completed { roomId, messageId }`
+- `stream_snapshot { roomId, messageId, content, state }` — sent to a client on
+  `join_room` **only when a generation is in progress**, carrying the assistant
+  message's accumulated-content-so-far. Lets a late or reconnecting client catch up
+  to an in-flight stream before live `token` deltas resume (see §13.3).
 - `typing { roomId, author, isTyping }`
 - `presence { roomId, members[] }`
 - `ai_status { roomId, state: 'idle' | 'generating' | 'queued', queueDepth }`
@@ -190,9 +196,11 @@ coherent instead of spawning overlapping completions.
 
 - **OpenRouter API key**: server-side only, from `OPENROUTER_API_KEY`, loaded via a
   gitignored `.env`. Never sent to the client.
-- **Model selection**: each room stores its `model`. The Settings pane offers a small
-  configured list — a cheap `:free` model as the dev default plus a reliable paid
-  model. Changing a room's model affects its next generation.
+- **Model selection**: each room stores its `model`. The list of selectable models is
+  served by the backend at **`GET /models`** → `[{ id, label, free }]` (built from
+  configured settings), so the catalogue stays server-authoritative (resolved in §13.2).
+  The Settings pane fetches it and offers a cheap `:free` model as the dev default plus a
+  reliable paid model. Changing a room's model affects its next generation.
 - **Provider abstraction**: Langchain is the interface; OpenRouter is the configured
   backend today. Claude-direct / OpenAI-direct later = additional configured chat
   models behind the same seam.
@@ -200,17 +208,21 @@ coherent instead of spawning overlapping completions.
 ## 9. Frontend plugin (`studio/frontend/src/plugins/llm-chat/`)
 
 Follows the existing `IPlugin` pattern (manifest + panes + commands + hookstate
-slice; `persist: true` for display name and last-open rooms).
+slice; `persist: true` for display name and `activeRoomId`). **All panes are
+strict singletons** — the workbench's one-instance-per-pane-id rule is preserved (§13.1).
 
-- **Room List pane** — list rooms; create; join/leave.
-- **Chat Room pane** — parameterized by `roomId` (multiple open at once in dockview);
-  shows messages, streaming assistant output, composer, typing indicators, presence.
-  One pane instance per room.
-- **Settings pane** — display name; per-room model picker.
-- A **single `socket.io-client` connection** lives in the plugin (module-scoped) and
-  feeds the hookstate slice. Panes subscribe to their room's narrow slice, respecting
-  the repo's scoped-subscription discipline (a change in one room's pane must not
-  re-render another).
+- **Room List pane** — the splash/home. Lists rooms (REST `GET /rooms`), creates a
+  room, and **opens** a room by setting `slice.activeRoomId`.
+- **Chat Room pane** — a _single_ singleton pane bound to `slice.activeRoomId`. Renders
+  that room's messages, streaming assistant output, composer, typing indicators,
+  presence, and AI status. Switching rooms re-points the same pane; the socket joins
+  the new active room and leaves the previous one. **Multiple rooms open simultaneously
+  (e.g. a tabbed multi-room view) is deferred** (§13.1).
+- **Settings pane** — display name; per-room model picker (acts on the active room;
+  model catalogue from `GET /models`).
+- A **single `socket.io-client` connection** plus a small REST client live in the plugin
+  (module-scoped) and feed the hookstate slice. Panes subscribe to the narrowest leaf
+  they read, respecting the repo's scoped-subscription / render-count discipline.
 
 ## 10. Testing
 
@@ -237,8 +249,12 @@ browser e2e stays out of CI (cost), non-browser e2e is CI-affordable and gates C
 - Ephemeral identity (display name).
 - Typing indicators and presence.
 - OpenRouter via server-side env; per-room model selection.
-- The frontend plugin UI (room list, chat room panes, settings).
+- The frontend plugin UI (room list, single active-room chat pane, settings).
 - Docker Compose for Mongo; `justfile` targets; `uv` for Python deps.
+- **(Plan B) `GET /models` endpoint** serving the configurable model catalogue (§13.2).
+- **(Plan B) In-flight stream resume** on `join_room` via `stream_snapshot` (§13.3).
+- **(Plan B) Workbench saved + predefined layout arrangements** — a shell-level
+  `layoutPresets` service, "Layout" menu UI, and built-in presets (§13.4).
 
 **Out of scope (deliberately):**
 
@@ -260,6 +276,71 @@ These are deferred to implementation planning, not blockers for the design:
 - Backend project layout under `studio/backend` (package structure, `pyproject.toml`,
   `uv` setup) and the `compose.yaml` for Mongo.
 - Socket.IO ASGI mounting alongside FastAPI and the dev-serve story (`justfile`).
-- Reconnection/resume behavior when a client drops mid-stream (history via REST on
-  rejoin covers completed messages; behavior for an in-flight stream on reconnect to
-  be specified).
+- ~~Reconnection/resume behavior when a client drops mid-stream~~ — **resolved in §13.3**
+  (in-flight resume via `stream_snapshot` on `join_room`).
+
+## 13. Plan B decisions (resolved 2026-06-19)
+
+Plan A (the backend realtime core) is built and merged. These decisions, settled during
+Plan B brainstorming, refine the frontend slice and add the small backend/shell pieces it
+needs. They **supersede** any conflicting earlier wording in §6, §8, §9.
+
+### 13.1 Pane model: single active-room pane (not multi-instance)
+
+The workbench is **strict-singleton** (one instance per pane id) by a deliberate, revisitable
+decision. Rather than reverse that, Plan B keeps every chat pane a singleton:
+
+- The **Room List pane** is the splash/home — create or open a room.
+- Opening a room sets `slice.activeRoomId`; the **single Chat Room pane** re-points to it.
+  The socket joins the new active room and leaves the previous one.
+- **No core `host/` changes** are required, and the strict-singleton rule is preserved.
+- **Deferred:** viewing multiple rooms at once (a future tabbed multi-room view). This is
+  why Socket.IO's multiplexing is not exercised by this slice — but the backend is already
+  Socket.IO from Plan A, so the transport is settled and unaffected.
+
+### 13.2 Model catalogue: `GET /models` endpoint (server-authoritative)
+
+The selectable-model list is served by the backend (`GET /models` → `[{ id, label, free }]`,
+built from configured settings), not hardcoded in the frontend. New backend route + test;
+the Settings pane fetches it.
+
+### 13.3 In-flight stream resume
+
+A late-joining or reconnecting client must be able to catch up to a generation already in
+progress. Because the streaming assistant message is persisted to Mongo with empty content
+until completion, REST history alone cannot recover a partial stream — so:
+
+- `RoomHub` retains the **live accumulated content** of the active generation per room.
+- On `join_room`, if a generation is in progress, the server emits **`stream_snapshot
+{ roomId, messageId, content, state }`** to the joining client, then live `token` deltas
+  resume normally.
+- The authoritative realtime suite gains a case: a **third client joins mid-stream** and
+  receives a snapshot that, plus subsequent tokens, reconstructs the full message.
+
+### 13.4 Workbench saved + predefined layout arrangements (shell-level)
+
+Named, saveable layouts are built as a **shell feature**, deliberately kept **out of the
+`IPlugin` contract** (presets are chrome/shell concern, not something plugins consume):
+
+- A new **`layoutPresets` service** under `host/`, persisting named arrangements to a new
+  versioned key `bloom.studio.layoutPresets` = `{ version, data: { [name]: layoutJSON } }`.
+- Operations: `saveAs(name)` (captures `api.toJSON()`), `apply(name)`, `list()`,
+  `delete(name)`. `apply()` **reuses the existing validate-or-default guard**
+  (`panelIdsFromLayout` + registry check) — an arrangement referencing an unknown pane
+  warns and is refused, never crashes.
+- **Predefined presets:** one or two built-ins seeded if absent (e.g. a **"Chat"**
+  arrangement: Room List + Chat Room + Settings). Built-ins are re-seedable / non-deletable.
+- **Chrome UI:** a new **"Layout" menu** — _Save arrangement…_ (shadcn dialog for the name),
+  a dynamic list of saved/built-in arrangements (click to apply), _Delete arrangement_, and
+  the existing _Reset layout_; plus command-palette entries.
+
+### 13.5 Testing (Plan B)
+
+- **Vitest (unit, CI):** chat slice reducers, token-append into the in-flight message,
+  render-count/scoped-subscription discipline, REST + socket client seams (mocked), the
+  `layoutPresets` service (save/apply/list/delete, version+fallback, unknown-pane guard).
+- **pytest (CI):** `GET /models`; resume-on-join (`stream_snapshot`) extended into the
+  two-client realtime suite as a three-client case.
+- **Playwright (local-only):** real two-client streaming through the UI against the live
+  backend (fake provider); save an arrangement → rearrange → apply preset → restored;
+  built-in preset applies.
