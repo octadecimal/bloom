@@ -2,12 +2,17 @@ import { createPaneRegistry } from '../host/paneRegistry';
 import { createCommandRegistry } from '../host/commandRegistry';
 import { createHost } from '../host/host';
 import { createLayoutService } from '../host/layoutService';
+import { createLayoutPresetsService } from '../host/layoutPresets';
 import { boot } from '../host/boot';
 import { setHost } from '../state/hostRef';
+import { setLayoutPresets } from '../state/layoutPresetsRef';
+import { openSaveLayoutDialog } from '../state/saveLayoutDialogRef';
 import { registerSlicePersistence } from '../state/persistSlices';
 import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persistWorkspace';
 import { PLUGINS } from '../plugins';
 import { DEFAULT_LAYOUT } from './workbenchSetup';
+import { LAYOUT_BUILTINS } from './layoutPresets.builtins';
+import { notify } from '../lib/notify';
 import type { IPlugin, IPluginHost } from '../host/types';
 import type { DockviewApi } from 'dockview-react';
 
@@ -44,6 +49,17 @@ export function setupApp(): IAppSetup {
 
   setHost(host);
   if (!import.meta.env.PROD) (window as unknown as { __host?: unknown }).__host = host;
+
+  const layoutPresets = createLayoutPresetsService({
+    getApi: () => api,
+    paneRegistry,
+    builtins: LAYOUT_BUILTINS,
+    notify,
+  });
+  setLayoutPresets(layoutPresets);
+
+  host.registerCommand({ id: 'shell/save-layout', title: 'Save arrangement…', run: () => openSaveLayoutDialog() });
+  host.registerCommand({ id: 'shell/reset-layout', title: 'Reset layout', run: (h) => h.resetLayout() });
 
   let extra: IPlugin[] = [];
   if (!import.meta.env.PROD && (window as unknown as { __injectPlugins?: IPlugin[] }).__injectPlugins) {
