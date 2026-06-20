@@ -6,12 +6,7 @@ interface IPaneRegistryLikeLocal {
 
 // Mirrors the DEFAULT_LAYOUT add idiom; kept separate so Reset's default and
 // the preset built-ins stay decoupled.
-function addPane(
-  api: DockviewApi,
-  reg: IPaneRegistryLikeLocal,
-  id: string,
-  position?: { direction: 'right' | 'below'; referencePanel: string },
-): void {
+function addPane(api: DockviewApi, reg: IPaneRegistryLikeLocal, id: string, position?: { direction: 'right' | 'below'; referencePanel: string }): void {
   if (!api.getPanel(id)) {
     api.addPanel({ id, component: id, title: reg.get(id)?.title ?? id, params: { paneId: id }, position });
   }

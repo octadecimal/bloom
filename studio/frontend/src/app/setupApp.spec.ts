@@ -15,7 +15,9 @@ describe('setupApp', () => {
   });
 
   it('registers shell layout commands in the palette', () => {
-    const ids = setupApp().host.listCommands().map((c) => c.id);
+    const ids = setupApp()
+      .host.listCommands()
+      .map((c) => c.id);
     expect(ids).toContain('shell/save-layout');
     expect(ids).toContain('shell/reset-layout');
   });
@@ -23,6 +25,10 @@ describe('setupApp', () => {
   it('exposes the layout presets service via the ref', () => {
     setupApp();
     expect(getLayoutPresets()).toBeTruthy();
-    expect(getLayoutPresets().list().some((p) => p.kind === 'builtin')).toBe(true);
+    expect(
+      getLayoutPresets()
+        .list()
+        .some((p) => p.kind === 'builtin'),
+    ).toBe(true);
   });
 });

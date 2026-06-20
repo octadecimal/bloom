@@ -102,7 +102,9 @@ export function createLayoutPresetsService(deps: ILayoutPresetsDeps): ILayoutPre
 
   function onPresetsChange(cb: () => void): () => void {
     changeListeners.add(cb);
-    return () => { changeListeners.delete(cb); };
+    return () => {
+      changeListeners.delete(cb);
+    };
   }
 
   return { saveAs, apply, list, delete: remove, onPresetsChange };
