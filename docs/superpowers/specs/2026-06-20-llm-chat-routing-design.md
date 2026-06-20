@@ -109,7 +109,7 @@ _screen_:
   **derived from `useParams().roomId`** — the URL is the single source of truth for "which
   room." Subsystem-2 state/reducers that referenced `activeRoomId` read it from the route
   instead; the room-guarding invariant (ignore socket events whose `roomId !== current
-  route room`) is unchanged.
+route room`) is unchanged.
 - **Join/leave is route-driven:** mounting the room route (or changing `:roomId`) triggers
   `leave_room(prev)` → state reset → `GET /rooms/:id/messages` → `join_room(id)`, exactly
   the subsystem-2 `openRoom` sequence, now keyed off the route transition rather than a

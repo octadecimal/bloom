@@ -40,6 +40,7 @@ The `llm-chat` plugin is **built and merged**. Do NOT recreate these — reuse t
 ## File Structure
 
 **Create:**
+
 - `src/session/session.ts` (+ `.spec.ts`) — `ISession`, `loadSession/saveSession/clearSession`.
 - `src/session/SessionContext.tsx` (+ `.spec.tsx`) — `SessionProvider`, `useSession`.
 - `src/app/AppContext.tsx` — `AppProvider` (runs app setup once), `useApp`.
@@ -55,6 +56,7 @@ The `llm-chat` plugin is **built and merged**. Do NOT recreate these — reuse t
 - `e2e/routing.spec.ts`.
 
 **Modify:**
+
 - `src/app/workbenchSetup.ts` — split: keep `DEFAULT_LAYOUT` (retarget to the chat room), move once-only setup to `setupApp.ts`.
 - `src/app/Workbench.tsx` — consume `useApp()`; remove `<Toaster/>` (moves to app root); add `<SwitchUser/>`.
 - `src/main.tsx` — render provider/router tree.
@@ -64,6 +66,7 @@ The `llm-chat` plugin is **built and merged**. Do NOT recreate these — reuse t
 - root `package.json` — add `react-router-dom`.
 
 **Delete:**
+
 - `src/plugins/llm-chat/RoomListPane.tsx` (+ `.spec.tsx`).
 
 ---
@@ -166,7 +169,12 @@ function Probe() {
     </div>
   );
 }
-const renderProbe = () => render(<SessionProvider><Probe /></SessionProvider>);
+const renderProbe = () =>
+  render(
+    <SessionProvider>
+      <Probe />
+    </SessionProvider>,
+  );
 
 describe('SessionContext', () => {
   it('starts anon', () => {
@@ -263,7 +271,11 @@ function Probe() {
 
 describe('useActiveRoomId', () => {
   it('exposes the provided id', () => {
-    render(<ActiveRoomProvider roomId="r-42"><Probe /></ActiveRoomProvider>);
+    render(
+      <ActiveRoomProvider roomId="r-42">
+        <Probe />
+      </ActiveRoomProvider>,
+    );
     expect(screen.getByTestId('rid')).toHaveTextContent('r-42');
   });
   it('throws outside a room route', () => {
@@ -415,10 +427,7 @@ export function setupApp(): IAppSetup {
 // src/app/workbenchSetup.ts
 import type { DockviewApi } from 'dockview-react';
 
-export function DEFAULT_LAYOUT(
-  api: DockviewApi,
-  paneRegistry: { get(id: string): { title?: string } | undefined },
-): void {
+export function DEFAULT_LAYOUT(api: DockviewApi, paneRegistry: { get(id: string): { title?: string } | undefined }): void {
   const add = (id: string, ref?: { direction: 'right' | 'below'; referencePanel: string }) => {
     if (!api.getPanel(id))
       api.addPanel({
@@ -619,15 +628,23 @@ Create placeholders so the module resolves (Tasks 6–8 replace these files):
 
 ```tsx
 // src/app/routes/LoginScreen.tsx
-export function LoginScreen() { return <div data-testid="login-screen">login</div>; }
+export function LoginScreen() {
+  return <div data-testid="login-screen">login</div>;
+}
 ```
+
 ```tsx
 // src/app/routes/RoomPicker.tsx
-export function RoomPicker() { return <div data-testid="room-picker">picker</div>; }
+export function RoomPicker() {
+  return <div data-testid="room-picker">picker</div>;
+}
 ```
+
 ```tsx
 // src/app/routes/RoomRoute.tsx
-export function RoomRoute() { return <div data-testid="room-route">room</div>; }
+export function RoomRoute() {
+  return <div data-testid="room-route">room</div>;
+}
 ```
 
 - [ ] **Step 5: Update `main.tsx`** to the provider/router tree (Toaster moves to app root):
@@ -893,7 +910,9 @@ export function RoomPicker() {
       {status === 'error' && (
         <p>
           Couldn’t load rooms.{' '}
-          <button type="button" onClick={() => void load()}>Retry</button>
+          <button type="button" onClick={() => void load()}>
+            Retry
+          </button>
         </p>
       )}
       {status === 'ready' && (
@@ -981,7 +1000,14 @@ function tree(initial: string) {
     <MemoryRouter initialEntries={[initial]}>
       <Routes>
         <Route path="/" element={<div>PICKER</div>} />
-        <Route path="/room/:roomId" element={<RoomRoute><Echo /></RoomRoute>} />
+        <Route
+          path="/room/:roomId"
+          element={
+            <RoomRoute>
+              <Echo />
+            </RoomRoute>
+          }
+        />
       </Routes>
     </MemoryRouter>
   );
@@ -1075,7 +1101,7 @@ git commit -m "feat(studio): room route drives openRoom from the URL param"
 
 **Files:** Modify `src/plugins/llm-chat/index.ts`. Delete `src/plugins/llm-chat/RoomListPane.tsx`, `src/plugins/llm-chat/RoomListPane.spec.tsx`.
 
-**Why:** Room selection is now the `RoomPicker` *screen* (Task 7). The `llm-chat/rooms` pane and its `Open Room List` command are dead; `DEFAULT_LAYOUT` already dropped the pane in Task 4.
+**Why:** Room selection is now the `RoomPicker` _screen_ (Task 7). The `llm-chat/rooms` pane and its `Open Room List` command are dead; `DEFAULT_LAYOUT` already dropped the pane in Task 4.
 
 **Interfaces — Produces:** `llmChat` plugin with panes `llm-chat/room`, `llm-chat/settings` and commands `open-room`, `open-settings` only.
 
@@ -1147,21 +1173,45 @@ import { chatSlice } from './state';
 
 describe('session-driven connection', () => {
   it('connectChatAs sets displayName and connects', () => {
-    const socket = { connect: vi.fn(), disconnect: vi.fn(), reconnectWith: vi.fn(), joinRoom: vi.fn(), leaveRoom: vi.fn(), sendPrompt: vi.fn(), setTyping: vi.fn() };
+    const socket = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      reconnectWith: vi.fn(),
+      joinRoom: vi.fn(),
+      leaveRoom: vi.fn(),
+      sendPrompt: vi.fn(),
+      setTyping: vi.fn(),
+    };
     __setDeps({ socket });
     connectChatAs('ada');
     expect(chatSlice().displayName.get()).toBe('ada');
     expect(socket.connect).toHaveBeenCalledWith('ada');
   });
   it('connectChatAs reconnects when already connected once', () => {
-    const socket = { connect: vi.fn(), disconnect: vi.fn(), reconnectWith: vi.fn(), joinRoom: vi.fn(), leaveRoom: vi.fn(), sendPrompt: vi.fn(), setTyping: vi.fn() };
+    const socket = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      reconnectWith: vi.fn(),
+      joinRoom: vi.fn(),
+      leaveRoom: vi.fn(),
+      sendPrompt: vi.fn(),
+      setTyping: vi.fn(),
+    };
     __setDeps({ socket });
     connectChatAs('ada');
     connectChatAs('bob');
     expect(socket.reconnectWith).toHaveBeenLastCalledWith('bob');
   });
   it('initChat loads rooms but does not connect or auto-open', () => {
-    const socket = { connect: vi.fn(), disconnect: vi.fn(), reconnectWith: vi.fn(), joinRoom: vi.fn(), leaveRoom: vi.fn(), sendPrompt: vi.fn(), setTyping: vi.fn() };
+    const socket = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      reconnectWith: vi.fn(),
+      joinRoom: vi.fn(),
+      leaveRoom: vi.fn(),
+      sendPrompt: vi.fn(),
+      setTyping: vi.fn(),
+    };
     const rest = { getRooms: vi.fn().mockResolvedValue([]), createRoom: vi.fn(), getMessages: vi.fn() };
     __setDeps({ socket, rest });
     initChat();
@@ -1244,8 +1294,14 @@ export function SettingsPane() {
 
   useEffect(() => {
     let cancelled = false;
-    void getModels().then((m) => { if (!cancelled) setModels(m); }).catch(() => {});
-    return () => { cancelled = true; };
+    void getModels()
+      .then((m) => {
+        if (!cancelled) setModels(m);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -1253,8 +1309,14 @@ export function SettingsPane() {
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         Model (active room)
         <select data-testid="settings-model" defaultValue="">
-          <option value="" disabled>Select a model…</option>
-          {models.map((m) => (<option key={m.id} value={m.id}>{m.label}</option>))}
+          <option value="" disabled>
+            Select a model…
+          </option>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
         </select>
       </label>
     </div>
@@ -1304,11 +1366,19 @@ beforeEach(() => {
 describe('SessionSync', () => {
   it('connects with the logged-in username', () => {
     saveSession('ada');
-    render(<SessionProvider><SessionSync /></SessionProvider>);
+    render(
+      <SessionProvider>
+        <SessionSync />
+      </SessionProvider>,
+    );
     expect(connectChatAs).toHaveBeenCalledWith('ada');
   });
   it('disconnects when anon', () => {
-    render(<SessionProvider><SessionSync /></SessionProvider>);
+    render(
+      <SessionProvider>
+        <SessionSync />
+      </SessionProvider>,
+    );
     expect(disconnectChat).toHaveBeenCalled();
   });
 });
@@ -1320,13 +1390,13 @@ describe('SessionSync', () => {
 // main.tsx — add import and element
 import { SessionSync } from './app/SessionSync';
 // ...
-      <SessionProvider>
-        <SessionSync />
-        <Toaster />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </SessionProvider>
+<SessionProvider>
+  <SessionSync />
+  <Toaster />
+  <BrowserRouter>
+    <AppRoutes />
+  </BrowserRouter>
+</SessionProvider>;
 ```
 
 - [ ] **Step 8: Run the chat + app suites — expect PASS**: `npx nx test frontend -- src/plugins/llm-chat src/app/SessionSync.spec.tsx`
@@ -1404,7 +1474,13 @@ export function SwitchUser() {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
       <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{username}</span>
-      <button type="button" onClick={() => { logout(); navigate('/login', { replace: true }); }}>
+      <button
+        type="button"
+        onClick={() => {
+          logout();
+          navigate('/login', { replace: true });
+        }}
+      >
         Switch user
       </button>
     </span>
@@ -1417,10 +1493,10 @@ export function SwitchUser() {
 ```tsx
 import { SwitchUser } from './SwitchUser';
 // ...in the header, replace the lone <ThemeToggle /> with:
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SwitchUser />
-          <ThemeToggle />
-        </div>
+<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+  <SwitchUser />
+  <ThemeToggle />
+</div>;
 ```
 
 - [ ] **Step 5: Run — expect PASS** (2), then full suite: `npx nx test frontend`
@@ -1515,7 +1591,9 @@ import { seedLocalStorage } from './helpers';
 
 test('logged-in deep-link boots the workbench', async ({ page }) => {
   await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username: 'ada' } }));
-  await page.route('**/rooms', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'r1', name: 'A', model: 'm', gameId: null, createdAt: 't' }]) }));
+  await page.route('**/rooms', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'r1', name: 'A', model: 'm', gameId: null, createdAt: 't' }]) }),
+  );
   await page.route('**/rooms/*/messages', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.goto('/room/r1');
   await expect(page.getByTestId('workbench')).toBeVisible();
@@ -1577,6 +1655,7 @@ gh pr merge --squash --delete-branch
 **Type consistency:** `useSession()` shape, `IAppSetup`, `useActiveRoomId(): string`, `connectChatAs/disconnectChat/closeRoom` signatures consistent across the tasks that define and consume them. Session key `bloom.studio.session` consistent. ✓
 
 **Cross-task risks flagged for the reviewer:**
+
 - Task 10 bumps `PREFS_KEY` version to 2 and changes the prefs shape — old persisted prefs fall back cleanly (`loadPersisted` returns the fallback on version mismatch). Confirm `actions.spec.ts`/`prefs.spec.ts` are updated in the same task.
 - `setDisplayName` may become dead after Task 10 — verify references before deleting.
 - `llm-chat.spec.ts` (live-backend) rewrite in Task 12 Step 3 requires reading the current file; preserve its streaming assertions, change only the navigation preamble.
