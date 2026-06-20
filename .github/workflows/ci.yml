@@ -66,6 +66,38 @@ jobs:
       - name: Build
         run: npx nx build frontend
 
+  backend:
+    name: Backend (pytest unit + e2e)
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        working-directory: studio/backend
+        run: uv sync
+
+      - name: Test (unit + integration)
+        working-directory: studio/backend
+        env:
+          MONGO_URL: mongodb://localhost:27017
+          MONGO_DB: bloom_studio_ci
+        run: uv run pytest -m "not e2e" -v
+
+      - name: Test (non-browser e2e)
+        working-directory: studio/backend
+        env:
+          MONGO_URL: mongodb://localhost:27017
+        run: uv run pytest -m e2e -v
+
   # NOTE: Playwright browser e2e (just e2e) is intentionally NOT run in CI.
   # Per the repo CI cost policy (AGENTS.md), browser e2e is too expensive to
   # gate every PR and is run locally instead.
