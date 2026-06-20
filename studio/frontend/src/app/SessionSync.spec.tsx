@@ -32,5 +32,6 @@ describe('SessionSync', () => {
       </SessionProvider>,
     );
     expect(disconnectChat).toHaveBeenCalled();
+    expect(connectChatAs).not.toHaveBeenCalled();
   });
 });

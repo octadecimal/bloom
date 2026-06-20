@@ -142,6 +142,36 @@ describe('actions', () => {
       __setDeps({ socket, rest });
       initChat();
       expect(socket.connect).not.toHaveBeenCalled();
+      expect(socket.joinRoom).not.toHaveBeenCalled();
+    });
+    it('disconnectChat after connect calls socket.disconnect', () => {
+      const socket = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnectWith: vi.fn(),
+        joinRoom: vi.fn(),
+        leaveRoom: vi.fn(),
+        sendPrompt: vi.fn(),
+        setTyping: vi.fn(),
+      };
+      __setDeps({ socket });
+      connectChatAs('ada');
+      disconnectChat();
+      expect(socket.disconnect).toHaveBeenCalled();
+    });
+    it('disconnectChat without prior connect does not call socket.disconnect', () => {
+      const socket = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        reconnectWith: vi.fn(),
+        joinRoom: vi.fn(),
+        leaveRoom: vi.fn(),
+        sendPrompt: vi.fn(),
+        setTyping: vi.fn(),
+      };
+      __setDeps({ socket });
+      disconnectChat();
+      expect(socket.disconnect).not.toHaveBeenCalled();
     });
   });
 

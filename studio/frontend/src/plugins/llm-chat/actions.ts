@@ -36,7 +36,7 @@ function persist(): void {
 export function connectChatAs(username: string): void {
   chatSlice().displayName.set(username);
   if (!started) {
-    initSocketClient();
+    if (socket === null) initSocketClient();
     started = true;
     sock().connect(username);
   } else {
