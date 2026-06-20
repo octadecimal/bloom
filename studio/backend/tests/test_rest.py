@@ -48,3 +48,25 @@ async def test_models_endpoint_returns_catalog(ctx):
         first = catalog[0]
         assert set(first.keys()) == {"id", "label", "free"}
         assert any(item["free"] for item in catalog)  # at least one :free dev model
+
+
+@pytest.mark.asyncio
+async def test_rest_sends_cors_headers_for_browser_origin(ctx):
+    # The frontend runs on a different origin (e.g. :4200) than the backend
+    # (:8000), so the REST routes must answer CORS preflights and echo an
+    # Access-Control-Allow-Origin header, or the browser blocks every fetch.
+    origin = "http://localhost:4200"
+    async with _client(ctx) as client:
+        simple = await client.get("/health", headers={"Origin": origin})
+        assert simple.headers.get("access-control-allow-origin") in ("*", origin)
+
+        preflight = await client.options(
+            "/rooms",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert preflight.status_code in (200, 204)
+        assert preflight.headers.get("access-control-allow-origin") in ("*", origin)

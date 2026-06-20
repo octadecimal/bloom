@@ -3,6 +3,7 @@ from typing import Any
 
 import socketio
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.chat_service import ChatService
@@ -33,6 +34,16 @@ def build(settings: Settings) -> AppContext:
     chat_service = ChatService(build_provider(settings))
 
     fastapi_app = FastAPI(title="Bloom Studio Backend")
+    # The browser frontend is served from a different origin (e.g. :4200) than
+    # this API (:8000), so REST routes must answer CORS preflights and echo the
+    # allow-origin header — mirroring the Socket.IO server's allow-all policy
+    # below. Without this the browser blocks every fetch (room list/create).
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     fastapi_app.state.store = store
     fastapi_app.state.settings = settings
     fastapi_app.include_router(router)
