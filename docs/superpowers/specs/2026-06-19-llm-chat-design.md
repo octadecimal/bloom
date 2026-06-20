@@ -9,7 +9,7 @@
 A studio plugin that provides a **shared interface to an LLM**. Multiple users can
 join the same **room** (a shared LLM conversation), submit prompts, and watch the
 LLM's response **stream in real time to every participant**. Rooms are isolated
-(each will eventually map to a game). This is an interface *to an LLM*, not a
+(each will eventually map to a game). This is an interface _to an LLM_, not a
 human-to-human chat — human-to-human messaging, if ever wanted, is a separate
 plugin.
 
@@ -61,7 +61,7 @@ to Socket.IO once two facts surfaced:
    at once, each wanting a live stream.
 2. **Typing indicators / presence** are genuinely duplex.
 
-N simultaneously-live rooms over SSE means N connections per client *plus* a separate
+N simultaneously-live rooms over SSE means N connections per client _plus_ a separate
 WebSocket for typing — two overlapping transports, and the HTTP/1.1 ~6-connection
 limit looms. A **single multiplexed duplex connection** carrying tokens + typing +
 join/leave + presence for all open rooms is cleaner. Socket.IO over raw WebSocket
@@ -83,7 +83,7 @@ avoid building a throwaway adapter.
   `base_url` set to OpenRouter's OpenAI-compatible endpoint, consumed through
   `.astream()` / `astream_events`.
 - A thin internal seam — `chat_service.stream(messages, model) -> async iterator of
-  tokens` — keeps the Socket.IO hub and room-locking logic insulated from Langchain's
+tokens` — keeps the Socket.IO hub and room-locking logic insulated from Langchain's
   fast-moving surface. Langchain remains first-class for building chains/agents; the
   seam only protects the realtime plumbing from version churn.
 
@@ -141,7 +141,7 @@ directly. A nullable `gameId` field makes future game association additive.
   - `model` is per-room, defaults to the configured default model.
   - `gameId` is the nullable seam for future game association.
 - **`messages`**: `{ _id, roomId, author: string, role: 'user' | 'assistant',
-  content: string, status: 'streaming' | 'complete', createdAt }`
+content: string, status: 'streaming' | 'complete', createdAt }`
   - `author` is the ephemeral display name.
   - Assistant messages start `streaming` and finalize to `complete`.
 - **Users are not persisted.** Display name is client-side (localStorage), sent on

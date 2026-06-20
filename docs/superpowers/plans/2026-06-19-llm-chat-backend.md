@@ -72,12 +72,14 @@ justfile                        # add backend-* targets (incl. native mongo serv
 Stand up the `uv` project, the settings layer, Mongo via Compose, the `just` targets, and a composed ASGI app exposing `GET /health`. This proves the app boots and the FastAPI surface works before any domain logic.
 
 **Files:**
+
 - Create: `studio/backend/pyproject.toml`, `studio/backend/.python-version`, `studio/backend/.env.example`, `studio/backend/.gitignore`, `studio/backend/README.md`
 - Create: `studio/backend/app/__init__.py`, `studio/backend/app/config.py`, `studio/backend/app/rest.py`, `studio/backend/app/main.py`
 - Create: `studio/backend/tests/__init__.py`, `studio/backend/tests/conftest.py`, `studio/backend/tests/test_health.py`
 - Modify: `justfile` (add backend targets, incl. native Mongo service control)
 
 **Interfaces:**
+
 - Produces: `app.config.Settings`, `app.config.get_settings() -> Settings`
 - Produces: `app.main.AppContext` dataclass with fields `settings`, `fastapi_app`, `sio`, `asgi_app`, `store`, `chat_service`, `hub`, `presence`
 - Produces: `app.main.build(settings: Settings) -> AppContext` and module-level `app.main.app` (the ASGI app for uvicorn)
@@ -85,11 +87,13 @@ Stand up the `uv` project, the settings layer, Mongo via Compose, the `just` tar
 - [ ] **Step 1: Create the uv project files**
 
 `studio/backend/.python-version`:
+
 ```
 3.12
 ```
 
 `studio/backend/pyproject.toml`:
+
 ```toml
 [project]
 name = "bloom-studio-backend"
@@ -126,6 +130,7 @@ package = false
 ```
 
 `studio/backend/.gitignore`:
+
 ```
 .venv/
 __pycache__/
@@ -135,6 +140,7 @@ __pycache__/
 ```
 
 `studio/backend/.env.example`:
+
 ```
 # Copy to .env and fill in. .env is gitignored.
 MONGO_URL=mongodb://localhost:27017
@@ -149,6 +155,7 @@ FAKE_TOKEN_DELAY=0.0
 ```
 
 `studio/backend/README.md`:
+
 ```markdown
 # Bloom Studio Backend
 
@@ -173,6 +180,7 @@ Shared, multi-user, multi-room LLM chat. FastAPI + Socket.IO + MongoDB + Langcha
 `studio/backend/app/__init__.py`: (empty file)
 
 `studio/backend/app/config.py`:
+
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -198,6 +206,7 @@ def get_settings() -> Settings:
 `studio/backend/tests/__init__.py`: (empty file)
 
 `studio/backend/tests/conftest.py`:
+
 ```python
 import pytest
 
@@ -216,6 +225,7 @@ def ctx(settings):
 ```
 
 `studio/backend/tests/test_health.py`:
+
 ```python
 import httpx
 import pytest
@@ -233,14 +243,17 @@ async def test_health_ok(ctx):
 - [ ] **Step 4: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd studio/backend && uv sync && uv run pytest tests/test_health.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.main'` (and `app.rest`).
 
 - [ ] **Step 5: Write the REST router and app factory (minimal)**
 
 `studio/backend/app/rest.py`:
+
 ```python
 from fastapi import APIRouter
 
@@ -253,6 +266,7 @@ async def health() -> dict:
 ```
 
 `studio/backend/app/main.py`:
+
 ```python
 from dataclasses import dataclass
 from typing import Any
@@ -293,9 +307,11 @@ app = build(get_settings()).asgi_app
 - [ ] **Step 6: Run the test to verify it passes**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_health.py -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 7: Add justfile targets (native Mongo, no Docker)**
@@ -303,6 +319,7 @@ Expected: PASS.
 MongoDB is installed natively as a Windows service named `MongoDB` (via `winget MongoDB.Server`), listening on `mongodb://localhost:27017`. It auto-starts on boot; the `mongo-up`/`mongo-down` targets just ensure the service is in the desired state. No `compose.yaml` is created (deliberate deviation from ADR-0001 — see Global Constraints).
 
 Append to `justfile`:
+
 ```
 # Python / studio backend
 mongo-up:
@@ -325,9 +342,11 @@ backend-e2e:
 ```
 
 Verify the target works (service should already be running post-install):
+
 ```bash
 just mongo-up
 ```
+
 Expected: no error (service running).
 
 - [ ] **Step 8: Commit**
@@ -344,11 +363,13 @@ git commit -m "feat(backend): scaffold studio backend with health endpoint"
 Define the `Room` and `Message` domain models (camelCase wire serialization) and the `ConversationStore` that persists them via `motor`. Requires MongoDB (`just mongo-up`).
 
 **Files:**
+
 - Create: `studio/backend/app/models.py`, `studio/backend/app/store.py`
 - Create: `studio/backend/tests/test_models.py`, `studio/backend/tests/test_store.py`
 - Modify: `studio/backend/tests/conftest.py` (add `mongo_db` fixture)
 
 **Interfaces:**
+
 - Consumes: nothing from prior tasks.
 - Produces: `app.models.Room`, `app.models.Message`, `app.models.message_wire(m) -> dict`, `app.models.room_wire(r) -> dict`
 - Produces: `app.store.ConversationStore(db)` with async methods:
@@ -362,6 +383,7 @@ Define the `Room` and `Message` domain models (camelCase wire serialization) and
 - [ ] **Step 1: Write the failing models test**
 
 `studio/backend/tests/test_models.py`:
+
 ```python
 from datetime import datetime, timezone
 
@@ -387,14 +409,17 @@ def test_message_wire_is_camel_case():
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_models.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.models'`.
 
 - [ ] **Step 3: Write the models module**
 
 `studio/backend/app/models.py`:
+
 ```python
 from datetime import datetime
 from typing import Literal, Optional
@@ -438,14 +463,17 @@ Note: `mode="json"` renders the `datetime` as ISO-8601. To get the trailing `Z`,
 - [ ] **Step 4: Run the models test to verify it passes**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_models.py -v
 ```
+
 Expected: PASS. If the `Z`/`+00:00` assertion fails, relax it to `.startswith("2026-01-01T00:00:00")` and re-run.
 
 - [ ] **Step 5: Add the `mongo_db` fixture**
 
 Append to `studio/backend/tests/conftest.py`:
+
 ```python
 import pytest_asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -466,6 +494,7 @@ async def mongo_db(settings):
 - [ ] **Step 6: Write the failing store test**
 
 `studio/backend/tests/test_store.py`:
+
 ```python
 import pytest
 
@@ -501,15 +530,18 @@ async def test_messages_round_trip_in_order(mongo_db):
 - [ ] **Step 7: Run the store test to verify it fails**
 
 Run:
+
 ```bash
 just mongo-up
 cd studio/backend && uv run pytest tests/test_store.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.store'`.
 
 - [ ] **Step 8: Write the store module**
 
 `studio/backend/app/store.py`:
+
 ```python
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -616,9 +648,11 @@ Note on ordering: `created_at` is generated per insert. If two messages land wit
 - [ ] **Step 9: Run the store test to verify it passes**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_store.py tests/test_models.py -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 10: Commit**
@@ -635,11 +669,13 @@ git commit -m "feat(backend): add Room/Message models and Mongo ConversationStor
 Expose `GET /rooms`, `POST /rooms`, and `GET /rooms/{id}/messages`. Wire the store into the FastAPI app via dependency state on the `AppContext`.
 
 **Files:**
+
 - Modify: `studio/backend/app/main.py` (construct store, attach to app state)
 - Modify: `studio/backend/app/rest.py` (room routes)
 - Create: `studio/backend/tests/test_rest.py`
 
 **Interfaces:**
+
 - Consumes: `ConversationStore`, `Settings`, `room_wire`, `message_wire`.
 - Produces: `AppContext.store: ConversationStore`; REST endpoints returning camelCase JSON:
   - `GET /rooms` → `[room_wire, ...]`
@@ -649,6 +685,7 @@ Expose `GET /rooms`, `POST /rooms`, and `GET /rooms/{id}/messages`. Wire the sto
 - [ ] **Step 1: Write the failing REST test**
 
 `studio/backend/tests/test_rest.py`:
+
 ```python
 import httpx
 import pytest
@@ -695,6 +732,7 @@ The `ctx` fixture must now expose `ctx.store` and share the same Mongo DB as `mo
 - [ ] **Step 2: Point the app factory at the test DB and expose the store**
 
 Modify `studio/backend/app/main.py` — add the store to `AppContext` and build it inside `build()`:
+
 ```python
 from dataclasses import dataclass
 from typing import Any
@@ -744,6 +782,7 @@ app = build(get_settings()).asgi_app
 - [ ] **Step 3: Write the room routes**
 
 Replace `studio/backend/app/rest.py`:
+
 ```python
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -792,10 +831,12 @@ async def list_messages(room_id: str, request: Request) -> list[dict]:
 - [ ] **Step 4: Run the REST test to verify it passes**
 
 Run:
+
 ```bash
 just mongo-up
 cd studio/backend && uv run pytest tests/test_rest.py -v
 ```
+
 Expected: PASS (3 assertions across 2 tests).
 
 - [ ] **Step 5: Commit**
@@ -812,10 +853,12 @@ git commit -m "feat(backend): add room CRUD and history REST endpoints"
 Build the thin `ChatService` that converts a room's message history into provider turns (with author attribution) and streams tokens. Provide a deterministic `FakeProvider` (tests/CI) and a `LangchainOpenRouterProvider` (real use), selected by settings.
 
 **Files:**
+
 - Create: `studio/backend/app/providers.py`, `studio/backend/app/chat_service.py`
 - Create: `studio/backend/tests/test_providers.py`, `studio/backend/tests/test_chat_service.py`
 
 **Interfaces:**
+
 - Consumes: `app.models.Message`, `app.config.Settings`.
 - Produces: `app.providers.LLMProvider` (Protocol with `stream(turns: list[dict], model: str) -> AsyncIterator[str]`), `app.providers.FakeProvider(delay: float = 0.0)`, `app.providers.LangchainOpenRouterProvider(api_key, base_url)`, `app.providers.build_provider(settings) -> LLMProvider`.
 - Produces: `app.chat_service.build_turns(messages: list[Message]) -> list[dict]`, `app.chat_service.ChatService(provider)` with `stream(messages: list[Message], model: str) -> AsyncIterator[str]`.
@@ -824,6 +867,7 @@ Build the thin `ChatService` that converts a room's message history into provide
 - [ ] **Step 1: Write the failing providers test**
 
 `studio/backend/tests/test_providers.py`:
+
 ```python
 import pytest
 
@@ -848,14 +892,17 @@ def test_build_provider_selects_fake_when_configured():
 - [ ] **Step 2: Run to verify it fails**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_providers.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.providers'`.
 
 - [ ] **Step 3: Write the providers module**
 
 `studio/backend/app/providers.py`:
+
 ```python
 import asyncio
 from typing import AsyncIterator, Protocol
@@ -921,14 +968,17 @@ def build_provider(settings: Settings) -> LLMProvider:
 - [ ] **Step 4: Run providers test to verify it passes**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_providers.py -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Write the failing chat_service test**
 
 `studio/backend/tests/test_chat_service.py`:
+
 ```python
 from datetime import datetime, timezone
 
@@ -974,14 +1024,17 @@ async def test_chat_service_streams_tokens():
 - [ ] **Step 6: Run to verify it fails**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_chat_service.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.chat_service'`.
 
 - [ ] **Step 7: Write the chat_service module**
 
 `studio/backend/app/chat_service.py`:
+
 ```python
 from typing import AsyncIterator
 
@@ -1011,9 +1064,11 @@ class ChatService:
 - [ ] **Step 8: Run chat_service test to verify it passes**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_chat_service.py tests/test_providers.py -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 9: Commit**
@@ -1030,10 +1085,12 @@ git commit -m "feat(backend): add ChatService seam and Fake/OpenRouter providers
 The concurrency core. `RoomHub` persists the user message, broadcasts it, and serializes generations per room: one assistant completion at a time; concurrent prompts queue and run in order. Tested in isolation with fake `sio`, store, and chat service for deterministic control.
 
 **Files:**
+
 - Create: `studio/backend/app/room_hub.py`
 - Create: `studio/backend/tests/test_room_hub.py`
 
 **Interfaces:**
+
 - Consumes: `ConversationStore` (duck-typed: `add_message`, `get_room`, `list_messages`, `complete_message`), `ChatService.stream`, and an `sio`-like object with `async emit(event, data=None, room=None)`.
 - Produces: `app.room_hub.RoomHub(sio, store, chat_service)` with `async handle_prompt(room_id: str, author: str, text: str) -> None`.
 - Emits these events (all with `room=room_id`): `message_created {message}`, `token {roomId, messageId, delta}`, `message_completed {roomId, messageId}`, `ai_status {roomId, state, queueDepth}` where state ∈ `{"idle","generating","queued"}`.
@@ -1041,6 +1098,7 @@ The concurrency core. `RoomHub` persists the user message, broadcasts it, and se
 - [ ] **Step 1: Write the failing RoomHub tests**
 
 `studio/backend/tests/test_room_hub.py`:
+
 ```python
 import asyncio
 from datetime import datetime, timezone
@@ -1172,14 +1230,17 @@ async def _wait_event(sio, name):
 - [ ] **Step 2: Run to verify it fails**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_room_hub.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.room_hub'`.
 
 - [ ] **Step 3: Write the RoomHub module**
 
 `studio/backend/app/room_hub.py`:
+
 ```python
 import asyncio
 
@@ -1266,9 +1327,11 @@ class RoomHub:
 - [ ] **Step 4: Run the RoomHub tests to verify they pass**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_room_hub.py -v
 ```
+
 Expected: PASS (both tests). If `test_concurrent_prompts_are_serialized` is flaky, increase the `asyncio.sleep(0.05)` settling waits to `0.1`; the assertions (only one `chat.calls` entry while busy; two completions after release) are the contract.
 
 - [ ] **Step 5: Commit**
@@ -1285,12 +1348,14 @@ git commit -m "feat(backend): add RoomHub with per-room turn lock and token fan-
 Wire Socket.IO events to the hub and a `PresenceRegistry`, compose everything in `build()`, and establish the e2e harness (a subprocess uvicorn fixture). First socket coverage: connect with a display name, join a room, receive presence, broadcast typing.
 
 **Files:**
+
 - Create: `studio/backend/app/presence.py`, `studio/backend/app/sockets.py`
 - Modify: `studio/backend/app/main.py` (construct chat_service, hub, presence; register handlers)
 - Create: `studio/backend/tests/e2e/__init__.py`, `studio/backend/tests/e2e/conftest.py`, `studio/backend/tests/e2e/test_sockets.py`
 - Modify: `studio/backend/pyproject.toml` (add `python-socketio[asyncio_client]` to dev deps)
 
 **Interfaces:**
+
 - Consumes: `RoomHub.handle_prompt`, `ConversationStore`, `ChatService`, `build_provider`.
 - Produces: `app.presence.PresenceRegistry` with `join(room_id, sid, name)`, `leave_all(sid) -> list[str]`, `leave(room_id, sid)`, `members(room_id) -> list[str]`.
 - Produces: `app.sockets.register_socket_handlers(sio, hub, presence)`.
@@ -1301,6 +1366,7 @@ Wire Socket.IO events to the hub and a `PresenceRegistry`, compose everything in
 - [ ] **Step 1: Add the async socket.io client dev dependency**
 
 In `studio/backend/pyproject.toml`, change the dev group to include the asyncio client extra:
+
 ```toml
 [dependency-groups]
 dev = [
@@ -1310,7 +1376,9 @@ dev = [
     "python-socketio[asyncio_client]>=5.11",
 ]
 ```
+
 Then:
+
 ```bash
 cd studio/backend && uv sync
 ```
@@ -1318,6 +1386,7 @@ cd studio/backend && uv sync
 - [ ] **Step 2: Write the PresenceRegistry (with a quick unit test)**
 
 `studio/backend/app/presence.py`:
+
 ```python
 class PresenceRegistry:
     def __init__(self):
@@ -1344,6 +1413,7 @@ class PresenceRegistry:
 ```
 
 `studio/backend/tests/test_presence.py`:
+
 ```python
 from app.presence import PresenceRegistry
 
@@ -1360,14 +1430,17 @@ def test_presence_tracks_and_removes_members():
 ```
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest tests/test_presence.py -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 3: Write the socket handlers**
 
 `studio/backend/app/sockets.py`:
+
 ```python
 def register_socket_handlers(sio, hub, presence):
     @sio.event
@@ -1417,6 +1490,7 @@ Note: `skip_sid=sid` on `typing` means the sender does not receive their own typ
 - [ ] **Step 4: Compose everything in build()**
 
 Replace `studio/backend/app/main.py`:
+
 ```python
 from dataclasses import dataclass
 from typing import Any
@@ -1484,6 +1558,7 @@ app = build(get_settings()).asgi_app
 `studio/backend/tests/e2e/__init__.py`: (empty file)
 
 `studio/backend/tests/e2e/conftest.py`:
+
 ```python
 import os
 import socket
@@ -1544,6 +1619,7 @@ def live_server():
 - [ ] **Step 6: Write the failing single-client socket test**
 
 `studio/backend/tests/e2e/test_sockets.py`:
+
 ```python
 import asyncio
 
@@ -1603,10 +1679,12 @@ async def test_typing_is_broadcast_to_other_members(live_server):
 - [ ] **Step 7: Run to verify it fails, then passes**
 
 Run:
+
 ```bash
 just mongo-up
 cd studio/backend && uv run pytest -m e2e tests/e2e/test_sockets.py -v
 ```
+
 First run (before Steps 3–4 were saved) would fail; with all steps saved, expected: PASS. If the handlers/build were already written, confirm PASS here. If presence events are empty, increase the `asyncio.sleep` waits to `0.5`.
 
 - [ ] **Step 8: Commit**
@@ -1623,15 +1701,18 @@ git commit -m "feat(backend): wire Socket.IO handlers, presence, and e2e harness
 The behavioral contract for this plan: two clients in one room, A sends a prompt, **both** receive ordered tokens and the completed message; concurrent prompts serialize; messages carry attribution. This is the suite that decides correctness.
 
 **Files:**
+
 - Create: `studio/backend/tests/e2e/test_realtime.py`
 
 **Interfaces:**
+
 - Consumes: the `live_server` fixture (Task 6), the full socket/REST surface.
 - Produces: no new code — this is the contract suite over existing behavior.
 
 - [ ] **Step 1: Write the two-client streaming test**
 
 `studio/backend/tests/e2e/test_realtime.py`:
+
 ```python
 import asyncio
 
@@ -1732,18 +1813,22 @@ async def test_concurrent_prompts_serialize_into_two_answers(live_server):
 - [ ] **Step 2: Run the authoritative suite**
 
 Run:
+
 ```bash
 just mongo-up
 cd studio/backend && uv run pytest -m e2e -v
 ```
+
 Expected: PASS (all e2e tests across `test_sockets.py` and `test_realtime.py`). If timing-sensitive assertions flake, the contract is the assertion content, not the sleeps — bump `FAKE_TOKEN_DELAY` (in `e2e/conftest.py`) and the polling deadlines, never weaken an assertion.
 
 - [ ] **Step 3: Run the full suite (unit + integration + e2e)**
 
 Run:
+
 ```bash
 cd studio/backend && uv run pytest -v
 ```
+
 Expected: ALL PASS.
 
 - [ ] **Step 4: Commit**
@@ -1760,47 +1845,50 @@ git commit -m "test(backend): add authoritative two-client realtime e2e suite"
 Add a `backend` job to the existing CI workflow that provisions MongoDB, installs deps with `uv`, and runs the full Python suite (unit + integration + non-browser e2e) per the repo's CI cost policy.
 
 **Files:**
+
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
+
 - Consumes: the full backend test suite.
 - Produces: a CI job that gates PRs on backend tests.
 
 - [ ] **Step 1: Add the backend CI job**
 
 Append this job under `jobs:` in `.github/workflows/ci.yml` (sibling to `rust` and `frontend`):
+
 ```yaml
-  backend:
-    name: Backend (pytest unit + e2e)
-    runs-on: ubuntu-latest
-    services:
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
-    steps:
-      - uses: actions/checkout@v4
+backend:
+  name: Backend (pytest unit + e2e)
+  runs-on: ubuntu-latest
+  services:
+    mongo:
+      image: mongo:7
+      ports:
+        - 27017:27017
+  steps:
+    - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
+    - uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
 
-      - name: Install dependencies
-        working-directory: studio/backend
-        run: uv sync
+    - name: Install dependencies
+      working-directory: studio/backend
+      run: uv sync
 
-      - name: Test (unit + integration)
-        working-directory: studio/backend
-        env:
-          MONGO_URL: mongodb://localhost:27017
-          MONGO_DB: bloom_studio_ci
-        run: uv run pytest -m "not e2e" -v
+    - name: Test (unit + integration)
+      working-directory: studio/backend
+      env:
+        MONGO_URL: mongodb://localhost:27017
+        MONGO_DB: bloom_studio_ci
+      run: uv run pytest -m "not e2e" -v
 
-      - name: Test (non-browser e2e)
-        working-directory: studio/backend
-        env:
-          MONGO_URL: mongodb://localhost:27017
-        run: uv run pytest -m e2e -v
+    - name: Test (non-browser e2e)
+      working-directory: studio/backend
+      env:
+        MONGO_URL: mongodb://localhost:27017
+      run: uv run pytest -m e2e -v
 ```
 
 Note: the e2e `live_server` fixture sets `LLM_BACKEND=fake` and `MONGO_DB=bloom_studio_e2e` in the subprocess env itself, and inherits `MONGO_URL` from `os.environ` — so the job-level `MONGO_URL` reaches the spawned server. No OpenRouter key is needed in CI (the fake provider is used throughout).
@@ -1808,9 +1896,11 @@ Note: the e2e `live_server` fixture sets `LLM_BACKEND=fake` and `MONGO_DB=bloom_
 - [ ] **Step 2: Validate the workflow YAML formatting**
 
 Run:
+
 ```bash
 npx prettier --write .github/workflows/ci.yml
 ```
+
 Confirm no other files were reformatted (the plan's earlier Prettier runs kept YAML clean). Re-read the file to confirm the `backend` job is well-formed and indentation matches the existing jobs.
 
 - [ ] **Step 3: Commit and open the PR**
@@ -1825,9 +1915,11 @@ gh pr create --fill
 - [ ] **Step 4: Verify CI is green**
 
 After the PR run completes:
+
 ```bash
 gh pr checks
 ```
+
 Expected: the `Backend (pytest unit + e2e)` check passes alongside `rust` and `frontend`. If it fails, read the logs (`gh run view --log-failed`), fix, and push — do not merge on red.
 
 ---
@@ -1836,17 +1928,17 @@ Expected: the `Backend (pytest unit + e2e)` check passes alongside `rust` and `f
 
 **1. Spec coverage** (checked against `docs/superpowers/specs/2026-06-19-llm-chat-design.md`):
 
-| Spec section | Covered by |
-|---|---|
-| §4 Architecture (FastAPI + Socket.IO composed ASGI) | Task 1 (`build`/`asgi_app`), Task 6 (compose all) |
-| §5 Data model (`rooms`, `messages`, nullable `gameId`, not-persisted users) | Task 2 (`Room.game_id`, `Message`, store) |
-| §6 Realtime protocol (all events, camelCase) | Task 5 (hub events), Task 6 (presence/typing), Task 7 (contract) |
-| §6 History via REST, not sockets | Task 3 (`GET /rooms/{id}/messages`), Task 7 (history assertion) |
-| §7 Turn-based lock/queue (4 steps) | Task 5 (`RoomHub`), Task 7 (serialization contract) |
-| §8 Provider/config (OpenRouter env, per-room model) | Task 1 (`Settings`), Task 3 (per-room `model`), Task 4 (providers) |
-| §10 Testing (pytest unit + Python Socket.IO e2e, CI-gated) | Tasks 2,4,5 (unit), Tasks 6,7 (e2e), Task 8 (CI) |
-| §11 Scope (Mongo, justfile, uv) | Task 1 (native Mongo service, justfile, uv) |
-| §11 Scaling seam documented (single worker) | Global Constraints + this plan's header |
+| Spec section                                                                | Covered by                                                         |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| §4 Architecture (FastAPI + Socket.IO composed ASGI)                         | Task 1 (`build`/`asgi_app`), Task 6 (compose all)                  |
+| §5 Data model (`rooms`, `messages`, nullable `gameId`, not-persisted users) | Task 2 (`Room.game_id`, `Message`, store)                          |
+| §6 Realtime protocol (all events, camelCase)                                | Task 5 (hub events), Task 6 (presence/typing), Task 7 (contract)   |
+| §6 History via REST, not sockets                                            | Task 3 (`GET /rooms/{id}/messages`), Task 7 (history assertion)    |
+| §7 Turn-based lock/queue (4 steps)                                          | Task 5 (`RoomHub`), Task 7 (serialization contract)                |
+| §8 Provider/config (OpenRouter env, per-room model)                         | Task 1 (`Settings`), Task 3 (per-room `model`), Task 4 (providers) |
+| §10 Testing (pytest unit + Python Socket.IO e2e, CI-gated)                  | Tasks 2,4,5 (unit), Tasks 6,7 (e2e), Task 8 (CI)                   |
+| §11 Scope (Mongo, justfile, uv)                                             | Task 1 (native Mongo service, justfile, uv)                        |
+| §11 Scaling seam documented (single worker)                                 | Global Constraints + this plan's header                            |
 
 Frontend plugin (§9) is intentionally Plan B — not in scope here.
 
@@ -1862,4 +1954,7 @@ Frontend plugin (§9) is intentionally Plan B — not in scope here.
 - In-flight stream resume on reconnect (a client joining mid-generation sees completed history via REST but not the partial in-progress stream). Acceptable for MVP; specify if needed.
 - Crash recovery for messages left in `streaming` status after an ungraceful shutdown.
 - Multi-worker scaling: Redis pub/sub fan-out + distributed per-room lock.
+
+```
+
 ```
