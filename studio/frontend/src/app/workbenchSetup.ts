@@ -13,4 +13,5 @@ export function DEFAULT_LAYOUT(api: DockviewApi, paneRegistry: { get(id: string)
   };
   add('llm-chat/room');
   add('llm-chat/settings', { direction: 'right', referencePanel: 'llm-chat/room' });
+  add('assets/board', { direction: 'below', referencePanel: 'llm-chat/room' });
 }

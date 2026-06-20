@@ -55,3 +55,9 @@ backend-serve-fake:
 # terminal first (Playwright starts only the frontend). Local-only; not in CI.
 e2e-chat:
     npx playwright test --config=studio/frontend/playwright.config.ts llm-chat
+
+# Browser e2e for the assets plugin. Start a fake backend in another terminal:
+#   cd studio/backend && LLM_BACKEND=fake COMFY_BACKEND=fake uv run uvicorn app.main:app --port 8000
+# Local-only; not in CI.
+e2e-assets:
+    npx playwright test --config=studio/frontend/playwright.config.ts assets

@@ -22,7 +22,11 @@ async def mongo_db(settings):
     db = client[settings.mongo_db]
     await db["rooms"].delete_many({})
     await db["messages"].delete_many({})
+    await db["games"].delete_many({})
+    await db["assets"].delete_many({})
     yield db
     await db["rooms"].delete_many({})
     await db["messages"].delete_many({})
+    await db["games"].delete_many({})
+    await db["assets"].delete_many({})
     client.close()

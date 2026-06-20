@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     available_models: str = "openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
     llm_backend: str = "openrouter"  # "openrouter" | "fake"
     fake_token_delay: float = 0.0
+    comfy_backend: str = "real"  # "real" | "fake"
+    comfyui_url: str = "http://127.0.0.1:8188"
+    media_dir: str = "var/media"
 
 
 def get_settings() -> Settings:

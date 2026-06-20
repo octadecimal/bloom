@@ -1,11 +1,19 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from app.assets.comfy import build_provider as build_comfy_provider
+from app.assets.hub import AssetHub
+from app.assets.media import MediaStore
+from app.assets.rest import router as assets_router
+from app.assets.sockets import register_asset_handlers
+from app.assets.store import AssetStore
 from app.chat_service import ChatService
 from app.config import Settings, get_settings
 from app.presence import PresenceRegistry
@@ -13,6 +21,7 @@ from app.providers import build_provider
 from app.rest import router
 from app.room_hub import RoomHub
 from app.sockets import register_socket_handlers
+from app.games import GameStore
 from app.store import ConversationStore
 
 
@@ -26,11 +35,15 @@ class AppContext:
     chat_service: ChatService
     hub: RoomHub
     presence: PresenceRegistry
+    games: GameStore
+    asset_store: AssetStore
+    asset_hub: AssetHub
 
 
 def build(settings: Settings) -> AppContext:
     mongo = AsyncIOMotorClient(settings.mongo_url)
-    store = ConversationStore(mongo[settings.mongo_db])
+    games = GameStore(mongo[settings.mongo_db])
+    store = ConversationStore(mongo[settings.mongo_db], games)
     chat_service = ChatService(build_provider(settings))
 
     fastapi_app = FastAPI(title="Bloom Studio Backend")
@@ -53,6 +66,20 @@ def build(settings: Settings) -> AppContext:
     hub = RoomHub(sio, store, chat_service)
     register_socket_handlers(sio, hub, presence)
 
+    asset_store = AssetStore(mongo[settings.mongo_db])
+    media_root = Path(settings.media_dir)
+    media_root.mkdir(parents=True, exist_ok=True)
+    media = MediaStore(media_root)
+    comfy = build_comfy_provider(settings)
+    asset_hub = AssetHub(sio, asset_store, comfy, media)
+
+    fastapi_app.state.game_store = games
+    fastapi_app.state.asset_store = asset_store
+    fastapi_app.include_router(assets_router)
+    fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
+
+    register_asset_handlers(sio, asset_hub)
+
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
     return AppContext(
@@ -64,6 +91,9 @@ def build(settings: Settings) -> AppContext:
         chat_service=chat_service,
         hub=hub,
         presence=presence,
+        games=games,
+        asset_store=asset_store,
+        asset_hub=asset_hub,
     )
 
 

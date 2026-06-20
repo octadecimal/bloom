@@ -27,6 +27,8 @@ def live_server():
         "LLM_BACKEND": "fake",
         "FAKE_TOKEN_DELAY": "0.15",
         "MONGO_DB": "bloom_studio_e2e",
+        "COMFY_BACKEND": "fake",
+        "MEDIA_DIR": "var/media_e2e",
     }
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--port", str(port)],
