@@ -29,6 +29,8 @@ export interface ILayoutPresetsService {
   apply(name: string): boolean;
   list(): ILayoutPresetInfo[];
   delete(name: string): void;
+  /** Subscribe to preset-list changes (save or delete). Returns an unsubscribe function. */
+  onPresetsChange(cb: () => void): () => void;
 }
 
 type UserMap = Record<string, unknown>;
@@ -36,6 +38,8 @@ type UserMap = Record<string, unknown>;
 export function createLayoutPresetsService(deps: ILayoutPresetsDeps): ILayoutPresetsService {
   const loadUser = (): UserMap => loadPersisted<UserMap>(LAYOUT_PRESETS_KEY, LAYOUT_PRESETS_VERSION, {});
   const saveUser = (map: UserMap): void => savePersisted(LAYOUT_PRESETS_KEY, LAYOUT_PRESETS_VERSION, map);
+  const changeListeners = new Set<() => void>();
+  const notifyChange = () => changeListeners.forEach((cb) => cb());
 
   function saveAs(name: string): boolean {
     const trimmed = name.trim();
@@ -52,6 +56,7 @@ export function createLayoutPresetsService(deps: ILayoutPresetsDeps): ILayoutPre
     const map = loadUser();
     map[trimmed] = api.toJSON();
     saveUser(map);
+    notifyChange();
     return true;
   }
 
@@ -92,7 +97,13 @@ export function createLayoutPresetsService(deps: ILayoutPresetsDeps): ILayoutPre
     if (!(name in map)) return;
     delete map[name];
     saveUser(map);
+    notifyChange();
   }
 
-  return { saveAs, apply, list, delete: remove };
+  function onPresetsChange(cb: () => void): () => void {
+    changeListeners.add(cb);
+    return () => { changeListeners.delete(cb); };
+  }
+
+  return { saveAs, apply, list, delete: remove, onPresetsChange };
 }

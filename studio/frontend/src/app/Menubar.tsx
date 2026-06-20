@@ -9,10 +9,12 @@ export function AppMenubar() {
   const host = getHost();
   const presets = getLayoutPresets();
   const [saveOpen, setSaveOpen] = useState(false);
+  const [, setPresetsVersion] = useState(0);
 
   useEffect(() => {
     setSaveLayoutOpener(() => setSaveOpen(true));
-  }, []);
+    return presets.onPresetsChange(() => setPresetsVersion((v) => v + 1));
+  }, [presets]);
 
   const all = presets.list();
   const userPresets = all.filter((p) => p.kind === 'user');

@@ -17,6 +17,7 @@ vi.mock('../state/layoutPresetsRef', () => ({
     apply,
     delete: del,
     saveAs: vi.fn(),
+    onPresetsChange: () => () => {},
   }),
 }));
 
