@@ -61,3 +61,8 @@ e2e-chat:
 # Local-only; not in CI.
 e2e-assets:
     npx playwright test --config=studio/frontend/playwright.config.ts assets
+
+# Regenerate recorded-real replay fixtures from the LIVE providers.
+# Requires OPENROUTER_API_KEY in .env and ComfyUI running on :8188.
+record-fixtures:
+    cd studio/backend && PROVIDER_MODE=live uv run python -m app.replay.record
