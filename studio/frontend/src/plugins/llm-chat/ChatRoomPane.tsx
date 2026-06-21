@@ -37,7 +37,9 @@ function ChatMessageBubble({ index }: { index: number }) {
         </div>
         <div className="text-sm leading-relaxed">
           {content}
-          {status === 'streaming' && <span data-testid="chat-caret" className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />}
+          {status === 'streaming' && (
+            <span data-testid="chat-caret" className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />
+          )}
         </div>
       </div>
     </li>
@@ -63,7 +65,11 @@ function ConnectionIndicator() {
   const state = s.connection.get();
   const connected = state === 'connected';
   return (
-    <span data-testid="chat-connection" data-state={state} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+    <span
+      data-testid="chat-connection"
+      data-state={state}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+    >
       <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-primary' : 'bg-muted-foreground'}`} />
       {connected ? 'connected' : `${state}…`}
     </span>
@@ -106,7 +112,11 @@ function AiStatusLine() {
   const s = llmChatHooks.usePluginState();
   const st = s.aiStatus.get();
   return (
-    <span data-testid="chat-ai-status" data-state={st.state} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+    <span
+      data-testid="chat-ai-status"
+      data-state={st.state}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+    >
       AI: {st.state}
       {st.queueDepth > 0 ? ` (${st.queueDepth} queued)` : ''}
     </span>
