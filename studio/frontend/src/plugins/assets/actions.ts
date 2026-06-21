@@ -4,6 +4,7 @@ import { upsertAsset } from './reducers';
 import * as realRest from './restClient';
 import type { ICreateAssetInput } from './restClient';
 import { getSocketClient, initSocketClient, type SocketClient } from './socketClient';
+import { notify } from '../../lib/notify';
 
 interface IRestDeps {
   getGames: typeof realRest.getGames;
@@ -101,6 +102,7 @@ export async function updateAsset(assetId: string, patch: Partial<ICreateAssetIn
 export async function deleteAsset(assetId: string): Promise<void> {
   await rest.deleteAsset(assetId);
   assetsSlice().assets.set(read().filter((a) => a.id !== assetId));
+  notify.info('Asset deleted');
 }
 
 export function generateAsset(assetId: string): void {

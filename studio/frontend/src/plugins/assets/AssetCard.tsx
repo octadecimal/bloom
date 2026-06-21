@@ -61,7 +61,7 @@ export function AssetCard({ index }: { index: number }) {
           </span>
         )}
         {status === 'error' && (
-          <span data-testid="asset-error" className="text-xs text-red-500">
+          <span data-testid="asset-error" className="text-xs text-destructive">
             {errorMessage ?? 'Generation failed'}
           </span>
         )}
