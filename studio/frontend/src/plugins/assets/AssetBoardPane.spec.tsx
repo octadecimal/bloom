@@ -13,6 +13,7 @@ vi.mock('./actions', () => ({
   loadGames: vi.fn(),
   openGame: vi.fn(),
   createAsset: vi.fn(),
+  createGame: vi.fn(),
   initAssets: vi.fn(),
 }));
 
@@ -38,5 +39,15 @@ describe('AssetBoardPane game-select', () => {
 
     // The dropdown must now contain an option for the game.
     expect(screen.getByRole('option', { name: 'Slots' })).toBeTruthy();
+  });
+});
+
+describe('AssetBoardPane empty state', () => {
+  it('shows the empty state with a New Game button when there are no games', () => {
+    // assumes the spec already resets the plugin state to makeInitialState() in a
+    // beforeEach (games: []). If not, set it: assetsSlice().games.set([]).
+    const { getByTestId } = render(<AssetBoardPane {...({} as never)} />);
+    expect(getByTestId('games-empty')).toBeTruthy();
+    expect(getByTestId('new-game')).toBeTruthy();
   });
 });

@@ -59,3 +59,13 @@ export async function selectGeneration(assetId: string, generationId: string): P
     }),
   );
 }
+
+export async function createGame(name: string): Promise<IGame> {
+  return okJson<IGame>(
+    await fetch(`${BACKEND_URL}/games`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  );
+}

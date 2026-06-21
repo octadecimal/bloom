@@ -1,7 +1,7 @@
 // studio/frontend/src/plugins/assets/actions.spec.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../../state/rootStore';
-import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './state';
+import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset, type IGame } from './state';
 import * as actions from './actions';
 
 const asset: IAsset = {
@@ -32,6 +32,7 @@ describe('assets actions', () => {
       rest: {
         getGames: vi.fn(),
         getAssets: vi.fn().mockResolvedValue([asset]),
+        createGame: vi.fn(),
         createAsset: vi.fn(),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
@@ -51,6 +52,7 @@ describe('assets actions', () => {
       rest: {
         getGames: vi.fn(),
         getAssets: vi.fn().mockResolvedValue([asset]),
+        createGame: vi.fn(),
         createAsset: vi.fn(),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
@@ -69,6 +71,7 @@ describe('assets actions', () => {
       rest: {
         getGames: vi.fn(),
         getAssets: vi.fn().mockResolvedValue([]),
+        createGame: vi.fn(),
         createAsset: vi.fn().mockResolvedValue(created),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
@@ -83,5 +86,28 @@ describe('assets actions', () => {
         .assets.get({ noproxy: true })
         .map((a) => a.id),
     ).toContain('a2');
+  });
+
+  it('createGame creates, appends to games, and selects it', async () => {
+    const created = { id: 'g2', name: 'New', createdAt: 't' };
+    actions.__setDeps({
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([]),
+        createGame: vi.fn().mockResolvedValue(created),
+        createAsset: vi.fn(),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
+      socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame: vi.fn(), generateAsset: vi.fn() },
+    });
+    await actions.createGame('New');
+    expect(
+      assetsSlice()
+        .games.get({ noproxy: true })
+        .map((g) => g.id),
+    ).toContain('g2');
+    expect(assetsSlice().activeGameId.get()).toBe('g2');
   });
 });

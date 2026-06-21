@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic.alias_generators import to_camel
 
 from app.assets.models import asset_wire
@@ -39,10 +39,27 @@ class SelectBody(BaseModel):
     generation_id: str
 
 
+class CreateGameBody(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("name must not be blank")
+        return v.strip()
+
+
 @router.get("/games")
 async def list_games(request: Request) -> list[dict]:
     games = await request.app.state.game_store.list_games()
     return [game_wire(g) for g in games]
+
+
+@router.post("/games", status_code=201)
+async def create_game(body: CreateGameBody, request: Request) -> dict:
+    game = await request.app.state.game_store.create_game(body.name)
+    return game_wire(game)
 
 
 @router.get("/games/{game_id}/assets")

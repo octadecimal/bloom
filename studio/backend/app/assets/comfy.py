@@ -5,6 +5,8 @@ from typing import AsyncIterator, Protocol
 
 from app.config import Settings
 
+FORCE_ERROR_PROMPT = "force error"  # normalized sentinel: an asset with this prompt makes replay raise
+
 
 @dataclass
 class ProgressEvent:
@@ -57,6 +59,10 @@ class ReplayComfyProvider:
 
     async def generate(self, graph: dict) -> AsyncIterator[ComfyEvent]:
         self._ensure_loaded()
+        from app.replay.cassette import normalize_prompt
+        positive = graph.get("6", {}).get("inputs", {}).get("text", "")
+        if normalize_prompt(positive) == FORCE_ERROR_PROMPT:
+            raise RuntimeError("forced replay error")
         for value, maximum in self._progress:
             if self._delay:
                 await asyncio.sleep(self._delay)
