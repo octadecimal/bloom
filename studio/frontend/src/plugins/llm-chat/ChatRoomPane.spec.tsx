@@ -83,4 +83,13 @@ describe('ChatRoomPane', () => {
     render(<ChatRoomPane />);
     expect(screen.queryByTestId('chat-caret')).toBeNull();
   });
+
+  it('renders the error banner with the destructive token when lastError is set', () => {
+    chatSlice().lastError.set('boom');
+    render(<ChatRoomPane />);
+    const banner = screen.getByTestId('chat-error');
+    expect(banner.getAttribute('role')).toBe('alert');
+    expect(banner.textContent).toContain('boom');
+    expect(banner.className).toContain('text-destructive');
+  });
 });
