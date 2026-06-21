@@ -25,14 +25,15 @@ test('create a room, send a prompt, and watch the assistant stream', async ({ pa
   await openChat(page, 'alice');
   await createRoom(page, `E2E ${Date.now()}`);
 
-  await page.getByTestId('chat-composer').fill('Hello there');
+  await page.getByTestId('chat-composer').fill('Reply with exactly: PONG');
   await page.getByTestId('chat-send').click();
 
-  // user message appears, then the assistant message streams to non-empty content
-  await expect(page.getByTestId('chat-messages')).toContainText('Hello there');
+  await expect(page.getByTestId('chat-messages')).toContainText('Reply with exactly: PONG');
   const assistant = page.locator('[data-role="assistant"]').last();
-  await expect(assistant).not.toHaveText('', { timeout: 15_000 });
   await expect(assistant).toHaveAttribute('data-status', 'complete', { timeout: 15_000 });
+  const text = (await assistant.textContent())?.toLowerCase() ?? '';
+  expect(text).not.toContain('echo:'); // would catch the degenerate fake
+  expect(text).toContain('pong'); // real (or recorded-real) answer
 });
 
 test('two clients in one room both see the stream and each other in presence', async ({ browser }) => {

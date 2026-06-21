@@ -44,10 +44,16 @@ test('author a game asset and generate it with live progress', async ({ page }) 
   await addAsset(page);
 
   await page.getByRole('button', { name: 'Generate' }).click();
-
-  // Live progress appears, then the produced image (fake provider returns a PNG fast).
   await expect(page.getByTestId('asset-progress')).toBeVisible();
-  await expect(page.getByTestId('asset-selected-image')).toBeVisible({ timeout: 15_000 });
+  const img = page.getByTestId('asset-selected-image');
+  await expect(img).toBeVisible({ timeout: 30_000 });
+  // Real image, not a 1x1 fake: natural dimensions are substantial.
+  await expect(async () => {
+    const w = await img.evaluate((el) => (el as HTMLImageElement).naturalWidth);
+    const h = await img.evaluate((el) => (el as HTMLImageElement).naturalHeight);
+    expect(w).toBeGreaterThan(64);
+    expect(h).toBeGreaterThan(64);
+  }).toPass({ timeout: 30_000 });
 
   // Generate a second candidate and confirm the candidate strip grows to >= 2.
   await page.getByRole('button', { name: 'Generate' }).click();
