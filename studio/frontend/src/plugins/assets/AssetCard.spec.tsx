@@ -55,6 +55,16 @@ describe('AssetCard', () => {
     expect(img.src).toContain('/media/g1/a1/gen1.png');
   });
 
+  it('always renders a visible, enabled Generate button for an idle asset', () => {
+    // Checks that an idle asset exposes a Generate button that is present and not disabled.
+    assetsSlice().assets.set([mk({ status: 'idle', progress: null })]);
+    const { getByTestId } = render(<AssetCard index={0} />);
+    const gen = getByTestId('asset-generate') as HTMLButtonElement;
+    expect(gen).toBeTruthy();
+    expect(gen.disabled).toBe(false);
+    expect(gen.textContent).toContain('Generate');
+  });
+
   it('a progress tick re-renders only the targeted card', () => {
     assetsSlice().assets.set([mk({ id: 'a1', progress: null, status: 'queued' }), mk({ id: 'a2', progress: null, status: 'queued' })]);
     render(
