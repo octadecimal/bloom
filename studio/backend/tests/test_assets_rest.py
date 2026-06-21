@@ -119,3 +119,24 @@ async def test_patch_cannot_null_required_fields(mongo_db):
         body = resp.json()
         assert body["name"] == "Wild"
         assert body["prompt"] == "still here"
+
+
+@pytest.mark.asyncio
+async def test_create_game_endpoint(mongo_db):
+    app = _app(mongo_db)
+    async with _client(app) as client:
+        resp = await client.post("/games", json={"name": "Neon Slots"})
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["name"] == "Neon Slots"
+        assert body["id"]
+        listed = await client.get("/games")
+        assert [g["id"] for g in listed.json()] == [body["id"]]
+
+
+@pytest.mark.asyncio
+async def test_create_game_rejects_blank_name(mongo_db):
+    app = _app(mongo_db)
+    async with _client(app) as client:
+        resp = await client.post("/games", json={"name": "   "})
+        assert resp.status_code == 422
