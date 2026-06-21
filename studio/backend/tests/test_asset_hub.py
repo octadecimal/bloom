@@ -3,7 +3,11 @@ import asyncio
 
 import pytest
 
-from app.assets.comfy import FAKE_PNG, FakeComfyProvider, ImageEvent, ProgressEvent
+from app.assets.comfy import ReplayComfyProvider, ImageEvent, ProgressEvent
+
+# Minimal valid PNG bytes for in-memory replay fixtures
+_FAKE_PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 500
+FAKE_PNG = _FAKE_PNG  # keep name for FlakyProvider inline usage
 from app.assets.hub import AssetHub
 from app.assets.media import MediaStore
 from app.assets.store import AssetStore
@@ -44,7 +48,7 @@ async def test_generation_emits_status_progress_completed(mongo_db, tmp_path):
     store = AssetStore(mongo_db)
     asset = await store.create_asset(game_id="g1", name="W", prompt="p", width=64, height=64, workflow="schnell-transparent", seed=5)
     sio = FakeSio()
-    hub = AssetHub(sio, store, FakeComfyProvider(ticks=2), MediaStore(tmp_path))
+    hub = AssetHub(sio, store, ReplayComfyProvider(progress=[(1, 2), (2, 2)], image=_FAKE_PNG, delay=0.0), MediaStore(tmp_path))
 
     await hub.request_generation("g1", asset.id)
     await _wait_for(sio, "asset_completed")
@@ -129,7 +133,7 @@ async def test_attach_subscriber_replays_active_progress(mongo_db, tmp_path):
     asset = await store.create_asset(game_id="g1", name="W", prompt="p", width=64, height=64, workflow="schnell-opaque", seed=1)
     sio = FakeSio()
     # slow provider so the generation is mid-flight when we attach
-    hub = AssetHub(sio, store, FakeComfyProvider(ticks=3, delay=0.05), MediaStore(tmp_path))
+    hub = AssetHub(sio, store, ReplayComfyProvider(progress=[(1, 3), (2, 3), (3, 3)], image=_FAKE_PNG, delay=0.05), MediaStore(tmp_path))
 
     await hub.request_generation("g1", asset.id)
     # Wait until at least one real progress tick has been recorded, rather than
