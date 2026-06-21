@@ -48,6 +48,9 @@ export function AssetCard({ index }: { index: number }) {
         {status === 'generating' && progress && (
           <progress data-testid="asset-progress" className="w-full" value={progress.value} max={progress.max} />
         )}
+        {status === 'generating' && !progress && !selected && (
+          <span data-testid="asset-generating" className="text-xs text-muted-foreground">Generating…</span>
+        )}
         {status === 'queued' && (
           <span data-testid="asset-queued" className="text-xs text-muted-foreground">
             queued…
