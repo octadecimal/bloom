@@ -6,6 +6,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
 import { SwitchUser } from './SwitchUser';
+import { ModeBadge } from './ModeBadge';
 
 export function Workbench({ leading }: { leading?: ReactNode }) {
   const app = useApp();
@@ -21,6 +22,7 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
           <AppMenubar />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ModeBadge />
           <SwitchUser />
           <ThemeToggle />
         </div>
