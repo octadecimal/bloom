@@ -89,3 +89,20 @@ test('two clients in the same game both see a generation live', async ({ browser
   await a.close();
   await b.close();
 });
+
+// RED diagnostic (added in Task 2): asserts the *human* contract — the Generate
+// control must be visible, enabled, and in the viewport, not merely present in the
+// DOM. Expected to FAIL against the un-redesigned card; turns green after the
+// AssetCard redesign (Task 6).
+test('the Generate control is visible and usable on an asset card', async ({ page }) => {
+  const name = `Discover ${Date.now()}`;
+  await openApp(page, 'alice');
+  await createGameViaRoom(page, name);
+  await selectGameOnBoard(page, name);
+  await addAsset(page);
+
+  const gen = page.getByRole('button', { name: 'Generate' });
+  await expect(gen).toBeVisible();
+  await expect(gen).toBeEnabled();
+  await expect(gen).toBeInViewport();
+});
