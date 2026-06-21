@@ -2,8 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { seedLocalStorage } from './helpers';
 
 // Drives the real UI against a running backend (:8000) + frontend (:4200).
-// Backend must be started with BOTH fake providers:
-//   cd studio/backend && LLM_BACKEND=fake COMFY_BACKEND=fake uv run uvicorn app.main:app --port 8000
+// Backend must be started in replay mode (`just backend-serve-replay`, i.e. PROVIDER_MODE=replay).
 // Local-only; not in CI. Each test uses a UNIQUE room/game name for determinism.
 
 async function openApp(page: Page, username: string) {

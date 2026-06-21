@@ -49,6 +49,6 @@ async def test_generate_streams_status_progress_completed(live_server):
     # the served image is reachable
     async with httpx.AsyncClient(base_url=live_server) as http:
         img = await http.get(asset["generations"][0]["imageRef"])
-        assert img.status_code == 200 and img.content.startswith(b"\x89PNG")
+        assert img.status_code == 200 and img.content.startswith(b"\x89PNG") and len(img.content) > 5000
 
     await client.disconnect()

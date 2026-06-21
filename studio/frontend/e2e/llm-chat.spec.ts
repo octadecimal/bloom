@@ -2,9 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 import { seedLocalStorage } from './helpers';
 
 // Drives the real UI against a running backend (:8000) + frontend (:4200).
-// Best run against the fake provider for speed/determinism (`just backend-serve-fake`),
-// but it works against any backend. Each test uses a UNIQUE room name so it is
-// deterministic regardless of rooms already present in the backend's datastore.
+// Best run against replay mode for speed/determinism (`just backend-serve-replay`,
+// i.e. PROVIDER_MODE=replay), but it works against any backend. Each test uses a
+// UNIQUE room name so it is deterministic regardless of rooms already present in the backend's datastore.
 
 async function openChat(page: Page, username: string) {
   // Seed the session so the app navigates to the room-picker directly.

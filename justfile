@@ -61,7 +61,7 @@ e2e:
 
 # Live e2e: same specs against LIVE providers (start a live backend + ComfyUI first). Never in CI.
 e2e-live:
-    cd studio/frontend && set BLOOM_E2E_TIER=live && npx playwright test --config=playwright.config.ts
+    cd studio/frontend && BLOOM_E2E_TIER=live npx playwright test --config=playwright.config.ts
 
 # Regenerate recorded-real replay fixtures from the LIVE providers.
 # Requires OPENROUTER_API_KEY in .env and ComfyUI running on :8188.
