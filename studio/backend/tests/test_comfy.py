@@ -1,3 +1,5 @@
+import pytest
+
 from app.config import Settings
 from app.assets.comfy import (
     ReplayComfyProvider, LiveComfyProvider, ProgressEvent, ImageEvent, build_provider,
@@ -17,3 +19,12 @@ async def test_replay_yields_recorded_progress_then_image():
 def test_factory_selects_by_mode(tmp_path, monkeypatch):
     # live branch needs no fixtures
     assert isinstance(build_provider(Settings(provider_mode="live")), LiveComfyProvider)
+
+
+@pytest.mark.asyncio
+async def test_replay_raises_on_force_error_prompt():
+    provider = ReplayComfyProvider(progress=[(1, 1)], image=b"\x89PNG\r\n\x1a\n")
+    graph = {"6": {"inputs": {"text": "Force Error"}}}
+    with pytest.raises(RuntimeError):
+        async for _ in provider.generate(graph):
+            pass
