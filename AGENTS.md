@@ -49,6 +49,16 @@ docs: clarify setup steps in README
 - The Superpowers `test-driven-development` skill enforces unit-level
   RED-GREEN-REFACTOR. It does **not** provide an e2e/browser harness — the e2e
   stack (Playwright) is wired up per client project and used to validate client flows.
+- **Backend provider modes:** `PROVIDER_MODE=live` (real APIs, default) or
+  `PROVIDER_MODE=replay` (recorded-real cassettes, offline). The `/health` endpoint
+  exposes the active mode; the frontend `mode-badge` reflects it. Run
+  `just preflight` before any human session — it exits non-zero if the backend is in
+  replay mode. Run `just record-fixtures` to refresh cassettes from live providers.
+- **E2e tiers:** `just e2e` runs the Playwright suite against a replay backend
+  (deterministic, the normal dev loop — start `just backend-serve-replay` first);
+  `just e2e-live` sets `BLOOM_E2E_TIER=live` and runs the same specs against live
+  providers (on-demand, never CI). The suite requires a backend on :8000 — global-setup
+  performs a `/health` parity check and fails fast if none is reachable.
 
 ## Coding standards
 
