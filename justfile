@@ -47,17 +47,23 @@ backend-test:
 backend-e2e:
     cd studio/backend && uv run pytest -m e2e
 
-# Run the backend with the fake LLM provider for browser e2e (no API key needed).
-backend-serve-fake:
-    cd studio/backend && LLM_BACKEND=fake uv run uvicorn app.main:app --port 8000
+# Serve the backend in replay mode (recorded-real fixtures; offline, no API key/GPU).
+backend-serve-replay:
+    cd studio/backend && PROVIDER_MODE=replay uv run uvicorn app.main:app --port 8000
 
-# Browser e2e for the chat plugin. Start `just backend-serve-fake` in another
-# terminal first (Playwright starts only the frontend). Local-only; not in CI.
-e2e-chat:
-    npx playwright test --config=studio/frontend/playwright.config.ts llm-chat
+# Preflight: refuse to "serve to a human" if the backend is in replay mode.
+preflight:
+    powershell -NoProfile -Command "$h = Invoke-RestMethod http://localhost:8000/health; Write-Host ('Provider mode: ' + $h.providerMode.ToUpper()); if ($h.providerMode -ne 'live') { Write-Error 'Backend is in REPLAY mode — not safe to hand to a user. Start it with PROVIDER_MODE=live.'; exit 1 }"
 
-# Browser e2e for the assets plugin. Start a fake backend in another terminal:
-#   cd studio/backend && LLM_BACKEND=fake COMFY_BACKEND=fake uv run uvicorn app.main:app --port 8000
-# Local-only; not in CI.
-e2e-assets:
-    npx playwright test --config=studio/frontend/playwright.config.ts assets
+# Deterministic e2e against a replay backend (start `just backend-serve-replay` first).
+e2e:
+    npx playwright test --config=studio/frontend/playwright.config.ts
+
+# Live e2e: same specs against LIVE providers (start a live backend + ComfyUI first). Never in CI.
+e2e-live:
+    cd studio/frontend && BLOOM_E2E_TIER=live npx playwright test --config=playwright.config.ts
+
+# Regenerate recorded-real replay fixtures from the LIVE providers.
+# Requires OPENROUTER_API_KEY in .env and ComfyUI running on :8188.
+record-fixtures:
+    cd studio/backend && PROVIDER_MODE=live uv run python -m app.replay.record

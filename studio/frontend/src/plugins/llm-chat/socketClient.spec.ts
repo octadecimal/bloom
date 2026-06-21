@@ -170,4 +170,14 @@ describe('socketClient inbound', () => {
     sock.fire('error', { roomId: 'r1', message: 'generation failed' });
     expect(notifyError).toHaveBeenCalledWith('generation failed');
   });
+
+  it('sets lastError on socket error and clears it on the next message_created', () => {
+    const { sock } = connected();
+    const ACTIVE = 'r1';
+    sock.fire('error', { roomId: ACTIVE, message: 'generation failed' });
+    expect(chatSlice().lastError.get()).toBe('generation failed');
+
+    sock.fire('message_created', { message: message({ roomId: ACTIVE }) });
+    expect(chatSlice().lastError.get()).toBeNull();
+  });
 });

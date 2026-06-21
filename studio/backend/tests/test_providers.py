@@ -1,18 +1,35 @@
 import pytest
-
 from app.config import Settings
-from app.providers import FakeProvider, build_provider
+from app.providers import (
+    ReplayLLMProvider, LiveOpenRouterProvider, build_provider, ERROR_SENTINEL_MODEL,
+)
+
+CASSETTES = {"hi there": ["Hi", " back"], "__default__": ["Sure", " thing"]}
 
 
-@pytest.mark.asyncio
-async def test_fake_provider_echoes_last_turn():
-    provider = FakeProvider(delay=0.0)
-    turns = [{"role": "user", "content": "Alice: hello"}]
-    tokens = [tok async for tok in provider.stream(turns, "m:free")]
-    assert "".join(tokens).strip() == "echo: Alice: hello"
-    assert len(tokens) > 1  # streamed as multiple tokens
+async def _collect(provider, turns, model):
+    return "".join([c async for c in provider.stream(turns, model)])
 
 
-def test_build_provider_selects_fake_when_configured():
-    provider = build_provider(Settings(llm_backend="fake"))
-    assert isinstance(provider, FakeProvider)
+async def test_replay_returns_recorded_chunks_not_echo():
+    p = ReplayLLMProvider(CASSETTES)
+    out = await _collect(p, [{"role": "user", "content": "Hi there"}], "m")
+    assert out == "Hi back"
+    assert not out.startswith("echo:")
+
+
+async def test_replay_falls_back_to_default():
+    p = ReplayLLMProvider(CASSETTES)
+    out = await _collect(p, [{"role": "user", "content": "unknown prompt"}], "m")
+    assert out == "Sure thing"
+
+
+async def test_replay_raises_on_sentinel_model():
+    p = ReplayLLMProvider(CASSETTES)
+    with pytest.raises(RuntimeError):
+        await _collect(p, [{"role": "user", "content": "x"}], ERROR_SENTINEL_MODEL)
+
+
+def test_factory_selects_by_mode():
+    assert isinstance(build_provider(Settings(provider_mode="replay")), ReplayLLMProvider)
+    assert isinstance(build_provider(Settings(provider_mode="live")), LiveOpenRouterProvider)

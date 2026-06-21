@@ -1,22 +1,19 @@
-import pytest
-
-from app.assets.comfy import FakeComfyProvider, ImageEvent, ProgressEvent, build_provider
 from app.config import Settings
+from app.assets.comfy import (
+    ReplayComfyProvider, LiveComfyProvider, ProgressEvent, ImageEvent, build_provider,
+)
+
+REAL_PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 500
 
 
-@pytest.mark.asyncio
-async def test_fake_provider_streams_progress_then_image():
-    provider = FakeComfyProvider(ticks=3)
-    events = [ev async for ev in provider.generate({"any": "graph"})]
-
-    progress = [e for e in events if isinstance(e, ProgressEvent)]
-    images = [e for e in events if isinstance(e, ImageEvent)]
-    assert len(progress) == 3
-    assert progress[-1].value == progress[-1].max  # ends at 100%
-    assert len(images) == 1
-    assert images[0].data.startswith(b"\x89PNG")  # valid PNG header
+async def test_replay_yields_recorded_progress_then_image():
+    p = ReplayComfyProvider(progress=[(1, 2), (2, 2)], image=REAL_PNG, delay=0.0)
+    events = [e async for e in p.generate({})]
+    assert [type(e) for e in events] == [ProgressEvent, ProgressEvent, ImageEvent]
+    assert events[-1].data == REAL_PNG
+    assert len(events[-1].data) > 70  # not the old 1x1 fake
 
 
-def test_build_provider_selects_fake():
-    provider = build_provider(Settings(comfy_backend="fake"))
-    assert isinstance(provider, FakeComfyProvider)
+def test_factory_selects_by_mode(tmp_path, monkeypatch):
+    # live branch needs no fixtures
+    assert isinstance(build_provider(Settings(provider_mode="live")), LiveComfyProvider)

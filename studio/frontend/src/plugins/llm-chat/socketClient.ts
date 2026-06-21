@@ -24,6 +24,7 @@ function registerInboundHandlers(s: ISocketLike): void {
   s.on('message_created', (p) => {
     const { message } = p as { message: IMessage };
     if (!isActive(message.roomId)) return;
+    slice().lastError.set(null);
     slice().messages.set(upsertMessage(read(), message));
   });
   s.on('token', (p) => {
@@ -59,6 +60,7 @@ function registerInboundHandlers(s: ISocketLike): void {
   });
   s.on('error', (p) => {
     const { message } = p as { message: string };
+    slice().lastError.set(message ?? 'chat error');
     notify.error(message ?? 'chat error');
   });
 }

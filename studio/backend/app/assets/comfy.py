@@ -1,15 +1,9 @@
 import asyncio
-import base64
 from dataclasses import dataclass
+from pathlib import Path
 from typing import AsyncIterator, Protocol
 
 from app.config import Settings
-
-# Minimal valid 1x1 transparent PNG.
-FAKE_PNG: bytes = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42m"
-    "NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-)
 
 
 @dataclass
@@ -30,22 +24,47 @@ class ComfyProvider(Protocol):
     def generate(self, graph: dict) -> AsyncIterator[ComfyEvent]: ...
 
 
-class FakeComfyProvider:
-    """Deterministic provider for tests/CI: a few progress ticks then a PNG. No GPU."""
+class ReplayComfyProvider:
+    """Replays a recorded-real generation: captured progress ticks then a real PNG.
 
-    def __init__(self, ticks: int = 2, delay: float = 0.0):
-        self._ticks = ticks
+    Construct directly with in-memory data (unit tests), or via from_dir() to
+    lazy-load a cassette on first generate() — so the app can boot in replay
+    mode before the fixtures are recorded.
+    """
+
+    def __init__(
+        self,
+        progress: list[tuple[int, int]] | None = None,
+        image: bytes | None = None,
+        delay: float = 0.05,
+        *,
+        fixtures_dir: "Path | None" = None,
+    ):
+        self._progress = progress
+        self._image = image
         self._delay = delay
+        self._dir = fixtures_dir
+
+    @classmethod
+    def from_dir(cls, fixtures_dir: Path, delay: float = 0.05) -> "ReplayComfyProvider":
+        return cls(delay=delay, fixtures_dir=fixtures_dir)
+
+    def _ensure_loaded(self) -> None:
+        if self._dir is not None:
+            from app.replay.cassette import load_comfy_cassette
+            self._progress, self._image = load_comfy_cassette(self._dir)
+            self._dir = None
 
     async def generate(self, graph: dict) -> AsyncIterator[ComfyEvent]:
-        for i in range(1, self._ticks + 1):
+        self._ensure_loaded()
+        for value, maximum in self._progress:
             if self._delay:
                 await asyncio.sleep(self._delay)
-            yield ProgressEvent(value=i, max=self._ticks)
-        yield ImageEvent(data=FAKE_PNG)
+            yield ProgressEvent(value=value, max=maximum)
+        yield ImageEvent(data=self._image)
 
 
-class RealComfyProvider:
+class LiveComfyProvider:
     """Submits a graph to ComfyUI, relays progress, then yields the produced image.
 
     Protocol (ComfyUI 0.25.x): POST /prompt {prompt, client_id} -> {prompt_id};
@@ -98,8 +117,9 @@ class RealComfyProvider:
 
 
 def build_provider(settings: Settings) -> ComfyProvider:
-    if settings.comfy_backend == "fake":
-        # Small delay so browser e2e tests can observe the progress indicator
-        # before generation completes.  Unit tests pass explicit params and are unaffected.
-        return FakeComfyProvider(delay=0.05)
-    return RealComfyProvider(base_url=settings.comfyui_url)
+    from app.replay.cassette import DEFAULT_FIXTURES_DIR
+    if settings.provider_mode == "replay":
+        # Use lazy loading so the app starts even before Task 6 records the fixture files.
+        # The cassette is loaded on the first generate() call.
+        return ReplayComfyProvider.from_dir(DEFAULT_FIXTURES_DIR, delay=0.05)
+    return LiveComfyProvider(base_url=settings.comfyui_url)

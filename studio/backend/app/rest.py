@@ -13,8 +13,9 @@ class CreateRoomBody(BaseModel):
 
 
 @router.get("/health")
-async def health() -> dict:
-    return {"status": "ok"}
+async def health(request: Request) -> dict:
+    settings = request.app.state.settings
+    return {"status": "ok", "providerMode": settings.provider_mode}
 
 
 @router.get("/models")

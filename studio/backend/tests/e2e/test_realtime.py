@@ -49,7 +49,9 @@ async def test_both_clients_receive_streamed_tokens(live_server):
 
     # both clients reconstruct the same streamed assistant text
     assert ra.text_for(assistant_id) == rb.text_for(assistant_id)
-    assert ra.text_for(assistant_id).strip() == "echo: Alice: hello"
+    reply = ra.text_for(assistant_id).strip()
+    assert reply, "assistant reply must be non-empty"
+    assert not reply.startswith("echo:"), "reply must come from replay cassette, not fake echo provider"
 
     # Alice's user message is attributed to Alice and seen by Bob
     user_msgs = [c["message"] for c in rb.created if c["message"]["role"] == "user"]
@@ -72,7 +74,7 @@ async def test_concurrent_prompts_serialize_into_two_answers(live_server):
     await bob.emit("join_room", {"roomId": room_id})
     await asyncio.sleep(0.2)
 
-    # fire two prompts almost simultaneously; FAKE_TOKEN_DELAY=0.15 keeps gen 1 busy
+    # fire two prompts almost simultaneously; REPLAY_TOKEN_DELAY=0.15 keeps gen 1 busy
     await alice.emit("send_prompt", {"roomId": room_id, "text": "first"})
     await bob.emit("send_prompt", {"roomId": room_id, "text": "second"})
 
@@ -141,11 +143,17 @@ async def test_late_joiner_resumes_in_flight_stream(live_server):
     assert snap["state"] == "generating"
     assert snap["content"], "snapshot carries the partial content accumulated so far"
 
-    full = "echo: Alice: hello"
+    # Alice (present from start) reconstructs the full reply from the replay cassette.
+    alice_full = ra.text_for(assistant_id).strip()
+    assert alice_full, "assistant reply must be non-empty"
+    assert not alice_full.startswith("echo:"), "reply must come from replay cassette, not fake echo provider"
+
     # snapshot content + tokens Carol received AFTER joining == full text, exactly (no gap/dup)
-    assert (snap["content"] + rc.text_for(assistant_id)).strip() == full
-    # and Alice (present from the start) reconstructs the same text
-    assert ra.text_for(assistant_id).strip() == full
+    carol_reconstructed = (snap["content"] + rc.text_for(assistant_id)).strip()
+    assert carol_reconstructed == alice_full, (
+        f"late joiner reconstruction mismatch: snap={snap['content']!r} + "
+        f"carol_tokens={rc.text_for(assistant_id)!r} != alice_full={alice_full!r}"
+    )
 
     await alice.disconnect()
     await carol.disconnect()
