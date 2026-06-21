@@ -21,6 +21,10 @@ export function AssetCard({ index }: { index: number }) {
   const progress = a.progress.get();
   const selected = generations.find((g) => g.id === selectedId);
   const busy = status === 'generating' || status === 'queued';
+  // NOTE: hookstate v4 reserves `state.error` as a built-in for async promise
+  // errors. Accessing `a.error` returns the hookstate promise-error (undefined),
+  // not the asset field. Use `a.nested('error')` to reach the correct child node.
+  const errorMessage = (a.nested('error') as unknown as { get(): string | null }).get();
 
   return (
     <Card data-testid={`asset-card-${id}`} className="w-64">
@@ -58,7 +62,7 @@ export function AssetCard({ index }: { index: number }) {
         )}
         {status === 'error' && (
           <span data-testid="asset-error" className="text-xs text-red-500">
-            {a.error.get() ?? 'Generation failed'}
+            {errorMessage ?? 'Generation failed'}
           </span>
         )}
         {!selected && status === 'idle' && (

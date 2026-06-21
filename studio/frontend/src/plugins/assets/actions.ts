@@ -66,7 +66,9 @@ export async function openGame(gameId: string): Promise<void> {
   try {
     const assets = await rest.getAssets(gameId);
     if (assetsSlice().activeGameId.get() !== gameId) return; // a newer openGame won
-    s.assets.set(assets);
+    // Ensure the client-only `progress` field is always initialised so hookstate
+    // creates a node for it. Assets from the API never include `progress`.
+    s.assets.set(assets.map((a) => ({ ...a, progress: null })));
     s.assetsStatus.set('idle');
   } catch {
     if (assetsSlice().activeGameId.get() !== gameId) return;
@@ -86,7 +88,9 @@ export async function createAsset(input: ICreateAssetInput): Promise<void> {
   const gameId = assetsSlice().activeGameId.get();
   if (!gameId) return;
   const created = await rest.createAsset(gameId, input);
-  assetsSlice().assets.set(upsertAsset(read(), created));
+  // Ensure the client-only `progress` field is always initialised so hookstate
+  // creates a node for it. Assets from the API never include `progress`.
+  assetsSlice().assets.set(upsertAsset(read(), { ...created, progress: null }));
 }
 
 export async function updateAsset(assetId: string, patch: Partial<ICreateAssetInput>): Promise<void> {
