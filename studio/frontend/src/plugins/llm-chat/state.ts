@@ -45,6 +45,7 @@ export interface ILlmChatState {
   typing: string[];
   aiStatus: IAiStatus;
   roomLoadStatus: 'idle' | 'loading' | 'error';
+  lastError: string | null;
 }
 
 export function makeInitialState(displayName: string, activeRoomId: string | null): ILlmChatState {
@@ -59,6 +60,7 @@ export function makeInitialState(displayName: string, activeRoomId: string | nul
     typing: [],
     aiStatus: { state: 'idle', queueDepth: 0 },
     roomLoadStatus: 'idle',
+    lastError: null,
   };
 }
 

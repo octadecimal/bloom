@@ -62,6 +62,17 @@ function PresenceLine() {
   );
 }
 
+function ErrorBanner() {
+  const s = llmChatHooks.usePluginState();
+  const err = s.lastError.get();
+  if (!err) return null;
+  return (
+    <div data-testid="chat-error" role="alert" style={{ color: '#b00020', fontSize: '0.85rem' }}>
+      ⚠ {err}
+    </div>
+  );
+}
+
 function AiStatusLine() {
   const s = llmChatHooks.usePluginState();
   const st = s.aiStatus.get();
@@ -101,6 +112,7 @@ export function ChatRoomPane() {
         <AiStatusLine />
       </div>
       <PresenceLine />
+      <ErrorBanner />
       <MessageList />
       <TypingLine />
       <div style={{ display: 'flex', gap: 4 }}>
