@@ -1,5 +1,5 @@
 // studio/frontend/src/plugins/assets/actions.ts
-import { assetsSlice, type IAsset } from './state';
+import { assetsSlice, type IAsset, type IGame } from './state';
 import { upsertAsset } from './reducers';
 import * as realRest from './restClient';
 import type { ICreateAssetInput } from './restClient';
@@ -8,6 +8,7 @@ import { getSocketClient, initSocketClient, type SocketClient } from './socketCl
 interface IRestDeps {
   getGames: typeof realRest.getGames;
   getAssets: typeof realRest.getAssets;
+  createGame: typeof realRest.createGame;
   createAsset: typeof realRest.createAsset;
   updateAsset: typeof realRest.updateAsset;
   deleteAsset: typeof realRest.deleteAsset;
@@ -72,6 +73,13 @@ export async function openGame(gameId: string): Promise<void> {
     s.assetsStatus.set('error');
   }
   sock().joinGame(gameId);
+}
+
+export async function createGame(name: string): Promise<void> {
+  const created = await rest.createGame(name);
+  const s = assetsSlice();
+  s.games.set([...(s.games.get({ noproxy: true }) as IGame[]), created]);
+  await openGame(created.id);
 }
 
 export async function createAsset(input: ICreateAssetInput): Promise<void> {
