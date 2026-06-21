@@ -82,4 +82,12 @@ describe('AssetCard', () => {
     // Exactly one card re-rendered (the one whose node changed), not both.
     expect(window.__renderCounts['AssetCard'] ?? 0).toBe(1);
   });
+
+  it('renders the error message when the asset status is error', () => {
+    assetsSlice().assets.set([mk({ status: 'error', error: 'boom', progress: null })]);
+    const { getByTestId } = render(<AssetCard index={0} />);
+    const err = getByTestId('asset-error');
+    expect(err).toBeTruthy();
+    expect(err.textContent).toContain('boom');
+  });
 });
