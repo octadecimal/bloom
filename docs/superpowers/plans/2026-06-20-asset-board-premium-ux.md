@@ -25,17 +25,20 @@
 ## File Structure
 
 **Backend**
+
 - Modify `studio/backend/app/assets/rest.py` — add `CreateGameBody` + `POST /games` (Task 1).
 - Modify `studio/backend/app/assets/comfy.py` — `ReplayComfyProvider` sentinel error path (Task 7).
 - Modify `studio/backend/tests/test_assets_rest.py` — `POST /games` tests (Task 1).
 - Modify `studio/backend/tests/test_comfy.py` — sentinel-error test (Task 7).
 
 **Frontend data layer**
+
 - Modify `studio/frontend/src/plugins/assets/restClient.ts` — `createGame()` (Task 3).
 - Modify `studio/frontend/src/plugins/assets/actions.ts` — `IRestDeps.createGame` + `createGame()` action (Task 3).
 - Modify `studio/frontend/src/plugins/assets/actions.spec.ts` — deps + new test (Task 3).
 
 **Frontend UI**
+
 - Create `studio/frontend/src/components/ui/card.tsx` (Task 4).
 - Create `studio/frontend/src/components/ui/input.tsx` (Task 4).
 - Create `studio/frontend/src/components/ui/card.spec.tsx`, `input.spec.tsx` (Task 4).
@@ -44,6 +47,7 @@
 - Adjust `studio/frontend/src/plugins/assets/AssetBoardPane.spec.tsx`, `AssetCard.spec.tsx` (Tasks 5–6).
 
 **E2e**
+
 - Modify `studio/frontend/e2e/assets.spec.ts` — RED discoverability test (Task 2), then journey/candidates/error + selector alignment (Task 8).
 
 ---
@@ -51,10 +55,12 @@
 ## Task 1: Backend `POST /games` endpoint
 
 **Files:**
+
 - Modify: `studio/backend/app/assets/rest.py`
 - Test: `studio/backend/tests/test_assets_rest.py`
 
 **Interfaces:**
+
 - Consumes: `request.app.state.game_store.create_game(name: str) -> Game` (exists in `app/games.py`), `game_wire(game) -> dict` (exists).
 - Produces: `POST /games` accepting `{"name": str}` → `201` + `game_wire` dict; blank/whitespace name → `422`.
 
@@ -135,9 +141,11 @@ git commit -m "feat(assets): add POST /games endpoint"
 This task captures the failure that motivates the whole effort: it adds a test that asserts the human contract against the **current** UI and runs it to watch it fail. The same test goes green once `AssetCard` is rebuilt (Task 6). Browser e2e is not in CI, so a temporarily-red spec gates nothing.
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/assets.spec.ts`
 
 **Interfaces:**
+
 - Consumes: existing local helpers `openApp`, `createGameViaRoom`, `selectGameOnBoard`, `addAsset` (already in the file).
 - Produces: a `test('the Generate control is visible and usable …')` asserting `toBeVisible` + `toBeEnabled` + `toBeInViewport` on the Generate button.
 
@@ -187,11 +195,13 @@ Include the observed failure mode in the commit body.
 ## Task 3: Frontend `createGame` (restClient + action)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/restClient.ts`
 - Modify: `studio/frontend/src/plugins/assets/actions.ts`
 - Test: `studio/frontend/src/plugins/assets/actions.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `okJson`, `BACKEND_URL`, `IGame` (existing); `openGame(gameId)` (existing action) for auto-select.
 - Produces: `createGame(name: string): Promise<IGame>` (restClient); `createGame(name: string): Promise<void>` (action) that POSTs, appends the game to `games`, and selects it; `IRestDeps` gains `createGame: typeof realRest.createGame`.
 
@@ -252,7 +262,7 @@ import { assetsSlice, type IAsset, type IGame } from './state';
 Add `createGame` to `IRestDeps` (after `getAssets`):
 
 ```typescript
-  createGame: typeof realRest.createGame;
+createGame: typeof realRest.createGame;
 ```
 
 Add the action (place it above `createAsset`):
@@ -283,12 +293,14 @@ git commit -m "feat(assets): add createGame action and rest client"
 ## Task 4: Shared UI primitives — `Card` and `Input`
 
 **Files:**
+
 - Create: `studio/frontend/src/components/ui/card.tsx`
 - Create: `studio/frontend/src/components/ui/input.tsx`
 - Test: `studio/frontend/src/components/ui/card.spec.tsx`
 - Test: `studio/frontend/src/components/ui/input.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `cn` from `@/lib/utils` (exists).
 - Produces: `Card`, `CardHeader`, `CardContent`, `CardFooter` (div wrappers, token-styled); `Input` (forwardRef `<input>`, token-styled). All accept and merge `className` and forward native props.
 
@@ -371,21 +383,19 @@ export function CardFooter({ className, ...props }: React.HTMLAttributes<HTMLDiv
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  function Input({ className, ...props }, ref) {
-    return (
-      <input
-        ref={ref}
-        className={cn(
-          'h-9 rounded-md border border-input bg-background px-3 py-1 text-sm outline-none',
-          'focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
-);
+export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
+  return (
+    <input
+      ref={ref}
+      className={cn(
+        'h-9 rounded-md border border-input bg-background px-3 py-1 text-sm outline-none',
+        'focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -405,10 +415,12 @@ git commit -m "feat(ui): add Card and Input primitives"
 ## Task 5: Redesign `AssetBoardPane` (empty state, inline New Game, styled form)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/AssetBoardPane.tsx`
 - Test: `studio/frontend/src/plugins/assets/AssetBoardPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `assetsHooks`, `IGame`, `Workflow`, `openGame`, `createAsset`, `createGame`, `loadGames`, `AssetCard`, `bumpRenderCount`, `Button`, `Input`, `Card`, `CardContent`, `notify`.
 - Produces: a board that renders a centered empty state with `data-testid="new-game"` when there are no games; an inline New Game row (`new-game-name`, `new-game-submit`); the styled new-asset form (existing testids `new-asset-form`, `asset-name`, `asset-prompt`, `asset-workflow`); `game-select`, `refresh-games` preserved; an `assets-empty` hint; the asset grid. Subscribes only to `s.assets.length` (render discipline preserved).
 
@@ -506,7 +518,9 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
           <h2 className="text-lg font-semibold">No games yet</h2>
           <p className="text-sm text-muted-foreground">Create a game to start generating assets.</p>
         </div>
-        {creating ? newGameRow : (
+        {creating ? (
+          newGameRow
+        ) : (
           <Button data-testid="new-game" onClick={() => setCreating(true)}>
             + New Game
           </Button>
@@ -520,12 +534,7 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-sm">
           Game:{' '}
-          <select
-            data-testid="game-select"
-            className={selectClass}
-            value={activeGameId ?? ''}
-            onChange={(e) => void openGame(e.target.value)}
-          >
+          <select data-testid="game-select" className={selectClass} value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
             <option value="" disabled>
               Select a game…
             </option>
@@ -536,7 +545,9 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
             ))}
           </select>
         </label>
-        {creating ? newGameRow : (
+        {creating ? (
+          newGameRow
+        ) : (
           <Button data-testid="new-game" variant="outline" onClick={() => setCreating(true)}>
             + New Game
           </Button>
@@ -608,10 +619,12 @@ git commit -m "feat(assets): premium Asset Board with inline New Game and empty 
 ## Task 6: Redesign `AssetCard` (prominent Generate + styled states)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/AssetCard.tsx`
 - Test: `studio/frontend/src/plugins/assets/AssetCard.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `assetsHooks`, `IGeneration`, `BACKEND_URL`, `generateAsset`, `deleteAsset`, `selectGeneration`, `bumpRenderCount`, `Button`, `Card`/`CardHeader`/`CardContent`/`CardFooter`.
 - Produces: a card that always renders a Generate button at `data-testid="asset-generate"` (label "Generate" when no generations, "Generate again" otherwise), disabled while `queued`/`generating`; preserves testids `asset-card-{id}`, `asset-selected-image`, `asset-progress`, `asset-queued`, `asset-error`, `asset-candidates`. Keeps the scoped-subscription render discipline.
 
@@ -684,15 +697,11 @@ export function AssetCard({ index }: { index: number }) {
               className="h-full w-full object-contain"
             />
           ) : (
-            <span className="text-xs text-muted-foreground">
-              {status === 'generating' ? 'Generating…' : status === 'queued' ? 'Queued…' : 'No image yet'}
-            </span>
+            <span className="text-xs text-muted-foreground">{status === 'generating' ? 'Generating…' : status === 'queued' ? 'Queued…' : 'No image yet'}</span>
           )}
         </div>
 
-        {status === 'generating' && progress && (
-          <progress data-testid="asset-progress" className="w-full" value={progress.value} max={progress.max} />
-        )}
+        {status === 'generating' && progress && <progress data-testid="asset-progress" className="w-full" value={progress.value} max={progress.max} />}
         {status === 'queued' && (
           <span data-testid="asset-queued" className="text-xs text-muted-foreground">
             queued…
@@ -757,10 +766,12 @@ git commit -m "feat(assets): premium Asset Card with prominent Generate and styl
 ## Task 7: Deterministic replay error path (sentinel prompt)
 
 **Files:**
+
 - Modify: `studio/backend/app/assets/comfy.py`
 - Test: `studio/backend/tests/test_comfy.py`
 
 **Interfaces:**
+
 - Consumes: graph dict shape `graph["6"]["inputs"]["text"]` (the positive prompt node, per `app/assets/graph.py`).
 - Produces: `ReplayComfyProvider.generate(graph)` raises `RuntimeError` when the positive prompt normalizes to the sentinel `"force error"`. Used by the e2e error-state test; the running hub already maps a raised exception to asset status `error`.
 
@@ -817,9 +828,11 @@ git commit -m "feat(assets): deterministic replay error via sentinel prompt"
 ## Task 8: Expand the e2e contract (self-contained journey, candidates, error)
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/assets.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `openApp`, `createGameViaRoom` (reach the workbench), the board testids from Tasks 5–6 (`new-game`, `new-game-name`, `new-game-submit`, `asset-generate`, `asset-error`, `asset-selected-image`, `asset-candidates`).
 - Produces: a `createGameOnBoard(page, name)` helper using the inline New Game flow; a self-contained journey test; an error-state test; the existing two tests aligned to the new `asset-generate` testid where the label changes.
 
@@ -981,6 +994,7 @@ gh pr create --title "feat(studio): premium Asset Board + exhaustive ComfyUI e2e
 ## Self-Review
 
 **Spec coverage:**
+
 - Exhaustive replay e2e asserting human contract → Tasks 2, 8 (visible/enabled/in-viewport, real image, empty/error states). ✔
 - Premium redesign on existing design system → Tasks 4 (primitives), 5 (board), 6 (card). ✔
 - `POST /games` + inline New Game → Tasks 1 (backend), 3 (action), 5 (UI). ✔

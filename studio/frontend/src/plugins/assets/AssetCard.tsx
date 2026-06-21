@@ -49,11 +49,11 @@ export function AssetCard({ index }: { index: number }) {
           </div>
         )}
 
-        {status === 'generating' && progress && (
-          <progress data-testid="asset-progress" className="w-full" value={progress.value} max={progress.max} />
-        )}
+        {status === 'generating' && progress && <progress data-testid="asset-progress" className="w-full" value={progress.value} max={progress.max} />}
         {status === 'generating' && !progress && !selected && (
-          <span data-testid="asset-generating" className="text-xs text-muted-foreground">Generating…</span>
+          <span data-testid="asset-generating" className="text-xs text-muted-foreground">
+            Generating…
+          </span>
         )}
         {status === 'queued' && (
           <span data-testid="asset-queued" className="text-xs text-muted-foreground">
@@ -65,9 +65,7 @@ export function AssetCard({ index }: { index: number }) {
             {errorMessage ?? 'Generation failed'}
           </span>
         )}
-        {!selected && status === 'idle' && (
-          <span className="text-xs text-muted-foreground">No image yet</span>
-        )}
+        {!selected && status === 'idle' && <span className="text-xs text-muted-foreground">No image yet</span>}
 
         {generations.length > 0 && (
           <div className="flex flex-wrap gap-1" data-testid="asset-candidates">

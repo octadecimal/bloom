@@ -70,7 +70,9 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
           <h2 className="text-lg font-semibold">No games yet</h2>
           <p className="text-sm text-muted-foreground">Create a game to start generating assets.</p>
         </div>
-        {creating ? newGameRow : (
+        {creating ? (
+          newGameRow
+        ) : (
           <Button data-testid="new-game" onClick={() => setCreating(true)}>
             + New Game
           </Button>
@@ -84,12 +86,7 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-sm">
           Game:{' '}
-          <select
-            data-testid="game-select"
-            className={selectClass}
-            value={activeGameId ?? ''}
-            onChange={(e) => void openGame(e.target.value)}
-          >
+          <select data-testid="game-select" className={selectClass} value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
             <option value="" disabled>
               Select a game…
             </option>
@@ -100,7 +97,9 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
             ))}
           </select>
         </label>
-        {creating ? newGameRow : (
+        {creating ? (
+          newGameRow
+        ) : (
           <Button data-testid="new-game" variant="outline" onClick={() => setCreating(true)}>
             + New Game
           </Button>

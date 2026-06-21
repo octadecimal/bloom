@@ -19,7 +19,7 @@ but fails the human test:
   styling or absent from the DOM is exactly what the first e2e run must reveal.
 - A fresh user hits a **dead end**: games exist only as a side effect of creating a
   chat room (`studio/backend/app/store.py:67`); the board's `GET /games` can only
-  *list* games. Open the board first and the dropdown is empty, the asset form is
+  _list_ games. Open the board first and the dropdown is empty, the asset form is
   hidden, and there is no in-pane way forward.
 
 The existing e2e gives **false confidence**: it locates controls via ARIA role in a
@@ -31,7 +31,7 @@ broken for the human.
 
 Deliver, test-first:
 
-1. An **exhaustive replay e2e** asserting the *human* contract: controls visible,
+1. An **exhaustive replay e2e** asserting the _human_ contract: controls visible,
    enabled, and in-viewport; a real image actually rendered; coherent empty / loading
    / generating / done / error states. Authored first so it reproduces today's failure
    (RED) before any fix.
@@ -114,8 +114,8 @@ Keep them minimal — only the variants the board uses. No new dependencies.
 - **New Game** → inline name entry (small `Dialog` or inline row with `Input` +
   confirm). On submit: `createGame(name)` → game auto-selected.
 - **Game selected, no assets** → game header (name + game switcher `select` + `New Game`
-  + Refresh) and a styled **"Add your first asset"** form (`Input` for name/prompt,
-  `select` for workflow, primary `Add asset` button). Empty-grid hint below.
+  - Refresh) and a styled **"Add your first asset"** form (`Input` for name/prompt,
+    `select` for workflow, primary `Add asset` button). Empty-grid hint below.
 - **Assets present** → responsive grid (`flex flex-wrap gap`) of `AssetCard`s.
 
 Preserve the render-count discipline: the board subscribes only to the asset **count**,
@@ -172,7 +172,7 @@ Scenarios:
    image appear live. Kept from the current suite and re-asserted against the redesigned
    card.
 
-**RED-first diagnostic:** Scenario 2 is run against the *current* (un-redesigned) app
+**RED-first diagnostic:** Scenario 2 is run against the _current_ (un-redesigned) app
 first. Its failure mode tells us whether the missing Generate button is "in the DOM but
 not visible/in-viewport" (styling) or "absent" (logic), and that observation drives the
 fix. We do not edit `AssetCard` until we have watched the assertion fail.
