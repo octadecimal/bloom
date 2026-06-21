@@ -16,4 +16,10 @@ describe('SettingsPane', () => {
     expect(screen.getByText('GPT-4o mini')).toBeTruthy();
     expect(screen.getByText('Llama 3.2 3B (free)')).toBeTruthy();
   });
+
+  it('shows a loading placeholder while models load', () => {
+    vi.spyOn(rest, 'getModels').mockReturnValue(new Promise(() => {}));
+    render(<SettingsPane />);
+    expect(screen.getByText(/loading models/i)).toBeTruthy();
+  });
 });
