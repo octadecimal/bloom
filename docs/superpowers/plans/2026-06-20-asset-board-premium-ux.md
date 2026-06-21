@@ -904,6 +904,27 @@ test('a failed generation shows a styled error and stays retryable', async ({ pa
 });
 ```
 
+- [ ] **Step 3b: Add the short-pane reachability test** (guards the real symptom found in Task 2: a short pane clipping the Generate control with no scroll). Append:
+
+```typescript
+test('the Generate control stays reachable when the pane is short', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 360 }); // force the board to overflow its panel
+  const room = `Short ${Date.now()}`;
+  const game = `Short Game ${Date.now()}`;
+  await openApp(page, 'alice');
+  await createGameViaRoom(page, room);
+  await createGameOnBoard(page, game);
+  await addAssetNamed(page, 'Wild', 'a glowing wild symbol');
+
+  // The board must scroll the control into view rather than clip it under overflow:hidden.
+  // If the pane clips with no scroll, scrollIntoViewIfNeeded cannot reveal it and this fails.
+  const gen = page.getByTestId('asset-generate');
+  await gen.scrollIntoViewIfNeeded();
+  await expect(gen).toBeVisible();
+  await expect(gen).toBeInViewport();
+});
+```
+
 - [ ] **Step 4: Align the existing two tests to the new testid** — in the first test (`author a game asset and generate it…`) and the multi-client test, replace the second-click locator `page.getByRole('button', { name: 'Generate' })` (which becomes "Generate again" after the first generation) with `page.getByTestId('asset-generate')`. The initial click may stay as-is or also switch to the testid for consistency.
 
 - [ ] **Step 5: Run the full replay suite** (replay backend + frontend serving from Task 2)
