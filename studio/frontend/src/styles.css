@@ -22,6 +22,9 @@
   --ring: oklch(0.55 0.2 264);
   /* input — same as border */
   --input: oklch(0.9 0 0);
+  /* destructive — error/danger actions and text */
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.98 0 0);
 }
 .dark {
   --background: oklch(0.15 0 0);
@@ -42,6 +45,9 @@
   --ring: oklch(0.65 0.2 264);
   /* input — same as border */
   --input: oklch(0.3 0 0);
+  /* destructive — slightly lighter for contrast on the dark surface */
+  --destructive: oklch(0.65 0.22 27);
+  --destructive-foreground: oklch(0.98 0 0);
 }
 
 @theme inline {
@@ -58,6 +64,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
   --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 }
 
 body {

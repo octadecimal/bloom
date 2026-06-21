@@ -65,4 +65,31 @@ describe('ChatRoomPane', () => {
     expect(window.__renderCounts['ChatMessageBubble'] ?? 0).toBeGreaterThanOrEqual(1);
     expect(window.__renderCounts['ChatRoomPane'] ?? 0).toBe(0);
   });
+
+  it('renders the author label on a message', () => {
+    chatSlice().messages.set([msg({ id: 'a2', author: 'alice', role: 'user', content: 'yo' })]);
+    render(<ChatRoomPane />);
+    expect(screen.getByTestId('chat-msg-a2').textContent).toContain('alice');
+  });
+
+  it('shows a streaming caret while a message is streaming', () => {
+    chatSlice().messages.set([msg({ id: 's1', content: 'Hi', status: 'streaming' })]);
+    render(<ChatRoomPane />);
+    expect(screen.getByTestId('chat-caret')).toBeTruthy();
+  });
+
+  it('drops the caret when the message is complete', () => {
+    chatSlice().messages.set([msg({ id: 'c1', content: 'Done', status: 'complete' })]);
+    render(<ChatRoomPane />);
+    expect(screen.queryByTestId('chat-caret')).toBeNull();
+  });
+
+  it('renders the error banner with the destructive token when lastError is set', () => {
+    chatSlice().lastError.set('boom');
+    render(<ChatRoomPane />);
+    const banner = screen.getByTestId('chat-error');
+    expect(banner.getAttribute('role')).toBe('alert');
+    expect(banner.textContent).toContain('boom');
+    expect(banner.className).toContain('text-destructive');
+  });
 });

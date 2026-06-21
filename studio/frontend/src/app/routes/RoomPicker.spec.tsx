@@ -61,4 +61,15 @@ describe('RoomPicker', () => {
     render(tree());
     expect(await screen.findByText(/couldn.t load rooms/i)).toBeInTheDocument();
   });
+  it('shows a toast on successful create', async () => {
+    getRooms.mockResolvedValue([]);
+    createRoom.mockResolvedValue({ id: 'r-new', name: 'Beta', model: 'm', gameId: null, createdAt: 't' });
+    const { notify } = await import('../../lib/notify');
+    render(tree());
+    await waitFor(() => expect(getRooms).toHaveBeenCalled());
+    await userEvent.type(screen.getByPlaceholderText(/new room/i), 'Beta');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+    await screen.findByText('ROOM');
+    expect(notify.info).toHaveBeenCalledWith('Room created');
+  });
 });

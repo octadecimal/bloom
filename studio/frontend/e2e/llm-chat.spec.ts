@@ -36,6 +36,33 @@ test('create a room, send a prompt, and watch the assistant stream', async ({ pa
   expect(text).toContain('pong'); // real (or recorded-real) answer
 });
 
+test('chat pane renders the premium author-labeled feed with a styled composer', async ({ page }) => {
+  await openChat(page, 'alice');
+  await createRoom(page, `Premium ${Date.now()}`);
+
+  // Composer is the shared Input primitive (token border compiled by Tailwind).
+  const composer = page.getByTestId('chat-composer');
+  await expect(composer).toBeVisible();
+  const borderWidth = await composer.evaluate((el) => getComputedStyle(el).borderTopWidth);
+  expect(borderWidth).not.toBe('0px');
+
+  // Message list is a scrollable region.
+  await expect(page.getByTestId('chat-messages')).toBeVisible();
+  const overflowY = await page.getByTestId('chat-messages').evaluate((el) => getComputedStyle(el).overflowY);
+  expect(['auto', 'scroll']).toContain(overflowY);
+
+  // Send a prompt; the user bubble shows the author label.
+  await composer.fill('Reply with exactly: PONG');
+  await page.getByTestId('chat-send').click();
+  const userBubble = page.locator('[data-role="user"]').last();
+  await expect(userBubble).toContainText('alice');
+
+  // While the assistant streams, a caret is present; once complete it is gone.
+  const assistant = page.locator('[data-role="assistant"]').last();
+  await expect(assistant).toHaveAttribute('data-status', 'complete', { timeout: 15_000 });
+  await expect(assistant.getByTestId('chat-caret')).toHaveCount(0);
+});
+
 test('two clients in one room both see the stream and each other in presence', async ({ browser }) => {
   const room = `Shared ${Date.now()}`;
   const a = await browser.newPage();

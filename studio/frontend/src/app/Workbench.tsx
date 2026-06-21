@@ -14,21 +14,21 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
   useApplyTheme(dockEl);
 
   return (
-    <div data-testid="workbench" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flexShrink: 0, padding: '0 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div data-testid="workbench" className="flex h-screen flex-col">
+      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-border px-3">
+        <div className="flex items-center gap-2">
           {leading}
-          <h1 style={{ margin: 0, fontSize: '1rem' }}>Bloom Studio</h1>
+          <h1 className="m-0 text-base font-semibold">Bloom Studio</h1>
           <AppMenubar />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="flex items-center gap-2">
           <ModeBadge />
           <SwitchUser />
           <ThemeToggle />
         </div>
       </div>
       <CommandPalette />
-      <div ref={setDockEl} style={{ flex: 1, overflow: 'hidden' }}>
+      <div ref={setDockEl} className="flex-1 overflow-hidden">
         <DockviewReact components={app.components as never} onReady={(e: DockviewReadyEvent) => app.attachDockview(e.api)} />
       </div>
     </div>

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { getRooms, createRoom } from '../../plugins/llm-chat/restClient';
 import type { IRoom } from '../../plugins/llm-chat/state';
 import { notify } from '../../lib/notify';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 
 type Status = 'loading' | 'ready' | 'error';
 
@@ -35,6 +38,7 @@ export function RoomPicker() {
     try {
       const room = await createRoom(name);
       setNewName('');
+      notify.info('Room created');
       navigate(`/room/${room.id}`);
     } catch {
       notify.error('Could not create room');
@@ -44,34 +48,34 @@ export function RoomPicker() {
   }
 
   return (
-    <div data-testid="room-picker" style={{ maxWidth: 560, margin: '48px auto', padding: 16 }}>
-      <h1 style={{ fontSize: '1.25rem' }}>Rooms</h1>
-      <form onSubmit={onCreate} style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
-        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New room name…" style={{ flex: 1 }} />
-        <button type="submit" disabled={creating}>
+    <div data-testid="room-picker" className="mx-auto mt-12 w-full max-w-xl p-4">
+      <h1 className="mb-4 text-xl font-semibold">Rooms</h1>
+      <form onSubmit={onCreate} className="mb-4 flex gap-2">
+        <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New room name…" className="flex-1" />
+        <Button type="submit" disabled={creating}>
           Create
-        </button>
+        </Button>
       </form>
-      {status === 'loading' && <p>Loading rooms…</p>}
+      {status === 'loading' && <p className="text-sm text-muted-foreground">Loading rooms…</p>}
       {status === 'error' && (
-        <p>
+        <p className="text-sm text-destructive">
           Couldn't load rooms.{' '}
-          <button type="button" onClick={() => void load()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
             Retry
-          </button>
+          </Button>
         </p>
       )}
       {status === 'ready' && (
-        <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {rooms.map((r) => (
-            <li key={r.id}>
-              <button type="button" style={{ width: '100%', textAlign: 'left' }} onClick={() => navigate(`/room/${r.id}`)}>
+        <Card>
+          <CardContent className="flex flex-col gap-1 pt-4">
+            {rooms.map((r) => (
+              <Button key={r.id} type="button" variant="ghost" className="w-full justify-start" onClick={() => navigate(`/room/${r.id}`)}>
                 {r.name}
-              </button>
-            </li>
-          ))}
-          {rooms.length === 0 && <li>No rooms yet — create one above.</li>}
-        </ul>
+              </Button>
+            ))}
+            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet — create one above.</p>}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

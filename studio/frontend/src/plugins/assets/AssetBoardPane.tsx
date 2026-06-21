@@ -9,10 +9,10 @@ import { bumpRenderCount } from '../../app/renderCount';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Select } from '@/components/ui/select';
 import { notify } from '@/lib/notify';
 
 const WORKFLOWS: Workflow[] = ['schnell-opaque', 'schnell-transparent', 'dev-transparent'];
-const selectClass = 'rounded-md border border-input bg-background px-2 py-1 text-sm';
 
 export function AssetBoardPane(_props: IDockviewPanelProps) {
   const s = assetsHooks.usePluginState();
@@ -86,7 +86,7 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-sm">
           Game:{' '}
-          <select data-testid="game-select" className={selectClass} value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
+          <Select data-testid="game-select" value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
             <option value="" disabled>
               Select a game…
             </option>
@@ -95,7 +95,7 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
                 {g.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {creating ? (
           newGameRow
@@ -125,13 +125,13 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
             >
               <Input data-testid="asset-name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
               <Input data-testid="asset-prompt" placeholder="Prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-              <select data-testid="asset-workflow" className={selectClass} value={workflow} onChange={(e) => setWorkflow(e.target.value as Workflow)}>
+              <Select data-testid="asset-workflow" value={workflow} onChange={(e) => setWorkflow(e.target.value as Workflow)}>
                 {WORKFLOWS.map((w) => (
                   <option key={w} value={w}>
                     {w}
                   </option>
                 ))}
-              </select>
+              </Select>
               <Button type="submit">Add asset</Button>
             </form>
           </CardContent>
