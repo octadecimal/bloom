@@ -16,12 +16,19 @@ async function activateTab(page: Page, tabText: string) {
 
 test('shadcn Button renders with Tailwind utility classes applied', async ({ page }) => {
   await gotoWorkbench(page);
-  const themeToggle = page.getByTestId('theme-toggle');
-  await expect(themeToggle).toBeVisible();
-  // variant="outline" gives the button a visible border; a non-zero borderTopWidth
-  // proves that Tailwind compiled the ring/border utilities from shadcn.
-  const borderWidth = await themeToggle.evaluate((el) => getComputedStyle(el).borderTopWidth);
-  expect(borderWidth).not.toBe('0px');
+  // The chat composer's Send button is a primary Button; its compiled utilities
+  // (bg-primary fill + the compact h-7 height) prove Tailwind built the Button variants.
+  const send = page.getByTestId('chat-send');
+  await expect(send).toBeVisible();
+  const { bg, height } = await send.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { bg: s.backgroundColor, height: s.height };
+  });
+  // bg-primary compiled to a real, non-transparent fill.
+  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+  expect(bg).not.toBe('transparent');
+  // h-7 compiled to the compact 28px height.
+  expect(height).toBe('28px');
 });
 
 test('settings pane select renders inside card chrome with token borders', async ({ page }) => {
