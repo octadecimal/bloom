@@ -1,5 +1,5 @@
 // studio/frontend/src/plugins/assets/actions.ts
-import { assetsSlice, type IAsset, type IGame } from './state';
+import { assetsSlice, type IAsset } from './state';
 import { upsertAsset } from './reducers';
 import * as realRest from './restClient';
 import type { ICreateAssetInput } from './restClient';
@@ -7,9 +7,7 @@ import { getSocketClient, initSocketClient, type SocketClient } from './socketCl
 import { notify } from '../../lib/notify';
 
 interface IRestDeps {
-  getGames: typeof realRest.getGames;
   getAssets: typeof realRest.getAssets;
-  createGame: typeof realRest.createGame;
   createAsset: typeof realRest.createAsset;
   updateAsset: typeof realRest.updateAsset;
   deleteAsset: typeof realRest.deleteAsset;
@@ -43,16 +41,6 @@ function ensureConnected(): void {
 
 const read = () => assetsSlice().assets.get({ noproxy: true }) as IAsset[];
 
-export async function loadGames(): Promise<void> {
-  assetsSlice().gamesStatus.set('loading');
-  try {
-    assetsSlice().games.set(await rest.getGames());
-    assetsSlice().gamesStatus.set('idle');
-  } catch {
-    assetsSlice().gamesStatus.set('error');
-  }
-}
-
 export async function openGame(gameId: string): Promise<void> {
   const s = assetsSlice();
   if (s.activeGameId.get() === gameId) return;
@@ -78,11 +66,13 @@ export async function openGame(gameId: string): Promise<void> {
   sock().joinGame(gameId);
 }
 
-export async function createGame(name: string): Promise<void> {
-  const created = await rest.createGame(name);
+export function closeGame(): void {
   const s = assetsSlice();
-  s.games.set([...(s.games.get({ noproxy: true }) as IGame[]), created]);
-  await openGame(created.id);
+  const prev = s.activeGameId.get();
+  if (prev) sock().leaveGame(prev);
+  s.activeGameId.set(null);
+  s.assets.set([]);
+  s.assetsStatus.set('idle');
 }
 
 export async function createAsset(input: ICreateAssetInput): Promise<void> {
@@ -117,5 +107,4 @@ export async function selectGeneration(assetId: string, generationId: string): P
 
 export function initAssets(): void {
   ensureConnected();
-  void loadGames();
 }

@@ -8,12 +8,6 @@ export const ASSETS_PLUGIN_ID = 'assets';
 export type AssetStatus = 'idle' | 'queued' | 'generating' | 'done' | 'error';
 export type Workflow = 'schnell-opaque' | 'schnell-transparent' | 'dev-transparent';
 
-export interface IGame {
-  id: string;
-  name: string;
-  createdAt: string;
-}
-
 export interface IGeneration {
   id: string;
   seed: number;
@@ -45,8 +39,6 @@ export interface IAsset {
 
 export interface IAssetsState {
   connection: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
-  games: IGame[];
-  gamesStatus: 'idle' | 'loading' | 'error';
   activeGameId: string | null;
   assets: IAsset[];
   assetsStatus: 'idle' | 'loading' | 'error';
@@ -55,8 +47,6 @@ export interface IAssetsState {
 export function makeInitialState(): IAssetsState {
   return {
     connection: 'connecting',
-    games: [],
-    gamesStatus: 'idle',
     activeGameId: null,
     assets: [],
     assetsStatus: 'idle',

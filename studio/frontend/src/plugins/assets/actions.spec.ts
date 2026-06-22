@@ -1,7 +1,7 @@
 // studio/frontend/src/plugins/assets/actions.spec.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../../state/rootStore';
-import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset, type IGame } from './state';
+import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './state';
 import * as actions from './actions';
 
 const asset: IAsset = {
@@ -30,9 +30,7 @@ describe('assets actions', () => {
     const joinGame = vi.fn();
     actions.__setDeps({
       rest: {
-        getGames: vi.fn(),
         getAssets: vi.fn().mockResolvedValue([asset]),
-        createGame: vi.fn(),
         createAsset: vi.fn(),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
@@ -50,9 +48,7 @@ describe('assets actions', () => {
     const generateAsset = vi.fn();
     actions.__setDeps({
       rest: {
-        getGames: vi.fn(),
         getAssets: vi.fn().mockResolvedValue([asset]),
-        createGame: vi.fn(),
         createAsset: vi.fn(),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
@@ -69,9 +65,7 @@ describe('assets actions', () => {
     const created = { ...asset, id: 'a2' };
     actions.__setDeps({
       rest: {
-        getGames: vi.fn(),
         getAssets: vi.fn().mockResolvedValue([]),
-        createGame: vi.fn(),
         createAsset: vi.fn().mockResolvedValue(created),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
@@ -88,26 +82,26 @@ describe('assets actions', () => {
     ).toContain('a2');
   });
 
-  it('createGame creates, appends to games, and selects it', async () => {
-    const created = { id: 'g2', name: 'New', createdAt: 't' };
+  it('closeGame leaves the active game and clears assets', async () => {
+    const leaveGame = vi.fn();
     actions.__setDeps({
       rest: {
-        getGames: vi.fn(),
-        getAssets: vi.fn().mockResolvedValue([]),
-        createGame: vi.fn().mockResolvedValue(created),
+        getAssets: vi.fn().mockResolvedValue([asset]),
         createAsset: vi.fn(),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn(),
         selectGeneration: vi.fn(),
       },
-      socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame: vi.fn(), generateAsset: vi.fn() },
+      socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame, generateAsset: vi.fn() },
     });
-    await actions.createGame('New');
-    expect(
-      assetsSlice()
-        .games.get({ noproxy: true })
-        .map((g) => g.id),
-    ).toContain('g2');
-    expect(assetsSlice().activeGameId.get()).toBe('g2');
+    await actions.openGame('g1');
+    expect(assetsSlice().activeGameId.get()).toBe('g1');
+
+    actions.closeGame();
+
+    expect(leaveGame).toHaveBeenCalledWith('g1');
+    expect(assetsSlice().activeGameId.get()).toBeNull();
+    expect(assetsSlice().assets.get({ noproxy: true })).toHaveLength(0);
+    expect(assetsSlice().assetsStatus.get()).toBe('idle');
   });
 });

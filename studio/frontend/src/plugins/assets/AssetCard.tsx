@@ -1,8 +1,10 @@
 // studio/frontend/src/plugins/assets/AssetCard.tsx
+import { useState, useEffect } from 'react';
 import { assetsHooks } from './state';
 import type { IGeneration } from './state';
 import { BACKEND_URL } from './config';
 import { generateAsset, deleteAsset, selectGeneration } from './actions';
+import { ImageLightbox } from './ImageLightbox';
 import { bumpRenderCount } from '../../app/renderCount';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
@@ -21,6 +23,10 @@ export function AssetCard({ index }: { index: number }) {
   const progress = a.progress.get();
   const selected = generations.find((g) => g.id === selectedId);
   const busy = status === 'generating' || status === 'queued';
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    setZoomed(false);
+  }, [selectedId]);
   // NOTE: hookstate v4 reserves `state.error` as a built-in for async promise
   // errors. Accessing `a.error` returns the hookstate promise-error (undefined),
   // not the asset field. Use `a.nested('error')` to reach the correct child node.
@@ -44,7 +50,8 @@ export function AssetCard({ index }: { index: number }) {
               alt={a.name.get()}
               width={a.width.get()}
               height={a.height.get()}
-              className="h-full w-full object-contain"
+              onClick={() => setZoomed(true)}
+              className="h-full w-full cursor-zoom-in object-contain"
             />
           </div>
         )}
@@ -93,6 +100,8 @@ export function AssetCard({ index }: { index: number }) {
           Delete
         </Button>
       </CardFooter>
+
+      {selected && <ImageLightbox src={`${BACKEND_URL}${selected.imageRef}`} alt={a.name.get()} open={zoomed} onOpenChange={setZoomed} />}
     </Card>
   );
 }

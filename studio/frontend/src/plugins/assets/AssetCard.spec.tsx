@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
+import { selectGeneration } from './actions';
 import { rootStore } from '../../state/rootStore';
 import { ASSETS_PLUGIN_ID, assetsSlice, makeInitialState, type IAsset } from './state';
 import { AssetCard } from './AssetCard';
@@ -89,5 +90,64 @@ describe('AssetCard', () => {
     const err = getByTestId('asset-error');
     expect(err).toBeTruthy();
     expect(err.textContent).toContain('boom');
+  });
+
+  it('opens the full-size lightbox when the selected preview is clicked', () => {
+    assetsSlice().assets.set([
+      mk({
+        status: 'done',
+        generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
+    ]);
+    render(<AssetCard index={0} />);
+    expect(screen.queryByTestId('image-lightbox')).toBeNull();
+    fireEvent.click(screen.getByTestId('asset-selected-image'));
+    const img = screen.getByTestId('image-lightbox-img') as HTMLImageElement;
+    expect(img.src).toContain('/media/g1/a1/gen1.png');
+  });
+
+  it('closes the full-size lightbox when the selected generation changes', () => {
+    assetsSlice().assets.set([
+      mk({
+        status: 'done',
+        generations: [
+          { id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' },
+          { id: 'gen2', seed: 2, imageRef: '/media/g1/a1/gen2.png', createdAt: '' },
+        ],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
+    ]);
+    render(<AssetCard index={0} />);
+    // Open the lightbox
+    fireEvent.click(screen.getByTestId('asset-selected-image'));
+    expect(screen.getByTestId('image-lightbox-img')).toBeTruthy();
+    // Change the selected generation via state update
+    act(() => {
+      assetsSlice().assets[0].selectedGenerationId.set('gen2');
+    });
+    // Lightbox should be closed
+    expect(screen.queryByTestId('image-lightbox-img')).toBeNull();
+  });
+
+  it('clicking a candidate thumbnail selects it and does not open the lightbox', () => {
+    assetsSlice().assets.set([
+      mk({
+        status: 'done',
+        generations: [
+          { id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' },
+          { id: 'gen2', seed: 2, imageRef: '/media/g1/a1/gen2.png', createdAt: '' },
+        ],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
+    ]);
+    render(<AssetCard index={0} />);
+    const thumb = screen.getByTestId('asset-candidates').querySelectorAll('img')[1];
+    fireEvent.click(thumb);
+    expect(selectGeneration).toHaveBeenCalledWith('a1', 'gen2');
+    expect(screen.queryByTestId('image-lightbox')).toBeNull();
   });
 });
