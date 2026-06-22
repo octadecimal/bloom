@@ -106,7 +106,7 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-faint: var(--faint);
-  --color-accent: var(--raised-hover);
+  --color-accent: var(--raised-hover); /* intentionally NOT var(--accent): keeps shadcn hover:bg-accent neutral; orange is bg-primary / text-accent-text */
   --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
   --color-input: var(--input);

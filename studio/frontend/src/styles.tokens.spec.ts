@@ -30,7 +30,7 @@ describe('design-language token layer', () => {
   for (const [name, value] of Object.entries(EXPECTED)) {
     it(`declares ${name}: ${value}`, () => {
       // Match `  --name: value;` allowing any whitespace run after the colon.
-      const re = new RegExp(`${name.replace(/[-]/g, '\\-')}:\\s*${value.replace(/[().]/g, (m) => '\\' + m)}\\s*;`);
+      const re = new RegExp(`${name.replace(/-/g, '\\-')}:\\s*${value.replace(/[().]/g, (m) => '\\' + m)}\\s*;`);
       expect(css).toMatch(re);
     });
   }
@@ -41,5 +41,11 @@ describe('design-language token layer', () => {
     expect(css).toMatch(/--primary:\s*var\(--accent\)\s*;/);
     expect(css).toMatch(/--destructive:\s*var\(--danger\)\s*;/);
     expect(css).toMatch(/--muted-foreground:\s*var\(--text-2\)\s*;/);
+    expect(css).toMatch(/--foreground:\s*var\(--text-1\)\s*;/);
+    expect(css).toMatch(/--muted:\s*var\(--raised\)\s*;/);
+    expect(css).toMatch(/--ring:\s*var\(--accent\)\s*;/);
+    expect(css).toMatch(/--input:\s*var\(--hairline\)\s*;/);
+    expect(css).toMatch(/--primary-foreground:\s*var\(--accent-fg\)\s*;/);
+    expect(css).toMatch(/--faint:\s*var\(--text-3\)\s*;/);
   });
 });
