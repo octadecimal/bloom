@@ -106,7 +106,7 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-faint: var(--faint);
-  --color-accent: var(--accent);
+  --color-accent: var(--raised-hover);
   --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
   --color-input: var(--input);
