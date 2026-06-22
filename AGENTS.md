@@ -99,6 +99,9 @@ gh pr merge --squash --delete-branch   # 0 approvals required; self-merge is OK
 - Branch names use the same semantic prefixes as commits (`feat/`, `fix/`, `docs/`, ...).
 - PRs require no approvals, so a solo author can self-merge once checks pass.
 - Force pushes and branch deletions on `main` are disabled.
+- **When finishing a development branch, don't present a merge/PR options menu —
+  default to push + open a PR** (`git push -u` then `gh pr create`). `main` is
+  protected, so PR is the only path anyway; just do it without asking.
 
 ## Session hygiene
 
