@@ -70,7 +70,7 @@ MenubarItem.displayName = MenubarPrimitive.Item.displayName;
 export interface IMenubarSeparatorProps extends React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Separator> {}
 
 const MenubarSeparator = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive.Separator>, IMenubarSeparatorProps>(({ className, ...props }, ref) => (
-  <MenubarPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-muted', className)} {...props} />
+  <MenubarPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-hairline', className)} {...props} />
 ));
 MenubarSeparator.displayName = MenubarPrimitive.Separator.displayName;
 
