@@ -143,3 +143,14 @@ async def test_attach_subscriber_replays_active_progress(mongo_db, tmp_path):
 
     snap_to_sid = [e for e in sio.events if e[0] == "asset_progress" and e[2] == "sid-late"]
     assert snap_to_sid  # the late subscriber got a replayed snapshot
+
+
+@pytest.mark.asyncio
+async def test_generate_and_wait_completes_inline(mongo_db, tmp_path):
+    store = AssetStore(mongo_db)
+    sio = FakeSio()
+    hub = AssetHub(sio, store, ReplayComfyProvider(progress=[(1, 2), (2, 2)], image=_FAKE_PNG, delay=0.0), MediaStore(tmp_path))
+    asset = await store.create_asset("g1", "spr", "a knight", 512, 512, "schnell-transparent")
+    await hub.generate_and_wait("g1", asset.id)
+    done = await store.get_asset(asset.id)
+    assert done.status == "done" and len(done.generations) == 1
