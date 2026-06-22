@@ -1,4 +1,4 @@
-import type { IRoom, IMessage } from './state';
+import type { IRoom, IMessage, ISkill } from './state';
 import { BACKEND_URL } from './config';
 
 export interface IModelOption {
@@ -18,6 +18,10 @@ export async function getModels(): Promise<IModelOption[]> {
 
 export async function getRooms(): Promise<IRoom[]> {
   return okJson<IRoom[]>(await fetch(`${BACKEND_URL}/rooms`));
+}
+
+export async function getSkills(): Promise<ISkill[]> {
+  return okJson<ISkill[]>(await fetch(`${BACKEND_URL}/skills`));
 }
 
 export async function createRoom(name: string, model?: string): Promise<IRoom> {

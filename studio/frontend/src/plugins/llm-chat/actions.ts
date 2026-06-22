@@ -7,6 +7,7 @@ interface IRestDeps {
   getRooms: typeof realRest.getRooms;
   createRoom: typeof realRest.createRoom;
   getMessages: typeof realRest.getMessages;
+  getSkills: typeof realRest.getSkills;
 }
 
 // Injectable deps so actions are unit-testable without the module singletons.
@@ -56,6 +57,17 @@ export async function loadRooms(): Promise<void> {
     chatSlice().roomsStatus.set('idle');
   } catch {
     chatSlice().roomsStatus.set('error');
+  }
+}
+
+export async function loadSkills(): Promise<void> {
+  chatSlice().skillsStatus.set('loading');
+  try {
+    const skills = await rest.getSkills();
+    chatSlice().skills.set(skills);
+    chatSlice().skillsStatus.set('idle');
+  } catch {
+    chatSlice().skillsStatus.set('error');
   }
 }
 
@@ -120,4 +132,5 @@ export function setTyping(isTyping: boolean): void {
 
 export function initChat(): void {
   void loadRooms();
+  void loadSkills();
 }
