@@ -34,4 +34,11 @@ describe('SwitchUser', () => {
     expect(screen.getByText('LOGIN')).toBeInTheDocument();
     expect(localStorage.getItem('bloom.studio.session')).toBeNull();
   });
+  it('routes Switch user through the ghost Button primitive (not a raw button)', () => {
+    saveSession('ada');
+    render(tree());
+    const btn = screen.getByRole('button', { name: /switch user/i });
+    // ghost variant from buttonVariants → token border, not a bare <button>
+    expect(btn.className).toContain('border-border-strong');
+  });
 });

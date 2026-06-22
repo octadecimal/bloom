@@ -7,23 +7,28 @@ import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
 import { SwitchUser } from './SwitchUser';
 import { ModeBadge } from './ModeBadge';
+import { BrandMark } from './BrandMark';
+import { ToolbarDivider } from './ToolbarDivider';
 
-export function Workbench({ leading }: { leading?: ReactNode }) {
+export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
   const app = useApp();
   useApplyTheme();
 
   return (
     <div data-testid="workbench" className="flex h-screen flex-col bg-canvas font-sans text-foreground">
-      <div className="flex h-9 flex-shrink-0 items-center justify-between bg-canvas px-2.5">
-        <div className="flex items-center gap-2">
-          {leading}
-          <h1 className="m-0 text-[13px] font-semibold tracking-tight">Bloom Studio</h1>
-          <AppMenubar />
-        </div>
-        <div className="flex items-center gap-2">
-          <ModeBadge />
-          <SwitchUser />
-        </div>
+      <div className="flex h-10 flex-shrink-0 items-center gap-2 bg-canvas px-3">
+        <BrandMark />
+        <ToolbarDivider />
+        <AppMenubar />
+        <div className="flex-1" />
+        {roomContext && (
+          <>
+            {roomContext}
+            <ToolbarDivider />
+          </>
+        )}
+        <ModeBadge />
+        <SwitchUser />
       </div>
       <CommandPalette />
       <div className="flex-1 overflow-hidden">
