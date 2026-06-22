@@ -4,7 +4,7 @@ import { rootStore } from '../../state/rootStore';
 import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID, type IMessage } from './state';
 import { appendToken } from './reducers';
 import * as actions from './actions';
-import { ChatRoomPane } from './ChatRoomPane';
+import { ChatRoomPane, parseSlashCommand } from './ChatRoomPane';
 
 vi.spyOn(actions, 'sendPrompt').mockReturnValue(undefined);
 vi.spyOn(actions, 'setTyping').mockReturnValue(undefined);
@@ -109,5 +109,29 @@ describe('ChatRoomPane', () => {
     expect(bubble.className).toContain('border-primary/50');
     const chip = bubble.querySelector('[aria-hidden]') as HTMLElement;
     expect(chip.textContent).toBe('ai');
+  });
+});
+
+describe('parseSlashCommand', () => {
+  it('extracts name + key=value args', () => {
+    expect(parseSlashCommand('/generate-sprite description="a knight" style=pixel')).toEqual({
+      skillName: 'generate-sprite',
+      args: { description: 'a knight', style: 'pixel' },
+    });
+    expect(parseSlashCommand('hello world')).toBeNull();
+  });
+
+  it('handles a slash command with no args', () => {
+    expect(parseSlashCommand('/foo')).toEqual({ skillName: 'foo', args: {} });
+  });
+});
+
+describe('ChatRoomPane skill autocomplete', () => {
+  it('typing "/" shows skill autocomplete filtered by prefix', () => {
+    chatSlice().skills.set([{ name: 'generate-sprite', description: 'd', args: [] }]);
+    render(<ChatRoomPane />);
+    fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/gen' } });
+    expect(screen.getByTestId('skill-autocomplete')).toBeInTheDocument();
+    expect(screen.getByTestId('skill-option-generate-sprite')).toBeInTheDocument();
   });
 });

@@ -4,8 +4,43 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { llmChatHooks } from './state';
-import { sendPrompt, setTyping } from './actions';
+import { sendPrompt, setTyping, runSkill } from './actions';
 import { bumpRenderCount } from '../../app/renderCount';
+import { RunTimeline } from './RunTimeline';
+
+// ---------------------------------------------------------------------------
+// Pure helper — exported for unit tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a slash command from the composer draft.
+ * "/generate-sprite description="a knight" style=pixel"
+ *   → { skillName: 'generate-sprite', args: { description: 'a knight', style: 'pixel' } }
+ * "hello world" → null
+ */
+export function parseSlashCommand(
+  text: string,
+): { skillName: string; args: Record<string, string> } | null {
+  const slashMatch = text.match(/^\/(\S+)\s*(.*)$/);
+  if (!slashMatch) return null;
+
+  const skillName = slashMatch[1];
+  const rest = slashMatch[2] ?? '';
+  const args: Record<string, string> = {};
+
+  const argRe = /(\w+)=(?:"([^"]*)"|(\S+))/g;
+  let m: RegExpExecArray | null;
+  while ((m = argRe.exec(rest)) !== null) {
+    // group 2 = quoted value, group 3 = bare value
+    args[m[1]] = m[2] !== undefined ? m[2] : m[3];
+  }
+
+  return { skillName, args };
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 // Each bubble subscribes to ITS OWN message node, so a token append re-renders
 // only the streaming bubble — not the list container, not the pane shell.
@@ -118,6 +153,41 @@ function AiStatusLine() {
   );
 }
 
+/**
+ * Skill autocomplete popup — isolated sub-component so it subscribes to the
+ * `skills` leaf independently. This means a `skills` change re-renders only
+ * this component, not `ChatRoomPane`, preserving the render-count discipline.
+ */
+function SkillAutocomplete({ prefix }: { prefix: string }) {
+  const s = llmChatHooks.usePluginState();
+  const skills = s.skills.get();
+  const matches = skills.filter((sk) => sk.name.startsWith(prefix));
+  if (matches.length === 0) return null;
+  return (
+    <ul
+      data-testid="skill-autocomplete"
+      className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md"
+    >
+      {matches.map((sk) => (
+        <li
+          key={sk.name}
+          data-testid={`skill-option-${sk.name}`}
+          className="cursor-pointer rounded px-2 py-1 text-foreground hover:bg-raised"
+        >
+          <span className="font-semibold text-accent-text">/{sk.name}</span>
+          {sk.description ? (
+            <span className="ml-2 text-muted-foreground">{sk.description}</span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main pane
+// ---------------------------------------------------------------------------
+
 export function ChatRoomPane() {
   const s = llmChatHooks.usePluginState();
   const [draft, setDraft] = useState('');
@@ -134,11 +204,19 @@ export function ChatRoomPane() {
 
   const submit = () => {
     if (draft.trim()) {
-      sendPrompt(draft.trim());
+      const parsed = parseSlashCommand(draft.trim());
+      if (parsed) {
+        runSkill(parsed.skillName, parsed.args);
+      } else {
+        sendPrompt(draft.trim());
+      }
       setDraft('');
       setTyping(false);
     }
   };
+
+  // Derive autocomplete prefix: only non-empty when draft starts with "/"
+  const slashPrefix = draft.startsWith('/') ? draft.slice(1).split(' ')[0] : null;
 
   return (
     <div data-testid="chat-room-pane" className="flex h-full flex-col gap-2 bg-surface p-2.5">
@@ -150,6 +228,8 @@ export function ChatRoomPane() {
       <ErrorBanner />
       <MessageList />
       <TypingLine />
+      <RunTimeline />
+      {slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} />}
       <div className="flex gap-2">
         <Input
           data-testid="chat-composer"
