@@ -17,7 +17,12 @@ describe('Button', () => {
 
   it('applies the sm size', () => {
     const { getByRole } = render(<Button size="sm">Small</Button>);
-    expect(getByRole('button').className).toContain('h-8');
+    expect(getByRole('button').className).toContain('h-6');
+  });
+
+  it('applies the compact default height', () => {
+    const { getByRole } = render(<Button>Go</Button>);
+    expect(getByRole('button').className).toContain('h-7');
   });
 
   it('forwards className', () => {

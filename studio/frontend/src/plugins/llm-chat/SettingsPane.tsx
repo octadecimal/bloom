@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getModels, type IModelOption } from './restClient';
-import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
+import { PanelHeader } from '@/components/ui/PanelHeader';
 import { bumpRenderCount } from '../../app/renderCount';
 
 export function SettingsPane() {
@@ -25,27 +26,27 @@ export function SettingsPane() {
   }, []);
 
   return (
-    <div data-testid="chat-settings-pane" className="h-full overflow-auto p-3">
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold">Settings</h2>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <label className="flex flex-col gap-1 text-sm">
-            Model (active room)
-            <Select data-testid="settings-model" defaultValue="">
-              <option value="" disabled>
-                {loading ? 'Loading models…' : 'Select a model…'}
-              </option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
+    <div data-testid="chat-settings-pane" className="flex h-full flex-col overflow-auto bg-surface">
+      <PanelHeader label="Settings" />
+      <div className="p-2.5">
+        <Card>
+          <CardContent className="flex flex-col gap-2 pt-2.5">
+            <label className="flex flex-col gap-1 text-[13px]">
+              Model (active room)
+              <Select data-testid="settings-model" defaultValue="">
+                <option value="" disabled>
+                  {loading ? 'Loading models…' : 'Select a model…'}
                 </option>
-              ))}
-            </Select>
-          </label>
-        </CardContent>
-      </Card>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

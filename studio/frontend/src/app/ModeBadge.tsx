@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getHealth } from '../host/health';
+import { StatusPill } from '@/components/ui/StatusPill';
 
 export function ModeBadge() {
   const [mode, setMode] = useState<'live' | 'replay' | 'unknown'>('unknown');
@@ -16,21 +17,14 @@ export function ModeBadge() {
 
   const isReplay = mode === 'replay';
   return (
-    <span
+    <StatusPill
       data-testid="mode-badge"
       data-mode={mode}
+      tone={isReplay ? 'warning' : 'success'}
       title={isReplay ? 'Recorded-real fixtures — not live providers' : 'Live providers'}
-      style={{
-        fontSize: '0.7rem',
-        fontWeight: 600,
-        padding: '2px 6px',
-        borderRadius: 4,
-        textTransform: 'uppercase',
-        background: isReplay ? '#a3551b' : '#1b5e20',
-        color: 'white',
-      }}
+      className="uppercase tracking-wide"
     >
       {mode === 'unknown' ? '…' : mode}
-    </span>
+    </StatusPill>
   );
 }

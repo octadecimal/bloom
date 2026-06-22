@@ -16,4 +16,11 @@ describe('Card', () => {
     expect(getByText('F')).toBeTruthy();
     expect(container.querySelector('.extra')).toBeTruthy();
   });
+
+  it('uses the surface token and drops the drop-shadow', () => {
+    const { container } = render(<Card>x</Card>);
+    const cls = (container.firstChild as HTMLElement).className;
+    expect(cls).toContain('bg-surface');
+    expect(cls).not.toContain('shadow');
+  });
 });

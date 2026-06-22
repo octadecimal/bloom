@@ -17,4 +17,10 @@ describe('ModeBadge', () => {
     render(<ModeBadge />);
     await waitFor(() => expect(screen.getByTestId('mode-badge')).toHaveAttribute('data-mode', 'live'));
   });
+
+  it('renders without inline background styles (token-driven)', async () => {
+    const { findByTestId } = render(<ModeBadge />);
+    const el = await findByTestId('mode-badge');
+    expect(el.getAttribute('style')).toBeNull();
+  });
 });

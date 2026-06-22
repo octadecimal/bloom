@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSession } from '../../session/SessionContext';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 
 export function LoginScreen() {
   const { login } = useSession();
@@ -18,13 +21,19 @@ export function LoginScreen() {
   }
 
   return (
-    <div data-testid="login-screen" style={{ display: 'grid', placeItems: 'center', height: '100vh' }}>
-      <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 280 }}>
-        <h1 style={{ margin: 0, fontSize: '1.25rem' }}>Bloom Studio</h1>
-        <label htmlFor="username">Your name</label>
-        <input id="username" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. ada" />
-        <button type="submit">Continue</button>
-      </form>
+    <div data-testid="login-screen" className="grid h-screen place-items-center bg-bg font-sans text-foreground">
+      <Card className="w-72">
+        <CardContent className="pt-2.5">
+          <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+            <h1 className="m-0 text-base font-semibold">Bloom Studio</h1>
+            <label htmlFor="username" className="text-xs text-muted-foreground">
+              Your name
+            </label>
+            <Input id="username" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. ada" />
+            <Button type="submit">Continue</Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

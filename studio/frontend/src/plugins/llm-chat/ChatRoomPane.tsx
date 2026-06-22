@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { StatusPill } from '@/components/ui/StatusPill';
 import { llmChatHooks } from './state';
 import { sendPrompt, setTyping } from './actions';
 import { avatarHue } from './avatarColor';
@@ -52,7 +53,7 @@ function MessageList() {
   // but content edits (token) do not touch this component.
   const count = s.messages.length;
   return (
-    <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-3 overflow-auto p-0">
+    <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-2.5 overflow-auto p-0">
       {Array.from({ length: count }, (_, i) => (
         <ChatMessageBubble key={i} index={i} />
       ))}
@@ -65,14 +66,9 @@ function ConnectionIndicator() {
   const state = s.connection.get();
   const connected = state === 'connected';
   return (
-    <span
-      data-testid="chat-connection"
-      data-state={state}
-      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-primary' : 'bg-muted-foreground'}`} />
+    <StatusPill data-testid="chat-connection" data-state={state} tone={connected ? 'success' : 'warning'}>
       {connected ? 'connected' : `${state}…`}
-    </span>
+    </StatusPill>
   );
 }
 
@@ -112,14 +108,10 @@ function AiStatusLine() {
   const s = llmChatHooks.usePluginState();
   const st = s.aiStatus.get();
   return (
-    <span
-      data-testid="chat-ai-status"
-      data-state={st.state}
-      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
-    >
+    <StatusPill data-testid="chat-ai-status" data-state={st.state} tone={st.state === 'idle' ? 'neutral' : 'warning'}>
       AI: {st.state}
       {st.queueDepth > 0 ? ` (${st.queueDepth} queued)` : ''}
-    </span>
+    </StatusPill>
   );
 }
 
@@ -130,8 +122,8 @@ export function ChatRoomPane() {
 
   if (s.activeRoomId.get() === null) {
     return (
-      <div data-testid="chat-empty" className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <h2 className="text-lg font-semibold">No room selected</h2>
+      <div data-testid="chat-empty" className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+        <h2 className="text-base font-semibold">No room selected</h2>
         <p className="text-sm text-muted-foreground">Return to the room picker to choose or create a room.</p>
       </div>
     );
@@ -146,7 +138,7 @@ export function ChatRoomPane() {
   };
 
   return (
-    <div data-testid="chat-room-pane" className="flex h-full flex-col gap-3 p-3">
+    <div data-testid="chat-room-pane" className="flex h-full flex-col gap-2 bg-surface p-2.5">
       <div className="flex items-center justify-between gap-2">
         <ConnectionIndicator />
         <AiStatusLine />

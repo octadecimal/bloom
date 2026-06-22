@@ -2,7 +2,6 @@ import { useState, type ReactNode } from 'react';
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react';
 import { useApp } from './AppContext';
 import { useApplyTheme } from './useApplyTheme';
-import { ThemeToggle } from './ThemeToggle';
 import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
 import { SwitchUser } from './SwitchUser';
@@ -14,17 +13,16 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
   useApplyTheme(dockEl);
 
   return (
-    <div data-testid="workbench" className="flex h-screen flex-col">
-      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-border px-3">
+    <div data-testid="workbench" className="flex h-screen flex-col bg-bg font-sans text-foreground">
+      <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-border bg-bg px-2.5">
         <div className="flex items-center gap-2">
           {leading}
-          <h1 className="m-0 text-base font-semibold">Bloom Studio</h1>
+          <h1 className="m-0 text-[13px] font-semibold tracking-tight">Bloom Studio</h1>
           <AppMenubar />
         </div>
         <div className="flex items-center gap-2">
           <ModeBadge />
           <SwitchUser />
-          <ThemeToggle />
         </div>
       </div>
       <CommandPalette />
