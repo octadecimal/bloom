@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -163,8 +164,8 @@ export function ChatRoomPane() {
             if (e.key === 'Enter') submit();
           }}
         />
-        <Button data-testid="chat-send" onClick={submit}>
-          Send
+        <Button data-testid="chat-send" size="icon" aria-label="Send" onClick={submit}>
+          <ArrowUp className="h-4 w-4" />
         </Button>
       </div>
     </div>
