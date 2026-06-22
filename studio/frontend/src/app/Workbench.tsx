@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react';
 import { useApp } from './AppContext';
 import { useApplyTheme } from './useApplyTheme';
@@ -10,7 +10,6 @@ import { ModeBadge } from './ModeBadge';
 
 export function Workbench({ leading }: { leading?: ReactNode }) {
   const app = useApp();
-  const [, setDockEl] = useState<HTMLElement | null>(null);
   useApplyTheme();
 
   return (
@@ -27,7 +26,7 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
         </div>
       </div>
       <CommandPalette />
-      <div ref={setDockEl} className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden">
         <DockviewReact theme={bloomTheme} components={app.components as never} onReady={(e: DockviewReadyEvent) => app.attachDockview(e.api)} />
       </div>
     </div>

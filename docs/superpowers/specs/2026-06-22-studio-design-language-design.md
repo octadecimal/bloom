@@ -189,14 +189,22 @@ local; only the cheap check gates CI).
    `studio/frontend/src` for any hex literal or non-token `rgba()` **outside
    `styles.css`**; must return zero. Mechanical guarantee that components cannot
    drift back to ad-hoc colors. Cheap enough to gate every PR.
-2. **Computed-style assertions in Playwright (local, source of truth).** Extend
-   `e2e/theme.spec.ts` to assert _invariants_ against the real running shell (not
+2. **Computed-style assertions in Playwright (local, source of truth).**
+   `e2e/theme.spec.ts` asserts _invariants_ against the real running shell (not
    pixels — pixel snapshots are brittle across fonts/AA):
-   - panel group border resolves to `--hairline`; group bg = `--surface`; gap
-     renders (canvas visible between groups);
-   - active-tab underline = `--accent`; active tab bg = `--surface`;
-   - a `Field`'s focus ring = `--accent`; placeholder = `--text-3`;
-   - each asset tile has exactly one accent-filled button.
+   - Docked groups are floating hairline cards: `border-radius: 9px`, `1px`
+     border, `border-color: rgba(255,255,255,0.07)`.
+   - The `--canvas` token resolves to `#08090a`.
+   - A reference screenshot of the workbench is captured (committed fidelity
+     artifact).
+
+   The **accent-rationing rule (rule 3)** is enforced by the `Button` variant
+   system + the no-raw-color guard (layer 1) + code review + the committed
+   reference screenshot — not by an e2e assertion today. Future hardening:
+   per-element invariants (active-tab underline = accent, Field focus ring =
+   accent, one accent-filled button per region) could be added to
+   `theme.spec.ts`.
+
 3. **Reference screenshot artifact (human eyeball).** One Playwright step captures
    the real workbench (top bar + Chat Room + Asset Board, replay backend) to a PNG
    committed under `docs/design-language/`. The approved mockup sits beside it; any

@@ -172,11 +172,18 @@ stays local; only the cheap check gates CI).
 2. **Computed-style invariants in Playwright (local, source of truth).**
    `studio/frontend/e2e/theme.spec.ts` asserts invariants against the real running
    shell (not pixel snapshots — those are brittle across fonts/AA):
-   - Panel group border resolves to `--hairline`; group bg = `--surface`; gap
-     renders (canvas visible between groups).
-   - Active-tab underline = `--accent`; active tab bg = `--surface`.
-   - A `Field`'s focus ring = `--accent`; placeholder = `--text-3`.
-   - Each asset tile has exactly one accent-filled button.
+   - Docked groups are floating hairline cards: `border-radius: 9px`, `1px` border,
+     `border-color: rgba(255,255,255,0.07)`.
+   - The `--canvas` token resolves to `#08090a`.
+   - A reference screenshot of the workbench is captured (committed fidelity
+     artifact).
+
+   The **accent-rationing rule (rule 3)** is enforced by the `Button` variant
+   system + the no-raw-color guard (layer 1) + code review + the committed
+   reference screenshot — not by an e2e assertion today. Future hardening:
+   per-element invariants (active-tab underline = accent, Field focus ring =
+   accent, one accent-filled button per region) could be added to
+   `theme.spec.ts`.
 
 3. **Reference screenshot (human eyeball).** A Playwright step captures the real
    workbench (top bar + Chat Room + Asset Board, replay backend) to the PNG at

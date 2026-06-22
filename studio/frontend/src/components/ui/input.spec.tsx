@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { Input } from './input';
 
 describe('Input', () => {
@@ -15,8 +15,6 @@ describe('Input', () => {
     expect((getByPlaceholderText('h') as HTMLInputElement).className).toContain('h-7');
   });
 });
-
-import { screen } from '@testing-library/react';
 
 describe('Input is a raised field well with token chrome', () => {
   it('uses the raised surface and a hairline border', () => {
