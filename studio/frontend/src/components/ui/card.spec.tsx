@@ -17,10 +17,10 @@ describe('Card', () => {
     expect(container.querySelector('.extra')).toBeTruthy();
   });
 
-  it('uses the surface token and drops the drop-shadow', () => {
+  it('uses the raised surface token and drops the drop-shadow', () => {
     const { container } = render(<Card>x</Card>);
     const cls = (container.firstChild as HTMLElement).className;
-    expect(cls).toContain('bg-surface');
+    expect(cls).toContain('bg-raised');
     expect(cls).not.toContain('shadow');
   });
 });
