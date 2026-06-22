@@ -382,3 +382,43 @@ async def test_attach_subscriber_emits_run_snapshot_during_active_run(mongo_db):
     # Release the run so cleanup happens and we don't leave dangling tasks
     gated.release.set()
     await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+
+class RaisingRunner:
+    """Runner that yields one StepStarted then raises mid-iteration."""
+
+    async def run(self, **kw):
+        yield StepStarted(0, "tool_call", "generate_asset")
+        raise RuntimeError("boom")
+
+
+@pytest.mark.asyncio
+async def test_skill_run_error_still_completes(mongo_db):
+    """If the runner raises mid-iteration, run_completed must still be emitted
+    with status='error' and the run must be persisted as terminal in the store."""
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()
+    run_store = RunStore(mongo_db)
+    skills = FakeSkills()
+    runner = RaisingRunner()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=runner, skills=skills)
+
+    await hub.handle_skill_run("r1", "alice", "generate-sprite", {"description": "knight"})
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+    # (a) run_completed emitted with status == "error"
+    completed_events = [(e, d) for (e, d, _) in sio.events if e == "run_completed"]
+    assert completed_events, "run_completed must be emitted even when runner raises"
+    assert completed_events[-1][1]["status"] == "error", (
+        f"expected status='error', got {completed_events[-1][1]['status']}"
+    )
+    run_id = completed_events[-1][1]["runId"]
+
+    # (b) persisted run has status == "error" (not left as "running")
+    persisted = await run_store.get_run(run_id)
+    assert persisted is not None, "run must exist in the store"
+    assert persisted.status == "error", (
+        f"expected persisted status='error', got {persisted.status}"
+    )

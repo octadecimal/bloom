@@ -1,6 +1,9 @@
 import asyncio
+import logging
 
 from app.models import message_wire
+
+logger = logging.getLogger(__name__)
 
 
 class RoomHub:
@@ -177,7 +180,7 @@ class RoomHub:
 
         history = await self._store.list_messages(room_id)
         messages = [{"role": m.role, "content": m.content} for m in history]
-        ctx = ToolContext(room_id, getattr(room, "game_id", None), self._asset_store, self._asset_hub)
+        ctx = ToolContext(room_id, room.game_id, self._asset_store, self._asset_hub)
         status = "completed"
         try:
             async for ev in self._runner.run(
@@ -186,12 +189,16 @@ class RoomHub:
                 await self._project_run_event(room_id, run.id, ev)
                 if type(ev).__name__ == "RunFinished":
                     status = ev.status
+        except Exception:
+            logger.exception("skill run failed")
+            status = "error"
         finally:
             async with self._lock(room_id):
                 self._active_runs.pop(room_id, None)
-
-        await self._run_store.complete_run(run.id, status)
-        await self._sio.emit("run_completed", {"roomId": room_id, "runId": run.id, "status": status}, room=room_id)
+            await self._run_store.complete_run(run.id, status)
+            await self._sio.emit(
+                "run_completed", {"roomId": room_id, "runId": run.id, "status": status}, room=room_id
+            )
 
     async def _project_run_event(self, room_id: str, run_id: str, ev) -> None:
         from app.runs import RunStep
