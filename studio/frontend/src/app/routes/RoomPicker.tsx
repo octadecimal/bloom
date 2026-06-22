@@ -48,17 +48,17 @@ export function RoomPicker() {
   }
 
   return (
-    <div data-testid="room-picker" className="mx-auto mt-12 w-full max-w-xl p-4">
-      <h1 className="mb-4 text-xl font-semibold">Rooms</h1>
+    <div data-testid="room-picker" className="mx-auto mt-16 w-full max-w-md p-4">
+      <h1 className="mb-3 text-base font-semibold">Rooms</h1>
       <form onSubmit={onCreate} className="mb-4 flex gap-2">
         <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New room name…" className="flex-1" />
         <Button type="submit" disabled={creating}>
           Create
         </Button>
       </form>
-      {status === 'loading' && <p className="text-sm text-muted-foreground">Loading rooms…</p>}
+      {status === 'loading' && <p className="text-xs text-muted-foreground">Loading rooms…</p>}
       {status === 'error' && (
-        <p className="text-sm text-destructive">
+        <p className="text-xs text-destructive">
           Couldn't load rooms.{' '}
           <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
             Retry
@@ -67,13 +67,13 @@ export function RoomPicker() {
       )}
       {status === 'ready' && (
         <Card>
-          <CardContent className="flex flex-col gap-1 pt-4">
+          <CardContent className="flex flex-col gap-1 pt-2.5">
             {rooms.map((r) => (
               <Button key={r.id} type="button" variant="ghost" className="w-full justify-start" onClick={() => navigate(`/room/${r.id}`)}>
                 {r.name}
               </Button>
             ))}
-            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet — create one above.</p>}
+            {rooms.length === 0 && <p className="text-xs text-muted-foreground">No rooms yet — create one above.</p>}
           </CardContent>
         </Card>
       )}
