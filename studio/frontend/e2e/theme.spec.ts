@@ -20,3 +20,29 @@ test('app is dark-only: html keeps the dark class, there is no theme toggle, and
   await page.reload();
   await expect(html).toHaveClass(/dark/);
 });
+
+test('docked groups are floating hairline cards on the canvas', async ({ page }) => {
+  await gotoWorkbench(page);
+  const group = page.locator('.dockview-theme-bloom .dv-groupview').first();
+  await expect(group).toBeVisible();
+  const { radius, borderColor, borderWidth } = await group.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { radius: s.borderTopLeftRadius, borderColor: s.borderTopColor, borderWidth: s.borderTopWidth };
+  });
+  expect(radius).toBe('9px');
+  expect(borderWidth).toBe('1px');
+  // hairline = rgba(255,255,255,0.07)
+  expect(borderColor.replace(/\s/g, '')).toBe('rgba(255,255,255,0.07)');
+});
+
+test('the canvas token is the near-black app background', async ({ page }) => {
+  await gotoWorkbench(page);
+  const canvas = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim());
+  expect(canvas).toBe('#08090a');
+});
+
+test('reference screenshot of the workbench (committed fidelity artifact)', async ({ page }) => {
+  await gotoWorkbench(page);
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await page.screenshot({ path: 'docs/design-language/reference-workbench.png' });
+});
