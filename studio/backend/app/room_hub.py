@@ -145,7 +145,7 @@ class RoomHub:
 
         content = ""
         try:
-            async for token in self._chat.stream(context, room.model):
+            async for token in self._generation_tokens(context, room.model):
                 content += token
                 async with self._lock(room_id):
                     self._active[room_id]["content"] = content
@@ -164,6 +164,34 @@ class RoomHub:
             {"roomId": room_id, "messageId": assistant.id},
             room=room_id,
         )
+
+    async def _generation_tokens(self, context, model):
+        """Yield plain-chat token deltas.
+
+        Unified executor: every turn flows through ``TurnRunner.run`` — plain
+        chat uses the no-tool path (``skill=None``), and its ``StepToken`` deltas
+        are projected onto the legacy ``token`` wire event by ``_run_generation``.
+        Only the token SOURCE changes here; the wire protocol is unchanged.
+
+        When no runner is wired (e.g. unit tests that inject a fake chat
+        service), fall back to the legacy ``chat_service.stream`` path so the
+        plain-chat contract is preserved without a runner dependency.
+        """
+        if self._runner is None:
+            async for token in self._chat.stream(context, model):
+                yield token
+            return
+
+        from app.chat_service import build_turns
+
+        # Build turns exactly as the legacy plain-chat path did (user content is
+        # author-prefixed) so the replay prompt-key normalization is identical.
+        messages = build_turns(context)
+        async for ev in self._runner.run(
+            messages=messages, model=model, skill=None, args={}, ctx=None
+        ):
+            if type(ev).__name__ == "StepToken":
+                yield ev.delta
 
     async def _run_skill(self, room_id: str, descriptor: dict) -> None:
         from app.runs import run_wire, RunStep
