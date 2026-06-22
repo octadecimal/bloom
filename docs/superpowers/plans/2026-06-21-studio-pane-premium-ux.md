@@ -26,6 +26,7 @@
 ## File Structure
 
 **Create:**
+
 - `studio/frontend/src/components/ui/select.tsx` — token-styled native `<select>` primitive.
 - `studio/frontend/src/components/ui/select.spec.tsx` — unit test for `Select`.
 - `studio/frontend/src/components/ui/button.spec.tsx` — unit test for new `Button` variants/sizes.
@@ -34,6 +35,7 @@
 - `studio/frontend/src/plugins/assets/actions.delete.spec.ts` — unit test for the delete toast.
 
 **Modify:**
+
 - `studio/frontend/src/styles.css` — add `--destructive` / `--destructive-foreground` (light + dark + `@theme inline`).
 - `studio/frontend/src/components/ui/button.tsx` — add `ghost`/`destructive` variants + `sm` size.
 - `studio/frontend/src/plugins/assets/AssetBoardPane.tsx` — `<select>` → `Select`; drop `selectClass`.
@@ -54,11 +56,13 @@
 ## Task 1: Design-system foundation — destructive token + Button variants/sizes
 
 **Files:**
+
 - Modify: `studio/frontend/src/styles.css`
 - Modify: `studio/frontend/src/components/ui/button.tsx`
 - Test (create): `studio/frontend/src/components/ui/button.spec.tsx`
 
 **Interfaces:**
+
 - Produces: token utilities `bg-destructive`, `text-destructive`, `text-destructive-foreground` (+ `/NN` opacity); `Button` accepting `variant: 'default' | 'outline' | 'ghost' | 'destructive'` and `size: 'default' | 'sm' | 'icon'`.
 
 - [ ] **Step 1: Write the failing test** — create `studio/frontend/src/components/ui/button.spec.tsx`:
@@ -103,24 +107,24 @@ Expected: FAIL — the `ghost`/`destructive`/`sm` classes are absent (current bu
 In `:root` (after the `--input` line) add:
 
 ```css
-  /* destructive — error/danger actions and text */
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.98 0 0);
+/* destructive — error/danger actions and text */
+--destructive: oklch(0.58 0.22 27);
+--destructive-foreground: oklch(0.98 0 0);
 ```
 
 In `.dark` (after its `--input` line) add:
 
 ```css
-  /* destructive — slightly lighter for contrast on the dark surface */
-  --destructive: oklch(0.65 0.22 27);
-  --destructive-foreground: oklch(0.98 0 0);
+/* destructive — slightly lighter for contrast on the dark surface */
+--destructive: oklch(0.65 0.22 27);
+--destructive-foreground: oklch(0.98 0 0);
 ```
 
 In `@theme inline` (after `--color-input`) add:
 
 ```css
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+--color-destructive: var(--destructive);
+--color-destructive-foreground: var(--destructive-foreground);
 ```
 
 - [ ] **Step 4: Extend the Button CVA in `button.tsx`** — replace the `buttonVariants` definition (lines 5–14) with:
@@ -159,10 +163,12 @@ git commit -m "feat(ui): add destructive token plus ghost/destructive/sm button 
 ## Task 2: `Select` primitive
 
 **Files:**
+
 - Create: `studio/frontend/src/components/ui/select.tsx`
 - Test (create): `studio/frontend/src/components/ui/select.spec.tsx`
 
 **Interfaces:**
+
 - Produces: `Select` — `React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>`; renders a token-styled native `<select>`, forwarding `className` (merged via `cn()`) and all props.
 
 - [ ] **Step 1: Write the failing test** — create `studio/frontend/src/components/ui/select.spec.tsx`:
@@ -202,7 +208,11 @@ export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
   return (
     <select
       ref={ref}
-      className={cn('h-9 rounded-md border border-input bg-background px-3 text-sm outline-none', 'focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50', className)}
+      className={cn(
+        'h-9 rounded-md border border-input bg-background px-3 text-sm outline-none',
+        'focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+        className,
+      )}
       {...props}
     />
   );
@@ -226,12 +236,14 @@ git commit -m "feat(ui): add token-styled Select primitive"
 ## Task 3: Migrate Asset Board onto Select + destructive token, add delete toast
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/AssetBoardPane.tsx`
 - Modify: `studio/frontend/src/plugins/assets/AssetCard.tsx`
 - Modify: `studio/frontend/src/plugins/assets/actions.ts:101-104`
 - Test (create): `studio/frontend/src/plugins/assets/actions.delete.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `Select` (Task 2), `text-destructive` token (Task 1), `notify.info` (`src/lib/notify.ts`).
 - Produces: `deleteAsset(assetId)` unchanged signature; now also calls `notify.info('Asset deleted')` after a successful delete.
 
@@ -315,28 +327,28 @@ Delete the `selectClass` constant (line 15).
 Replace the game select (lines 89–98) — change the opening tag and closing tag only, keep all attributes/children:
 
 ```tsx
-          <Select data-testid="game-select" value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
-            <option value="" disabled>
-              Select a game…
-            </option>
-            {games.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </Select>
+<Select data-testid="game-select" value={activeGameId ?? ''} onChange={(e) => void openGame(e.target.value)}>
+  <option value="" disabled>
+    Select a game…
+  </option>
+  {games.map((g) => (
+    <option key={g.id} value={g.id}>
+      {g.name}
+    </option>
+  ))}
+</Select>
 ```
 
 Replace the workflow select (lines 128–134):
 
 ```tsx
-              <Select data-testid="asset-workflow" value={workflow} onChange={(e) => setWorkflow(e.target.value as Workflow)}>
-                {WORKFLOWS.map((w) => (
-                  <option key={w} value={w}>
-                    {w}
-                  </option>
-                ))}
-              </Select>
+<Select data-testid="asset-workflow" value={workflow} onChange={(e) => setWorkflow(e.target.value as Workflow)}>
+  {WORKFLOWS.map((w) => (
+    <option key={w} value={w}>
+      {w}
+    </option>
+  ))}
+</Select>
 ```
 
 - [ ] **Step 6: Switch the Asset Card error color to the token**
@@ -364,10 +376,12 @@ git commit -m "refactor(assets): adopt shared Select + destructive token, toast 
 ## Task 4: Author avatar hue helper
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/avatarColor.ts`
 - Test (create): `studio/frontend/src/plugins/llm-chat/avatarColor.spec.ts`
 
 **Interfaces:**
+
 - Produces: `avatarHue(seed: string): number` — deterministic hue in `[0, 360)` from a seed string (used for non-assistant author avatars).
 
 - [ ] **Step 1: Write the failing test** — create `studio/frontend/src/plugins/llm-chat/avatarColor.spec.ts`:
@@ -432,33 +446,35 @@ git commit -m "feat(llm-chat): add deterministic avatar hue helper"
 ## Task 5: Chat pane redesign (author-labeled feed)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx` (full rewrite)
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx` (add tests)
 
 **Interfaces:**
+
 - Consumes: `Input` (`@/components/ui/input`), `Button` (`@/components/ui/button`), `avatarHue` (Task 4), `text-destructive` token.
 - Produces: a redesigned chat pane that preserves the component split (`ChatRoomPane`/`MessageList`/`ChatMessageBubble` + status sub-components), `bumpRenderCount` names, all testids (`chat-room-pane`, `chat-empty`, `chat-messages`, `chat-msg-${id}`, `chat-connection`, `chat-ai-status`, `chat-presence`, `chat-typing`, `chat-error`, `chat-composer`, `chat-send`), `data-role`/`data-status`, and adds `data-testid="chat-caret"` on the streaming caret.
 
 - [ ] **Step 1: Write the failing tests** — append to `ChatRoomPane.spec.tsx` inside the `describe('ChatRoomPane', …)` block (after the existing tests, before the closing `});`):
 
 ```tsx
-  it('renders the author label on a message', () => {
-    chatSlice().messages.set([msg({ id: 'a2', author: 'alice', role: 'user', content: 'yo' })]);
-    render(<ChatRoomPane />);
-    expect(screen.getByTestId('chat-msg-a2').textContent).toContain('alice');
-  });
+it('renders the author label on a message', () => {
+  chatSlice().messages.set([msg({ id: 'a2', author: 'alice', role: 'user', content: 'yo' })]);
+  render(<ChatRoomPane />);
+  expect(screen.getByTestId('chat-msg-a2').textContent).toContain('alice');
+});
 
-  it('shows a streaming caret while a message is streaming', () => {
-    chatSlice().messages.set([msg({ id: 's1', content: 'Hi', status: 'streaming' })]);
-    render(<ChatRoomPane />);
-    expect(screen.getByTestId('chat-caret')).toBeTruthy();
-  });
+it('shows a streaming caret while a message is streaming', () => {
+  chatSlice().messages.set([msg({ id: 's1', content: 'Hi', status: 'streaming' })]);
+  render(<ChatRoomPane />);
+  expect(screen.getByTestId('chat-caret')).toBeTruthy();
+});
 
-  it('drops the caret when the message is complete', () => {
-    chatSlice().messages.set([msg({ id: 'c1', content: 'Done', status: 'complete' })]);
-    render(<ChatRoomPane />);
-    expect(screen.queryByTestId('chat-caret')).toBeNull();
-  });
+it('drops the caret when the message is complete', () => {
+  chatSlice().messages.set([msg({ id: 'c1', content: 'Done', status: 'complete' })]);
+  render(<ChatRoomPane />);
+  expect(screen.queryByTestId('chat-caret')).toBeNull();
+});
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -508,7 +524,9 @@ function ChatMessageBubble({ index }: { index: number }) {
         </div>
         <div className="text-sm leading-relaxed">
           {content}
-          {status === 'streaming' && <span data-testid="chat-caret" className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />}
+          {status === 'streaming' && (
+            <span data-testid="chat-caret" className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />
+          )}
         </div>
       </div>
     </li>
@@ -534,7 +552,11 @@ function ConnectionIndicator() {
   const state = s.connection.get();
   const connected = state === 'connected';
   return (
-    <span data-testid="chat-connection" data-state={state} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+    <span
+      data-testid="chat-connection"
+      data-state={state}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+    >
       <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-primary' : 'bg-muted-foreground'}`} />
       {connected ? 'connected' : `${state}…`}
     </span>
@@ -577,7 +599,11 @@ function AiStatusLine() {
   const s = llmChatHooks.usePluginState();
   const st = s.aiStatus.get();
   return (
-    <span data-testid="chat-ai-status" data-state={st.state} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+    <span
+      data-testid="chat-ai-status"
+      data-state={st.state}
+      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+    >
       AI: {st.state}
       {st.queueDepth > 0 ? ` (${st.queueDepth} queued)` : ''}
     </span>
@@ -656,21 +682,23 @@ git commit -m "feat(llm-chat): premium author-labeled chat pane on design tokens
 ## Task 6: Settings pane redesign
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/SettingsPane.tsx` (full rewrite)
 - Modify: `studio/frontend/src/plugins/llm-chat/SettingsPane.spec.tsx` (add a test)
 
 **Interfaces:**
+
 - Consumes: `Card`/`CardHeader`/`CardContent` (`@/components/ui/card`), `Select` (Task 2).
 - Produces: settings pane preserving `chat-settings-pane`, `settings-model`, with a loading placeholder.
 
 - [ ] **Step 1: Write the failing test** — add to `SettingsPane.spec.tsx` inside `describe('SettingsPane', …)`:
 
 ```tsx
-  it('shows a loading placeholder while models load', () => {
-    vi.spyOn(rest, 'getModels').mockReturnValue(new Promise(() => {}));
-    render(<SettingsPane />);
-    expect(screen.getByText(/loading models/i)).toBeTruthy();
-  });
+it('shows a loading placeholder while models load', () => {
+  vi.spyOn(rest, 'getModels').mockReturnValue(new Promise(() => {}));
+  render(<SettingsPane />);
+  expect(screen.getByText(/loading models/i)).toBeTruthy();
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -751,27 +779,29 @@ git commit -m "feat(llm-chat): premium settings pane with Card chrome and Select
 ## Task 7: Room picker redesign + create toast
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/routes/RoomPicker.tsx` (full rewrite)
 - Modify: `studio/frontend/src/app/routes/RoomPicker.spec.tsx` (add a test)
 
 **Interfaces:**
+
 - Consumes: `Button`, `Input`, `Card`/`CardContent`, `notify.info`.
 - Produces: redesigned picker preserving `room-picker`, the `/new room/i` placeholder, the `/create/i` button, room items clickable by exact name; toasts `notify.info('Room created')` on success.
 
 - [ ] **Step 1: Write the failing test** — add to `RoomPicker.spec.tsx` inside `describe('RoomPicker', …)`:
 
 ```tsx
-  it('shows a toast on successful create', async () => {
-    getRooms.mockResolvedValue([]);
-    createRoom.mockResolvedValue({ id: 'r-new', name: 'Beta', model: 'm', gameId: null, createdAt: 't' });
-    const { notify } = await import('../../lib/notify');
-    render(tree());
-    await waitFor(() => expect(getRooms).toHaveBeenCalled());
-    await userEvent.type(screen.getByPlaceholderText(/new room/i), 'Beta');
-    await userEvent.click(screen.getByRole('button', { name: /create/i }));
-    await screen.findByText('ROOM');
-    expect(notify.info).toHaveBeenCalledWith('Room created');
-  });
+it('shows a toast on successful create', async () => {
+  getRooms.mockResolvedValue([]);
+  createRoom.mockResolvedValue({ id: 'r-new', name: 'Beta', model: 'm', gameId: null, createdAt: 't' });
+  const { notify } = await import('../../lib/notify');
+  render(tree());
+  await waitFor(() => expect(getRooms).toHaveBeenCalled());
+  await userEvent.type(screen.getByPlaceholderText(/new room/i), 'Beta');
+  await userEvent.click(screen.getByRole('button', { name: /create/i }));
+  await screen.findByText('ROOM');
+  expect(notify.info).toHaveBeenCalledWith('Room created');
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -883,9 +913,11 @@ git commit -m "feat(rooms): premium room picker with token chrome and create toa
 ## Task 8: Workbench header polish
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/Workbench.tsx`
 
 **Interfaces:**
+
 - Consumes: existing token utilities. No new component API.
 - Produces: token-styled header (`border-b border-border`, consistent height/padding) preserving the `workbench` testid and all header widgets. Covered by existing e2e (`layout`, `theme`, `chrome`) plus the new styling assertions in Task 9.
 
@@ -947,10 +979,12 @@ git commit -m "style(app): token-based workbench header chrome"
 ## Task 9: E2e sweep — encode the premium contract
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/llm-chat.spec.ts`
 - Modify: `studio/frontend/e2e/styling.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the running replay backend (:8000) + frontend (:4200). Helpers `seedLocalStorage`, `gotoWorkbench` (existing).
 - Produces: assertions that the redesigned panes are visible, styled, and behavior-preserving.
 
@@ -959,6 +993,7 @@ git commit -m "style(app): token-based workbench header chrome"
 ```bash
 just backend-serve-replay
 ```
+
 ```bash
 cd studio/frontend && npx nx serve frontend
 ```
@@ -1047,6 +1082,7 @@ git commit -m "test(e2e): assert premium chat feed, settings, and room-picker ch
 ## Self-Review (completed by plan author)
 
 **Spec coverage:**
+
 - DS hardening (destructive token, ghost/destructive/sm, Select) → Tasks 1–2. ✓
 - Chat redesign (author-labeled feed, caret, render isolation, destructive error) → Task 5 (+ helper Task 4). ✓
 - Settings / RoomPicker / Workbench header → Tasks 6, 7, 8. ✓
