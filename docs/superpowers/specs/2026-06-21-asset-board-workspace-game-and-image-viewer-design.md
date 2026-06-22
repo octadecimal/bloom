@@ -15,7 +15,7 @@ is carried everywhere as `Room.game_id` / `IRoom.gameId`.
 
 Despite this, the Asset Board (`studio/frontend/src/plugins/assets/AssetBoardPane.tsx`)
 keeps its **own** `activeGameId` and exposes a game `<Select>`, a `+ New Game`
-button, and a `↻ Refresh` button. That is a second, contradictory way to pick *any*
+button, and a `↻ Refresh` button. That is a second, contradictory way to pick _any_
 game inside a workspace that is supposed to be pinned to one. It must go.
 
 Separately, generated images can only be viewed at thumbnail/preview size. Clicking

@@ -145,18 +145,18 @@ Component-by-component:
 - **`MessageList` (`chat-messages`):** `flex-1 overflow-auto` scroll region,
   `flex flex-col gap-3`. Still keyed by index, still length-only subscription.
 - **`ChatMessageBubble` (`chat-msg-${id}`):** row = avatar + (`author` name + role chip
-  + content). Avatar background is a deterministic color derived from `author` (small
-  hash → fixed token-ish palette); the assistant uses the primary color and shows an
-  "ai" role chip. A **streaming caret** renders while `data-status="streaming"` and is
-  dropped on `complete`. **Preserves** `data-testid`, `data-role`, `data-status`, and
-  per-leaf reads. (No Hookstate reserved-key collision: fields are
-  `id/author/role/content/status`; `s.lastError` is read normally, not as `error`.)
+  - content). Avatar background is a deterministic color derived from `author` (small
+    hash → fixed token-ish palette); the assistant uses the primary color and shows an
+    "ai" role chip. A **streaming caret** renders while `data-status="streaming"` and is
+    dropped on `complete`. **Preserves** `data-testid`, `data-role`, `data-status`, and
+    per-leaf reads. (No Hookstate reserved-key collision: fields are
+    `id/author/role/content/status`; `s.lastError` is read normally, not as `error`.)
 - **Composer:** bare `<input>` → `Input` primitive (`flex-1`), keeping
   `data-testid="chat-composer"`, placeholder `Message…`, the typing-on-change behavior,
   and Enter-to-send. `chat-send` stays a `Button`.
 - **`ErrorBanner` (`chat-error`, `role="alert"`):** replace `#b00020` with
   `text-destructive` on a subtle `bg-destructive/10 border border-destructive/30
-  rounded-md` block. Inline only — no toast (it is already visible).
+rounded-md` block. Inline only — no toast (it is already visible).
 - **`TypingLine` (`chat-typing`):** styled italic muted text.
 
 ### 3. Settings, RoomPicker, Workbench header

@@ -25,10 +25,12 @@
 ### Task 1: `closeGame()` action + trim `initAssets()`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/actions.ts`
 - Test: `studio/frontend/src/plugins/assets/actions.spec.ts`
 
 **Interfaces:**
+
 - Consumes: existing `assetsSlice()`, `SocketDeps.leaveGame`, `__setDeps` (all in `actions.ts`).
 - Produces: `export function closeGame(): void` — leaves the active game's socket room (if any) and resets `activeGameId` → `null`, `assets` → `[]`, `assetsStatus` → `'idle'`. Consumed by Task 2.
 
@@ -108,10 +110,12 @@ git commit -m "feat(assets): add closeGame() and trim initAssets to connection-o
 ### Task 2: `RoomRoute` opens/closes the game with the room
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/routes/RoomRoute.tsx`
 - Test: `studio/frontend/src/app/routes/RoomRoute.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `openGame(gameId)` and `closeGame()` from `../../plugins/assets/actions`; `IRoom.gameId` from the room returned by `getRooms()`.
 - Produces: behavior only — on entering a valid room, `openGame(room.gameId)` is called (when `gameId` is non-null); on unmount, `closeGame()` is called.
 
@@ -170,32 +174,32 @@ import { openGame, closeGame } from '../../plugins/assets/actions';
 In the validation effect, capture the matched room and open its game (replace the existing `rooms.some(...)` check):
 
 ```ts
-    getRooms()
-      .then((rooms) => {
-        if (!alive) return;
-        const room = rooms.find((r) => r.id === roomId);
-        if (room) {
-          void openRoom(roomId!);
-          if (room.gameId) void openGame(room.gameId);
-          setState('valid');
-        } else {
-          setState('invalid');
-        }
-      })
-      .catch(() => alive && setState('invalid'));
+getRooms()
+  .then((rooms) => {
+    if (!alive) return;
+    const room = rooms.find((r) => r.id === roomId);
+    if (room) {
+      void openRoom(roomId!);
+      if (room.gameId) void openGame(room.gameId);
+      setState('valid');
+    } else {
+      setState('invalid');
+    }
+  })
+  .catch(() => alive && setState('invalid'));
 ```
 
 Extend the existing unmount cleanup so it also closes the game:
 
 ```ts
-  // Leave the room AND its game when the route unmounts (back to picker / different room).
-  useEffect(
-    () => () => {
-      closeRoom();
-      closeGame();
-    },
-    [],
-  );
+// Leave the room AND its game when the route unmounts (back to picker / different room).
+useEffect(
+  () => () => {
+    closeRoom();
+    closeGame();
+  },
+  [],
+);
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -215,10 +219,12 @@ git commit -m "feat(assets): open/close the workspace game with the room route"
 ### Task 3: Strip game-management UI from `AssetBoardPane`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/AssetBoardPane.tsx`
 - Test: `studio/frontend/src/plugins/assets/AssetBoardPane.spec.tsx` (rewrite)
 
 **Interfaces:**
+
 - Consumes: `activeGameId` and `assets` from the assets plugin state (set by `openGame`); `createAsset` from `./actions`.
 - Produces: a board that renders the new-asset form + grid for the active game and renders **no** `game-select` / `new-game` / `refresh-games` / `games-empty`.
 
@@ -377,10 +383,12 @@ git commit -m "feat(assets): bind asset board to the workspace game; drop game p
 ### Task 4: `ImageLightbox` component
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/assets/ImageLightbox.tsx`
 - Test: `studio/frontend/src/plugins/assets/ImageLightbox.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `Dialog`, `DialogContent` from `@/components/ui/dialog`; `DialogPrimitive.Title` from `@radix-ui/react-dialog` (for an accessible, visually-hidden title).
 - Produces: `export function ImageLightbox(props: IImageLightboxProps)` where
   `interface IImageLightboxProps { src: string; alt: string; open: boolean; onOpenChange(open: boolean): void; }`.
@@ -469,10 +477,12 @@ git commit -m "feat(assets): add ImageLightbox full-size image viewer"
 ### Task 5: Wire the lightbox into the `AssetCard` preview
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/AssetCard.tsx`
 - Test: `studio/frontend/src/plugins/assets/AssetCard.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `ImageLightbox` from `./ImageLightbox` (Task 4); existing `selected.imageRef`, `BACKEND_URL`.
 - Produces: clicking the `asset-selected-image` preview opens `image-lightbox`; candidate thumbnails still call `selectGeneration` and do not open the lightbox.
 
@@ -543,33 +553,35 @@ import { ImageLightbox } from './ImageLightbox';
 Add lightbox state inside the component (near the other hooks):
 
 ```ts
-  const [zoomed, setZoomed] = useState(false);
+const [zoomed, setZoomed] = useState(false);
 ```
 
 Make the preview clickable — replace the existing selected-preview block:
 
 ```tsx
-        {selected && (
-          <div className="flex h-32 w-full items-center justify-center overflow-hidden rounded-md bg-muted">
-            <img
-              data-testid="asset-selected-image"
-              src={`${BACKEND_URL}${selected.imageRef}`}
-              alt={a.name.get()}
-              width={a.width.get()}
-              height={a.height.get()}
-              onClick={() => setZoomed(true)}
-              className="h-full w-full cursor-zoom-in object-contain"
-            />
-          </div>
-        )}
+{
+  selected && (
+    <div className="flex h-32 w-full items-center justify-center overflow-hidden rounded-md bg-muted">
+      <img
+        data-testid="asset-selected-image"
+        src={`${BACKEND_URL}${selected.imageRef}`}
+        alt={a.name.get()}
+        width={a.width.get()}
+        height={a.height.get()}
+        onClick={() => setZoomed(true)}
+        className="h-full w-full cursor-zoom-in object-contain"
+      />
+    </div>
+  );
+}
 ```
 
 Render the lightbox once (just before the closing `</Card>`), using the selected image:
 
 ```tsx
-      {selected && (
-        <ImageLightbox src={`${BACKEND_URL}${selected.imageRef}`} alt={a.name.get()} open={zoomed} onOpenChange={setZoomed} />
-      )}
+{
+  selected && <ImageLightbox src={`${BACKEND_URL}${selected.imageRef}`} alt={a.name.get()} open={zoomed} onOpenChange={setZoomed} />;
+}
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -591,6 +603,7 @@ git commit -m "feat(assets): open full-size viewer when the asset preview is cli
 The board no longer reads the games list, `initAssets` no longer calls `loadGames`, and nothing creates games from the client (the backend auto-creates a game per room). Remove the dead surface so the codebase stays honest.
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/actions.ts` (remove `loadGames`, `createGame`)
 - Modify: `studio/frontend/src/plugins/assets/state.ts` (remove `games`, `gamesStatus`)
 - Modify: `studio/frontend/src/plugins/assets/restClient.ts` (remove `getGames`, `createGame` if unused)
@@ -621,12 +634,14 @@ In `actions.spec.ts`: delete the `createGame creates, appends to games, and sele
 - [ ] **Step 6: Run the full frontend gates**
 
 Run (from `studio/frontend`):
+
 ```
 npx prettier --check .
 npx nx typecheck frontend
 npx nx test frontend
 npx nx build frontend
 ```
+
 Expected: all four PASS. Typecheck is the key signal that no dangling reference to the removed symbols remains.
 
 - [ ] **Step 7: Commit**
@@ -646,6 +661,7 @@ flows no longer exist; entering a room now binds the board to that room's game
 directly. Update the specs and add coverage for the lightbox.
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/assets.spec.ts`
 
 - [ ] **Step 1: Replace the game-selection helpers**
