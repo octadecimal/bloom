@@ -52,12 +52,6 @@ class RunRecorder:
         client.on("run_completed", lambda d: _record("run_completed", d))
 
 
-async def _wait_for_completed(recorder: RunRecorder, timeout: float = 15.0) -> None:
-    deadline = asyncio.get_event_loop().time() + timeout
-    while not recorder.run_completed and asyncio.get_event_loop().time() < deadline:
-        await asyncio.sleep(0.05)
-
-
 # ---------------------------------------------------------------------------
 # Case 1: two clients watch a skill run + asset attached
 # ---------------------------------------------------------------------------

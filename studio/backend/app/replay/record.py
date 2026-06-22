@@ -75,7 +75,6 @@ async def _record_run(settings, out: Path) -> None:
         description="Generate a game sprite image from a text description and add it to the Asset Board.",
     )
 
-    from langchain_openai import ChatOpenAI
     llm = ChatOpenAI(
         model=settings.default_model,
         api_key=settings.openrouter_api_key,
