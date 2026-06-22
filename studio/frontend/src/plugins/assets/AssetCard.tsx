@@ -1,5 +1,5 @@
 // studio/frontend/src/plugins/assets/AssetCard.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { assetsHooks } from './state';
 import type { IGeneration } from './state';
 import { BACKEND_URL } from './config';
@@ -24,6 +24,9 @@ export function AssetCard({ index }: { index: number }) {
   const selected = generations.find((g) => g.id === selectedId);
   const busy = status === 'generating' || status === 'queued';
   const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    setZoomed(false);
+  }, [selectedId]);
   // NOTE: hookstate v4 reserves `state.error` as a built-in for async promise
   // errors. Accessing `a.error` returns the hookstate promise-error (undefined),
   // not the asset field. Use `a.nested('error')` to reach the correct child node.

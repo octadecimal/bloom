@@ -108,6 +108,30 @@ describe('AssetCard', () => {
     expect(img.src).toContain('/media/g1/a1/gen1.png');
   });
 
+  it('closes the full-size lightbox when the selected generation changes', () => {
+    assetsSlice().assets.set([
+      mk({
+        status: 'done',
+        generations: [
+          { id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' },
+          { id: 'gen2', seed: 2, imageRef: '/media/g1/a1/gen2.png', createdAt: '' },
+        ],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
+    ]);
+    render(<AssetCard index={0} />);
+    // Open the lightbox
+    fireEvent.click(screen.getByTestId('asset-selected-image'));
+    expect(screen.getByTestId('image-lightbox-img')).toBeTruthy();
+    // Change the selected generation via state update
+    act(() => {
+      assetsSlice().assets[0].selectedGenerationId.set('gen2');
+    });
+    // Lightbox should be closed
+    expect(screen.queryByTestId('image-lightbox-img')).toBeNull();
+  });
+
   it('clicking a candidate thumbnail selects it and does not open the lightbox', () => {
     assetsSlice().assets.set([
       mk({
