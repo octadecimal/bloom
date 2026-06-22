@@ -9,11 +9,7 @@ export interface IRoomContextProps {
 export function RoomContext({ roomName, gameLinked }: IRoomContextProps) {
   return (
     <div className="flex items-center gap-2">
-      <Link
-        to="/"
-        title="Back to rooms"
-        className="flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-      >
+      <Link to="/" title="Back to rooms" className="flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
         <ChevronLeft aria-hidden className="h-3.5 w-3.5" />
         Rooms
       </Link>

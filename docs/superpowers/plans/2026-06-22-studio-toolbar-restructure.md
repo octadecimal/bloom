@@ -23,11 +23,13 @@
 ### Task 1: BrandMark + ToolbarDivider
 
 **Files:**
+
 - Create: `studio/frontend/src/app/BrandMark.tsx`
 - Create: `studio/frontend/src/app/ToolbarDivider.tsx`
 - Test: `studio/frontend/src/app/BrandMark.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `BrandMark(): JSX.Element` — the monogram tile + `Bloom Studio` `<h1>`.
@@ -69,10 +71,7 @@ Expected: FAIL — `Failed to resolve import "./BrandMark"`.
 export function BrandMark() {
   return (
     <div className="flex items-center gap-2">
-      <span
-        aria-hidden
-        className="grid h-5 w-5 place-items-center rounded-[6px] bg-primary text-[13px] font-bold leading-none text-primary-foreground"
-      >
+      <span aria-hidden className="grid h-5 w-5 place-items-center rounded-[6px] bg-primary text-[13px] font-bold leading-none text-primary-foreground">
         b
       </span>
       <h1 className="m-0 text-[13px] font-semibold tracking-tight text-foreground">Bloom Studio</h1>
@@ -111,10 +110,12 @@ git commit -m "feat(studio): add BrandMark monogram + ToolbarDivider primitives"
 ### Task 2: RoomContext breadcrumb
 
 **Files:**
+
 - Create: `studio/frontend/src/app/RoomContext.tsx`
 - Test: `studio/frontend/src/app/RoomContext.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `react-router-dom` `Link`, `lucide-react` (`ChevronLeft`, `Gamepad2`).
 - Produces:
   - `interface IRoomContextProps { roomName: string; gameLinked: boolean }`
@@ -178,11 +179,7 @@ export interface IRoomContextProps {
 export function RoomContext({ roomName, gameLinked }: IRoomContextProps) {
   return (
     <div className="flex items-center gap-2">
-      <Link
-        to="/"
-        title="Back to rooms"
-        className="flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-      >
+      <Link to="/" title="Back to rooms" className="flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
         <ChevronLeft aria-hidden className="h-3.5 w-3.5" />
         Rooms
       </Link>
@@ -218,10 +215,12 @@ git commit -m "feat(studio): add RoomContext breadcrumb lockup"
 ### Task 3: SwitchUser on the Button primitive
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/SwitchUser.tsx` (full rewrite)
 - Test: `studio/frontend/src/app/SwitchUser.spec.tsx` (extend)
 
 **Interfaces:**
+
 - Consumes: `useSession` (`{ username: string; logout(): void }`), `useNavigate`, `Button` (`@/components/ui/button`), `lucide-react` `LogOut`.
 - Produces: `SwitchUser(): JSX.Element` — avatar + username + ghost icon `Button` (`aria-label="Switch user"`).
 
@@ -230,13 +229,13 @@ git commit -m "feat(studio): add RoomContext breadcrumb lockup"
 Add this `it` block inside the existing `describe('SwitchUser', …)` in `studio/frontend/src/app/SwitchUser.spec.tsx` (keep the two existing tests unchanged):
 
 ```tsx
-  it('routes Switch user through the ghost Button primitive (not a raw button)', () => {
-    saveSession('ada');
-    render(tree());
-    const btn = screen.getByRole('button', { name: /switch user/i });
-    // ghost variant from buttonVariants → token border, not a bare <button>
-    expect(btn.className).toContain('border-border-strong');
-  });
+it('routes Switch user through the ghost Button primitive (not a raw button)', () => {
+  saveSession('ada');
+  render(tree());
+  const btn = screen.getByRole('button', { name: /switch user/i });
+  // ghost variant from buttonVariants → token border, not a bare <button>
+  expect(btn.className).toContain('border-border-strong');
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -300,11 +299,13 @@ git commit -m "feat(studio): rebuild SwitchUser on the ghost Button primitive"
 ### Task 4: De-box the menus (primitive + Menubar)
 
 **Files:**
+
 - Modify: `studio/frontend/src/components/ui/menubar.tsx` (Root de-box, retoken trigger/item, add `MenubarLabel`, content radius)
 - Modify: `studio/frontend/src/app/Menubar.tsx` (trigger icons + "Presets" label + item icons)
 - Test: `studio/frontend/src/app/Menubar.spec.tsx` (existing — must stay green)
 
 **Interfaces:**
+
 - Consumes: Radix Menubar primitives, `lucide-react` (`LayoutGrid`, `PanelsTopLeft`, `Save`, `RotateCcw`).
 - Produces: a borderless `Menubar` root; `MenubarLabel` export; `AppMenubar` with iconned triggers. **All existing testids unchanged.**
 
@@ -386,6 +387,7 @@ Give the triggers leading icons (text + testids unchanged):
   Layout
 </MenubarTrigger>
 ```
+
 ```tsx
 <MenubarTrigger data-testid="menu-view">
   <PanelsTopLeft aria-hidden className="h-3.5 w-3.5" />
@@ -406,6 +408,7 @@ Add a `Save` icon to the save item, a `Presets` label above the preset list, and
   // …unchanged…
 ))}
 ```
+
 ```tsx
 <MenubarItem data-testid="menu-reset-layout" onClick={() => host.resetLayout()}>
   <RotateCcw aria-hidden className="h-3.5 w-3.5" />
@@ -430,9 +433,11 @@ git commit -m "feat(studio): de-box menubar into borderless icon triggers"
 ### Task 5: Rezone the Workbench toolbar
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/Workbench.tsx`
 
 **Interfaces:**
+
 - Consumes: `BrandMark`, `ToolbarDivider` (Task 1), `AppMenubar` (Task 4), `SwitchUser` (Task 3), `ModeBadge`.
 - Produces: `Workbench({ roomContext }: { roomContext?: ReactNode })` — `h-10` four-zone toolbar. **Renames the prop `leading` → `roomContext`.**
 
@@ -499,10 +504,12 @@ git commit -m "feat(studio): rezone toolbar into four deliberate zones at 40px"
 ### Task 6: Wire RoomContext through RoomRoute (capstone)
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/routes/RoomRoute.tsx`
 - Test: `studio/frontend/src/app/routes/RoomRoute.spec.tsx` (update the `Workbench` mock; existing assertions stay)
 
 **Interfaces:**
+
 - Consumes: `RoomContext` (Task 2), `Workbench` `roomContext` prop (Task 5), `IRoom` (`../../plugins/llm-chat/state`).
 - Produces: `RoomRoute` renders `<Workbench roomContext={<RoomContext … />} />`.
 
@@ -623,6 +630,7 @@ npx nx typecheck frontend
 npx nx test frontend
 npx nx build frontend
 ```
+
 Expected: all PASS. (`nx test frontend` runs the whole Vitest suite incl. the guard, BrandMark, RoomContext, SwitchUser, Menubar, RoomRoute, smoke-level specs.)
 
 - [ ] **Step 2: Run the browser e2e against a replay backend**
@@ -632,6 +640,7 @@ Per `MEMORY.md` (Always run e2e before PR): ensure a replay backend is on `:8000
 ```bash
 just e2e
 ```
+
 Expected: PASS — including `routing.spec.ts` (Rooms link → picker), `chrome.spec.ts` / `styling.spec.ts` / `panes.spec.ts` / `layout-presets.spec.ts` (menu testids), `smoke.spec.ts` (Bloom Studio heading), and `theme.spec.ts` (which re-shoots `docs/design-language/reference-workbench.png`). Restore the `:8000` backend to its prior state afterward.
 
 - [ ] **Step 3: Eyeball the reference screenshot**
@@ -660,7 +669,7 @@ gh pr merge --squash --delete-branch
 
 ## Notes for the implementer
 
-- **Why the `leading` → `roomContext` rename:** the prop now feeds the *right* zone, not a left-leading slot; the name keeps the toolbar self-documenting. Only `Workbench.tsx` (def) and `RoomRoute.tsx` (call) + the `RoomRoute.spec` mock reference it.
+- **Why the `leading` → `roomContext` rename:** the prop now feeds the _right_ zone, not a left-leading slot; the name keeps the toolbar self-documenting. Only `Workbench.tsx` (def) and `RoomRoute.tsx` (call) + the `RoomRoute.spec` mock reference it.
 - **Accent discipline:** if you find yourself reaching for orange anywhere except the `BrandMark` tile, stop — that's a design-language violation the reviewer will reject.
 - **Icons are decorative:** every lucide icon in the toolbar/menus is `aria-hidden` so it never pollutes an accessible name or heading text.
 - **Typecheck fallback:** if `npx nx typecheck frontend` reports no such target in this environment, use `cd studio/frontend && npx tsc --noEmit` instead — same gate.

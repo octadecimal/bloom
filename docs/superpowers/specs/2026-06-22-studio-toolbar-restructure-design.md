@@ -72,7 +72,7 @@ height, **"b" monogram** brand mark, **user control A** (name + ghost switch ico
    lucide icon + label. Idle = `text-muted-foreground`; hover/open =
    `text-foreground` on `bg-raised-hover`. Icons: `LayoutGrid` (Layout),
    `PanelsTopLeft` (View).
-3. **Room context** *(right group, pushed by a flex spacer)*. A **breadcrumb lockup**:
+3. **Room context** _(right group, pushed by a flex spacer)_. A **breadcrumb lockup**:
    - `Rooms` — a router `<Link to="/">` (`text-muted-foreground` → `text-foreground`
      on hover), optionally preceded by a decorative `aria-hidden` `ChevronLeft`.
    - a faint `/` separator (`text-faint`),
@@ -112,17 +112,17 @@ No accent anywhere in the menus.
 
 ### Component map
 
-| File | Change |
-| --- | --- |
-| `app/BrandMark.tsx` *(new)* | Presentational: the monogram tile + wordmark `<h1>`. |
-| `app/RoomContext.tsx` *(new)* | Presentational breadcrumb: `Rooms` link + `/` + name + optional `GameChip`. Props: `{ roomName: string; gameLinked: boolean }`. |
-| `app/ToolbarDivider.tsx` *(new, tiny)* | 1px hairline vertical rule. |
-| `app/Workbench.tsx` | Rezoned toolbar: `h-10`; left group = `BrandMark` + divider + `AppMenubar`; right group = `roomContext` slot + divider + `ModeBadge` + `SwitchUser`. Rename the `leading` prop → `roomContext` (optional `ReactNode`). |
-| `app/Menubar.tsx` | Add leading icons to triggers; add the "Presets" group label; de-box (via the primitive). Room context is **not** here. All testids unchanged. |
-| `components/ui/menubar.tsx` | De-box `Menubar` Root; retoken `MenubarTrigger`/`MenubarItem` hover/open to `bg-raised-hover`/`text-foreground` (no accent-named classes); keep `MenubarContent` surface popover (confirm `rounded-[9px]`). |
-| `app/SwitchUser.tsx` | Rebuild on `Button` (`ghost`/`icon`, `LogOut`, `aria-label="Switch user"`) + avatar + username. No raw `<button>`/`<span>` styling. |
-| `app/routes/RoomRoute.tsx` | Store the resolved `room` in state; build `<RoomContext roomName={room.name} gameLinked={!!room.gameId} />` and pass it to `Workbench` via the renamed `roomContext` prop. (Keeps the `Rooms` link inside that node — satisfies the back-link tests.) |
-| `app/ModeBadge.tsx` | No logic change; verify it sits correctly in the new right group. |
+| File                                   | Change                                                                                                                                                                                                                                                |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/BrandMark.tsx` _(new)_            | Presentational: the monogram tile + wordmark `<h1>`.                                                                                                                                                                                                  |
+| `app/RoomContext.tsx` _(new)_          | Presentational breadcrumb: `Rooms` link + `/` + name + optional `GameChip`. Props: `{ roomName: string; gameLinked: boolean }`.                                                                                                                       |
+| `app/ToolbarDivider.tsx` _(new, tiny)_ | 1px hairline vertical rule.                                                                                                                                                                                                                           |
+| `app/Workbench.tsx`                    | Rezoned toolbar: `h-10`; left group = `BrandMark` + divider + `AppMenubar`; right group = `roomContext` slot + divider + `ModeBadge` + `SwitchUser`. Rename the `leading` prop → `roomContext` (optional `ReactNode`).                                |
+| `app/Menubar.tsx`                      | Add leading icons to triggers; add the "Presets" group label; de-box (via the primitive). Room context is **not** here. All testids unchanged.                                                                                                        |
+| `components/ui/menubar.tsx`            | De-box `Menubar` Root; retoken `MenubarTrigger`/`MenubarItem` hover/open to `bg-raised-hover`/`text-foreground` (no accent-named classes); keep `MenubarContent` surface popover (confirm `rounded-[9px]`).                                           |
+| `app/SwitchUser.tsx`                   | Rebuild on `Button` (`ghost`/`icon`, `LogOut`, `aria-label="Switch user"`) + avatar + username. No raw `<button>`/`<span>` styling.                                                                                                                   |
+| `app/routes/RoomRoute.tsx`             | Store the resolved `room` in state; build `<RoomContext roomName={room.name} gameLinked={!!room.gameId} />` and pass it to `Workbench` via the renamed `roomContext` prop. (Keeps the `Rooms` link inside that node — satisfies the back-link tests.) |
+| `app/ModeBadge.tsx`                    | No logic change; verify it sits correctly in the new right group.                                                                                                                                                                                     |
 
 **Why no `activeRoom.ts` change:** `RoomRoute` already fetches the room and has
 `room.name` / `room.gameId` in scope. Building the lockup there and passing it through

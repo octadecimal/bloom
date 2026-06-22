@@ -85,4 +85,16 @@ const MenubarLabel = React.forwardRef<React.ComponentRef<typeof MenubarPrimitive
 ));
 MenubarLabel.displayName = MenubarPrimitive.Label.displayName;
 
-export { Menubar, MenubarMenu, MenubarGroup, MenubarPortal, MenubarSub, MenubarRadioGroup, MenubarTrigger, MenubarContent, MenubarItem, MenubarSeparator, MenubarLabel };
+export {
+  Menubar,
+  MenubarMenu,
+  MenubarGroup,
+  MenubarPortal,
+  MenubarSub,
+  MenubarRadioGroup,
+  MenubarTrigger,
+  MenubarContent,
+  MenubarItem,
+  MenubarSeparator,
+  MenubarLabel,
+};
