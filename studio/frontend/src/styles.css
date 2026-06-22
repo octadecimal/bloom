@@ -10,68 +10,86 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
-  Bloom dark game-editor identity. DARK-ONLY today; a future light theme supplies a
-  second value-set for these same names (no component changes). Hex values match the
-  approved design mockups and are authoritative.
+  Bloom design language — Linear/floating-card. DARK-ONLY today; a future light theme
+  supplies a second value-set for these same names (no component changes). Values are
+  authoritative and locked by src/styles.tokens.spec.ts. See docs/design-language.md.
 */
 :root {
-  /* Neutral ramp — cool slate, three elevations */
-  --bg: #0d1014; /* gutter: app bg, gaps between panels, tab-strip gutter, inset fields */
-  --surface: #161b22; /* working pane surface; active tab shares this */
-  --raised: #1c222b; /* controls, tiles, cards-on-a-surface */
-  --raised-hover: #232a34; /* hover for raised elements */
-  --border-strong: #313a47; /* emphasized separators / resizers */
-  --faint: #5c6573; /* disabled / placeholder */
+  /* Surfaces — 4 elevations, nothing between */
+  --canvas: #08090a; /* app bg · the gap between floating panels · inset field wells */
+  --surface: #131417; /* the floating panel card body · active tab shares this */
+  --raised: #1b1c1f; /* cards / tiles / inputs sitting on a surface */
+  --raised-hover: #232427; /* hover state for raised things & menu items */
+  --bg: var(--canvas); /* legacy alias: existing bg-bg / body utilities */
 
-  /* Fire-orange accent extras */
-  --primary-hover: #ff7a33; /* hover/active of accent fills */
-  --accent-text: #ff8a4d; /* orange text/icons on dark surfaces */
-  --selection: rgba(240, 100, 30, 0.15); /* selected-row / active tint */
+  /* Hairlines — translucent white, exactly 2 weights */
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+
+  /* Text — 3 tiers */
+  --text-1: #ededef;
+  --text-2: #9b9ba4;
+  --text-3: #62626b;
+
+  /* Accent — fire orange, rationed */
+  --accent: #f0641e;
+  --accent-hover: #ff7a33;
+  --accent-text: #ff8a4d;
+  --accent-fg: #160a02;
+  --selection: rgba(240, 100, 30, 0.14);
   --selection-text: #ffb98c;
 
   /* Status */
   --success: #3ec28b;
   --warning: #e7b549;
+  --danger: #f0574d;
 
   /* Type */
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
 
-  /* ===== Legacy shadcn token names, remapped onto the dark ramp =====
+  /* ===== Legacy shadcn names, re-pointed onto the new ramp =====
      Existing utilities (bg-background, bg-muted, hover:bg-accent, bg-primary,
-     text-muted-foreground, border-border, text-destructive, ring-ring …) keep
-     working and inherit the new identity. */
-  --background: var(--surface); /* Card/Input/Select surfaces */
-  --foreground: #e7eaef;
-  --primary: #f0641e; /* fire orange */
-  --primary-foreground: #2a1002;
-  --border: #283039; /* hairline */
+     text-muted-foreground, border-border, text-destructive, ring-ring, text-faint …)
+     keep working and inherit the new identity. */
+  --background: var(--surface);
+  --foreground: var(--text-1);
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-foreground: var(--accent-fg);
+  --accent-foreground: var(--text-1);
+  --border: var(--hairline);
+  --border-strong: var(--hairline-strong);
   --popover: var(--surface);
-  --popover-foreground: var(--foreground);
-  --muted: var(--raised); /* bg-muted = raised surface */
-  --muted-foreground: #8a93a2;
-  --accent: var(--raised-hover); /* hover:bg-accent = neutral hover */
-  --accent-foreground: var(--foreground);
-  --ring: var(--primary); /* orange focus ring */
-  --input: var(--border);
-  --destructive: #e5484d; /* clear red on slate */
+  --popover-foreground: var(--text-1);
+  --muted: var(--raised);
+  --muted-foreground: var(--text-2);
+  --faint: var(--text-3);
+  --ring: var(--accent);
+  --input: var(--hairline);
+  --destructive: var(--danger);
   --destructive-foreground: #ffffff;
 }
 
 @theme inline {
   /* new tokens */
-  --color-bg: var(--bg);
+  --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
   --color-raised-hover: var(--raised-hover);
-  --color-border-strong: var(--border-strong);
-  --color-faint: var(--faint);
-  --color-primary-hover: var(--primary-hover);
+  --color-bg: var(--bg);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-text-1: var(--text-1);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
   --color-accent-text: var(--accent-text);
+  --color-accent-fg: var(--accent-fg);
   --color-selection: var(--selection);
   --color-selection-text: var(--selection-text);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-danger: var(--danger);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
@@ -79,13 +97,16 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
+  --color-faint: var(--faint);
+  --color-accent: var(--raised-hover); /* intentionally NOT var(--accent): keeps shadcn hover:bg-accent neutral; orange is bg-primary / text-accent-text */
   --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -94,8 +115,8 @@
 }
 
 body {
-  background: var(--bg);
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--text-1);
   margin: 0;
   font-family: var(--font-sans);
   font-size: 13px;
@@ -122,34 +143,53 @@ body {
   background: transparent;
 }
 
-/* === Dockview "bloom" theme: connected tabs over a recessed gutter === */
+/* === Dockview "bloom" theme: floating panel cards on the canvas (mockup C) === */
 .dockview-theme-bloom {
   --dv-group-view-background-color: var(--surface);
-  --dv-tabs-and-actions-container-background-color: var(--bg);
+  --dv-tabs-and-actions-container-background-color: var(--surface);
   --dv-activegroup-visiblepanel-tab-background-color: var(--surface);
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--surface);
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
-  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
-  --dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
-  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
-  --dv-tab-divider-color: var(--bg);
-  --dv-separator-border: var(--border);
-  --dv-paneview-active-outline-color: var(--primary);
+  --dv-activegroup-visiblepanel-tab-color: var(--text-1);
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-2);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-1);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-2);
+  --dv-tab-divider-color: transparent;
+  --dv-separator-border: transparent;
+  --dv-paneview-active-outline-color: var(--accent);
   --dv-icon-hover-background-color: var(--raised-hover);
+  --dv-activegroup-visiblepanel-tab-border-color: var(--accent);
   --dv-tab-font-size: 12px;
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--text-1);
 }
 
-/* Active tab: 2px orange cap; share the pane surface so tab + pane read as one shape */
-.dockview-theme-bloom .dv-active-tab {
-  box-shadow: inset 0 2px 0 var(--primary);
+/* The grid that tiles the panels inherits --dv-group-view-background-color (surface)
+   by default, which would fill the 8px gaps with the pane color. Paint it with the
+   canvas instead so the void behind the panels matches the toolbar and the surface
+   groups read as truly floating cards. (Nested split/branch containers are
+   transparent, so this one rule covers every gap.) */
+.dockview-theme-bloom .dv-grid-view {
+  background-color: var(--canvas);
 }
 
-/* Seamless panels: groups are flat surfaces with no outline of their own —
-   separation comes only from the darker gutter the resize sash paints between
-   them (pro-editor look; inner cards carry the only borders). */
+/* Each group is a rounded, hairline-bordered card floating on the canvas. */
+.dockview-theme-bloom .dv-groupview {
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+/* The wrapped active-tab indicator is the accent underline (model C signal). */
+.dockview-theme-bloom .dv-active-tab .dv-default-tab-content {
+  color: var(--text-1);
+}
+
+/* Resizer sash is invisible until hovered; the canvas gap provides the separation. */
 .dockview-theme-bloom .dv-sash {
-  background: var(--bg);
+  background: transparent;
+}
+.dockview-theme-bloom .dv-sash:hover {
+  background: var(--hairline-strong);
 }

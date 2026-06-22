@@ -20,3 +20,50 @@ test('app is dark-only: html keeps the dark class, there is no theme toggle, and
   await page.reload();
   await expect(html).toHaveClass(/dark/);
 });
+
+test('docked groups are floating hairline cards on the canvas', async ({ page }) => {
+  await gotoWorkbench(page);
+  const group = page.locator('.dockview-theme-bloom .dv-groupview').first();
+  await expect(group).toBeVisible();
+  const { radius, borderColor, borderWidth } = await group.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { radius: s.borderTopLeftRadius, borderColor: s.borderTopColor, borderWidth: s.borderTopWidth };
+  });
+  expect(radius).toBe('9px');
+  expect(borderWidth).toBe('1px');
+  // hairline = rgba(255,255,255,0.07)
+  expect(borderColor.replace(/\s/g, '')).toBe('rgba(255,255,255,0.07)');
+});
+
+test('the canvas token is the near-black app background', async ({ page }) => {
+  await gotoWorkbench(page);
+  const canvas = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim());
+  expect(canvas).toBe('#08090a');
+});
+
+test('the void behind the panels is the canvas, matching the toolbar (panels float)', async ({ page }) => {
+  await gotoWorkbench(page);
+  const { toolbar, toolbarBorderBottom, grid } = await page.evaluate(() => {
+    // Top toolbar (first child of the workbench shell) and the dockview grid that
+    // tiles the panels — the surface between/around groups. Both must be --canvas
+    // so the surface panels read as floating, with no lighter seam.
+    const tb = document.querySelector('[data-testid="workbench"] > div')!;
+    return {
+      toolbar: getComputedStyle(tb).backgroundColor,
+      toolbarBorderBottom: getComputedStyle(tb).borderBottomWidth,
+      grid: getComputedStyle(document.querySelector('.dockview-theme-bloom .dv-grid-view')!).backgroundColor,
+    };
+  });
+  // --canvas #08090a === rgb(8, 9, 10)
+  expect(grid).toBe('rgb(8, 9, 10)');
+  expect(grid).toBe(toolbar);
+  // No full-width divider under the toolbar: separation comes from the canvas gap +
+  // the floating panel cards, not a hairline that cuts edge-to-edge across the float.
+  expect(toolbarBorderBottom).toBe('0px');
+});
+
+test('reference screenshot of the workbench (committed fidelity artifact)', async ({ page }) => {
+  await gotoWorkbench(page);
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await page.screenshot({ path: 'docs/design-language/reference-workbench.png' });
+});

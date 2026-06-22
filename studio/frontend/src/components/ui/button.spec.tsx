@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { Button } from './button';
 
 describe('Button', () => {
@@ -12,7 +12,7 @@ describe('Button', () => {
 
   it('renders the ghost variant', () => {
     const { getByRole } = render(<Button variant="ghost">Quiet</Button>);
-    expect(getByRole('button').className).toContain('hover:bg-accent');
+    expect(getByRole('button').className).toContain('hover:bg-raised-hover');
   });
 
   it('applies the sm size', () => {
@@ -35,5 +35,22 @@ describe('Button', () => {
     const cls = getByRole('button').className;
     expect(cls).toContain('border-primary/45');
     expect(cls).toContain('text-accent-text');
+  });
+});
+
+describe('Button variants follow accent rationing', () => {
+  it('primary is the only accent fill', () => {
+    render(<Button data-testid="b">Go</Button>);
+    expect(screen.getByTestId('b').className).toContain('bg-primary'); // → --accent
+  });
+  it('ghost carries a hairline-strong edge, no fill', () => {
+    render(
+      <Button data-testid="g" variant="ghost">
+        x
+      </Button>,
+    );
+    const c = screen.getByTestId('g').className;
+    expect(c).toContain('bg-transparent');
+    expect(c).toContain('border-border-strong');
   });
 });

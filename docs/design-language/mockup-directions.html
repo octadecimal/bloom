@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bloom Studio — design directions</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #0a0a0b;
+        color: #e7eaef;
+        font-family:
+          'IBM Plex Sans',
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+        font-size: 13px;
+        -webkit-font-smoothing: antialiased;
+        padding: 28px 28px 60px;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 700;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .lede {
+        color: #8a93a2;
+        margin: 0 0 24px;
+        max-width: 880px;
+        line-height: 1.5;
+      }
+      .lede b {
+        color: #cbd2dc;
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+        max-width: 1320px;
+      }
+      .card {
+        border: 1px solid #20242c;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #0d0f12;
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          transform 0.1s,
+          box-shadow 0.15s;
+      }
+      .card:hover {
+        border-color: #3a4250;
+      }
+      .card.selected {
+        border-color: #f0641e;
+        box-shadow:
+          0 0 0 1px #f0641e,
+          0 8px 30px rgba(240, 100, 30, 0.18);
+      }
+      .card-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 13px 16px;
+        border-bottom: 1px solid #20242c;
+      }
+      .card-head .name {
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .card-head .tag {
+        color: #7a828f;
+        font-size: 11.5px;
+      }
+      .card-head .badge {
+        margin-left: auto;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8a93a2;
+        border: 1px solid #2a313b;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .rules {
+        padding: 11px 16px 15px;
+        border-top: 1px solid #20242c;
+      }
+      .rules li {
+        color: #97a0ad;
+        font-size: 11.5px;
+        line-height: 1.65;
+        margin: 0;
+        list-style: none;
+        padding-left: 16px;
+        position: relative;
+      }
+      .rules li::before {
+        content: '—';
+        position: absolute;
+        left: 0;
+        color: #4d5562;
+      }
+
+      /* ===== shared mini-studio skeleton; per-theme vars override ===== */
+      .studio {
+        --top-h: 30px;
+        --tab-h: 30px;
+        font-size: 11px;
+        user-select: none;
+      }
+      .s-top {
+        height: var(--top-h);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 11px;
+        font-size: 11px;
+      }
+      .s-top .home {
+        opacity: 0.6;
+      }
+      .s-top .brand {
+        font-weight: 700;
+      }
+      .s-top .mi {
+        opacity: 0.72;
+      }
+      .s-top .right {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .s-pill {
+        font-size: 9.5px;
+        padding: 1.5px 7px;
+        border-radius: 999px;
+      }
+      .s-body {
+        display: flex;
+        height: 232px;
+      }
+      .s-group {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .s-group.right-group {
+        flex: 0 0 44%;
+      }
+      .s-tabs {
+        height: var(--tab-h);
+        display: flex;
+        align-items: flex-end;
+        gap: 0;
+        padding: 0 0 0 0;
+      }
+      .s-tab {
+        height: calc(var(--tab-h) - 1px);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 13px;
+        font-size: 11px;
+        white-space: nowrap;
+        position: relative;
+      }
+      .s-tab .x {
+        opacity: 0.4;
+        font-size: 12px;
+      }
+      .s-pane {
+        flex: 1;
+        padding: 11px 13px;
+        overflow: hidden;
+        line-height: 1.5;
+      }
+      .s-h {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-weight: 700;
+        margin: 0 0 9px;
+        opacity: 0.55;
+      }
+      .msg {
+        margin: 0 0 8px;
+      }
+      .msg .who {
+        font-weight: 600;
+        font-size: 10px;
+      }
+      .msg.ai {
+        padding-left: 8px;
+      }
+      .msg .txt {
+        font-size: 11px;
+        opacity: 0.9;
+      }
+      .field {
+        border-radius: 6px;
+        padding: 6px 9px;
+        font-size: 10px;
+        margin-bottom: 8px;
+      }
+      .asset-card {
+        border-radius: 8px;
+        padding: 10px 11px;
+      }
+      .asset-card .at {
+        font-weight: 700;
+        font-size: 11px;
+      }
+      .asset-card .am {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 9.5px;
+        opacity: 0.6;
+        float: right;
+      }
+      .asset-card .btn {
+        font-size: 10px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        display: inline-block;
+        margin-top: 9px;
+      }
+      .legend {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin: 4px 0 0;
+        font-size: 11px;
+        color: #8a93a2;
+      }
+      .legend i {
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        vertical-align: -1px;
+        margin-right: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Four design directions — same Studio, four languages</h1>
+    <p class="lede">
+      Each tile is the <b>real Bloom Studio layout</b> (top bar · tab strip · two docked panes) rebuilt under one design language. What kills the "AI-generated"
+      feel isn't the hue — it's <b>discipline</b>: one accent, a small fixed set of surface elevations, and the active tab sharing its pane's surface so
+      tab+pane read as one shape. Click the direction that feels right.
+    </p>
+
+    <div class="grid">
+      <!-- ============ 1. PRO IDE ============ -->
+      <div class="card" data-choice="ide" onclick="toggleSelect(this)">
+        <div class="card-head"><span class="name">Pro IDE</span><span class="tag">VS Code · Zed</span><span class="badge">restraint</span></div>
+        <div class="studio" style="background: #181a1b; color: #cccccc">
+          <div class="s-top" style="background: #1f2122; border-bottom: 1px solid #2b2d2e">
+            <span class="home">← Rooms</span><span class="brand">Bloom Studio</span><span class="mi">Layout</span><span class="mi">View</span>
+            <span class="right"
+              ><span class="s-pill" style="background: #26282a; color: #9aa0a6">replay</span
+              ><span class="s-pill" style="background: #26282a; color: #9aa0a6">dylanh</span></span
+            >
+          </div>
+          <div class="s-body" style="background: #141516">
+            <div class="s-group">
+              <div class="s-tabs" style="background: #141516">
+                <div class="s-tab" style="background: #181a1b; color: #fff; box-shadow: inset 0 1px 0 #e0843f">Chat Room <span class="x">×</span></div>
+              </div>
+              <div class="s-pane" style="background: #181a1b">
+                <div class="msg">
+                  <span class="who">guest-6318</span>
+                  <div class="txt">howdy</div>
+                </div>
+                <div class="msg ai" style="border-left: 2px solid #e0843f">
+                  <span class="who" style="color: #e0843f">assistant</span>
+                  <div class="txt">Howdy! How can I assist you today?</div>
+                </div>
+                <div class="msg">
+                  <span class="who">dylanh</span>
+                  <div class="txt">what is the capital of France?</div>
+                </div>
+              </div>
+            </div>
+            <div class="s-group right-group">
+              <div class="s-tabs" style="background: #141516">
+                <div class="s-tab" style="color: #8b9096">Chat Settings</div>
+                <div class="s-tab" style="background: #181a1b; color: #fff; box-shadow: inset 0 1px 0 #e0843f">Asset Board <span class="x">×</span></div>
+              </div>
+              <div class="s-pane" style="background: #181a1b">
+                <div class="s-h">Asset Board</div>
+                <div class="field" style="background: #141516; border: 1px solid #2b2d2e; color: #777">Name</div>
+                <div class="asset-card" style="background: #1e2021; border: 1px solid #2b2d2e">
+                  <span class="am">schnell</span><span class="at">Test</span>
+                  <div style="color: #c8554f; font-size: 10px; margin-top: 4px">generation failed</div>
+                  <span class="btn" style="border: 1px solid #e0843f; color: #e0843f">Generate</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="rules">
+          <li>2 elevations only: editor body + slightly-darker chrome. Active tab IS the body.</li>
+          <li>Borders are 1px #2b2d2e hairlines; zero shadows. Accent only on active tab + primary action.</li>
+        </ul>
+      </div>
+
+      <!-- ============ 2. LINEAR / VERCEL ============ -->
+      <div class="card" data-choice="linear" onclick="toggleSelect(this)">
+        <div class="card-head"><span class="name">Linear · Vercel</span><span class="tag">refined SaaS</span><span class="badge">premium</span></div>
+        <div class="studio" style="background: #0a0a0b; color: #ededef">
+          <div class="s-top" style="background: #0a0a0b; border-bottom: 1px solid rgba(255, 255, 255, 0.07)">
+            <span class="home">← Rooms</span><span class="brand">Bloom Studio</span><span class="mi">Layout</span><span class="mi">View</span>
+            <span class="right"
+              ><span class="s-pill" style="background: rgba(255, 255, 255, 0.06); color: #a0a0a8; border: 1px solid rgba(255, 255, 255, 0.08)">replay</span
+              ><span class="s-pill" style="background: rgba(255, 255, 255, 0.06); color: #a0a0a8">dylanh</span></span
+            >
+          </div>
+          <div class="s-body" style="background: #0a0a0b">
+            <div class="s-group">
+              <div class="s-tabs" style="background: #0a0a0b; padding-top: 5px">
+                <div
+                  class="s-tab"
+                  style="background: #161618; color: #fff; border: 1px solid rgba(255, 255, 255, 0.08); border-bottom: none; border-radius: 8px 8px 0 0"
+                >
+                  Chat Room <span class="x">×</span>
+                </div>
+              </div>
+              <div class="s-pane" style="background: #161618; border: 1px solid rgba(255, 255, 255, 0.08); border-top: none; margin: 0 0 0 0">
+                <div class="msg">
+                  <span class="who">guest-6318</span>
+                  <div class="txt">howdy</div>
+                </div>
+                <div class="msg ai">
+                  <span class="who" style="color: #f0814e">assistant</span>
+                  <div class="txt">Howdy! How can I assist you today?</div>
+                </div>
+                <div class="msg">
+                  <span class="who">dylanh</span>
+                  <div class="txt">what is the capital of France?</div>
+                </div>
+              </div>
+            </div>
+            <div class="s-group right-group" style="padding-left: 6px">
+              <div class="s-tabs" style="background: #0a0a0b; padding-top: 5px">
+                <div class="s-tab" style="color: #7c7c85">Chat Settings</div>
+                <div
+                  class="s-tab"
+                  style="background: #161618; color: #fff; border: 1px solid rgba(255, 255, 255, 0.08); border-bottom: none; border-radius: 8px 8px 0 0"
+                >
+                  Asset Board <span class="x">×</span>
+                </div>
+              </div>
+              <div class="s-pane" style="background: #161618; border: 1px solid rgba(255, 255, 255, 0.08); border-top: none">
+                <div class="s-h">Asset Board</div>
+                <div class="field" style="background: #0e0e10; border: 1px solid rgba(255, 255, 255, 0.09); color: #6c6c75">Name</div>
+                <div class="asset-card" style="background: #1c1c1f; border: 1px solid rgba(255, 255, 255, 0.08)">
+                  <span class="am">schnell</span><span class="at">Test</span>
+                  <div style="color: #f0814e; font-size: 10px; margin-top: 4px">generation failed</div>
+                  <span class="btn" style="background: #f0641e; color: #160a02; font-weight: 600">Generate</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="rules">
+          <li>Near-black canvas; one raised card surface. Hairlines are translucent white, not grey hexes.</li>
+          <li>Rounded tab-tops fuse into the panel card. Accent = solid orange fill on the single primary action.</li>
+        </ul>
+      </div>
+
+      <!-- ============ 3. GAME ENGINE ============ -->
+      <div class="card" data-choice="engine" onclick="toggleSelect(this)">
+        <div class="card-head"><span class="name">Game engine</span><span class="tag">Unity · Unreal · Ableton</span><span class="badge">tooling</span></div>
+        <div class="studio" style="background: #0d1014; color: #d6dae1">
+          <div class="s-top" style="background: #0d1014; border-bottom: 1px solid #1f262f">
+            <span class="home">← Rooms</span><span class="brand">Bloom Studio</span><span class="mi">Layout</span><span class="mi">View</span>
+            <span class="right"
+              ><span class="s-pill" style="background: #161b22; color: #8a93a2; border: 1px solid #283039">replay</span
+              ><span class="s-pill" style="background: #161b22; color: #8a93a2">dylanh</span></span
+            >
+          </div>
+          <div class="s-body" style="background: #0d1014">
+            <div class="s-group">
+              <div class="s-tabs" style="background: #0d1014">
+                <div class="s-tab" style="background: #161b22; color: #fff; box-shadow: inset 0 2px 0 #f0641e">Chat Room <span class="x">×</span></div>
+              </div>
+              <div class="s-pane" style="background: #161b22">
+                <div class="msg">
+                  <span class="who">guest-6318</span>
+                  <div class="txt">howdy</div>
+                </div>
+                <div class="msg ai" style="border-left: 2px solid #f0641e">
+                  <span class="who" style="color: #ff8a4d">assistant</span>
+                  <div class="txt">Howdy! How can I assist you today?</div>
+                </div>
+                <div class="msg">
+                  <span class="who">dylanh</span>
+                  <div class="txt">what is the capital of France?</div>
+                </div>
+              </div>
+            </div>
+            <div class="s-group right-group" style="border-left: 2px solid #0d1014">
+              <div class="s-tabs" style="background: #0d1014">
+                <div class="s-tab" style="color: #8a93a2">Chat Settings</div>
+                <div class="s-tab" style="background: #161b22; color: #fff; box-shadow: inset 0 2px 0 #f0641e">Asset Board <span class="x">×</span></div>
+              </div>
+              <div class="s-pane" style="background: #161b22">
+                <div class="s-h" style="color: #ff8a4d; opacity: 1">Asset Board</div>
+                <div class="field" style="background: #0d1014; border: 1px solid #283039; color: #5c6573">Name</div>
+                <div class="asset-card" style="background: #1c222b; border: 1px solid #283039">
+                  <span class="am">schnell</span><span class="at">Test</span>
+                  <div style="color: #e5484d; font-size: 10px; margin-top: 4px">generation failed</div>
+                  <span class="btn" style="border: 1px solid #f0641e; color: #ff8a4d">Generate</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="rules">
+          <li>3 cool-slate elevations: gutter · pane surface · raised cards. Panels split by the dark gutter sash only.</li>
+          <li>Orange is the "active/selected" signal — top-cap on active tab, section labels, generate. (Closest to today, made consistent.)</li>
+        </ul>
+      </div>
+
+      <!-- ============ 4. FIGMA / NOTION ============ -->
+      <div class="card" data-choice="figma" onclick="toggleSelect(this)">
+        <div class="card-head"><span class="name">Figma · Notion</span><span class="tag">softer product</span><span class="badge">friendly</span></div>
+        <div class="studio" style="background: #1b1c1f; color: #e6e6e9">
+          <div class="s-top" style="background: #222327; border-bottom: 1px solid #303135">
+            <span class="home">← Rooms</span><span class="brand">Bloom Studio</span><span class="mi">Layout</span><span class="mi">View</span>
+            <span class="right"
+              ><span class="s-pill" style="background: #2c2d32; color: #a8a8b0">replay</span
+              ><span class="s-pill" style="background: #2c2d32; color: #a8a8b0">dylanh</span></span
+            >
+          </div>
+          <div class="s-body" style="background: #1b1c1f; padding: 8px; gap: 8px">
+            <div class="s-group" style="background: #26272b; border-radius: 10px; overflow: hidden">
+              <div class="s-tabs" style="background: #26272b; padding: 0 6px">
+                <div class="s-tab" style="color: #fff; font-weight: 600; border-bottom: 2px solid #f0641e">Chat Room</div>
+              </div>
+              <div class="s-pane" style="background: #26272b">
+                <div class="msg">
+                  <span class="who">guest-6318</span>
+                  <div class="txt">howdy</div>
+                </div>
+                <div class="msg ai">
+                  <span class="who" style="color: #f0814e">assistant</span>
+                  <div class="txt">Howdy! How can I assist you today?</div>
+                </div>
+                <div class="msg">
+                  <span class="who">dylanh</span>
+                  <div class="txt">what is the capital of France?</div>
+                </div>
+              </div>
+            </div>
+            <div class="s-group right-group" style="background: #26272b; border-radius: 10px; overflow: hidden">
+              <div class="s-tabs" style="background: #26272b; padding: 0 6px">
+                <div class="s-tab" style="color: #8e8e98">Chat Settings</div>
+                <div class="s-tab" style="color: #fff; font-weight: 600; border-bottom: 2px solid #f0641e">Asset Board</div>
+              </div>
+              <div class="s-pane" style="background: #26272b">
+                <div class="s-h">Asset Board</div>
+                <div class="field" style="background: #1b1c1f; border: 1px solid #34353a; color: #75757e">Name</div>
+                <div class="asset-card" style="background: #2e2f34; border: 1px solid #3a3b40">
+                  <span class="am">schnell</span><span class="at">Test</span>
+                  <div style="color: #f0814e; font-size: 10px; margin-top: 4px">generation failed</div>
+                  <span class="btn" style="background: #f0641e; color: #fff; font-weight: 600">Generate</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul class="rules">
+          <li>Lighter charcoal; panels are floating rounded cards with breathing room between them.</li>
+          <li>Underline marks the active tab; accent fill on primary action. Softer, less "engineer terminal".</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="legend" style="margin-top: 22px">
+      Note: every tile uses the same fire-orange you already have — the difference you're judging is <b style="color: #cbd2dc">structure & restraint</b>, not
+      the accent color.
+    </p>
+  </body>
+</html>

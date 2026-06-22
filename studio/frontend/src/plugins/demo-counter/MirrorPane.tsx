@@ -5,7 +5,7 @@ export function MirrorPane() {
   const s = counterHooks.usePluginState();
   bumpRenderCount('MirrorPane');
   return (
-    <div data-testid="mirror-pane" style={{ padding: 12 }}>
+    <div data-testid="mirror-pane" className="h-full bg-surface p-3">
       count is {s.count.get()}
     </div>
   );
