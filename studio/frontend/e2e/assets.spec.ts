@@ -87,9 +87,10 @@ test('two clients in the same game both see a generation live', async ({ browser
   await openApp(b, 'bob');
   await b.getByTestId('room-picker').getByText(name, { exact: true }).click();
   await expect(b.getByTestId('chat-room-pane')).toBeVisible();
+  // asset-board visibility confirms the board DOM mounted (mount guard).
   await expect(b.getByTestId('asset-board')).toBeVisible();
 
-  // bob's board fetches assets when the game is bound; wait for alice's asset to appear.
+  // Wait for an asset card to confirm bob's board has bound to the room's game and fetched assets (data-readiness gate).
   await expect(b.getByTestId(/^asset-card-/)).toBeVisible({ timeout: 10_000 });
 
   // alice generates; both boards show the produced image (proves real-time fan-out).
