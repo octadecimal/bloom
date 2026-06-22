@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-21
 **Status:** Design (approved for planning)
-**Scope:** `studio/frontend` only (no backend changes)
+**Scope:** `studio/frontend` (as designed). A follow-up bugfix (PR #36) also added a
+small backend change — see "Error handling" — to backfill `game_id` on legacy rooms.
 
 ## Problem
 
@@ -135,9 +136,14 @@ leave workspace (unmount → navigate to "/")
 ## Error handling
 
 - Unchanged asset/generation error surfaces (`asset-error`) remain.
-- If a room somehow has no `gameId` (legacy/edge), `openGame` is simply not called;
-  the board shows its normal empty/loading state rather than crashing. (All rooms
-  created by the current backend always have a `gameId`.)
+- A room must always have a `gameId` for the board to bind. New rooms get one at
+  creation, but **legacy rooms created before per-room games existed had none**, and
+  `RoomRoute`'s `if (room.gameId)` guard then left the board stuck at the
+  `board-no-game` ("Opening game…") fallback forever. Fixed in PR #36 (a follow-up to
+  this spec): `ConversationStore.list_rooms` / `get_room` now lazily create + link a
+  game for any room missing one, so every room the frontend sees carries a `gameId`.
+  This added a backend change the original scope didn't anticipate (it assumed every
+  room already had a `gameId`); see the Scope note at the top.
 
 ## Testing
 
