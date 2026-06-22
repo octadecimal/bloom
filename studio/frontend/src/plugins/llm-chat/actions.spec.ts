@@ -17,6 +17,7 @@ const socket = {
   leaveRoom: vi.fn(),
   sendPrompt: vi.fn(),
   setTyping: vi.fn(),
+  runSkill: vi.fn(),
 };
 const savePrefs = vi.fn();
 
@@ -73,6 +74,13 @@ describe('actions', () => {
     actions.setTyping(true);
     expect(socket.sendPrompt).toHaveBeenCalledWith('r1', 'hello');
     expect(socket.setTyping).toHaveBeenCalledWith('r1', true);
+  });
+
+  it('runSkill forwards to the socket for the active room', () => {
+    actions.__setDeps({ socket });
+    chatSlice().activeRoomId.set('r1');
+    actions.runSkill('generate-sprite', { description: 'knight' });
+    expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' });
   });
 
   describe('closeRoom', () => {

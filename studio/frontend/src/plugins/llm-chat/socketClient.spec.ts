@@ -180,4 +180,53 @@ describe('socketClient inbound', () => {
     sock.fire('message_created', { message: message({ roomId: ACTIVE }) });
     expect(chatSlice().lastError.get()).toBeNull();
   });
+
+  it('run_started + run_step_token build a run in the slice', () => {
+    const { sock } = connected();
+    sock.fire('run_started', { roomId: 'r1', run: { id: 'run1', roomId: 'r1', skillName: 'generate-sprite', status: 'running', steps: [] } });
+    sock.fire('run_step_started', { roomId: 'r1', runId: 'run1', step: { index: 0, type: 'final', toolName: null, content: '', status: 'running' } });
+    sock.fire('run_step_token', { roomId: 'r1', runId: 'run1', stepIndex: 0, delta: 'Hi' });
+    expect(chatSlice().runs.get()[0].steps[0].content).toBe('Hi');
+  });
+
+  it('run_started sets activeRunId', () => {
+    const { sock } = connected();
+    sock.fire('run_started', { roomId: 'r1', run: { id: 'run42', roomId: 'r1', skillName: 'gen', status: 'running', steps: [] } });
+    expect(chatSlice().activeRunId.get()).toBe('run42');
+  });
+
+  it('run_step_completed updates step status and content', () => {
+    const { sock } = connected();
+    sock.fire('run_started', { roomId: 'r1', run: { id: 'run1', roomId: 'r1', skillName: 'gen', status: 'running', steps: [] } });
+    sock.fire('run_step_started', { roomId: 'r1', runId: 'run1', step: { index: 0, type: 'final', toolName: null, content: '', status: 'running' } });
+    sock.fire('run_step_completed', { roomId: 'r1', runId: 'run1', stepIndex: 0, status: 'complete', content: 'done' });
+    expect(chatSlice().runs.get()[0].steps[0].status).toBe('complete');
+    expect(chatSlice().runs.get()[0].steps[0].content).toBe('done');
+  });
+
+  it('run_completed updates run status', () => {
+    const { sock } = connected();
+    sock.fire('run_started', { roomId: 'r1', run: { id: 'run1', roomId: 'r1', skillName: 'gen', status: 'running', steps: [] } });
+    sock.fire('run_completed', { roomId: 'r1', runId: 'run1', status: 'completed' });
+    expect(chatSlice().runs.get()[0].status).toBe('completed');
+  });
+
+  it('run_snapshot upserts run into the slice', () => {
+    const { sock } = connected();
+    const snap = { id: 'run1', roomId: 'r1', skillName: 'gen', status: 'running' as const, steps: [{ index: 0, type: 'final' as const, toolName: null, content: 'partial', status: 'running' as const }] };
+    sock.fire('run_snapshot', { roomId: 'r1', run: snap });
+    expect(chatSlice().runs.get()[0].steps[0].content).toBe('partial');
+  });
+
+  it('run_* events are ignored for non-active rooms', () => {
+    const { sock } = connected();
+    sock.fire('run_started', { roomId: 'OTHER', run: { id: 'run1', roomId: 'OTHER', skillName: 'gen', status: 'running', steps: [] } });
+    expect(chatSlice().runs.get()).toHaveLength(0);
+  });
+
+  it('runSkill emits run_skill to the socket', () => {
+    const { sock, emitted, client } = connected();
+    client.runSkill('r1', 'generate-sprite', { description: 'knight' });
+    expect(emitted).toContainEqual({ event: 'run_skill', payload: { roomId: 'r1', skillName: 'generate-sprite', args: { description: 'knight' } } });
+  });
 });

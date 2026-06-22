@@ -1,8 +1,8 @@
 import { io } from 'socket.io-client';
 import { BACKEND_URL } from './config';
-import type { IMessage, IAiStatus } from './state';
+import type { IMessage, IAiStatus, IRun, IRunStep } from './state';
 import { chatSlice } from './state';
-import { upsertMessage, appendToken, applySnapshot, completeMessage, addTyping, removeTyping } from './reducers';
+import { upsertMessage, appendToken, applySnapshot, completeMessage, addTyping, removeTyping, startRun, startStep, appendStepToken, completeStep, completeRun, applyRunSnapshot } from './reducers';
 import { notify } from '../../lib/notify';
 
 export interface ISocketLike {
@@ -20,6 +20,7 @@ function registerInboundHandlers(s: ISocketLike): void {
   const slice = chatSlice;
   const isActive = (roomId: string) => slice().activeRoomId.get() === roomId;
   const read = () => slice().messages.get({ noproxy: true }) as IMessage[];
+  const readRuns = () => slice().runs.get({ noproxy: true }) as IRun[];
 
   s.on('message_created', (p) => {
     const { message } = p as { message: IMessage };
@@ -62,6 +63,37 @@ function registerInboundHandlers(s: ISocketLike): void {
     const { message } = p as { message: string };
     slice().lastError.set(message ?? 'chat error');
     notify.error(message ?? 'chat error');
+  });
+  s.on('run_started', (p) => {
+    const { roomId, run } = p as { roomId: string; run: IRun };
+    if (!isActive(roomId)) return;
+    slice().runs.set(startRun(readRuns(), run));
+    slice().activeRunId.set(run.id);
+  });
+  s.on('run_step_started', (p) => {
+    const { roomId, runId, step } = p as { roomId: string; runId: string; step: IRunStep };
+    if (!isActive(roomId)) return;
+    slice().runs.set(startStep(readRuns(), runId, step));
+  });
+  s.on('run_step_token', (p) => {
+    const { roomId, runId, stepIndex, delta } = p as { roomId: string; runId: string; stepIndex: number; delta: string };
+    if (!isActive(roomId)) return;
+    slice().runs.set(appendStepToken(readRuns(), runId, stepIndex, delta));
+  });
+  s.on('run_step_completed', (p) => {
+    const { roomId, runId, stepIndex, status, content } = p as { roomId: string; runId: string; stepIndex: number; status: IRunStep['status']; content: string };
+    if (!isActive(roomId)) return;
+    slice().runs.set(completeStep(readRuns(), runId, stepIndex, status, content));
+  });
+  s.on('run_completed', (p) => {
+    const { roomId, runId, status } = p as { roomId: string; runId: string; status: IRun['status'] };
+    if (!isActive(roomId)) return;
+    slice().runs.set(completeRun(readRuns(), runId, status));
+  });
+  s.on('run_snapshot', (p) => {
+    const { roomId, run } = p as { roomId: string; run: IRun };
+    if (!isActive(roomId)) return;
+    slice().runs.set(applyRunSnapshot(readRuns(), run));
   });
 }
 
@@ -107,6 +139,7 @@ export function createSocketClient(makeSocket: MakeSocket) {
     leaveRoom: (roomId: string) => emit('leave_room', { roomId }),
     sendPrompt: (roomId: string, text: string) => emit('send_prompt', { roomId, text }),
     setTyping: (roomId: string, isTyping: boolean) => emit('typing', { roomId, isTyping }),
+    runSkill: (roomId: string, skillName: string, args: Record<string, unknown>) => emit('run_skill', { roomId, skillName, args }),
   };
 }
 

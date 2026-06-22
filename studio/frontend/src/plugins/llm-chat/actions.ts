@@ -11,7 +11,7 @@ interface IRestDeps {
 
 // Injectable deps so actions are unit-testable without the module singletons.
 let rest: IRestDeps = realRest;
-let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping'> | null = null;
+let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill'> | null = null;
 let savePrefs = realSavePrefs;
 let started = false;
 
@@ -106,6 +106,11 @@ export async function createRoom(name: string, model?: string): Promise<void> {
 export function sendPrompt(text: string): void {
   const roomId = chatSlice().activeRoomId.get();
   if (roomId) sock().sendPrompt(roomId, text);
+}
+
+export function runSkill(skillName: string, args: Record<string, unknown>): void {
+  const roomId = chatSlice().activeRoomId.get();
+  if (roomId) sock().runSkill(roomId, skillName, args);
 }
 
 export function setTyping(isTyping: boolean): void {
