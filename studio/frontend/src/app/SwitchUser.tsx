@@ -5,8 +5,8 @@ export function SwitchUser() {
   const { username, logout } = useSession();
   const navigate = useNavigate();
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{username}</span>
+    <span className="inline-flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">{username}</span>
       <button
         type="button"
         onClick={() => {

@@ -31,7 +31,7 @@ export function SaveLayoutDialog({ open, onOpenChange }: ISaveLayoutDialogProps)
           onKeyDown={(e) => {
             if (e.key === 'Enter') submit();
           }}
-          className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+          className="rounded-md border border-border bg-raised px-3 py-2 text-sm"
         />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button data-testid="save-layout-cancel" variant="outline" onClick={() => onOpenChange(false)}>
