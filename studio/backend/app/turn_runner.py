@@ -1,8 +1,11 @@
+import logging
 from dataclasses import dataclass
 from typing import AsyncIterator, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
+
+logger = logging.getLogger(__name__)
 
 BASE_SYSTEM = "You are a game-development assistant operating inside a studio. Be concise."
 
@@ -82,5 +85,8 @@ class TurnRunner:
             if text_open:
                 yield StepCompleted(text_index, "complete", text_buf)
         except Exception:
+            logger.exception("turn run failed")
             status = "error"
+            if text_open:
+                yield StepCompleted(text_index, "error", text_buf)
         yield RunFinished(status)

@@ -32,6 +32,9 @@ testpaths = ["tests"]
 markers = [
     "e2e: end-to-end suite that spawns a live server (requires MongoDB)",
 ]
+filterwarnings = [
+    "ignore::langgraph.warnings.LangGraphDeprecationWarning",
+]
 
 [tool.uv]
 package = false
