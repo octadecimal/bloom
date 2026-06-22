@@ -41,6 +41,20 @@ test('the canvas token is the near-black app background', async ({ page }) => {
   expect(canvas).toBe('#08090a');
 });
 
+test('the void behind the panels is the canvas, matching the toolbar (panels float)', async ({ page }) => {
+  await gotoWorkbench(page);
+  const { toolbar, grid } = await page.evaluate(() => ({
+    // Top toolbar (first child of the workbench shell) and the dockview grid that
+    // tiles the panels — the surface between/around groups. Both must be --canvas
+    // so the surface panels read as floating, with no lighter seam.
+    toolbar: getComputedStyle(document.querySelector('[data-testid="workbench"] > div')!).backgroundColor,
+    grid: getComputedStyle(document.querySelector('.dockview-theme-bloom .dv-grid-view')!).backgroundColor,
+  }));
+  // --canvas #08090a === rgb(8, 9, 10)
+  expect(grid).toBe('rgb(8, 9, 10)');
+  expect(grid).toBe(toolbar);
+});
+
 test('reference screenshot of the workbench (committed fidelity artifact)', async ({ page }) => {
   await gotoWorkbench(page);
   await page.setViewportSize({ width: 1440, height: 720 });

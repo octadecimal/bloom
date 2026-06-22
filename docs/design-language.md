@@ -175,6 +175,8 @@ stays local; only the cheap check gates CI).
    - Docked groups are floating hairline cards: `border-radius: 9px`, `1px` border,
      `border-color: rgba(255,255,255,0.07)`.
    - The `--canvas` token resolves to `#08090a`.
+   - The void behind the panels (`.dv-grid-view`) is `--canvas` and matches the
+     toolbar, so the surface panels read as floating (no lighter seam).
    - A reference screenshot of the workbench is captured (committed fidelity
      artifact).
 

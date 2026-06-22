@@ -161,8 +161,17 @@ body {
   --dv-icon-hover-background-color: var(--raised-hover);
   --dv-activegroup-visiblepanel-tab-border-color: var(--accent);
   --dv-tab-font-size: 12px;
-  background: var(--canvas); /* shows through the 8px gap between groups */
+  background: var(--canvas);
   color: var(--text-1);
+}
+
+/* The grid that tiles the panels inherits --dv-group-view-background-color (surface)
+   by default, which would fill the 8px gaps with the pane color. Paint it with the
+   canvas instead so the void behind the panels matches the toolbar and the surface
+   groups read as truly floating cards. (Nested split/branch containers are
+   transparent, so this one rule covers every gap.) */
+.dockview-theme-bloom .dv-grid-view {
+  background-color: var(--canvas);
 }
 
 /* Each group is a rounded, hairline-bordered card floating on the canvas. */
