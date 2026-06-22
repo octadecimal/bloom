@@ -70,13 +70,23 @@ class ConversationStore:
         await self._rooms.insert_one(_room_to_doc(room))
         return room
 
+    async def _with_game(self, room: Room) -> Room:
+        # Guarantee the one-room-one-game invariant for EVERY room, not just newly
+        # created ones. Rooms predating per-room games (or created without a games
+        # store) have no game_id; lazily create+link one so the workspace can bind.
+        if room.game_id is None and self._games is not None:
+            game = await self._games.create_game(name=room.name)
+            await self._rooms.update_one({"_id": room.id}, {"$set": {"game_id": game.id}})
+            room = room.model_copy(update={"game_id": game.id})
+        return room
+
     async def list_rooms(self) -> list[Room]:
         docs = await self._rooms.find().sort("created_at", 1).to_list(length=None)
-        return [_room_from_doc(d) for d in docs]
+        return [await self._with_game(_room_from_doc(d)) for d in docs]
 
     async def get_room(self, room_id: str) -> Room | None:
         doc = await self._rooms.find_one({"_id": room_id})
-        return _room_from_doc(doc) if doc else None
+        return await self._with_game(_room_from_doc(doc)) if doc else None
 
     async def list_messages(self, room_id: str) -> list[Message]:
         docs = await self._messages.find({"room_id": room_id}).sort("created_at", 1).to_list(length=None)
