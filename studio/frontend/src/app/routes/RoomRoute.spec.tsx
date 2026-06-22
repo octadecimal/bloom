@@ -5,9 +5,15 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 const getRooms = vi.fn();
 const openRoom = vi.fn();
 const closeRoom = vi.fn();
+const openGame = vi.fn();
+const closeGame = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
+vi.mock('../../plugins/assets/actions', () => ({
+  openGame: (id: string) => openGame(id),
+  closeGame: () => closeGame(),
+}));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
 vi.mock('../Workbench', () => ({
   Workbench: ({ leading }: { leading?: React.ReactNode }) => <div data-testid="workbench">{leading}WB</div>,
@@ -20,6 +26,8 @@ beforeEach(() => {
   getRooms.mockReset();
   openRoom.mockReset();
   closeRoom.mockReset();
+  openGame.mockReset();
+  closeGame.mockReset();
   error.mockReset();
 });
 
@@ -63,5 +71,20 @@ describe('RoomRoute', () => {
     render(tree('/room/nope'));
     expect(await screen.findByText('PICKER')).toBeInTheDocument();
     expect(error).toHaveBeenCalledWith(expect.stringMatching(/no longer exists/i));
+  });
+
+  it('valid room with a gameId → opens that game', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: 'g1', createdAt: 't' }]);
+    render(tree('/room/r1'));
+    expect(await screen.findByTestId('workbench')).toBeInTheDocument();
+    expect(openGame).toHaveBeenCalledWith('g1');
+  });
+
+  it('unmount → closeGame is called', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: 'g1', createdAt: 't' }]);
+    const { unmount } = render(tree('/room/r1'));
+    await screen.findByTestId('workbench');
+    unmount();
+    expect(closeGame).toHaveBeenCalled();
   });
 });

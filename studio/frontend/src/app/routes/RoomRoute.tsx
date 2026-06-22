@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import { getRooms } from '../../plugins/llm-chat/restClient';
 import { openRoom, closeRoom } from '../../plugins/llm-chat/actions';
+import { openGame, closeGame } from '../../plugins/assets/actions';
 import { notify } from '../../lib/notify';
 import { ActiveRoomProvider } from './activeRoom';
 import { Workbench } from '../Workbench';
@@ -18,8 +19,10 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
     getRooms()
       .then((rooms) => {
         if (!alive) return;
-        if (rooms.some((r) => r.id === roomId)) {
+        const room = rooms.find((r) => r.id === roomId);
+        if (room) {
           void openRoom(roomId!);
+          if (room.gameId) void openGame(room.gameId);
           setState('valid');
         } else {
           setState('invalid');
@@ -31,8 +34,14 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
     };
   }, [roomId]);
 
-  // Leave the room when the route unmounts (back to picker / different room).
-  useEffect(() => () => closeRoom(), []);
+  // Leave the room AND its game when the route unmounts (back to picker / different room).
+  useEffect(
+    () => () => {
+      closeRoom();
+      closeGame();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (state === 'invalid') notify.error('That room no longer exists.');
