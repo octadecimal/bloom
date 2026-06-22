@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Token system</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #08090a;
+        color: #ededef;
+        font-family:
+          'IBM Plex Sans',
+          system-ui,
+          Segoe UI,
+          sans-serif;
+        font-size: 13px;
+        -webkit-font-smoothing: antialiased;
+        padding: 26px 26px 70px;
+      }
+      h1 {
+        font-size: 19px;
+        font-weight: 700;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .lede {
+        color: #9b9ba4;
+        margin: 0 0 24px;
+        max-width: 900px;
+        line-height: 1.55;
+      }
+      .lede b {
+        color: #cbcbd2;
+        font-weight: 600;
+      }
+      h2 {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: #62626b;
+        font-weight: 700;
+        margin: 26px 0 12px;
+      }
+      .wrap {
+        max-width: 1180px;
+      }
+      .ramp {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .sw {
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .sw .chip {
+        height: 64px;
+      }
+      .sw .meta {
+        padding: 9px 11px;
+      }
+      .sw .nm {
+        font-weight: 600;
+        font-size: 12px;
+      }
+      .sw .hex {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        color: #9b9ba4;
+      }
+      .sw .use {
+        color: #7a7a85;
+        font-size: 10.5px;
+        margin-top: 3px;
+        line-height: 1.4;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .tt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 8px;
+        padding: 9px 13px;
+        background: #131417;
+      }
+      .tt .dot {
+        width: 13px;
+        height: 13px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .tt .mono {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        color: #9b9ba4;
+      }
+      .rules {
+        background: #131417;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 10px;
+        padding: 14px 18px;
+        color: #b6b6bf;
+        line-height: 1.7;
+        font-size: 12.5px;
+      }
+      .rules b {
+        color: #fff;
+      }
+      .rules .k {
+        color: #ff8a4d;
+        font-weight: 600;
+      }
+      .live {
+        display: flex;
+        gap: 8px;
+        background: #08090a;
+        padding: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 12px;
+      }
+      .panel {
+        flex: 1;
+        background: #131417;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 9px;
+        overflow: hidden;
+      }
+      .ptabs {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 0 6px;
+        height: 30px;
+        display: flex;
+        align-items: flex-end;
+      }
+      .ptab {
+        font-size: 11px;
+        padding: 7px 12px;
+      }
+      .ptab.on {
+        color: #fff;
+        border-bottom: 2px solid #f0641e;
+        font-weight: 600;
+      }
+      .ptab.off {
+        color: #7a7a85;
+      }
+      .pbody {
+        padding: 12px;
+      }
+      .lbl {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #62626b;
+        font-weight: 700;
+        margin-bottom: 9px;
+      }
+      .fld {
+        background: #1b1c1f;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        padding: 6px 9px;
+        font-size: 11px;
+        color: #62626b;
+        margin-bottom: 9px;
+      }
+      .tile {
+        background: #1b1c1f;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .tile .t {
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .tile .m {
+        float: right;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        color: #7a7a85;
+      }
+      .btn {
+        background: #f0641e;
+        color: #160a02;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        display: inline-block;
+        margin-top: 10px;
+      }
+      .btn.ghost {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        color: #c9c9d2;
+        margin-left: 6px;
+      }
+      .pill {
+        font-size: 10px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #9b9ba4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>The token system — small, fixed, ruled</h1>
+      <p class="lede">
+        This is the actual cure. Today there are ~6 ad-hoc greys and two kinds of border. The Linear look is
+        <b>4 surfaces, 2 hairline weights, 3 text tiers, 1 accent</b> — and rules about when each is allowed. Nothing in the app gets a color that isn't on this
+        page.
+      </p>
+
+      <h2>Surfaces — 4 elevations, nothing between</h2>
+      <div class="ramp">
+        <div class="sw">
+          <div class="chip" style="background: #08090a"></div>
+          <div class="meta">
+            <span class="nm">canvas</span> <span class="hex">#08090a</span>
+            <div class="use">app bg · the gap between floating panels · inset field wells</div>
+          </div>
+        </div>
+        <div class="sw">
+          <div class="chip" style="background: #131417"></div>
+          <div class="meta">
+            <span class="nm">surface</span> <span class="hex">#131417</span>
+            <div class="use">the floating panel card body · active tab shares this</div>
+          </div>
+        </div>
+        <div class="sw">
+          <div class="chip" style="background: #1b1c1f"></div>
+          <div class="meta">
+            <span class="nm">raised</span> <span class="hex">#1b1c1f</span>
+            <div class="use">cards / tiles / inputs sitting on a surface</div>
+          </div>
+        </div>
+        <div class="sw">
+          <div class="chip" style="background: #232427"></div>
+          <div class="meta">
+            <span class="nm">raised-hover</span> <span class="hex">#232427</span>
+            <div class="use">hover state for raised things & menu items</div>
+          </div>
+        </div>
+      </div>
+
+      <h2>Hairlines — translucent white, exactly 2 weights (the Linear signature)</h2>
+      <div class="row">
+        <div class="tt">
+          <span class="dot" style="background: rgba(255, 255, 255, 0.07)"></span><b>hairline</b> <span class="mono">rgba(255,255,255,.07)</span> — every default
+          border: panels, cards, fields, dividers
+        </div>
+        <div class="tt">
+          <span class="dot" style="background: rgba(255, 255, 255, 0.12)"></span><b>hairline-strong</b> <span class="mono">rgba(255,255,255,.12)</span> —
+          hover/emphasis, resizer, ghost-button edge
+        </div>
+      </div>
+
+      <h2>Text — 3 tiers only</h2>
+      <div class="row">
+        <div class="tt"><span style="color: #ededef; font-weight: 600">text-1 primary</span> <span class="mono">#ededef</span></div>
+        <div class="tt"><span style="color: #9b9ba4; font-weight: 600">text-2 secondary / labels</span> <span class="mono">#9b9ba4</span></div>
+        <div class="tt"><span style="color: #62626b; font-weight: 600">text-3 faint / placeholder</span> <span class="mono">#62626b</span></div>
+      </div>
+
+      <h2>Accent — fire orange, rationed</h2>
+      <div class="row">
+        <div class="tt"><span class="dot" style="background: #f0641e"></span><b>accent</b> <span class="mono">#f0641e</span></div>
+        <div class="tt"><span class="dot" style="background: #ff7a33"></span>accent-hover <span class="mono">#ff7a33</span></div>
+        <div class="tt">
+          <span class="dot" style="background: #ff8a4d"></span><span style="color: #ff8a4d">accent-text</span> <span class="mono">#ff8a4d</span>
+        </div>
+        <div class="tt">
+          <span class="dot" style="background: rgba(240, 100, 30, 0.14)"></span>selection tint <span class="mono">rgba(240,100,30,.14)</span>
+        </div>
+        <div class="tt"><span class="dot" style="background: #3ec28b"></span>success <span class="mono">#3ec28b</span></div>
+        <div class="tt"><span class="dot" style="background: #f0574d"></span>danger <span class="mono">#f0574d</span></div>
+      </div>
+
+      <h2>The rules (this is what kills the AI-generated look)</h2>
+      <div class="rules">
+        1. <b>4 surfaces, full stop.</b> No component invents a 5th grey. Elevation goes canvas → surface → raised → raised-hover, never sideways.<br />
+        2. <b>Every border is a hairline</b> (one of the two white-alpha weights). No more `#283039` / `#313a47` hex borders.<br />
+        3. <span class="k">Accent is rationed:</span> active-tab underline · focus ring · selected row · and <b>exactly one</b> primary button per view.
+        Everything else (Delete, secondary actions) is a ghost button. Orange is never decoration.<br />
+        4. <b>3 text tiers only.</b> Labels are text-2 uppercase; placeholders text-3.
+      </div>
+
+      <h2>All of it together — live</h2>
+      <div class="live">
+        <div class="panel">
+          <div class="ptabs"><span class="ptab on">Chat Room</span></div>
+          <div class="pbody">
+            <div style="margin-bottom: 7px">
+              <b style="font-size: 11px">guest-6318</b>
+              <div style="font-size: 11px; opacity: 0.9">howdy</div>
+            </div>
+            <div style="padding-left: 8px">
+              <b style="font-size: 11px; color: #ff8a4d">assistant</b>
+              <div style="font-size: 11px; opacity: 0.9">Howdy! How can I assist you today?</div>
+            </div>
+            <span class="pill" style="margin-top: 10px">● connected</span>
+          </div>
+        </div>
+        <div class="panel" style="flex: 0 0 44%">
+          <div class="ptabs"><span class="ptab off">Chat Settings</span><span class="ptab on">Asset Board</span></div>
+          <div class="pbody">
+            <div class="lbl">Asset Board</div>
+            <div class="fld">Name</div>
+            <div class="tile">
+              <span class="m">schnell</span><span class="t">Test</span>
+              <div style="color: #f0574d; font-size: 10px; margin-top: 4px">generation failed</div>
+              <span class="btn">Generate</span><span class="btn ghost">Delete</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
