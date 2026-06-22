@@ -29,4 +29,11 @@ describe('Button', () => {
     const { getByRole } = render(<Button className="extra">x</Button>);
     expect(getByRole('button').classList.contains('extra')).toBe(true);
   });
+
+  it('renders the accentOutline variant', () => {
+    const { getByRole } = render(<Button variant="accentOutline">Generate</Button>);
+    const cls = getByRole('button').className;
+    expect(cls).toContain('border-primary/45');
+    expect(cls).toContain('text-accent-text');
+  });
 });

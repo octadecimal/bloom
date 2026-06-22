@@ -93,10 +93,10 @@ export function AssetCard({ index }: { index: number }) {
       </CardContent>
 
       <CardFooter className="justify-between">
-        <Button data-testid="asset-generate" onClick={() => generateAsset(id)} disabled={busy}>
+        <Button data-testid="asset-generate" variant="accentOutline" onClick={() => generateAsset(id)} disabled={busy}>
           {generations.length > 0 ? 'Generate again' : 'Generate'}
         </Button>
-        <Button variant="outline" onClick={() => void deleteAsset(id)}>
+        <Button variant="ghost" onClick={() => void deleteAsset(id)}>
           Delete
         </Button>
       </CardFooter>
