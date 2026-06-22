@@ -73,8 +73,8 @@ from typing import Any, Optional
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 
 class ReplayToolCallingChatModel(BaseChatModel):
@@ -86,6 +86,10 @@ class ReplayToolCallingChatModel(BaseChatModel):
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
         raise NotImplementedError("async only")
+
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        """Accept tool binding (ignored — replay model knows its tool calls from the cassette)."""
+        return self
 
     async def _agenerate(
         self,
@@ -104,6 +108,28 @@ class ReplayToolCallingChatModel(BaseChatModel):
         else:
             msg = AIMessage(content="".join(self.cassette.get("final", ["ok"])))
         return ChatResult(generations=[ChatGeneration(message=msg)])
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ):
+        """Stream tokens for the final reply; tool-call turn uses _agenerate (no streaming)."""
+        has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
+        if not has_tool_result and self.cassette.get("tool_calls"):
+            # First turn: emit a single non-streaming tool-call chunk
+            result = await self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            msg = result.generations[0].message
+            yield ChatGenerationChunk(message=AIMessageChunk(content=msg.content, tool_calls=msg.tool_calls))
+        else:
+            # Final turn: stream each token from the cassette
+            for token in self.cassette.get("final", ["ok"]):
+                chunk = AIMessageChunk(content=token)
+                if run_manager:
+                    await run_manager.on_llm_new_token(token, chunk=chunk)
+                yield ChatGenerationChunk(message=chunk)
 
 
 def build_chat_model(settings: Settings, model: str) -> BaseChatModel:
