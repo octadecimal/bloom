@@ -2,7 +2,20 @@ import { io } from 'socket.io-client';
 import { BACKEND_URL } from './config';
 import type { IMessage, IAiStatus, IRun, IRunStep } from './state';
 import { chatSlice } from './state';
-import { upsertMessage, appendToken, applySnapshot, completeMessage, addTyping, removeTyping, startRun, startStep, appendStepToken, completeStep, completeRun, applyRunSnapshot } from './reducers';
+import {
+  upsertMessage,
+  appendToken,
+  applySnapshot,
+  completeMessage,
+  addTyping,
+  removeTyping,
+  startRun,
+  startStep,
+  appendStepToken,
+  completeStep,
+  completeRun,
+  applyRunSnapshot,
+} from './reducers';
 import { notify } from '../../lib/notify';
 
 export interface ISocketLike {
@@ -81,7 +94,13 @@ function registerInboundHandlers(s: ISocketLike): void {
     slice().runs.set(appendStepToken(readRuns(), runId, stepIndex, delta));
   });
   s.on('run_step_completed', (p) => {
-    const { roomId, runId, stepIndex, status, content } = p as { roomId: string; runId: string; stepIndex: number; status: IRunStep['status']; content: string };
+    const { roomId, runId, stepIndex, status, content } = p as {
+      roomId: string;
+      runId: string;
+      stepIndex: number;
+      status: IRunStep['status'];
+      content: string;
+    };
     if (!isActive(roomId)) return;
     slice().runs.set(completeStep(readRuns(), runId, stepIndex, status, content));
   });

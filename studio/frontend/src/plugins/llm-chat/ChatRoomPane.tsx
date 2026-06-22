@@ -18,9 +18,7 @@ import { RunTimeline } from './RunTimeline';
  *   → { skillName: 'generate-sprite', args: { description: 'a knight', style: 'pixel' } }
  * "hello world" → null
  */
-export function parseSlashCommand(
-  text: string,
-): { skillName: string; args: Record<string, string> } | null {
+export function parseSlashCommand(text: string): { skillName: string; args: Record<string, string> } | null {
   const slashMatch = text.match(/^\/(\S+)\s*(.*)$/);
   if (!slashMatch) return null;
 
@@ -164,20 +162,11 @@ function SkillAutocomplete({ prefix }: { prefix: string }) {
   const matches = skills.filter((sk) => sk.name.startsWith(prefix));
   if (matches.length === 0) return null;
   return (
-    <ul
-      data-testid="skill-autocomplete"
-      className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md"
-    >
+    <ul data-testid="skill-autocomplete" className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md">
       {matches.map((sk) => (
-        <li
-          key={sk.name}
-          data-testid={`skill-option-${sk.name}`}
-          className="cursor-pointer rounded px-2 py-1 text-foreground hover:bg-raised"
-        >
+        <li key={sk.name} data-testid={`skill-option-${sk.name}`} className="cursor-pointer rounded px-2 py-1 text-foreground hover:bg-raised">
           <span className="font-semibold text-accent-text">/{sk.name}</span>
-          {sk.description ? (
-            <span className="ml-2 text-muted-foreground">{sk.description}</span>
-          ) : null}
+          {sk.description ? <span className="ml-2 text-muted-foreground">{sk.description}</span> : null}
         </li>
       ))}
     </ul>

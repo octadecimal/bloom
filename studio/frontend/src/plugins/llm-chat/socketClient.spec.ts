@@ -213,7 +213,13 @@ describe('socketClient inbound', () => {
 
   it('run_snapshot upserts run into the slice', () => {
     const { sock } = connected();
-    const snap = { id: 'run1', roomId: 'r1', skillName: 'gen', status: 'running' as const, steps: [{ index: 0, type: 'final' as const, toolName: null, content: 'partial', status: 'running' as const }] };
+    const snap = {
+      id: 'run1',
+      roomId: 'r1',
+      skillName: 'gen',
+      status: 'running' as const,
+      steps: [{ index: 0, type: 'final' as const, toolName: null, content: 'partial', status: 'running' as const }],
+    };
     sock.fire('run_snapshot', { roomId: 'r1', run: snap });
     expect(chatSlice().runs.get()[0].steps[0].content).toBe('partial');
   });

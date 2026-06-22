@@ -57,13 +57,17 @@ export function removeTyping(typing: string[], author: string): string[] {
 export function startRun(runs: IRun[], run: IRun): IRun[] {
   const idx = runs.findIndex((r) => r.id === run.id);
   if (idx === -1) return [...runs, run];
-  const next = runs.slice(); next[idx] = run; return next;
+  const next = runs.slice();
+  next[idx] = run;
+  return next;
 }
 
 function patchRun(runs: IRun[], runId: string, fn: (r: IRun) => IRun): IRun[] {
   const idx = runs.findIndex((r) => r.id === runId);
   if (idx === -1) return runs;
-  const next = runs.slice(); next[idx] = fn(next[idx]); return next;
+  const next = runs.slice();
+  next[idx] = fn(next[idx]);
+  return next;
 }
 
 export function startStep(runs: IRun[], runId: string, step: IRunStep): IRun[] {
