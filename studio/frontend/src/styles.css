@@ -1,56 +1,81 @@
 @import 'tailwindcss';
 @import 'dockview-react/dist/styles/dockview.css';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+  Bloom dark game-editor identity. DARK-ONLY today; a future light theme supplies a
+  second value-set for these same names (no component changes). Hex values match the
+  approved design mockups and are authoritative.
+*/
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.15 0 0);
-  --primary: oklch(0.55 0.2 264);
-  --primary-foreground: oklch(0.98 0 0);
-  --border: oklch(0.9 0 0);
-  /* popover — same as background in light mode */
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0 0);
-  /* muted — slightly off-white for subtle backgrounds */
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.45 0 0);
-  /* accent — slightly off-white for hover/focus states */
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0.15 0 0);
-  /* ring — matches primary */
-  --ring: oklch(0.55 0.2 264);
-  /* input — same as border */
-  --input: oklch(0.9 0 0);
-  /* destructive — error/danger actions and text */
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.98 0 0);
-}
-.dark {
-  --background: oklch(0.15 0 0);
-  --foreground: oklch(0.98 0 0);
-  --primary: oklch(0.65 0.2 264);
-  --primary-foreground: oklch(0.15 0 0);
-  --border: oklch(0.3 0 0);
-  /* popover — same as background in dark mode */
-  --popover: oklch(0.15 0 0);
-  --popover-foreground: oklch(0.98 0 0);
-  /* muted — slightly lighter than background */
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  /* accent — slightly lighter than background for hover/focus */
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.98 0 0);
-  /* ring — matches primary */
-  --ring: oklch(0.65 0.2 264);
-  /* input — same as border */
-  --input: oklch(0.3 0 0);
-  /* destructive — slightly lighter for contrast on the dark surface */
-  --destructive: oklch(0.65 0.22 27);
-  --destructive-foreground: oklch(0.98 0 0);
+  /* Neutral ramp — cool slate, three elevations */
+  --bg: #0d1014; /* gutter: app bg, gaps between panels, tab-strip gutter, inset fields */
+  --surface: #161b22; /* working pane surface; active tab shares this */
+  --raised: #1c222b; /* controls, tiles, cards-on-a-surface */
+  --raised-hover: #232a34; /* hover for raised elements */
+  --border-strong: #313a47; /* emphasized separators / resizers */
+  --faint: #5c6573; /* disabled / placeholder */
+
+  /* Fire-orange accent extras */
+  --primary-hover: #ff7a33; /* hover/active of accent fills */
+  --accent-text: #ff8a4d; /* orange text/icons on dark surfaces */
+  --selection: rgba(240, 100, 30, 0.15); /* selected-row / active tint */
+  --selection-text: #ffb98c;
+
+  /* Status */
+  --success: #3ec28b;
+  --warning: #e7b549;
+
+  /* Type */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
+
+  /* ===== Legacy shadcn token names, remapped onto the dark ramp =====
+     Existing utilities (bg-background, bg-muted, hover:bg-accent, bg-primary,
+     text-muted-foreground, border-border, text-destructive, ring-ring …) keep
+     working and inherit the new identity. */
+  --background: var(--surface); /* Card/Input/Select surfaces */
+  --foreground: #e7eaef;
+  --primary: #f0641e; /* fire orange */
+  --primary-foreground: #2a1002;
+  --border: #283039; /* hairline */
+  --popover: var(--surface);
+  --popover-foreground: var(--foreground);
+  --muted: var(--raised); /* bg-muted = raised surface */
+  --muted-foreground: #8a93a2;
+  --accent: var(--raised-hover); /* hover:bg-accent = neutral hover */
+  --accent-foreground: var(--foreground);
+  --ring: var(--primary); /* orange focus ring */
+  --input: var(--border);
+  --destructive: #e5484d; /* clear red on slate */
+  --destructive-foreground: #ffffff;
 }
 
 @theme inline {
+  /* new tokens */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-raised-hover: var(--raised-hover);
+  --color-border-strong: var(--border-strong);
+  --color-faint: var(--faint);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent-text: var(--accent-text);
+  --color-selection: var(--selection);
+  --color-selection-text: var(--selection-text);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* legacy names */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
@@ -69,7 +94,30 @@
 }
 
 body {
-  background: var(--background);
+  background: var(--bg);
   color: var(--foreground);
   margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin editor scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--raised) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--raised);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--raised-hover);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
