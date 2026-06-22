@@ -12,7 +12,7 @@ export function SwitchUser() {
         aria-hidden
         className="grid h-[18px] w-[18px] place-items-center rounded-full border border-border bg-raised-hover text-[10px] text-muted-foreground"
       >
-        {username.slice(0, 1).toLowerCase()}
+        {(username ?? '').slice(0, 1).toLowerCase()}
       </span>
       <span className="text-[13px] text-muted-foreground">{username}</span>
       <Button
