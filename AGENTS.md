@@ -66,6 +66,11 @@ docs: clarify setup steps in README
   and **MUST** be followed. Add new standards there as they are agreed.
 - Current highlights: **TypeScript interfaces always use an `I` prefix** (`IPlugin`,
   `IPaneDef`). See the doc for the full, authoritative list.
+- The **studio visual design language** is authoritative and lives in
+  [`docs/design-language.md`](docs/design-language.md) — 4 surfaces, 2 hairlines,
+  3 text tiers, 1 rationed accent, floating-card Dockview model. All
+  `studio/frontend` UI MUST follow it; raw colors outside `styles.css` are blocked
+  by a guard test.
 
 ## Tooling & plugins
 
