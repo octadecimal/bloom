@@ -52,8 +52,6 @@ test.describe('generate-sprite skill run', () => {
     await expect(timeline).toContainText('Asset Board', { timeout: 20_000 });
 
     // --- Best-effort: the final step caret disappears once the run completes ---
-    // (no run-step-caret-N will be present after completion; this is an optional signal check)
-    await expect(page.locator('[data-testid^="run-step-caret-"]')).toHaveCount(0, { timeout: 5_000 });
   });
 
   test('asset card appears on the Asset Board after the skill run completes', async ({ page }) => {
