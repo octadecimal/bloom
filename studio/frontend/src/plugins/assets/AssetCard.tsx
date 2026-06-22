@@ -33,11 +33,11 @@ export function AssetCard({ index }: { index: number }) {
   const errorMessage = (a.nested('error') as unknown as { get(): string | null }).get();
 
   return (
-    <Card data-testid={`asset-card-${id}`} className="w-64">
+    <Card data-testid={`asset-card-${id}`} className="w-56">
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <strong className="truncate">{a.name.get()}</strong>
-          <span className="text-xs text-muted-foreground">{a.workflow.get()}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">{a.workflow.get()}</span>
         </div>
       </CardHeader>
 
