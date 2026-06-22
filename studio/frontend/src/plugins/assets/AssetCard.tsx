@@ -101,9 +101,7 @@ export function AssetCard({ index }: { index: number }) {
         </Button>
       </CardFooter>
 
-      {selected && (
-        <ImageLightbox src={`${BACKEND_URL}${selected.imageRef}`} alt={a.name.get()} open={zoomed} onOpenChange={setZoomed} />
-      )}
+      {selected && <ImageLightbox src={`${BACKEND_URL}${selected.imageRef}`} alt={a.name.get()} open={zoomed} onOpenChange={setZoomed} />}
     </Card>
   );
 }

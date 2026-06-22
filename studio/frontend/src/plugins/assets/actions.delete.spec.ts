@@ -16,9 +16,7 @@ describe('deleteAsset', () => {
     assetsSlice().assets.set([{ id: 'a1' } as never]);
     actions.__setDeps({
       rest: {
-        getGames: vi.fn(),
         getAssets: vi.fn(),
-        createGame: vi.fn(),
         createAsset: vi.fn(),
         updateAsset: vi.fn(),
         deleteAsset: vi.fn().mockResolvedValue(undefined),

@@ -1,5 +1,5 @@
 // studio/frontend/src/plugins/assets/restClient.ts
-import type { IGame, IAsset, Workflow } from './state';
+import type { IAsset, Workflow } from './state';
 import { BACKEND_URL } from './config';
 
 export interface ICreateAssetInput {
@@ -15,10 +15,6 @@ export interface ICreateAssetInput {
 async function okJson<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`request failed: ${res.status}`);
   return (await res.json()) as T;
-}
-
-export async function getGames(): Promise<IGame[]> {
-  return okJson<IGame[]>(await fetch(`${BACKEND_URL}/games`));
 }
 
 export async function getAssets(gameId: string): Promise<IAsset[]> {
@@ -56,16 +52,6 @@ export async function selectGeneration(assetId: string, generationId: string): P
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ generationId }),
-    }),
-  );
-}
-
-export async function createGame(name: string): Promise<IGame> {
-  return okJson<IGame>(
-    await fetch(`${BACKEND_URL}/games`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
     }),
   );
 }
