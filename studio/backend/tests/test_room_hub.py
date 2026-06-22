@@ -168,6 +168,45 @@ async def test_generation_error_emits_error_and_keeps_draining():
     assert statuses[-1] == "idle"  # room not deadlocked
 
 
+from app.turn_runner import RunFinished as _RunFinished
+
+
+class ErrorRunner:
+    """Runner that yields only a RunFinished('error') — no tokens."""
+
+    async def run(self, **kw):
+        yield _RunFinished("error")
+
+
+@pytest.mark.asyncio
+async def test_runner_error_emits_error_and_keeps_draining():
+    """When TurnRunner emits RunFinished('error') on the plain-chat path,
+    an 'error' socket event must be emitted and the message must NOT be
+    completed (status stays streaming / no message_completed event).
+    Subsequent queued turns must still drain."""
+    sio = FakeSio()
+    store = FakeStore()
+    chat = GatedChatService()  # unused by runner path but required positionally
+    runner = ErrorRunner()
+    hub = RoomHub(sio, store, chat, turn_runner=runner)
+
+    await hub.handle_prompt("r1", "Alice", "first")
+
+    await asyncio.wait_for(_wait_event(sio, "error"), timeout=1)
+    # Let the drain settle to idle
+    await asyncio.wait_for(_wait_event(sio, "ai_status"), timeout=1)
+    await asyncio.sleep(0.05)
+
+    # error event emitted for the room
+    errors = [d for e, d, _ in sio.events if e == "error"]
+    assert errors and errors[0]["roomId"] == "r1"
+    # message must NOT have been completed (no message_completed event)
+    assert "message_completed" not in sio.names()
+    # room is not deadlocked
+    statuses = [d["state"] for e, d, _ in sio.events if e == "ai_status"]
+    assert statuses[-1] == "idle"
+
+
 class StepChatService:
     """Yields tokens one at a time, each gated, so a test can observe mid-stream state."""
 

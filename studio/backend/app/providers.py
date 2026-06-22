@@ -96,6 +96,7 @@ class ReplayToolCallingChatModel(BaseChatModel):
     cassette: dict
     llm_cassettes: dict = {}
     replay_token_delay: float = 0.0
+    model: str = ""
     _has_tools: bool = False
 
     @property
@@ -133,6 +134,8 @@ class ReplayToolCallingChatModel(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.model == ERROR_SENTINEL_MODEL:
+            raise RuntimeError("forced replay error (sentinel model)")
         if self._text_mode():
             msg = AIMessage(content="".join(self._text_chunks(messages)))
             return ChatResult(generations=[ChatGeneration(message=msg)])
@@ -155,6 +158,8 @@ class ReplayToolCallingChatModel(BaseChatModel):
         **kwargs: Any,
     ):
         """Stream tokens for the final reply; tool-call turn uses _agenerate (no streaming)."""
+        if self.model == ERROR_SENTINEL_MODEL:
+            raise RuntimeError("forced replay error (sentinel model)")
         if self._text_mode():
             # Plain chat: stream prompt-keyed LLM cassette chunks as plain text,
             # mirroring ReplayLLMProvider (incl. the per-chunk replay delay that
@@ -190,6 +195,7 @@ def build_chat_model(settings: Settings, model: str) -> BaseChatModel:
             cassette=load_run_cassette(DEFAULT_FIXTURES_DIR),
             llm_cassettes=load_llm_cassettes(DEFAULT_FIXTURES_DIR),
             replay_token_delay=settings.replay_token_delay,
+            model=model,
         )
     from langchain_openai import ChatOpenAI
 

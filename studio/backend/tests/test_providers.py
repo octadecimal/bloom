@@ -2,6 +2,7 @@ import pytest
 from app.config import Settings
 from app.providers import (
     ReplayLLMProvider, LiveOpenRouterProvider, build_provider, ERROR_SENTINEL_MODEL,
+    ReplayToolCallingChatModel,
 )
 
 CASSETTES = {"hi there": ["Hi", " back"], "__default__": ["Sure", " thing"]}
@@ -37,8 +38,6 @@ def test_factory_selects_by_mode():
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.providers import ReplayToolCallingChatModel
-
 
 def _cassette():
     return {
@@ -63,3 +62,9 @@ async def test_replay_model_after_tool_emits_final_text():
     ]
     res = await m.ainvoke(msgs)
     assert res.tool_calls == [] and res.content == "Done now."
+
+
+async def test_replay_tool_model_raises_on_sentinel_model_agenerate():
+    m = ReplayToolCallingChatModel(cassette=_cassette(), model=ERROR_SENTINEL_MODEL)
+    with pytest.raises(RuntimeError, match="sentinel model"):
+        await m.ainvoke([HumanMessage("x")])

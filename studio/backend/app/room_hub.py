@@ -190,8 +190,11 @@ class RoomHub:
         async for ev in self._runner.run(
             messages=messages, model=model, skill=None, args={}, ctx=None
         ):
-            if type(ev).__name__ == "StepToken":
+            name = type(ev).__name__
+            if name == "StepToken":
                 yield ev.delta
+            elif name == "RunFinished" and ev.status == "error":
+                raise RuntimeError("generation failed")
 
     async def _run_skill(self, room_id: str, descriptor: dict) -> None:
         from app.runs import run_wire, RunStep
