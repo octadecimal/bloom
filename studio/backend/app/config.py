@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     replay_token_delay: float = 0.0
     comfyui_url: str = "http://127.0.0.1:8188"
     media_dir: str = "var/media"
+    skills_dir: str = str(
+        (__import__("pathlib").Path(__file__).resolve().parents[3] / "skills")
+    )
 
 
 def _apply_legacy(settings: Settings) -> Settings:
