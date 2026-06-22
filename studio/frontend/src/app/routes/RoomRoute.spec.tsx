@@ -16,7 +16,7 @@ vi.mock('../../plugins/assets/actions', () => ({
 }));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
 vi.mock('../Workbench', () => ({
-  Workbench: ({ leading }: { leading?: React.ReactNode }) => <div data-testid="workbench">{leading}WB</div>,
+  Workbench: ({ roomContext }: { roomContext?: React.ReactNode }) => <div data-testid="workbench">{roomContext}WB</div>,
 }));
 
 import { RoomRoute } from './RoomRoute';
