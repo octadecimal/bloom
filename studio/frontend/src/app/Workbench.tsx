@@ -14,7 +14,7 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
 
   return (
     <div data-testid="workbench" className="flex h-screen flex-col bg-canvas font-sans text-foreground">
-      <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-hairline bg-canvas px-2.5">
+      <div className="flex h-9 flex-shrink-0 items-center justify-between bg-canvas px-2.5">
         <div className="flex items-center gap-2">
           {leading}
           <h1 className="m-0 text-[13px] font-semibold tracking-tight">Bloom Studio</h1>
