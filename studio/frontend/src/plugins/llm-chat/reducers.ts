@@ -1,4 +1,4 @@
-import type { IMessage } from './state';
+import type { IMessage, IRun, IRunStep } from './state';
 
 // Minimal streaming assistant stub used as a safety net when a token or snapshot
 // arrives before its message_created (rare — message_created normally precedes).
@@ -52,4 +52,42 @@ export function addTyping(typing: string[], author: string): string[] {
 
 export function removeTyping(typing: string[], author: string): string[] {
   return typing.filter((a) => a !== author);
+}
+
+export function startRun(runs: IRun[], run: IRun): IRun[] {
+  const idx = runs.findIndex((r) => r.id === run.id);
+  if (idx === -1) return [...runs, run];
+  const next = runs.slice(); next[idx] = run; return next;
+}
+
+function patchRun(runs: IRun[], runId: string, fn: (r: IRun) => IRun): IRun[] {
+  const idx = runs.findIndex((r) => r.id === runId);
+  if (idx === -1) return runs;
+  const next = runs.slice(); next[idx] = fn(next[idx]); return next;
+}
+
+export function startStep(runs: IRun[], runId: string, step: IRunStep): IRun[] {
+  return patchRun(runs, runId, (r) => ({ ...r, steps: [...r.steps, step] }));
+}
+
+export function appendStepToken(runs: IRun[], runId: string, index: number, delta: string): IRun[] {
+  return patchRun(runs, runId, (r) => ({
+    ...r,
+    steps: r.steps.map((s) => (s.index === index ? { ...s, content: s.content + delta } : s)),
+  }));
+}
+
+export function completeStep(runs: IRun[], runId: string, index: number, status: IRunStep['status'], content: string): IRun[] {
+  return patchRun(runs, runId, (r) => ({
+    ...r,
+    steps: r.steps.map((s) => (s.index === index ? { ...s, status, content } : s)),
+  }));
+}
+
+export function completeRun(runs: IRun[], runId: string, status: IRun['status']): IRun[] {
+  return patchRun(runs, runId, (r) => ({ ...r, status }));
+}
+
+export function applyRunSnapshot(runs: IRun[], run: IRun): IRun[] {
+  return startRun(runs, run);
 }
