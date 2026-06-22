@@ -80,6 +80,13 @@ describe('RoomRoute', () => {
     expect(openGame).toHaveBeenCalledWith('g1');
   });
 
+  it('valid room without a gameId → openGame is NOT called', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: null, createdAt: 't' }]);
+    render(tree('/room/r1'));
+    expect(await screen.findByTestId('workbench')).toBeInTheDocument();
+    expect(openGame).not.toHaveBeenCalled();
+  });
+
   it('unmount → closeGame is called', async () => {
     getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: 'g1', createdAt: 't' }]);
     const { unmount } = render(tree('/room/r1'));
