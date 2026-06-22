@@ -9,4 +9,9 @@ describe('Input', () => {
     expect(el.tagName).toBe('INPUT');
     expect(el.classList.contains('extra')).toBe(true);
   });
+
+  it('renders at the compact height', () => {
+    const { getByPlaceholderText } = render(<Input placeholder="h" />);
+    expect((getByPlaceholderText('h') as HTMLInputElement).className).toContain('h-7');
+  });
 });
