@@ -13,15 +13,16 @@ const FUNC = /\b(?:rgb|rgba|hsl|hsla)\s*\(/;
 
 function listSources(): string[] {
   return globSync('**/*.{ts,tsx}', { cwd: srcDir })
-    .filter((p) => !p.endsWith('styles.css'))
     .filter((p) => !p.endsWith('.guard.spec.ts'))
     .filter((p) => !p.endsWith('styles.tokens.spec.ts'));
 }
 
 describe('no raw colors outside the token layer', () => {
   it('every component sources its color from a token utility', () => {
+    const files = listSources();
+    expect(files.length, 'Guard must scan at least 1 source file — check glob/cwd').toBeGreaterThan(0);
     const offenders: string[] = [];
-    for (const rel of listSources()) {
+    for (const rel of files) {
       const text = readFileSync(`${srcDir}/${rel}`, 'utf8');
       text.split('\n').forEach((line, i) => {
         if (line.includes('design-allow-color')) return; // explicit escape hatch
@@ -29,5 +30,13 @@ describe('no raw colors outside the token layer', () => {
       });
     }
     expect(offenders, `Raw colors found (use a token utility or add // design-allow-color):\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('the detector regexes actually match raw colors (self-test)', () => {
+    expect(HEX.test('#1b1c1f')).toBe(true);
+    expect(FUNC.test('rgba(0,0,0,0.5)')).toBe(true);
+    // non-literals must NOT match
+    expect(HEX.test('currentColor') || FUNC.test('currentColor')).toBe(false);
+    expect(HEX.test('transparent') || FUNC.test('transparent')).toBe(false);
   });
 });
