@@ -346,7 +346,7 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
   useApplyTheme();
 
   return (
-    <div data-testid="workbench" className="flex h-screen flex-col bg-canvas font-sans text-1">
+    <div data-testid="workbench" className="flex h-screen flex-col bg-canvas font-sans text-foreground">
       <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-hairline bg-canvas px-2.5">
         <div className="flex items-center gap-2">
           {leading}
@@ -367,7 +367,7 @@ export function Workbench({ leading }: { leading?: ReactNode }) {
 }
 ```
 
-Note: `text-1` is the new Tailwind utility for `--color-text-1`; `bg-canvas`/`border-hairline` are the new surface/hairline utilities from Task 1. (If the project's existing `dockview.spec.ts` asserts the `dockview-theme-bloom` class is present, it still passes because the theme prop applies it.)
+Note: `text-foreground` is the existing text-color utility (remapped to `--text-1` in Task 1); `bg-canvas`/`border-hairline` are the new surface/hairline utilities from Task 1. Do NOT use a `text-1` class — Tailwind v4 would generate the primary-text utility as `text-text-1`, so use the remapped `text-foreground`/`text-muted-foreground`/`text-faint` instead. (If the project's existing `dockview.spec.ts` asserts the `dockview-theme-bloom` class is present, it still passes because the theme prop applies it.)
 
 - [ ] **Step 3: Typecheck**
 
