@@ -110,4 +110,29 @@ describe('assets actions', () => {
     ).toContain('g2');
     expect(assetsSlice().activeGameId.get()).toBe('g2');
   });
+
+  it('closeGame leaves the active game and clears assets', async () => {
+    const leaveGame = vi.fn();
+    actions.__setDeps({
+      rest: {
+        getGames: vi.fn(),
+        getAssets: vi.fn().mockResolvedValue([asset]),
+        createGame: vi.fn(),
+        createAsset: vi.fn(),
+        updateAsset: vi.fn(),
+        deleteAsset: vi.fn(),
+        selectGeneration: vi.fn(),
+      },
+      socket: { connect: vi.fn(), disconnect: vi.fn(), joinGame: vi.fn(), leaveGame, generateAsset: vi.fn() },
+    });
+    await actions.openGame('g1');
+    expect(assetsSlice().activeGameId.get()).toBe('g1');
+
+    actions.closeGame();
+
+    expect(leaveGame).toHaveBeenCalledWith('g1');
+    expect(assetsSlice().activeGameId.get()).toBeNull();
+    expect(assetsSlice().assets.get({ noproxy: true })).toHaveLength(0);
+    expect(assetsSlice().assetsStatus.get()).toBe('idle');
+  });
 });

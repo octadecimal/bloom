@@ -78,6 +78,15 @@ export async function openGame(gameId: string): Promise<void> {
   sock().joinGame(gameId);
 }
 
+export function closeGame(): void {
+  const s = assetsSlice();
+  const prev = s.activeGameId.get();
+  if (prev) sock().leaveGame(prev);
+  s.activeGameId.set(null);
+  s.assets.set([]);
+  s.assetsStatus.set('idle');
+}
+
 export async function createGame(name: string): Promise<void> {
   const created = await rest.createGame(name);
   const s = assetsSlice();
@@ -117,5 +126,4 @@ export async function selectGeneration(assetId: string, generationId: string): P
 
 export function initAssets(): void {
   ensureConnected();
-  void loadGames();
 }
