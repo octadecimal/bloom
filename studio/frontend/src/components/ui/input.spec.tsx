@@ -15,3 +15,16 @@ describe('Input', () => {
     expect((getByPlaceholderText('h') as HTMLInputElement).className).toContain('h-7');
   });
 });
+
+import { screen } from '@testing-library/react';
+
+describe('Input is a raised field well with token chrome', () => {
+  it('uses the raised surface and a hairline border', () => {
+    render(<Input data-testid="f" placeholder="Name" />);
+    const el = screen.getByTestId('f');
+    expect(el.className).toContain('bg-raised');
+    expect(el.className).toContain('border-input'); // → --hairline via remap
+    expect(el.className).toContain('placeholder:text-faint'); // → --text-3 via remap
+    expect(el.className).toContain('focus-visible:ring-ring'); // → --accent via remap
+  });
+});
