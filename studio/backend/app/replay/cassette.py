@@ -26,3 +26,10 @@ def load_comfy_cassette(fixtures_dir: Path) -> tuple[list[tuple[int, int]], byte
     progress = [(int(v), int(m)) for v, m in meta["progress"]]
     image = (comfy_dir / meta["image"]).read_bytes()
     return progress, image
+
+
+def load_run_cassette(fixtures_dir: Path) -> dict:
+    path = Path(fixtures_dir) / "run" / "default.json"
+    if not path.exists():
+        return {"tool_calls": [], "final": ["ok"]}
+    return json.loads(path.read_text(encoding="utf-8"))

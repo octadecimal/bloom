@@ -63,3 +63,59 @@ def build_provider(settings: Settings) -> LLMProvider:
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
     )
+
+
+# ---------------------------------------------------------------------------
+# Tool-capable chat-model seam (Task 4+)
+# ---------------------------------------------------------------------------
+
+from typing import Any, Optional
+
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+
+
+class ReplayToolCallingChatModel(BaseChatModel):
+    cassette: dict
+
+    @property
+    def _llm_type(self) -> str:
+        return "replay-tool-calling"
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        raise NotImplementedError("async only")
+
+    async def _agenerate(
+        self,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
+        if not has_tool_result and self.cassette.get("tool_calls"):
+            calls = [
+                {"name": c["name"], "args": c["args"], "id": f"call_{i}"}
+                for i, c in enumerate(self.cassette["tool_calls"])
+            ]
+            msg = AIMessage(content="", tool_calls=calls)
+        else:
+            msg = AIMessage(content="".join(self.cassette.get("final", ["ok"])))
+        return ChatResult(generations=[ChatGeneration(message=msg)])
+
+
+def build_chat_model(settings: Settings, model: str) -> BaseChatModel:
+    if settings.provider_mode == "replay":
+        from app.replay.cassette import DEFAULT_FIXTURES_DIR, load_run_cassette
+
+        return ReplayToolCallingChatModel(cassette=load_run_cassette(DEFAULT_FIXTURES_DIR))
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=model,
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+        streaming=True,
+    )
