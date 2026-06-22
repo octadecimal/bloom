@@ -38,4 +38,10 @@ describe('AssetBoardPane', () => {
     expect(screen.getByTestId('new-asset-form')).toBeTruthy();
     expect(screen.getByTestId('assets-empty')).toBeTruthy();
   });
+
+  it('renders the board-no-game fallback when no game is active', () => {
+    render(<AssetBoardPane {...fakeProps} />);
+    expect(screen.getByTestId('board-no-game')).toBeTruthy();
+    expect(screen.queryByTestId('new-asset-form')).toBeNull();
+  });
 });
