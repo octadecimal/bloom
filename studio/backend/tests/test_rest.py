@@ -51,6 +51,15 @@ async def test_models_endpoint_returns_catalog(ctx):
 
 
 @pytest.mark.asyncio
+async def test_get_skills_lists_registered(ctx):
+    async with _client(ctx) as client:
+        resp = await client.get("/skills")
+        assert resp.status_code == 200
+        names = [s["name"] for s in resp.json()]
+        assert "generate-sprite" in names
+
+
+@pytest.mark.asyncio
 async def test_rest_sends_cors_headers_for_browser_origin(ctx):
     # The frontend runs on a different origin (e.g. :4200) than the backend
     # (:8000), so the REST routes must answer CORS preflights and echo an

@@ -40,6 +40,11 @@ async def create_room(body: CreateRoomBody, request: Request) -> dict:
     return room_wire(room)
 
 
+@router.get("/skills")
+async def list_skills(request: Request) -> list[dict]:
+    return request.app.state.skill_registry.list_skills()
+
+
 @router.get("/rooms/{room_id}/messages")
 async def list_messages(room_id: str, request: Request) -> list[dict]:
     store = request.app.state.store

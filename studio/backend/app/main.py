@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from app.agent_tools import ToolFactory
 from app.assets.comfy import build_provider as build_comfy_provider
 from app.assets.hub import AssetHub
 from app.assets.media import MediaStore
@@ -17,10 +18,13 @@ from app.assets.store import AssetStore
 from app.chat_service import ChatService
 from app.config import Settings, get_settings
 from app.presence import PresenceRegistry
-from app.providers import build_provider
+from app.providers import build_provider, build_chat_model
 from app.rest import router
 from app.room_hub import RoomHub
+from app.runs import RunStore
+from app.skills import SkillRegistry
 from app.sockets import register_socket_handlers
+from app.turn_runner import TurnRunner
 from app.games import GameStore
 from app.store import ConversationStore
 
@@ -62,9 +66,6 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.include_router(router)
 
     sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-    presence = PresenceRegistry()
-    hub = RoomHub(sio, store, chat_service)
-    register_socket_handlers(sio, hub, presence)
 
     asset_store = AssetStore(mongo[settings.mongo_db])
     media_root = Path(settings.media_dir)
@@ -73,8 +74,24 @@ def build(settings: Settings) -> AppContext:
     comfy = build_comfy_provider(settings)
     asset_hub = AssetHub(sio, asset_store, comfy, media)
 
+    run_store = RunStore(mongo[settings.mongo_db])
+    tool_factory = ToolFactory(asset_store, asset_hub)
+    skill_registry = SkillRegistry(Path(settings.skills_dir), tool_factory.known_tool_names())
+    skill_registry.load()
+    turn_runner = TurnRunner(lambda model: build_chat_model(settings, model), tool_factory)
+
+    presence = PresenceRegistry()
+    hub = RoomHub(
+        sio, store, chat_service,
+        run_store=run_store, turn_runner=turn_runner,
+        skills=skill_registry, tool_factory=tool_factory,
+        asset_store=asset_store, asset_hub=asset_hub,
+    )
+    register_socket_handlers(sio, hub, presence)
+
     fastapi_app.state.game_store = games
     fastapi_app.state.asset_store = asset_store
+    fastapi_app.state.skill_registry = skill_registry
     fastapi_app.include_router(assets_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
