@@ -92,4 +92,22 @@ describe('ChatRoomPane', () => {
     expect(banner.textContent).toContain('boom');
     expect(banner.className).toContain('text-destructive');
   });
+
+  it('renders a monochrome avatar chip with no rainbow inline style', () => {
+    chatSlice().messages.set([msg({ id: 'h1', author: 'Alice', role: 'user', content: 'hey' })]);
+    render(<ChatRoomPane />);
+    const chip = screen.getByTestId('chat-msg-h1').querySelector('[aria-hidden]') as HTMLElement;
+    expect(chip).toBeTruthy();
+    expect(chip.getAttribute('style')).toBeNull(); // avatarHue HSL removed
+    expect(chip.textContent).toBe('a'); // lowercased initial
+  });
+
+  it('marks the assistant bubble with an accent rule and an "ai" chip', () => {
+    chatSlice().messages.set([msg({ id: 'a9', author: 'assistant', role: 'assistant', content: 'hi' })]);
+    render(<ChatRoomPane />);
+    const bubble = screen.getByTestId('chat-msg-a9');
+    expect(bubble.className).toContain('border-primary/50');
+    const chip = bubble.querySelector('[aria-hidden]') as HTMLElement;
+    expect(chip.textContent).toBe('ai');
+  });
 });

@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { llmChatHooks } from './state';
 import { sendPrompt, setTyping } from './actions';
-import { avatarHue } from './avatarColor';
 import { bumpRenderCount } from '../../app/renderCount';
 
 // Each bubble subscribes to ITS OWN message node, so a token append re-renders
@@ -20,26 +19,29 @@ function ChatMessageBubble({ index }: { index: number }) {
   const status = m.status.get();
   const content = m.content.get();
   const isAssistant = role === 'assistant';
-  const initial = (author.trim()[0] ?? '?').toUpperCase();
+  const initial = (author.trim()[0] ?? '?').toLowerCase();
 
   return (
-    <li data-testid={`chat-msg-${id}`} data-role={role} data-status={status} className="flex gap-2">
+    <li
+      data-testid={`chat-msg-${id}`}
+      data-role={role}
+      data-status={status}
+      className={`flex gap-2 rounded-r ${isAssistant ? 'border-l-2 border-primary/50 bg-primary/[0.04] pl-2' : ''}`}
+    >
       <div
         aria-hidden
-        className={`flex h-7 w-7 flex-none items-center justify-center rounded-full text-xs font-semibold text-primary-foreground ${isAssistant ? 'bg-primary' : ''}`}
-        style={isAssistant ? undefined : { backgroundColor: `hsl(${avatarHue(author)} 60% 45%)` }}
+        className={`mt-px flex h-[18px] w-[18px] flex-none items-center justify-center rounded-[5px] border bg-raised font-mono text-[9px] ${
+          isAssistant ? 'border-primary/30 text-accent-text' : 'border-border text-muted-foreground'
+        }`}
       >
-        {isAssistant ? 'AI' : initial}
+        {isAssistant ? 'ai' : initial}
       </div>
       <div className="min-w-0">
-        <div className="mb-0.5 flex items-center gap-2">
-          <span className="text-xs font-semibold">{author}</span>
-          {isAssistant && <span className="rounded border border-border px-1.5 text-[10px] text-muted-foreground">ai</span>}
-        </div>
-        <div className="text-sm leading-relaxed">
+        <div className={`text-[10.5px] font-semibold leading-tight ${isAssistant ? 'text-accent-text/90' : 'text-muted-foreground'}`}>{author}</div>
+        <div className="text-[13px] leading-snug text-foreground">
           {content}
           {status === 'streaming' && (
-            <span data-testid="chat-caret" className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />
+            <span data-testid="chat-caret" className="ml-0.5 inline-block h-3 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />
           )}
         </div>
       </div>
@@ -53,7 +55,7 @@ function MessageList() {
   // but content edits (token) do not touch this component.
   const count = s.messages.length;
   return (
-    <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-2.5 overflow-auto p-0">
+    <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-1.5 overflow-auto p-0">
       {Array.from({ length: count }, (_, i) => (
         <ChatMessageBubble key={i} index={i} />
       ))}
