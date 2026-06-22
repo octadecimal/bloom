@@ -1,8 +1,8 @@
 // @vitest-environment node
 // studio/frontend/src/design-language.guard.spec.ts
-import { readFileSync, globSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 const srcDir = dirname(fileURLToPath(new URL('./design-language.guard.spec.ts', import.meta.url)));
@@ -11,10 +11,23 @@ const srcDir = dirname(fileURLToPath(new URL('./design-language.guard.spec.ts', 
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
 const FUNC = /\b(?:rgb|rgba|hsl|hsla)\s*\(/;
 
+// Dependency-free recursive walk — `node:fs` globSync is Node 22+, but CI runs an
+// older Node, so we cannot rely on it. readdirSync is available on every version.
 function listSources(): string[] {
-  return globSync('**/*.{ts,tsx}', { cwd: srcDir })
-    .filter((p) => !p.endsWith('.guard.spec.ts'))
-    .filter((p) => !p.endsWith('styles.tokens.spec.ts'));
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules') continue;
+        walk(full);
+      } else if (/\.(ts|tsx)$/.test(entry.name)) {
+        out.push(relative(srcDir, full).split('\\').join('/'));
+      }
+    }
+  };
+  walk(srcDir);
+  return out.filter((p) => !p.endsWith('.guard.spec.ts')).filter((p) => !p.endsWith('styles.tokens.spec.ts'));
 }
 
 describe('no raw colors outside the token layer', () => {
