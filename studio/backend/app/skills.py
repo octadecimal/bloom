@@ -114,4 +114,6 @@ class SkillRegistry:
             frontmatter.dumps(post), encoding="utf-8"
         )
         self.load()
-        return self.get(spec.name)
+        result = self.get(spec.name)
+        assert result is not None
+        return result
