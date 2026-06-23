@@ -198,4 +198,22 @@ describe('ChatRoomPane skill autocomplete (keyboard)', () => {
     expect(screen.queryByTestId('skill-form')).not.toBeInTheDocument();
     expect(composer).toHaveValue('');
   });
+
+  it('surfaces a fuzzy (non-prefix) match and highlights the typed chars', () => {
+    chatSlice().skills.set([
+      { name: 'generate-sprite', description: 'Generate a game sprite and add it to the Asset Board.', args: [] },
+      { name: 'manage-assets', description: 'Review the Asset Board and remove assets.', args: [] },
+    ]);
+    render(<ChatRoomPane />);
+    fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/sprite' } });
+    // Non-prefix substring still matches under Fuse:
+    const option = screen.getByTestId('skill-option-generate-sprite');
+    expect(option).toBeTruthy();
+    // Matched characters render inside <strong>:
+    const strongText = Array.from(option.querySelectorAll('strong'))
+      .map((el) => el.textContent ?? '')
+      .join('')
+      .toLowerCase();
+    expect(strongText).toContain('sprite');
+  });
 });

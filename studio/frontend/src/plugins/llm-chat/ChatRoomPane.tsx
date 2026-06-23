@@ -9,6 +9,7 @@ import { bumpRenderCount } from '../../app/renderCount';
 import { RunTimeline } from './RunTimeline';
 import { SkillForm } from './SkillForm';
 import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './slashParse';
+import { fuzzyMatchSkills, type ISkillMatch } from './fuzzySkills';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -129,23 +130,46 @@ function AiStatusLine() {
  * Skill autocomplete popup — presentational, receives matches + highlight from parent.
  * Parent computes matches only while actively selecting, preserving render-count discipline.
  */
-function SkillAutocomplete({ matches, highlight, onPick }: { matches: ISkill[]; highlight: number; onPick: (name: string) => void }) {
+function SkillAutocomplete({ matches, highlight, onPick }: { matches: ISkillMatch[]; highlight: number; onPick: (name: string) => void }) {
   if (matches.length === 0) return null;
   return (
     <ul data-testid="skill-autocomplete" className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md">
-      {matches.map((sk, i) => (
+      {matches.map((m, i) => (
         <li
-          key={sk.name}
-          data-testid={`skill-option-${sk.name}`}
+          key={m.skill.name}
+          data-testid={`skill-option-${m.skill.name}`}
           data-active={i === highlight ? 'true' : 'false'}
           className={`cursor-pointer rounded px-2 py-1 text-foreground ${i === highlight ? 'bg-raised' : 'hover:bg-raised'}`}
           onMouseDown={(e) => {
             e.preventDefault(); // keep composer focus
-            onPick(sk.name);
+            onPick(m.skill.name);
           }}
         >
-          <span className="font-semibold text-accent-text">/{sk.name}</span>
-          {sk.description ? <span className="ml-2 text-muted-foreground">{sk.description}</span> : null}
+          <span className="font-semibold text-accent-text">
+            /
+            {m.nameSegments.map((seg, j) =>
+              seg.matched ? (
+                <strong key={j} className="font-bold underline decoration-accent-text/60">
+                  {seg.text}
+                </strong>
+              ) : (
+                <span key={j}>{seg.text}</span>
+              ),
+            )}
+          </span>
+          {m.descSegments.length > 0 ? (
+            <span className="ml-2 text-muted-foreground">
+              {m.descSegments.map((seg, j) =>
+                seg.matched ? (
+                  <strong key={j} className="font-semibold text-foreground">
+                    {seg.text}
+                  </strong>
+                ) : (
+                  <span key={j}>{seg.text}</span>
+                ),
+              )}
+            </span>
+          ) : null}
         </li>
       ))}
     </ul>
@@ -194,7 +218,7 @@ export function ChatRoomPane() {
   // Only read the skills leaf while actively selecting — preserves render-count discipline.
   const slash = splitSlashDraft(draft);
   const selecting = slash !== null && !slash.hasSpace && !popupDismissed;
-  const matches = selecting ? (s.skills.get() as ISkill[]).filter((sk) => sk.name.startsWith(slash!.skillName)) : [];
+  const matches: ISkillMatch[] = selecting ? fuzzyMatchSkills(s.skills.get() as ISkill[], slash!.skillName) : [];
   const popupOpen = selecting && matches.length > 0;
 
   const accept = (name: string) => {
@@ -230,13 +254,17 @@ export function ChatRoomPane() {
       }
       if (e.key === 'Tab') {
         e.preventDefault();
-        accept(matches[clampHighlight(highlight, matches.length)].name);
+        accept(matches[clampHighlight(highlight, matches.length)].skill.name);
         return;
       }
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      const decision = decideEnter(draft, matches, highlight);
+      const decision = decideEnter(
+        draft,
+        matches.map((m) => ({ name: m.skill.name })),
+        highlight,
+      );
       if (decision.kind === 'accept') accept(decision.name);
       else if (decision.kind === 'run') runProse(decision.name, decision.prose);
       else if (decision.kind === 'form') setFormSkillName(decision.name);
