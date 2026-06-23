@@ -26,8 +26,8 @@ Slice 1 proved the whole vertical with one tool (`generate_asset`), one skill
 - **A second real skill, `generate-background`,** exercises the enriched arg schema and
   drives a small, principled enrichment of the one tool (`size` + `transparency`).
 
-The theme is one coherent loop: **the editor *defines* a skill's typed args; the form
-*consumes* them; the second skill *proves* it generalizes.**
+The theme is one coherent loop: **the editor _defines_ a skill's typed args; the form
+_consumes_ them; the second skill _proves_ it generalizes.**
 
 ## 2. Guiding principles (carried forward)
 
@@ -77,11 +77,11 @@ writes the validated file and **hot-reloads the registry** so the skill is immed
 invocable. Git/branch/commit/PR stay entirely in the user's hands — the studio does not
 run `git`/`gh` (rejected as environment-specific and over-reaching).
 
-### 3.5 Second skill enriches the one tool, not the tool *set*
+### 3.5 Second skill enriches the one tool, not the tool _set_
 
 `generate-background` needs a wider, opaque asset, so `generate_asset` gains `size` and
 `transparent` parameters — listed as an open detail in the slice-1 spec (§8), **not** the
-deferred "more tools" work (which is about adding *new* tools / entity mutation). The
+deferred "more tools" work (which is about adding _new_ tools / entity mutation). The
 tool set stays at one; only its argument surface grows, with defaults preserving
 `generate-sprite` behavior byte-for-byte.
 
@@ -142,14 +142,12 @@ studio/backend (Python)
   name: generate-background
   description: Generate a wide, opaque background/scene and add it to the Asset Board.
   args:
-    - { name: description, type: string, required: true,
-        description: "What the scene depicts" }
-    - { name: mood, type: string, enum: [bright, dark, neutral], default: neutral,
-        description: "Overall mood" }
-    - { name: aspect, type: string, enum: [wide, square], default: wide,
-        description: "Aspect ratio" }
+    - { name: description, type: string, required: true, description: 'What the scene depicts' }
+    - { name: mood, type: string, enum: [bright, dark, neutral], default: neutral, description: 'Overall mood' }
+    - { name: aspect, type: string, enum: [wide, square], default: wide, description: 'Aspect ratio' }
   tools: [generate_asset]
   ---
+
   You generate a single background/scene image for the current game. Derive a concrete
   prompt from the description and mood, choose a size from the aspect (wide → 1024x576,
   square → 1024x1024), and call generate_asset once with transparent=false. Confirm in

@@ -26,10 +26,12 @@
 ### Task 1: Enrich `SkillArg` schema + `validate_args` (description / default / enum)
 
 **Files:**
+
 - Modify: `studio/backend/app/skills.py`
 - Test: `studio/backend/tests/test_skills.py`
 
 **Interfaces:**
+
 - Consumes: existing `SkillRegistry`, `SkillSpec`, `SkillError`.
 - Produces: `SkillArg{name, type, required, description: str, default: str|float|bool|None, enum: list[str|float]|None}`; `validate_args` now applies defaults and rejects out-of-enum values; `list_skills()` returns the full arg dump (incl. the new fields).
 
@@ -152,10 +154,12 @@ git commit -m "feat(skills): enrich arg schema with description, default, enum"
 ### Task 2: `generate_asset` gains `size` + `transparent`
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Test: `studio/backend/tests/test_agent_tools.py`
 
 **Interfaces:**
+
 - Consumes: `AssetStore.create_asset(game_id, name, prompt, width, height, workflow, seed=None, category=None)`; workflows `schnell-transparent` (default) and `schnell-opaque`.
 - Produces: `generate_asset(description: str, style: str = "", size: str = "512x512", transparent: bool = True)` — `size` parsed `"WxH"` → ints; `transparent=False` → workflow `schnell-opaque`.
 
@@ -245,10 +249,12 @@ git commit -m "feat(tools): add size and transparency to generate_asset"
 ### Task 3: Ship the `generate-background` skill file
 
 **Files:**
+
 - Create: `skills/generate-background.md`
 - Test: `studio/backend/tests/test_skills.py` (loads from the real repo skills dir)
 
 **Interfaces:**
+
 - Consumes: enriched loader (Task 1), `generate_asset` (Task 2).
 - Produces: a registered skill `generate-background` with args `description`/`mood`/`aspect`.
 
@@ -309,10 +315,12 @@ git commit -m "feat(skills): add generate-background skill"
 ### Task 4: `SkillRegistry.write_skill` (serialize → validate → write → reload)
 
 **Files:**
+
 - Modify: `studio/backend/app/skills.py`
 - Test: `studio/backend/tests/test_skills.py`
 
 **Interfaces:**
+
 - Consumes: `frontmatter` (already a dependency), `SkillSpec`, `SkillError`.
 - Produces: `SkillRegistry.write_skill(*, name, description, args, tools, body) -> SkillSpec` (validates SkillSpec + slug + known tools, writes `<dir>/<name>.md`, reloads, returns reloaded spec); `SkillRegistry.known_tools() -> list[str]`.
 
@@ -417,10 +425,12 @@ git commit -m "feat(skills): add write_skill (validate, serialize, reload) and k
 ### Task 5: Skills REST surface — `GET /skills/{name}`, `POST /skills`, `GET /tools`
 
 **Files:**
+
 - Modify: `studio/backend/app/rest.py`
 - Test: `studio/backend/tests/test_rest.py`
 
 **Interfaces:**
+
 - Consumes: `request.app.state.skill_registry` (`get`, `write_skill`, `known_tools`, `list_skills`), `SkillError`.
 - Produces:
   - `GET /skills/{name}` → `{name, description, args, tools, body}` or 404.
@@ -560,11 +570,13 @@ git commit -m "feat(api): add GET /skills/{name}, POST /skills, GET /tools"
 ### Task 6: Frontend types + REST client (`ISkillArg`, `getSkill`, `saveSkill`, `getTools`)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/state.ts`
 - Modify: `studio/frontend/src/plugins/llm-chat/restClient.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/restClient.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `ISkillArg{name; type:'string'|'number'|'boolean'; required:boolean; description?:string; default?:string|number|boolean|null; enum?:(string|number)[]|null}`
   - `ISkill{name; description; args: ISkillArg[]}`
@@ -578,21 +590,28 @@ Add to `studio/frontend/src/plugins/llm-chat/restClient.spec.ts` (follow the exi
 ```ts
 it('getSkill fetches the full skill', async () => {
   const skill = { name: 'x', description: 'd', args: [], tools: ['generate_asset'], body: 'b' };
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(skill), { status: 200 })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify(skill), { status: 200 })),
+  );
   const { getSkill } = await import('./restClient');
   expect(await getSkill('x')).toEqual(skill);
 });
 
 it('saveSkill surfaces the server detail on 400', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'unknown tools' }), { status: 400 })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ detail: 'unknown tools' }), { status: 400 })),
+  );
   const { saveSkill } = await import('./restClient');
-  await expect(
-    saveSkill({ name: 'x', description: '', args: [], tools: ['nuke'], body: '' }),
-  ).rejects.toThrow('unknown tools');
+  await expect(saveSkill({ name: 'x', description: '', args: [], tools: ['nuke'], body: '' })).rejects.toThrow('unknown tools');
 });
 
 it('getTools returns tool names', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{ name: 'generate_asset' }]), { status: 200 })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify([{ name: 'generate_asset' }]), { status: 200 })),
+  );
   const { getTools } = await import('./restClient');
   expect(await getTools()).toEqual(['generate_asset']);
 });
@@ -650,7 +669,10 @@ export async function saveSkill(payload: ISkillFull): Promise<ISkillFull> {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const detail = await res.json().then((b) => b.detail).catch(() => null);
+    const detail = await res
+      .json()
+      .then((b) => b.detail)
+      .catch(() => null);
     throw new Error(detail ?? `request failed: ${res.status}`);
   }
   return (await res.json()) as ISkillFull;
@@ -674,10 +696,12 @@ git commit -m "feat(chat): enriched skill types + getSkill/saveSkill/getTools cl
 ### Task 7: `SkillForm` component (typed inputs from an arg schema)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/SkillForm.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/SkillForm.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `ISkill`, `ISkillArg` from `./state`.
 - Produces: `export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubmit: (args: Record<string, unknown>) => void; onCancel: () => void })`. Renders one input per arg (`string→text`, `number→number`, `boolean→checkbox`, `enum→select`), prefills `default`, blocks submit while a `required` field is empty. Test ids: `skill-form`, `skill-form-field-<name>`, `skill-form-submit`, `skill-form-cancel`.
 
@@ -738,25 +762,12 @@ function initialValue(a: ISkillArg): string | boolean {
   return a.type === 'boolean' ? false : '';
 }
 
-export function SkillForm({
-  skill,
-  onSubmit,
-  onCancel,
-}: {
-  skill: ISkill;
-  onSubmit: (args: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
-  const [values, setValues] = useState<Record<string, string | boolean>>(
-    () => Object.fromEntries(skill.args.map((a) => [a.name, initialValue(a)])),
-  );
+export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubmit: (args: Record<string, unknown>) => void; onCancel: () => void }) {
+  const [values, setValues] = useState<Record<string, string | boolean>>(() => Object.fromEntries(skill.args.map((a) => [a.name, initialValue(a)])));
 
-  const missingRequired = skill.args.some(
-    (a) => a.required && (values[a.name] === '' || values[a.name] === undefined),
-  );
+  const missingRequired = skill.args.some((a) => a.required && (values[a.name] === '' || values[a.name] === undefined));
 
-  const set = (name: string, v: string | boolean) =>
-    setValues((prev) => ({ ...prev, [name]: v }));
+  const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
 
   const submit = () => {
     if (missingRequired) return;
@@ -837,10 +848,12 @@ git commit -m "feat(chat): SkillForm renders typed inputs from a skill arg schem
 ### Task 8: Wire `SkillForm` into the composer (autocomplete → form → run)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `SkillForm` (Task 7), `runSkill` (existing), `parseSlashCommand` (existing, retained as fallback).
 - Produces: clicking an autocomplete option opens `SkillForm` for that skill; submitting it calls `runSkill(name, args)` and clears; the text `key=value` path is unchanged.
 
@@ -905,32 +918,29 @@ function SkillAutocomplete({ prefix, onPick }: { prefix: string; onPick: (name: 
 In `ChatRoomPane`, add form state and render it. After `const [draft, setDraft] = useState('');` add:
 
 ```tsx
-  const [formSkillName, setFormSkillName] = useState<string | null>(null);
-  const formSkill = formSkillName ? s.skills.get().find((sk) => sk.name === formSkillName) ?? null : null;
+const [formSkillName, setFormSkillName] = useState<string | null>(null);
+const formSkill = formSkillName ? (s.skills.get().find((sk) => sk.name === formSkillName) ?? null) : null;
 ```
 
 Replace the autocomplete line `{slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} />}` with:
 
 ```tsx
-      {formSkill ? (
-        <SkillForm
-          skill={formSkill}
-          onSubmit={(args) => {
-            runSkill(formSkill.name, args);
-            setFormSkillName(null);
-            setDraft('');
-            setTyping(false);
-          }}
-          onCancel={() => setFormSkillName(null)}
-        />
-      ) : (
-        slashPrefix !== null && (
-          <SkillAutocomplete
-            prefix={slashPrefix}
-            onPick={(name) => setFormSkillName(name)}
-          />
-        )
-      )}
+{
+  formSkill ? (
+    <SkillForm
+      skill={formSkill}
+      onSubmit={(args) => {
+        runSkill(formSkill.name, args);
+        setFormSkillName(null);
+        setDraft('');
+        setTyping(false);
+      }}
+      onCancel={() => setFormSkillName(null)}
+    />
+  ) : (
+    slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} onPick={(name) => setFormSkillName(name)} />
+  );
+}
 ```
 
 (The existing `submit()` text path and `parseSlashCommand` stay exactly as-is — the `key=value` fallback is preserved.)
@@ -952,12 +962,14 @@ git commit -m "feat(chat): open SkillForm from autocomplete and run on submit"
 ### Task 9: `SkillEditorPane` (author/edit a skill → POST /skills)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/SkillEditorPane.tsx`
 - Modify: `studio/frontend/src/plugins/llm-chat/index.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/SkillEditorPane.spec.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/index.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `getTools`, `getSkill`, `saveSkill` (Task 6), `ISkillFull`, `ISkillArg`.
 - Produces: `export function SkillEditorPane()` — name/description/body fields, dynamic arg rows (name/type/required/description/default/enum-as-comma-list), tool checkboxes from `GET /tools`, a live markdown preview, and a Save button that calls `saveSkill` and shows success (`skill-editor-status`) or the server error. Registered as pane `llm-chat/skill-editor` + command `llm-chat/open-skill-editor`.
 
@@ -966,9 +978,7 @@ git commit -m "feat(chat): open SkillForm from autocomplete and run on submit"
 In `studio/frontend/src/plugins/llm-chat/index.spec.ts`, update the pane-id assertion:
 
 ```ts
-expect(llmChat.panes.map((p) => p.id)).toEqual([
-  'llm-chat/room', 'llm-chat/settings', 'llm-chat/skill-editor',
-]);
+expect(llmChat.panes.map((p) => p.id)).toEqual(['llm-chat/room', 'llm-chat/settings', 'llm-chat/skill-editor']);
 ```
 
 - [ ] **Step 2 (RED): write the editor component test**
@@ -1042,21 +1052,16 @@ function rowToArg(r: IArgRow): ISkillArg {
   const arg: ISkillArg = { name: r.name, type: r.type, required: r.required };
   if (r.description) arg.description = r.description;
   if (r.default !== '') arg.default = r.type === 'number' ? Number(r.default) : r.default;
-  const en = r.enumCsv.split(',').map((s) => s.trim()).filter(Boolean);
+  const en = r.enumCsv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (en.length) arg.enum = en;
   return arg;
 }
 
 function previewMarkdown(skill: ISkillFull): string {
-  const lines = [
-    '---',
-    `name: ${skill.name}`,
-    `description: ${skill.description}`,
-    `tools: [${skill.tools.join(', ')}]`,
-    '---',
-    '',
-    skill.body,
-  ];
+  const lines = ['---', `name: ${skill.name}`, `description: ${skill.description}`, `tools: [${skill.tools.join(', ')}]`, '---', '', skill.body];
   return lines.join('\n');
 }
 
@@ -1070,7 +1075,9 @@ export function SkillEditorPane() {
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
-    void getTools().then(setTools).catch(() => setTools([]));
+    void getTools()
+      .then(setTools)
+      .catch(() => setTools([]));
   }, []);
 
   const skill: ISkillFull = {
@@ -1081,14 +1088,11 @@ export function SkillEditorPane() {
     args: rows.map(rowToArg),
   };
 
-  const toggleTool = (t: string) =>
-    setSelectedTools((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  const toggleTool = (t: string) => setSelectedTools((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
 
-  const addRow = () =>
-    setRows((prev) => [...prev, { name: '', type: 'string', required: false, description: '', default: '', enumCsv: '' }]);
+  const addRow = () => setRows((prev) => [...prev, { name: '', type: 'string', required: false, description: '', default: '', enumCsv: '' }]);
 
-  const setRow = (i: number, patch: Partial<IArgRow>) =>
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const setRow = (i: number, patch: Partial<IArgRow>) => setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const save = async () => {
     setStatus(null);
@@ -1111,12 +1115,7 @@ export function SkillEditorPane() {
         <div className="flex flex-wrap gap-2">
           {tools.map((t) => (
             <label key={t} className="flex items-center gap-1 text-foreground">
-              <input
-                data-testid={`skill-editor-tool-${t}`}
-                type="checkbox"
-                checked={selectedTools.includes(t)}
-                onChange={() => toggleTool(t)}
-              />
+              <input data-testid={`skill-editor-tool-${t}`} type="checkbox" checked={selectedTools.includes(t)} onChange={() => toggleTool(t)} />
               {t}
             </label>
           ))}
@@ -1126,7 +1125,9 @@ export function SkillEditorPane() {
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <span className="text-[10.5px] text-muted-foreground">Args</span>
-          <Button data-testid="skill-editor-add-arg" size="sm" variant="ghost" onClick={addRow}>+ arg</Button>
+          <Button data-testid="skill-editor-add-arg" size="sm" variant="ghost" onClick={addRow}>
+            + arg
+          </Button>
         </div>
         {rows.map((r, i) => (
           <div key={i} data-testid={`skill-editor-arg-${i}`} className="flex flex-wrap gap-1 rounded border bg-raised p-1">
@@ -1168,10 +1169,7 @@ export function SkillEditorPane() {
 
       <div className="flex items-center justify-between gap-2">
         {status && (
-          <span
-            data-testid="skill-editor-status"
-            className={status.ok ? 'text-accent-text' : 'text-destructive'}
-          >
+          <span data-testid="skill-editor-status" className={status.ok ? 'text-accent-text' : 'text-destructive'}>
             {status.msg}
           </span>
         )}
@@ -1210,12 +1208,14 @@ Expected: PASS.
 - [ ] **Step 7: Run all four frontend CI gates**
 
 From `studio/frontend`:
+
 ```bash
 npx prettier --check .
 npx nx typecheck frontend
 npx nx test frontend
 npx nx build frontend
 ```
+
 Expected: all PASS. Fix any prettier/type issues before committing.
 
 - [ ] **Step 8: Commit**
@@ -1230,10 +1230,12 @@ git commit -m "feat(chat): Skill Editor pane writes git skills via POST /skills"
 ### Task 10: End-to-end — author `generate-background` via the editor, invoke via the form
 
 **Files:**
+
 - Create: `studio/frontend/e2e/skill-editor.spec.ts`
 - Reference: `studio/frontend/e2e/skill-run.spec.ts` (existing patterns: backend health/parity, room setup, asset-board assertions)
 
 **Interfaces:**
+
 - Consumes: the running replay backend on :8000 + the studio frontend; `llm-chat/open-skill-editor` command; `SkillForm`; Asset Board.
 
 > This is the authoritative behavioral contract for slice 2. Browser e2e is **local-only** (never CI). Run against a replay backend (`just backend-serve-replay` first, then `just e2e`). The editor writes a real file into `skills/`; the spec must delete `skills/generate-background.md` is **not** removed (it's a shipped skill from Task 3) — instead author a throwaway skill name OR assert against the shipped `generate-background` invoked via the form. Prefer the latter to avoid mutating the repo from a test.
@@ -1305,6 +1307,7 @@ gh pr create --fill
 ## Self-Review
 
 **Spec coverage (slice-2 spec §5–§7):**
+
 - §5.1 enriched `SkillArg` + `validate_args` (default/enum) → **Task 1**.
 - §5.2 `generate_asset` size/transparency → **Task 2**; `generate-background.md` → **Task 3**.
 - §5.3 `GET /skills` enriched (args now full-dump) → **Task 1** (list_skills) + verified in **Task 5**; `GET /skills/{name}` + `POST /skills` (validate→write→reload) → **Task 4** (registry) + **Task 5** (routes); `GET /tools` for the editor picker → **Task 4/5**.
@@ -1318,8 +1321,9 @@ gh pr create --fill
 **Type consistency:** `ISkillArg`/`ISkill`/`ISkillFull` defined in Task 6 and consumed unchanged in Tasks 7–9. `write_skill(*, name, description, args, tools, body)` defined in Task 4 and called identically in Task 5. `getSkill`/`saveSkill`/`getTools` signatures defined in Task 6, consumed in Task 9. `generate_asset(description, style, size, transparent)` defined in Task 2, exercised by `generate-background` body (Task 3) and e2e (Task 10).
 
 **Notes for the implementer (verify before coding each task):**
+
 - Confirm the `ctx` fixture in `studio/backend/tests/conftest.py` — whether it isolates `skills_dir` (affects Task 5 cleanup).
 - Confirm `Asset` field names (`width`/`height`/`workflow`) in `app/assets/models.py` (Task 2).
 - Confirm the shared `Button`/`Input` prop API in `@/components/ui/` (`size`/`variant`) before using them (Tasks 7, 9).
 - Match the existing vitest mocking idiom in each spec file rather than introducing a new one (Tasks 6–9).
-</content>
+  </content>
