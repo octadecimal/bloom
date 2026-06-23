@@ -107,6 +107,27 @@ async def test_post_skill_writes_and_rejects(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_runs_endpoint_and_404(ctx, mongo_db):
+    from app.runs import RunStore
+
+    async with _client(ctx) as client:
+        created = await client.post("/rooms", json={"name": "R", "model": "m:free"})
+        room_id = created.json()["id"]
+        run_store = RunStore(mongo_db)
+        await run_store.create_run(room_id, "generate-sprite", {"description": "knight"})
+
+        listed = await client.get(f"/rooms/{room_id}/runs")
+        assert listed.status_code == 200
+        body = listed.json()
+        assert len(body) == 1
+        assert body[0]["skillName"] == "generate-sprite"
+        assert "createdAt" in body[0]
+
+        missing = await client.get("/rooms/nope/runs")
+        assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_rest_sends_cors_headers_for_browser_origin(ctx):
     # The frontend runs on a different origin (e.g. :4200) than the backend
     # (:8000), so the REST routes must answer CORS preflights and echo an

@@ -75,6 +75,7 @@ def build(settings: Settings) -> AppContext:
     asset_hub = AssetHub(sio, asset_store, comfy, media)
 
     run_store = RunStore(mongo[settings.mongo_db])
+    fastapi_app.state.run_store = run_store
     tool_factory = ToolFactory(asset_store, asset_hub)
     skill_registry = SkillRegistry(Path(settings.skills_dir), tool_factory.known_tool_names())
     skill_registry.load()

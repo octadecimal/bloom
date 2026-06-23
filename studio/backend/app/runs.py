@@ -92,3 +92,7 @@ class RunStore:
             {"$set": {"status": status, "completed_at": _now()}},
         )
         return await self.get_run(run_id)
+
+    async def list_runs(self, room_id: str) -> list[Run]:
+        cursor = self._runs.find({"room_id": room_id}).sort("created_at", 1)
+        return [_from_doc(doc) async for doc in cursor]

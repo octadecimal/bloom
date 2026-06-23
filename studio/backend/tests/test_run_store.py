@@ -30,3 +30,12 @@ def test_run_step_accepts_approval_type():
     from app.runs import RunStep
     step = RunStep(index=2, type="approval", content="{}", status="running")
     assert step.type == "approval"
+
+
+async def test_list_runs_returns_room_runs_in_creation_order(store):
+    a = await store.create_run("r1", "skill-a", {})
+    b = await store.create_run("r1", "skill-b", {})
+    await store.create_run("other", "skill-c", {})
+    runs = await store.list_runs("r1")
+    assert [r.id for r in runs] == [a.id, b.id]
+    assert all(r.room_id == "r1" for r in runs)
