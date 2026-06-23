@@ -37,7 +37,7 @@ export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubm
   return (
     <div data-testid="skill-form" className="flex flex-col gap-2 rounded-md border bg-surface p-2.5 text-sm shadow-md">
       <div className="text-[10.5px] font-semibold text-accent-text">/{skill.name}</div>
-      {skill.args.map((a) => (
+      {skill.args.map((a, i) => (
         <label key={a.name} className="flex flex-col gap-0.5">
           <span className="text-[10.5px] text-muted-foreground">
             {a.name}
@@ -46,6 +46,7 @@ export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubm
           </span>
           {a.enum ? (
             <select
+              autoFocus={i === 0}
               data-testid={`skill-form-field-${a.name}`}
               value={String(values[a.name] ?? '')}
               className="rounded border bg-raised px-2 py-1 text-foreground"
@@ -60,6 +61,7 @@ export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubm
             </select>
           ) : a.type === 'boolean' ? (
             <input
+              autoFocus={i === 0}
               data-testid={`skill-form-field-${a.name}`}
               type="checkbox"
               checked={Boolean(values[a.name])}
@@ -68,6 +70,7 @@ export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubm
             />
           ) : (
             <Input
+              autoFocus={i === 0}
               data-testid={`skill-form-field-${a.name}`}
               type={a.type === 'number' ? 'number' : 'text'}
               value={String(values[a.name] ?? '')}
