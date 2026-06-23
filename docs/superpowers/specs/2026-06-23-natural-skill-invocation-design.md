@@ -86,18 +86,38 @@ synthetic line (e.g. `/generate-sprite (description="a knight", style="pixel")`)
 for the same reason.
 
 ### Where the change lands
-- `room_hub.handle_skill_run` / `_run_skill`: carry an optional `text` (prose)
-  alongside `args`; persist the user message; pass `text` through to the runner.
-- `TurnRunner.run`: build the invocation message from `text` (if present) else
-  from `args`, and append it as the final `HumanMessage` in `lc`.
-- `sockets.run_skill`: accept an optional `text` field on the payload.
-- Frontend `runSkill(skillName, args, text?)` and `socketClient.runSkill`: thread
-  the prose text on the wire.
+Refinement over the abstract description above: rather than appending the
+invocation message inside `TurnRunner`, we **persist it as a real user message**
+in `room_hub.handle_skill_run`. The existing `_run_skill` already reads room
+history into the agent context, so a persisted user message is automatically
+delivered — no `TurnRunner` change, no risk of double-injection, and the chat
+transcript shows what was asked.
 
-### Replay/cassette impact
-Appending the invocation message **changes the prompt key** the replay model is
-keyed on. Cassettes must be re-recorded (`just record-fixtures`) after the
-change. This is expected and called out in the plan.
+- `app/skills.py`: add pure helper `invocation_text(spec, text, args) -> str`;
+  add `enforce_required: bool = True` param to `validate_args`.
+- `room_hub.handle_skill_run(room_id, author, skill_name, args, text="")`:
+  validate (relaxed when `text` present), build + persist the invocation user
+  message, emit `message_created`, then queue the skill as today.
+- `sockets.run_skill`: read optional `text` from payload, pass to hub.
+- Frontend `runSkill(skillName, args, text?)` and `socketClient.runSkill`: thread
+  the prose text on the wire as `{ ..., text }`.
+- `TurnRunner.run`: **unchanged** (history already carries the invocation).
+
+### Required-arg relaxation
+`SkillRegistry.validate_args` currently enforces required args. The prose path
+sends `args={}`, so enforcement would reject it with "missing required arg
+'description'". Therefore: **when prose `text` is supplied, skip required-arg
+enforcement** (the agent infers them). The form path keeps enforcement. Type
+coercion and enum checks still run for any args that *are* present.
+
+### Replay/cassette impact — none for skill runs
+Verified: in **tool mode** (a skill run, `bind_tools` was called) the replay
+model `ReplayToolCallingChatModel` returns its tool calls and final text from
+the single run cassette **regardless of the prompt** (`providers.py:132-159`) —
+it is *not* prompt-keyed. So changing the invocation message does **not** break
+the run cassette, and the skill-run e2e stays green against the existing fixture
+**without re-recording**. (Only plain-chat text mode is prompt-keyed, and this
+change doesn't touch that path.)
 
 ## Decisions
 
