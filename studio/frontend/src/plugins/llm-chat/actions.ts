@@ -12,7 +12,7 @@ interface IRestDeps {
 
 // Injectable deps so actions are unit-testable without the module singletons.
 let rest: IRestDeps = realRest;
-let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill'> | null = null;
+let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill' | 'resolveApproval'> | null = null;
 let savePrefs = realSavePrefs;
 let started = false;
 
@@ -123,6 +123,11 @@ export function sendPrompt(text: string): void {
 export function runSkill(skillName: string, args: Record<string, unknown>): void {
   const roomId = chatSlice().activeRoomId.get();
   if (roomId) sock().runSkill(roomId, skillName, args);
+}
+
+export function resolveApproval(runId: string, decision: 'approve' | 'deny'): void {
+  const roomId = chatSlice().activeRoomId.get();
+  if (roomId) sock().resolveApproval(roomId, runId, decision);
 }
 
 export function setTyping(isTyping: boolean): void {

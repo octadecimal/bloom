@@ -19,6 +19,7 @@ const socket = {
   sendPrompt: vi.fn(),
   setTyping: vi.fn(),
   runSkill: vi.fn(),
+  resolveApproval: vi.fn(),
 };
 const savePrefs = vi.fn();
 
@@ -84,6 +85,13 @@ describe('actions', () => {
     expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' });
   });
 
+  it('resolveApproval forwards to the socket for the active room', () => {
+    actions.__setDeps({ socket });
+    chatSlice().activeRoomId.set('r1');
+    actions.resolveApproval('run1', 'approve');
+    expect(socket.resolveApproval).toHaveBeenCalledWith('r1', 'run1', 'approve');
+  });
+
   describe('closeRoom', () => {
     it('leaves the active room, clears state, and persists', () => {
       chatSlice().activeRoomId.set('r1');
@@ -116,6 +124,8 @@ describe('actions', () => {
         leaveRoom: vi.fn(),
         sendPrompt: vi.fn(),
         setTyping: vi.fn(),
+        runSkill: vi.fn(),
+        resolveApproval: vi.fn(),
       };
       __setDeps({ socket });
       connectChatAs('ada');
@@ -131,6 +141,8 @@ describe('actions', () => {
         leaveRoom: vi.fn(),
         sendPrompt: vi.fn(),
         setTyping: vi.fn(),
+        runSkill: vi.fn(),
+        resolveApproval: vi.fn(),
       };
       __setDeps({ socket });
       connectChatAs('ada');
@@ -146,6 +158,8 @@ describe('actions', () => {
         leaveRoom: vi.fn(),
         sendPrompt: vi.fn(),
         setTyping: vi.fn(),
+        runSkill: vi.fn(),
+        resolveApproval: vi.fn(),
       };
       const rest = { getRooms: vi.fn().mockResolvedValue([]), createRoom: vi.fn(), getMessages: vi.fn(), getSkills: vi.fn().mockResolvedValue([]) };
       __setDeps({ socket, rest });
@@ -162,6 +176,8 @@ describe('actions', () => {
         leaveRoom: vi.fn(),
         sendPrompt: vi.fn(),
         setTyping: vi.fn(),
+        runSkill: vi.fn(),
+        resolveApproval: vi.fn(),
       };
       __setDeps({ socket });
       connectChatAs('ada');
@@ -177,6 +193,8 @@ describe('actions', () => {
         leaveRoom: vi.fn(),
         sendPrompt: vi.fn(),
         setTyping: vi.fn(),
+        runSkill: vi.fn(),
+        resolveApproval: vi.fn(),
       };
       __setDeps({ socket });
       disconnectChat();
