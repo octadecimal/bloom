@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -84,3 +85,33 @@ class SkillRegistry:
                 raise SkillError(f"arg '{a.name}' must be one of {a.enum}")
             out[a.name] = value
         return out
+
+    def known_tools(self) -> list[str]:
+        return sorted(self._known)
+
+    def write_skill(self, *, name, description, args, tools, body) -> SkillSpec:
+        if not re.fullmatch(r"[a-z0-9-]+", name or ""):
+            raise SkillError(f"invalid skill name '{name}' (use a-z, 0-9, -)")
+        try:
+            spec = SkillSpec(
+                name=name, description=description, args=args, tools=tools,
+                body=body.strip(),
+            )
+        except ValidationError as e:
+            raise SkillError(f"invalid skill: {e}") from e
+        unknown = set(spec.tools) - self._known
+        if unknown:
+            raise SkillError(f"unknown tools {sorted(unknown)}")
+        metadata = {
+            "name": spec.name,
+            "description": spec.description,
+            "args": [a.model_dump(exclude_none=True) for a in spec.args],
+            "tools": spec.tools,
+        }
+        post = frontmatter.Post(spec.body, **metadata)
+        (self._dir).mkdir(parents=True, exist_ok=True)
+        (self._dir / f"{spec.name}.md").write_text(
+            frontmatter.dumps(post), encoding="utf-8"
+        )
+        self.load()
+        return self.get(spec.name)

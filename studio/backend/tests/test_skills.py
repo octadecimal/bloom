@@ -109,3 +109,41 @@ def test_repo_skills_dir_loads_background():
     assert {"generate-sprite", "generate-background"} <= names
     bg = reg.get("generate-background")
     assert [a.name for a in bg.args] == ["description", "mood", "aspect"]
+
+
+def test_write_skill_round_trips(tmp_path):
+    reg = SkillRegistry(tmp_path, known_tools={"generate_asset"})
+    reg.load()
+    spec = reg.write_skill(
+        name="my-skill",
+        description="A test skill.",
+        args=[{"name": "description", "type": "string", "required": True}],
+        tools=["generate_asset"],
+        body="Do the thing with generate_asset.",
+    )
+    assert spec.name == "my-skill"
+    assert (tmp_path / "my-skill.md").exists()
+    # reloaded into the live registry
+    assert reg.get("my-skill") is not None
+    assert reg.get("my-skill").body == "Do the thing with generate_asset."
+
+
+def test_write_skill_rejects_unknown_tool(tmp_path):
+    reg = SkillRegistry(tmp_path, known_tools={"generate_asset"})
+    reg.load()
+    with pytest.raises(SkillError):
+        reg.write_skill(name="bad", description="x", args=[],
+                        tools=["nuke_everything"], body="x")
+
+
+def test_write_skill_rejects_bad_slug(tmp_path):
+    reg = SkillRegistry(tmp_path, known_tools={"generate_asset"})
+    reg.load()
+    with pytest.raises(SkillError):
+        reg.write_skill(name="../escape", description="x", args=[],
+                        tools=[], body="x")
+
+
+def test_known_tools(tmp_path):
+    reg = SkillRegistry(tmp_path, known_tools={"generate_asset"})
+    assert reg.known_tools() == ["generate_asset"]
