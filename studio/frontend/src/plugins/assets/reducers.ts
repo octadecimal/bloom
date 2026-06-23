@@ -8,3 +8,7 @@ export function upsertAsset(assets: IAsset[], asset: IAsset): IAsset[] {
   next[idx] = asset;
   return next;
 }
+
+export function removeAsset(assets: IAsset[], assetId: string): IAsset[] {
+  return assets.filter((a) => a.id !== assetId);
+}

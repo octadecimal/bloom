@@ -1,7 +1,7 @@
 // studio/frontend/src/plugins/assets/reducers.spec.ts
 import { describe, it, expect } from 'vitest';
 import type { IAsset } from './state';
-import { upsertAsset } from './reducers';
+import { upsertAsset, removeAsset } from './reducers';
 
 const base: IAsset = {
   id: 'a1',
@@ -27,5 +27,10 @@ describe('assets reducers', () => {
     const replaced = upsertAsset(added, { ...base, name: 'Renamed' });
     expect(replaced).toHaveLength(1);
     expect(replaced[0].name).toBe('Renamed');
+  });
+
+  it('removeAsset drops the matching asset', () => {
+    const assets = [{ id: 'a1' } as never, { id: 'a2' } as never];
+    expect(removeAsset(assets, 'a1').map((a: { id: string }) => a.id)).toEqual(['a2']);
   });
 });
