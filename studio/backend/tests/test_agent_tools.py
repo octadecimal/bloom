@@ -16,7 +16,7 @@ class FakeHub:
 
 async def test_known_tool_names():
     f = ToolFactory(asset_store=None, asset_hub=None)
-    assert f.known_tool_names() == {"generate_asset"}
+    assert f.known_tool_names() == {"generate_asset", "list_assets"}
 
 
 @pytest.mark.asyncio
@@ -64,3 +64,28 @@ async def test_build_filters_to_allowlist(mongo_db):
     factory = ToolFactory(store, FakeHub(store))
     ctx = ToolContext("r1", "g1", store, FakeHub(store))
     assert factory.build([], ctx) == []
+
+
+from app.agent_tools import build_list_assets_tool
+
+
+class _Asset:
+    def __init__(self, id, name, category):
+        self.id, self.name, self.category = id, name, category
+
+
+class _ListStore:
+    def __init__(self, assets):
+        self._assets = assets
+    async def list_assets(self, game_id):
+        assert game_id == "g1"
+        return self._assets
+
+
+@pytest.mark.asyncio
+async def test_list_assets_returns_id_name_category_summary():
+    store = _ListStore([_Asset("a1", "knight", "sprite"), _Asset("a2", "sky", None)])
+    tool = build_list_assets_tool(ToolContext("r1", "g1", store, None))
+    out = await tool.ainvoke({})
+    assert "a1" in out and "knight" in out and "sprite" in out
+    assert "a2" in out and "sky" in out

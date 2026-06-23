@@ -38,8 +38,29 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
+    async def list_assets() -> str:
+        assets = await ctx.asset_store.list_assets(ctx.game_id)
+        if not assets:
+            return "The Asset Board is empty."
+        lines = [
+            f"- {a.id}: {a.name}" + (f" ({a.category})" if getattr(a, 'category', None) else "")
+            for a in assets
+        ]
+        return "Assets on the board:\n" + "\n".join(lines)
+
+    return StructuredTool.from_function(
+        coroutine=list_assets,
+        name="list_assets",
+        description="List the assets on the Asset Board (id, name, category) for the current game.",
+    )
+
+
 class ToolFactory:
-    _BUILDERS = {"generate_asset": build_generate_asset_tool}
+    _BUILDERS = {
+        "generate_asset": build_generate_asset_tool,
+        "list_assets": build_list_assets_tool,
+    }
 
     def __init__(self, asset_store, asset_hub):
         self._asset_store = asset_store
