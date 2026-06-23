@@ -99,3 +99,13 @@ def test_validate_args_rejects_out_of_enum(tmp_path):
     spec = reg.get("gen-bg")
     with pytest.raises(SkillError):
         reg.validate_args(spec, {"description": "x", "mood": "sparkly"})
+
+
+def test_repo_skills_dir_loads_background():
+    from app.config import get_settings
+    reg = SkillRegistry(Path(get_settings().skills_dir), known_tools={"generate_asset"})
+    reg.load()
+    names = {s["name"] for s in reg.list_skills()}
+    assert {"generate-sprite", "generate-background"} <= names
+    bg = reg.get("generate-background")
+    assert [a.name for a in bg.args] == ["description", "mood", "aspect"]
