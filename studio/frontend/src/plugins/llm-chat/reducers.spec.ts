@@ -84,3 +84,9 @@ it('completeStep and completeRun set terminal status without mutating input', ()
   expect(out[0].steps[0].status).toBe('complete');
   expect(base[0].status).toBe('running'); // input untouched
 });
+
+it('startRun preserves createdAt on the stored run', () => {
+  const run = { id: 'run1', roomId: 'r1', skillName: 's', status: 'running', steps: [], createdAt: '2026-06-23T00:00:01Z' } as IRun;
+  const out = startRun([], run);
+  expect(out[0].createdAt).toBe('2026-06-23T00:00:01Z');
+});

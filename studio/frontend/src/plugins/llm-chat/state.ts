@@ -75,6 +75,7 @@ export interface IRun {
   skillName: string;
   status: 'running' | 'completed' | 'error';
   steps: IRunStep[];
+  createdAt: string;
 }
 
 export interface IAiStatus {
