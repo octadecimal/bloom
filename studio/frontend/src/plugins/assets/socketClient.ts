@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { BACKEND_URL } from './config';
 import type { IAsset } from './state';
 import { assetsSlice } from './state';
-import { upsertAsset } from './reducers';
+import { upsertAsset, removeAsset } from './reducers';
 import { notify } from '../../lib/notify';
 
 export interface ISocketLike {
@@ -42,6 +42,11 @@ function registerInboundHandlers(s: ISocketLike): void {
     if (!isActive(gameId)) return;
     // Full upsert is correct here: fires once per generation and may add a new asset.
     slice().assets.set(upsertAsset(read(), { ...asset, progress: null }));
+  });
+  s.on('asset_deleted', (p) => {
+    const { gameId, assetId } = p as { gameId: string; assetId: string };
+    if (!isActive(gameId)) return;
+    slice().assets.set(removeAsset(read(), assetId));
   });
   s.on('error', (p) => {
     const { message } = p as { message: string };

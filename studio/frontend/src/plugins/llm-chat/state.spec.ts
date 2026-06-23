@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { rootStore } from '../../state/rootStore';
-import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID } from './state';
+import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID, parseApprovalAction, type IRunStep } from './state';
 
 describe('llm-chat state', () => {
   afterEach(() => {
@@ -32,3 +32,23 @@ describe('llm-chat state', () => {
 interface ILlmChatStateLike {
   displayName: string;
 }
+
+describe('parseApprovalAction', () => {
+  it('parses an approval step content', () => {
+    const step: IRunStep = {
+      index: 1,
+      type: 'approval',
+      toolName: null,
+      content: JSON.stringify({ tool: 'delete_asset', args: { asset_id: 'a1' }, label: "Delete 'knight'." }),
+      status: 'running',
+    };
+    const action = parseApprovalAction(step);
+    expect(action?.tool).toBe('delete_asset');
+    expect(action?.label).toContain('knight');
+  });
+
+  it('returns null for non-approval steps', () => {
+    const step: IRunStep = { index: 0, type: 'final', toolName: null, content: 'hi', status: 'complete' };
+    expect(parseApprovalAction(step)).toBeNull();
+  });
+});

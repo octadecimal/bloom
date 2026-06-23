@@ -36,6 +36,10 @@ def register_socket_handlers(sio, hub, presence):
             data["roomId"], session["displayName"], data["skillName"], data.get("args", {})
         )
 
+    @sio.on("resolve_approval")
+    async def resolve_approval(sid, data):
+        await hub.resolve_approval(data["roomId"], data["runId"], data["decision"])
+
     @sio.on("typing")
     async def typing(sid, data):
         room_id = data["roomId"]

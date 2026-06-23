@@ -154,3 +154,16 @@ async def test_generate_and_wait_completes_inline(mongo_db, tmp_path):
     await hub.generate_and_wait("g1", asset.id)
     done = await store.get_asset(asset.id)
     assert done.status == "done" and len(done.generations) == 1
+
+
+@pytest.mark.asyncio
+async def test_notify_deleted_emits_asset_deleted_to_game_room():
+    class _Sio:
+        def __init__(self): self.emits = []
+        async def emit(self, event, data, room=None, to=None):
+            self.emits.append((event, data, room))
+    from app.assets.hub import AssetHub
+    sio = _Sio()
+    hub = AssetHub(sio, asset_store=None, comfy=None, media=None)
+    await hub.notify_deleted("g1", "a1")
+    assert ("asset_deleted", {"gameId": "g1", "assetId": "a1"}, "g1") in sio.emits

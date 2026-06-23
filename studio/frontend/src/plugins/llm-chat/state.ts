@@ -46,10 +46,27 @@ export interface ISkillFull extends ISkill {
 
 export interface IRunStep {
   index: number;
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'final';
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval';
   toolName: string | null;
   content: string;
   status: 'running' | 'complete' | 'error';
+}
+
+export interface IApprovalAction {
+  tool: string;
+  args: Record<string, unknown>;
+  label: string;
+}
+
+export function parseApprovalAction(step: IRunStep): IApprovalAction | null {
+  if (step.type !== 'approval') return null;
+  try {
+    const a = JSON.parse(step.content) as IApprovalAction;
+    if (typeof a?.tool === 'string' && typeof a?.label === 'string') return a;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export interface IRun {

@@ -235,4 +235,10 @@ describe('socketClient inbound', () => {
     client.runSkill('r1', 'generate-sprite', { description: 'knight' });
     expect(emitted).toContainEqual({ event: 'run_skill', payload: { roomId: 'r1', skillName: 'generate-sprite', args: { description: 'knight' } } });
   });
+
+  it('resolveApproval emits resolve_approval with the decision', () => {
+    const { sock, emitted, client } = connected();
+    client.resolveApproval('r1', 'run1', 'approve');
+    expect(emitted).toContainEqual({ event: 'resolve_approval', payload: { roomId: 'r1', runId: 'run1', decision: 'approve' } });
+  });
 });

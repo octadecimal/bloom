@@ -16,7 +16,7 @@ class FakeHub:
 
 async def test_known_tool_names():
     f = ToolFactory(asset_store=None, asset_hub=None)
-    assert f.known_tool_names() == {"generate_asset"}
+    assert f.known_tool_names() == {"generate_asset", "list_assets", "delete_asset"}
 
 
 @pytest.mark.asyncio
@@ -64,3 +64,83 @@ async def test_build_filters_to_allowlist(mongo_db):
     factory = ToolFactory(store, FakeHub(store))
     ctx = ToolContext("r1", "g1", store, FakeHub(store))
     assert factory.build([], ctx) == []
+
+
+from app.agent_tools import build_list_assets_tool
+
+
+class _Asset:
+    def __init__(self, id, name, category):
+        self.id, self.name, self.category = id, name, category
+
+
+class _ListStore:
+    def __init__(self, assets):
+        self._assets = assets
+    async def list_assets(self, game_id):
+        assert game_id == "g1"
+        return self._assets
+
+
+@pytest.mark.asyncio
+async def test_list_assets_returns_id_name_category_summary():
+    store = _ListStore([_Asset("a1", "knight", "sprite"), _Asset("a2", "sky", None)])
+    tool = build_list_assets_tool(ToolContext("r1", "g1", store, None))
+    out = await tool.ainvoke({})
+    assert "a1" in out and "knight" in out and "sprite" in out
+    assert "a2" in out and "sky" in out
+
+
+from app.agent_tools import build_delete_asset_tool
+import app.agent_tools as agent_tools
+
+
+class _DelStore:
+    def __init__(self, asset):
+        self._asset = asset
+        self.deleted = []
+    async def get_asset(self, asset_id):
+        return self._asset if (self._asset and self._asset.id == asset_id) else None
+    async def delete_asset(self, asset_id):
+        self.deleted.append(asset_id)
+
+
+class _DelHub:
+    def __init__(self): self.notified = []
+    async def notify_deleted(self, g, a): self.notified.append((g, a))
+
+
+@pytest.mark.asyncio
+async def test_delete_asset_approve_deletes_and_notifies(monkeypatch):
+    monkeypatch.setattr(agent_tools, "interrupt", lambda payload: "approve")
+    store = _DelStore(_Asset("a1", "knight", "sprite"))
+    hub = _DelHub()
+    tool = build_delete_asset_tool(ToolContext("r1", "g1", store, hub))
+    out = await tool.ainvoke({"asset_id": "a1"})
+    assert store.deleted == ["a1"]
+    assert hub.notified == [("g1", "a1")]
+    assert "knight" in out
+
+
+@pytest.mark.asyncio
+async def test_delete_asset_deny_does_not_delete(monkeypatch):
+    monkeypatch.setattr(agent_tools, "interrupt", lambda payload: "deny")
+    store = _DelStore(_Asset("a1", "knight", "sprite"))
+    hub = _DelHub()
+    tool = build_delete_asset_tool(ToolContext("r1", "g1", store, hub))
+    out = await tool.ainvoke({"asset_id": "a1"})
+    assert store.deleted == []
+    assert hub.notified == []
+    assert "denied" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_delete_asset_unknown_id_returns_not_found_without_interrupt(monkeypatch):
+    def _boom(payload):
+        raise AssertionError("interrupt must not be called for unknown asset")
+    monkeypatch.setattr(agent_tools, "interrupt", _boom)
+    store = _DelStore(None)
+    tool = build_delete_asset_tool(ToolContext("r1", "g1", store, _DelHub()))
+    out = await tool.ainvoke({"asset_id": "missing"})
+    assert "not found" in out.lower()
+    assert store.deleted == []

@@ -98,6 +98,7 @@ class ReplayToolCallingChatModel(BaseChatModel):
     replay_token_delay: float = 0.0
     model: str = ""
     _has_tools: bool = False
+    _bound_names: set = set()
 
     @property
     def _llm_type(self) -> str:
@@ -110,6 +111,7 @@ class ReplayToolCallingChatModel(BaseChatModel):
         """Record that tools were bound (a skill run); the replay model knows its
         tool calls from the run cassette and ignores the actual tool objects."""
         self._has_tools = bool(tools)
+        self._bound_names = {getattr(t, "name", None) for t in tools}
         return self
 
     def _text_mode(self) -> bool:
@@ -127,6 +129,12 @@ class ReplayToolCallingChatModel(BaseChatModel):
             or []
         )
 
+    def _cassette_tool_calls(self) -> list:
+        calls = self.cassette.get("tool_calls") or []
+        if self._bound_names:
+            calls = [c for c in calls if c["name"] in self._bound_names]
+        return calls
+
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -140,10 +148,11 @@ class ReplayToolCallingChatModel(BaseChatModel):
             msg = AIMessage(content="".join(self._text_chunks(messages)))
             return ChatResult(generations=[ChatGeneration(message=msg)])
         has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
-        if not has_tool_result and self.cassette.get("tool_calls"):
+        cassette_calls = self._cassette_tool_calls()
+        if not has_tool_result and cassette_calls:
             calls = [
                 {"name": c["name"], "args": c["args"], "id": f"call_{i}"}
-                for i, c in enumerate(self.cassette["tool_calls"])
+                for i, c in enumerate(cassette_calls)
             ]
             msg = AIMessage(content="", tool_calls=calls)
         else:
@@ -173,7 +182,7 @@ class ReplayToolCallingChatModel(BaseChatModel):
                 yield ChatGenerationChunk(message=chunk)
             return
         has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
-        if not has_tool_result and self.cassette.get("tool_calls"):
+        if not has_tool_result and self._cassette_tool_calls():
             # First turn: emit a single non-streaming tool-call chunk
             result = await self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
             msg = result.generations[0].message

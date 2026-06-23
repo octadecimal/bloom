@@ -93,6 +93,9 @@ class AssetHub:
     async def generate_and_wait(self, game_id: str, asset_id: str) -> None:
         await self._run(game_id, asset_id)
 
+    async def notify_deleted(self, game_id: str, asset_id: str) -> None:
+        await self._sio.emit("asset_deleted", {"gameId": game_id, "assetId": asset_id}, room=game_id)
+
     async def _emit_status(self, game_id: str, asset_id: str, status: str) -> None:
         depth = len(self._queues.get(game_id, []))
         await self._sio.emit(

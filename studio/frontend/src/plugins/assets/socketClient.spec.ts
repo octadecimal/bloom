@@ -69,4 +69,25 @@ describe('assets socketClient', () => {
     sock.fire('asset_completed', { gameId: 'g1', asset: done });
     expect(assetsSlice().assets.get({ noproxy: true })[0].status).toBe('done');
   });
+
+  it('asset_deleted removes the asset', () => {
+    let sock!: ReturnType<typeof fakeSocket>;
+    const client = createSocketClient(() => (sock = fakeSocket()));
+    client.connect();
+    assetsSlice().assets.set([asset, { ...asset, id: 'a2', name: 'Other' }]);
+    sock.fire('asset_deleted', { gameId: 'g1', assetId: 'a1' });
+    expect(
+      assetsSlice()
+        .assets.get({ noproxy: true })
+        .map((a) => a.id),
+    ).toEqual(['a2']);
+  });
+
+  it('asset_deleted ignores events for a non-active game', () => {
+    let sock!: ReturnType<typeof fakeSocket>;
+    const client = createSocketClient(() => (sock = fakeSocket()));
+    client.connect();
+    sock.fire('asset_deleted', { gameId: 'other', assetId: 'a1' });
+    expect(assetsSlice().assets.get({ noproxy: true })[0].id).toBe('a1');
+  });
 });

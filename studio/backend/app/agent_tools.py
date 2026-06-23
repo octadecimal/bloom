@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from langchain_core.tools import BaseTool, StructuredTool
+from langgraph.types import interrupt
 
 
 @dataclass
@@ -38,8 +39,55 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
+    async def list_assets() -> str:
+        assets = await ctx.asset_store.list_assets(ctx.game_id)
+        if not assets:
+            return "The Asset Board is empty."
+        lines = [
+            f"- {a.id}: {a.name}" + (f" ({a.category})" if getattr(a, 'category', None) else "")
+            for a in assets
+        ]
+        return "Assets on the board:\n" + "\n".join(lines)
+
+    return StructuredTool.from_function(
+        coroutine=list_assets,
+        name="list_assets",
+        description="List the assets on the Asset Board (id, name, category) for the current game.",
+    )
+
+
+def build_delete_asset_tool(ctx: ToolContext) -> BaseTool:
+    async def delete_asset(asset_id: str) -> str:
+        asset = await ctx.asset_store.get_asset(asset_id)
+        if asset is None:
+            return f"Asset {asset_id} not found; nothing deleted."
+        label = f"Delete '{asset.name}' (id {asset_id}) — this can't be undone."
+        decision = interrupt(
+            {"tool": "delete_asset", "args": {"asset_id": asset_id}, "label": label}
+        )
+        if decision != "approve":
+            return "Deletion denied by the user."
+        await ctx.asset_store.delete_asset(asset_id)
+        await ctx.asset_hub.notify_deleted(ctx.game_id, asset_id)
+        return f"Deleted '{asset.name}' (id {asset_id}) from the Asset Board."
+
+    return StructuredTool.from_function(
+        coroutine=delete_asset,
+        name="delete_asset",
+        description=(
+            "Delete an asset from the Asset Board by its id. This is destructive and "
+            "irreversible; the studio will ask the human to approve before it runs."
+        ),
+    )
+
+
 class ToolFactory:
-    _BUILDERS = {"generate_asset": build_generate_asset_tool}
+    _BUILDERS = {
+        "generate_asset": build_generate_asset_tool,
+        "list_assets": build_list_assets_tool,
+        "delete_asset": build_delete_asset_tool,
+    }
 
     def __init__(self, asset_store, asset_hub):
         self._asset_store = asset_store
