@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { loadSkills } from './actions';
-import { getTools, saveSkill } from './restClient';
+import { getSkill, getTools, saveSkill } from './restClient';
 import type { ISkillArg, ISkillFull } from './state';
 
 interface IArgRow {
@@ -26,8 +26,32 @@ function rowToArg(r: IArgRow): ISkillArg {
   return arg;
 }
 
+function argToRow(a: ISkillArg): IArgRow {
+  return {
+    name: a.name,
+    type: a.type,
+    required: a.required,
+    description: a.description ?? '',
+    default: a.default === undefined || a.default === null ? '' : String(a.default),
+    enumCsv: a.enum ? a.enum.join(', ') : '',
+  };
+}
+
 function previewMarkdown(skill: ISkillFull): string {
-  const lines = ['---', `name: ${skill.name}`, `description: ${skill.description}`, `tools: [${skill.tools.join(', ')}]`, '---', '', skill.body];
+  const argLines =
+    skill.args.length > 0
+      ? [
+          'args:',
+          ...skill.args.map((a) => {
+            const parts = [`  - name: ${a.name}`, `    type: ${a.type}`, `    required: ${String(a.required)}`];
+            if (a.description) parts.push(`    description: ${a.description}`);
+            if (a.default !== undefined && a.default !== null) parts.push(`    default: ${String(a.default)}`);
+            if (a.enum?.length) parts.push(`    enum: [${a.enum.join(', ')}]`);
+            return parts.join('\n');
+          }),
+        ]
+      : [];
+  const lines = ['---', `name: ${skill.name}`, `description: ${skill.description}`, `tools: [${skill.tools.join(', ')}]`, ...argLines, '---', '', skill.body];
   return lines.join('\n');
 }
 
@@ -60,6 +84,20 @@ export function SkillEditorPane() {
 
   const setRow = (i: number, patch: Partial<IArgRow>) => setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
+  const load = async () => {
+    setStatus(null);
+    try {
+      const fetched = await getSkill(name);
+      setName(fetched.name);
+      setDescription(fetched.description);
+      setBody(fetched.body);
+      setSelectedTools(fetched.tools);
+      setRows(fetched.args.map(argToRow));
+    } catch (e) {
+      setStatus({ ok: false, msg: (e as Error).message });
+    }
+  };
+
   const save = async () => {
     setStatus(null);
     try {
@@ -74,7 +112,12 @@ export function SkillEditorPane() {
   return (
     <div data-testid="skill-editor-pane" className="flex h-full flex-col gap-2 overflow-auto bg-surface p-2.5 text-sm">
       <h2 className="text-base font-semibold text-foreground">Skill Editor</h2>
-      <Input data-testid="skill-editor-name" placeholder="name (a-z0-9-)" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="flex gap-2">
+        <Input data-testid="skill-editor-name" placeholder="name (a-z0-9-)" value={name} onChange={(e) => setName(e.target.value)} />
+        <Button data-testid="skill-editor-load" size="sm" variant="ghost" onClick={() => void load()}>
+          Load
+        </Button>
+      </div>
       <Input data-testid="skill-editor-description" placeholder="description" value={description} onChange={(e) => setDescription(e.target.value)} />
 
       <div className="flex flex-col gap-1">

@@ -33,6 +33,34 @@ describe('SkillEditorPane', () => {
     expect(actions.loadSkills).toHaveBeenCalled();
   });
 
+  it('loads an existing skill into the form', async () => {
+    (rest.getSkill as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      name: 'generate-background',
+      description: 'a background',
+      args: [{ name: 'mood', type: 'string', required: false, description: 'tone', default: 'neutral', enum: ['bright', 'dark'] }],
+      tools: ['generate_asset'],
+      body: 'use generate_asset',
+    });
+    render(<SkillEditorPane />);
+    fireEvent.change(screen.getByTestId('skill-editor-name'), { target: { value: 'generate-background' } });
+    fireEvent.click(screen.getByTestId('skill-editor-load'));
+    await waitFor(() => expect(screen.getByTestId('skill-editor-description')).toHaveValue('a background'));
+    expect(rest.getSkill).toHaveBeenCalledWith('generate-background');
+    expect(screen.getByTestId('skill-editor-body')).toHaveValue('use generate_asset');
+    expect(screen.getByTestId('skill-editor-arg-0')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('mood')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('bright, dark')).toBeInTheDocument();
+    expect(screen.getByTestId('skill-editor-preview')).toHaveTextContent('enum: [bright, dark]');
+  });
+
+  it('shows the error when load fails', async () => {
+    (rest.getSkill as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('skill not found'));
+    render(<SkillEditorPane />);
+    fireEvent.change(screen.getByTestId('skill-editor-name'), { target: { value: 'nope' } });
+    fireEvent.click(screen.getByTestId('skill-editor-load'));
+    await waitFor(() => expect(screen.getByTestId('skill-editor-status')).toHaveTextContent('skill not found'));
+  });
+
   it('shows the server error when save fails', async () => {
     (rest.saveSkill as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('unknown tools'));
     render(<SkillEditorPane />);
