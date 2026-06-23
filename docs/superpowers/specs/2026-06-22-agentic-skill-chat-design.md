@@ -59,7 +59,7 @@ architecture.
 
 **Why this is safe, not just optimistic:** the regression surface is the working
 streaming/turn-lock/presence contract, which is **fully covered by the authoritative
-realtime e2e suite**. Green = safe. The no-tool case is rendered onto the *existing*
+realtime e2e suite**. Green = safe. The no-tool case is rendered onto the _existing_
 wire protocol (§5.2), so the frontend plain-chat path and the existing suite are
 untouched and serve as the safety net. Plain-chat migration onto the runner is the
 **last task**, behind that green suite; if it cannot be kept green, plain chat falls
@@ -148,12 +148,12 @@ model; the executor never calls a raw token stream.
 (empty for plain chat) and the system prompt is `base + skill.body`. It consumes
 LangGraph's streamed events and yields a **uniform `RunEvent` stream**:
 
-| LangGraph event | RunEvent |
-| --- | --- |
-| LLM token chunk | `thinking`/`final` token delta |
-| tool start | `tool_call` (tool name + args) |
-| tool end | `tool_result` (structured result) |
-| final message | `final` complete |
+| LangGraph event | RunEvent                          |
+| --------------- | --------------------------------- |
+| LLM token chunk | `thinking`/`final` token delta    |
+| tool start      | `tool_call` (tool name + args)    |
+| tool end        | `tool_result` (structured result) |
+| final message   | `final` complete                  |
 
 `RoomHub` consumes this iterator where it consumes `chat_service` today, under the
 **same per-room turn lock**, and projects it:
@@ -180,6 +180,7 @@ args:
   - { name: style, type: string, required: false }
 tools: [generate_asset]
 ---
+
 You are generating a single game sprite. Use the generate_asset tool with a
 prompt derived from the user's description and style. Confirm what you made.
 ```
@@ -208,7 +209,7 @@ skills regardless of the unified-executor decision.
 #### 5.6 Run model + realtime protocol
 
 - **Mongo `runs`:** `{ _id, roomId, skillName, args, status: running|completed|error,
-  steps[], createdAt, completedAt }`; step =
+steps[], createdAt, completedAt }`; step =
   `{ index, type: thinking|tool_call|tool_result|final, toolName?, content, status }`.
 - **Server → client events:** `run_started`, `run_step_started`, `run_step_token`
   (streamed thinking/final deltas), `run_step_completed`, `run_completed`.
