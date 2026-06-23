@@ -81,8 +81,8 @@ describe('actions', () => {
   it('runSkill forwards to the socket for the active room', () => {
     actions.__setDeps({ socket });
     chatSlice().activeRoomId.set('r1');
-    actions.runSkill('generate-sprite', { description: 'knight' });
-    expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' });
+    actions.runSkill('generate-sprite', { description: 'knight' }, 'a knight');
+    expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' }, 'a knight');
   });
 
   it('resolveApproval forwards to the socket for the active room', () => {

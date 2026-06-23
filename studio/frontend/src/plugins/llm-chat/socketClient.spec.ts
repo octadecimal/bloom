@@ -230,10 +230,13 @@ describe('socketClient inbound', () => {
     expect(chatSlice().runs.get()).toHaveLength(0);
   });
 
-  it('runSkill emits run_skill to the socket', () => {
+  it('runSkill emits run_skill to the socket with text', () => {
     const { sock, emitted, client } = connected();
-    client.runSkill('r1', 'generate-sprite', { description: 'knight' });
-    expect(emitted).toContainEqual({ event: 'run_skill', payload: { roomId: 'r1', skillName: 'generate-sprite', args: { description: 'knight' } } });
+    client.runSkill('r1', 'generate-sprite', { description: 'knight' }, 'a knight');
+    expect(emitted).toContainEqual({
+      event: 'run_skill',
+      payload: { roomId: 'r1', skillName: 'generate-sprite', args: { description: 'knight' }, text: 'a knight' },
+    });
   });
 
   it('resolveApproval emits resolve_approval with the decision', () => {

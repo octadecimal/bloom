@@ -123,9 +123,9 @@ export function sendPrompt(text: string): void {
   if (roomId) sock().sendPrompt(roomId, text);
 }
 
-export function runSkill(skillName: string, args: Record<string, unknown>): void {
+export function runSkill(skillName: string, args: Record<string, unknown>, text = ''): void {
   const roomId = chatSlice().activeRoomId.get();
-  if (roomId) sock().runSkill(roomId, skillName, args);
+  if (roomId) sock().runSkill(roomId, skillName, args, text);
 }
 
 export function resolveApproval(runId: string, decision: 'approve' | 'deny'): void {
