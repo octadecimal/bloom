@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 
 import pytest
+import pytest_asyncio
 
 from app.models import Message
 from app.room_hub import RoomHub
@@ -167,6 +168,45 @@ async def test_generation_error_emits_error_and_keeps_draining():
     assert statuses[-1] == "idle"  # room not deadlocked
 
 
+from app.turn_runner import RunFinished as _RunFinished
+
+
+class ErrorRunner:
+    """Runner that yields only a RunFinished('error') — no tokens."""
+
+    async def run(self, **kw):
+        yield _RunFinished("error")
+
+
+@pytest.mark.asyncio
+async def test_runner_error_emits_error_and_keeps_draining():
+    """When TurnRunner emits RunFinished('error') on the plain-chat path,
+    an 'error' socket event must be emitted and the message must NOT be
+    completed (status stays streaming / no message_completed event).
+    Subsequent queued turns must still drain."""
+    sio = FakeSio()
+    store = FakeStore()
+    chat = GatedChatService()  # unused by runner path but required positionally
+    runner = ErrorRunner()
+    hub = RoomHub(sio, store, chat, turn_runner=runner)
+
+    await hub.handle_prompt("r1", "Alice", "first")
+
+    await asyncio.wait_for(_wait_event(sio, "error"), timeout=1)
+    # Let the drain settle to idle
+    await asyncio.wait_for(_wait_event(sio, "ai_status"), timeout=1)
+    await asyncio.sleep(0.05)
+
+    # error event emitted for the room
+    errors = [d for e, d, _ in sio.events if e == "error"]
+    assert errors and errors[0]["roomId"] == "r1"
+    # message must NOT have been completed (no message_completed event)
+    assert "message_completed" not in sio.names()
+    # room is not deadlocked
+    statuses = [d["state"] for e, d, _ in sio.events if e == "ai_status"]
+    assert statuses[-1] == "idle"
+
+
 class StepChatService:
     """Yields tokens one at a time, each gated, so a test can observe mid-stream state."""
 
@@ -231,3 +271,193 @@ async def test_attach_subscriber_when_idle_enters_without_snapshot():
     await hub.attach_subscriber("r1", "sidEarly")
     assert ("sidEarly", "r1") in sio.entered
     assert [e for e, _, _ in sio.events if e == "stream_snapshot"] == []
+
+
+# ---------------------------------------------------------------------------
+# Skill-run tests (Task 6)
+# ---------------------------------------------------------------------------
+
+from app.turn_runner import StepStarted, StepToken, StepCompleted, RunFinished
+
+
+class SkillFakeStore(FakeStore):
+    """FakeStore extended so get_room also sets a game_id attribute."""
+
+    async def get_room(self, room_id):
+        from app.models import Room
+
+        room = Room(id=room_id, name="R", model=self._model, created_at=datetime.now(timezone.utc))
+        room.game_id = "g1"
+        return room
+
+
+class StubRunner:
+    async def run(self, **kw):
+        yield StepStarted(0, "tool_call", "generate_asset")
+        yield StepCompleted(0, "complete", "{'description': 'knight'}", "generate_asset")
+        yield StepStarted(1, "final")
+        yield StepToken(1, "Done.")
+        yield StepCompleted(1, "complete", "Done.")
+        yield RunFinished("completed")
+
+
+class FakeSkills:
+    """Minimal skill registry stub: one skill named 'generate-sprite'."""
+
+    def __init__(self):
+        from types import SimpleNamespace
+        self._spec = SimpleNamespace(name="generate-sprite", body="make sprites", tools=["generate_asset"])
+
+    def get(self, name):
+        return self._spec if name == "generate-sprite" else None
+
+    def validate_args(self, spec, args):
+        return args
+
+
+class GatedStubRunner:
+    """StubRunner that gates mid-run so tests can observe in-flight state."""
+
+    def __init__(self):
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def run(self, **kw):
+        self.started.set()
+        await self.release.wait()
+        yield StepStarted(0, "final")
+        yield StepToken(0, "Hi.")
+        yield StepCompleted(0, "complete", "Hi.")
+        yield RunFinished("completed")
+
+
+@pytest_asyncio.fixture
+async def room_hub_with_skill(mongo_db):
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()  # unused by skill path but required positionally
+    run_store = RunStore(mongo_db)
+    skills = FakeSkills()
+    runner = StubRunner()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=runner, skills=skills)
+    return hub, sio
+
+
+@pytest.mark.asyncio
+async def test_handle_skill_run_emits_run_events(room_hub_with_skill):
+    hub, sio = room_hub_with_skill
+    await hub.handle_skill_run("r1", "alice", "generate-sprite", {"description": "knight"})
+    # Drain is a background task; wait for run_completed to appear.
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+    names = [e for (e, _, _) in sio.events]
+    # run_started must be the first run-lifecycle event (ai_status may appear before it)
+    run_lifecycle = [n for n in names if n.startswith("run_")]
+    assert run_lifecycle[0] == "run_started"
+    assert "run_step_started" in names and "run_step_token" in names
+    assert run_lifecycle[-1] == "run_completed"
+
+
+async def _wait_event_count(sio, name, n):
+    while [e for (e, _, _) in sio.events if e == name].__len__() < n:
+        await asyncio.sleep(0.01)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_skill_runs_are_serialized(mongo_db):
+    """Two concurrent handle_skill_run calls must not overlap — second waits for first."""
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()
+    run_store = RunStore(mongo_db)
+    skills = FakeSkills()
+    gated = GatedStubRunner()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=gated, skills=skills)
+
+    # Fire first skill run (will block at gated.release inside the drain task)
+    await hub.handle_skill_run("r1", "alice", "generate-sprite", {"description": "a"})
+    await asyncio.wait_for(gated.started.wait(), timeout=1)
+
+    # Fire second skill run while first is still in progress
+    await hub.handle_skill_run("r1", "bob", "generate-sprite", {"description": "b"})
+    await asyncio.sleep(0.05)
+
+    # At this point only one run_started should have been emitted
+    started_events = [e for (e, _, _) in sio.events if e == "run_started"]
+    assert len(started_events) == 1, "second run must not start while first is active"
+    assert any(e == "ai_status" and d["state"] == "queued" for e, d, _ in sio.events)
+
+    # Release first; second should now run and finish
+    gated.release.set()
+    await asyncio.wait_for(_wait_event_count(sio, "run_completed", 2), timeout=3)
+
+    completed_events = [e for (e, _, _) in sio.events if e == "run_completed"]
+    assert len(completed_events) == 2, "both runs must complete"
+
+
+@pytest.mark.asyncio
+async def test_attach_subscriber_emits_run_snapshot_during_active_run(mongo_db):
+    """A late joiner during an active skill run should receive run_snapshot."""
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()
+    run_store = RunStore(mongo_db)
+    skills = FakeSkills()
+    gated = GatedStubRunner()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=gated, skills=skills)
+
+    # Start skill run (drain is a background task that blocks at gated.release)
+    await hub.handle_skill_run("r1", "alice", "generate-sprite", {"description": "x"})
+    await asyncio.wait_for(gated.started.wait(), timeout=1)
+
+    # Late joiner attaches while the run is in-progress
+    await hub.attach_subscriber("r1", "sidLate")
+    snap_events = [d for (e, d, _) in sio.events if e == "run_snapshot"]
+    assert snap_events, "late joiner must receive run_snapshot during active run"
+    assert "run" in snap_events[-1]
+
+    # Release the run so cleanup happens and we don't leave dangling tasks
+    gated.release.set()
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+
+class RaisingRunner:
+    """Runner that yields one StepStarted then raises mid-iteration."""
+
+    async def run(self, **kw):
+        yield StepStarted(0, "tool_call", "generate_asset")
+        raise RuntimeError("boom")
+
+
+@pytest.mark.asyncio
+async def test_skill_run_error_still_completes(mongo_db):
+    """If the runner raises mid-iteration, run_completed must still be emitted
+    with status='error' and the run must be persisted as terminal in the store."""
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()
+    run_store = RunStore(mongo_db)
+    skills = FakeSkills()
+    runner = RaisingRunner()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=runner, skills=skills)
+
+    await hub.handle_skill_run("r1", "alice", "generate-sprite", {"description": "knight"})
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+    # (a) run_completed emitted with status == "error"
+    completed_events = [(e, d) for (e, d, _) in sio.events if e == "run_completed"]
+    assert completed_events, "run_completed must be emitted even when runner raises"
+    assert completed_events[-1][1]["status"] == "error", (
+        f"expected status='error', got {completed_events[-1][1]['status']}"
+    )
+    run_id = completed_events[-1][1]["runId"]
+
+    # (b) persisted run has status == "error" (not left as "running")
+    persisted = await run_store.get_run(run_id)
+    assert persisted is not None, "run must exist in the store"
+    assert persisted.status == "error", (
+        f"expected persisted status='error', got {persisted.status}"
+    )

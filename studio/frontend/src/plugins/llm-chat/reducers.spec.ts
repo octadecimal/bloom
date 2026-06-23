@@ -63,3 +63,24 @@ describe('reducers', () => {
     expect(removeTyping(['bob', 'amy'], 'bob')).toEqual(['amy']);
   });
 });
+
+import { startRun, startStep, appendStepToken, completeStep, completeRun } from './reducers';
+import type { IRun } from './state';
+
+const run = (over: Partial<IRun> = {}): IRun => ({ id: 'run1', roomId: 'r1', skillName: 'generate-sprite', status: 'running', steps: [], ...over });
+
+it('startRun adds a run; startStep + appendStepToken build a streaming step', () => {
+  let runs = startRun([], run());
+  runs = startStep(runs, 'run1', { index: 0, type: 'final', toolName: null, content: '', status: 'running' });
+  runs = appendStepToken(runs, 'run1', 0, 'He');
+  runs = appendStepToken(runs, 'run1', 0, 'llo');
+  expect(runs[0].steps[0].content).toBe('Hello');
+});
+
+it('completeStep and completeRun set terminal status without mutating input', () => {
+  const base = startStep(startRun([], run()), 'run1', { index: 0, type: 'final', toolName: null, content: 'x', status: 'running' });
+  const out = completeRun(completeStep(base, 'run1', 0, 'complete', 'x'), 'run1', 'completed');
+  expect(out[0].status).toBe('completed');
+  expect(out[0].steps[0].status).toBe('complete');
+  expect(base[0].status).toBe('running'); // input untouched
+});

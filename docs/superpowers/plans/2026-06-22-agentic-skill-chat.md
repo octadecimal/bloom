@@ -29,6 +29,7 @@
 ## File Structure
 
 **Backend — new files**
+
 - `studio/backend/app/skills.py` — `SkillArg`, `SkillSpec` models; `SkillRegistry` (load/validate repo-root `skills/*.md`, `list_skills`, `get`).
 - `studio/backend/app/runs.py` — `RunStep`, `Run` models; `RunStore` (Mongo, mirrors `AssetStore`).
 - `studio/backend/app/agent_tools.py` — `ToolContext`, `ToolFactory`, `build_generate_asset_tool` (LangChain tool wrapping the asset pipeline).
@@ -36,6 +37,7 @@
 - `skills/generate-sprite.md` — the one shipped skill (repo root).
 
 **Backend — modified files**
+
 - `studio/backend/app/providers.py` — add `build_chat_model`, `ReplayToolCallingChatModel`.
 - `studio/backend/app/replay/cassette.py` — add `load_run_cassette` + extended schema.
 - `studio/backend/app/replay/record.py` — record a tool-calling run cassette.
@@ -49,6 +51,7 @@
 - `studio/backend/tests/test_fixtures_committed.py` — guard the run cassette.
 
 **Frontend — modified files** (all under `studio/frontend/src/plugins/llm-chat/`)
+
 - `state.ts` — `ISkill`, `IRunStep`, `IRun` interfaces; slice fields `skills`, `skillsStatus`, `runs`, `activeRunId`.
 - `reducers.ts` — `startRun`, `startStep`, `appendStepToken`, `completeStep`, `completeRun`, `applyRunSnapshot`.
 - `socketClient.ts` — `run_*` inbound handlers; `runSkill` emit.
@@ -58,6 +61,7 @@
 - `ChatRoomPane.tsx` — slash-command composer + skill autocomplete + mount `RunTimeline`.
 
 **Frontend — new e2e**
+
 - `studio/frontend/e2e/skill-run.spec.ts` (or repo e2e dir) — Playwright local-only.
 
 ---
@@ -71,6 +75,7 @@ Backend foundation first (skills → runs → tool → chat-model seam → runne
 ## Task 1: Skill model + SkillRegistry + the shipped skill
 
 **Files:**
+
 - Create: `studio/backend/app/skills.py`
 - Create: `skills/generate-sprite.md`
 - Modify: `studio/backend/app/config.py`
@@ -78,6 +83,7 @@ Backend foundation first (skills → runs → tool → chat-model seam → runne
 - Test: `studio/backend/tests/test_skills.py`
 
 **Interfaces:**
+
 - Produces:
   - `class SkillArg(BaseModel): name: str; type: Literal["string","number","boolean"]; required: bool = False`
   - `class SkillSpec(BaseModel): name: str; description: str; args: list[SkillArg] = []; tools: list[str] = []; body: str`
@@ -93,15 +99,18 @@ Backend foundation first (skills → runs → tool → chat-model seam → runne
 - [ ] **Step 1: Add deps**
 
 In `studio/backend/pyproject.toml` dependencies add:
+
 ```
 python-frontmatter>=1.1
 pyyaml>=6.0
 ```
+
 Run: `cd studio/backend && uv sync`
 
 - [ ] **Step 2: Add `skills_dir` to config**
 
 In `studio/backend/app/config.py`, inside `Settings`, add (the default resolves to the repo root `skills/`, four parents up from `app/config.py`: `app` → `backend` → `studio` → repo root):
+
 ```python
     skills_dir: str = str(
         (__import__("pathlib").Path(__file__).resolve().parents[3] / "skills")
@@ -111,6 +120,7 @@ In `studio/backend/app/config.py`, inside `Settings`, add (the default resolves 
 - [ ] **Step 3: Write failing tests**
 
 `studio/backend/tests/test_skills.py`:
+
 ```python
 from pathlib import Path
 
@@ -266,6 +276,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 7: Ship the real skill**
 
 `skills/generate-sprite.md`:
+
 ```markdown
 ---
 name: generate-sprite
@@ -275,6 +286,7 @@ args:
   - { name: style, type: string, required: false }
 tools: [generate_asset]
 ---
+
 You generate a single game sprite for the current game. Derive a clear, concrete
 image prompt from the user's description (and style, if given) and call the
 generate_asset tool exactly once. When it returns, confirm in one sentence what
@@ -295,10 +307,12 @@ git commit -m "feat(studio): skill registry + repo-root skills/ with generate-sp
 ## Task 2: Run model + RunStore
 
 **Files:**
+
 - Create: `studio/backend/app/runs.py`
 - Test: `studio/backend/tests/test_run_store.py`
 
 **Interfaces:**
+
 - Produces:
   - `class RunStep(_WireModel): index: int; type: Literal["thinking","tool_call","tool_result","final"]; tool_name: str | None = None; content: str = ""; status: Literal["running","complete","error"] = "running"`
   - `class Run(_WireModel): id: str; room_id: str; skill_name: str; args: dict; status: Literal["running","completed","error"] = "running"; steps: list[RunStep] = []; created_at: datetime; completed_at: datetime | None = None`
@@ -316,6 +330,7 @@ git commit -m "feat(studio): skill registry + repo-root skills/ with generate-sp
 - [ ] **Step 1: Write failing tests** (use `mongomock_motor` already present in test deps, mirroring `tests/test_store.py` — confirm its import there and copy the fixture style)
 
 `studio/backend/tests/test_run_store.py`:
+
 ```python
 import pytest
 
@@ -466,10 +481,12 @@ git commit -m "feat(studio): Run model + RunStore (Mongo)"
 ## Task 3: generate_asset tool + ToolFactory
 
 **Files:**
+
 - Create: `studio/backend/app/agent_tools.py`
 - Test: `studio/backend/tests/test_agent_tools.py`
 
 **Interfaces:**
+
 - Produces:
   - `@dataclass class ToolContext: room_id: str; game_id: str; asset_store; asset_hub`
   - `class ToolFactory:`
@@ -479,9 +496,10 @@ git commit -m "feat(studio): Run model + RunStore (Mongo)"
   - The `generate_asset` tool: async, signature `(description: str, style: str = "") -> str`, returns a human-readable result string containing the new asset id; side effect: an asset is created + generated + attached to `ctx.game_id`.
 - Consumes: `AssetStore` (`create_asset`, `add_generation`, `set_status`), `AssetHub.request_generation(game_id, asset_id)` from Task-0 codebase.
 
-**Note on awaiting generation:** `AssetHub.request_generation` is fire-and-forget (queues + `create_task`). For the tool we need to *await completion*. Add a small awaitable to `AssetHub`: `async def generate_and_wait(self, game_id, asset_id) -> None` that runs `_run` inline (reusing existing `_run`) and returns when done. Implement it in this task (modify `assets/hub.py`) with a unit test.
+**Note on awaiting generation:** `AssetHub.request_generation` is fire-and-forget (queues + `create_task`). For the tool we need to _await completion_. Add a small awaitable to `AssetHub`: `async def generate_and_wait(self, game_id, asset_id) -> None` that runs `_run` inline (reusing existing `_run`) and returns when done. Implement it in this task (modify `assets/hub.py`) with a unit test.
 
 - [ ] **Step 1: Write failing test for `generate_and_wait`** in `studio/backend/tests/test_asset_hub.py` (append):
+
 ```python
 async def test_generate_and_wait_completes_inline(asset_hub_with_replay):
     hub, store = asset_hub_with_replay  # existing fixture pattern in this test file
@@ -497,10 +515,12 @@ Run: `cd studio/backend && uv run pytest tests/test_asset_hub.py -k generate_and
 Expected: FAIL (`AttributeError: generate_and_wait`).
 
 - [ ] **Step 3: Implement `generate_and_wait`** in `studio/backend/app/assets/hub.py` — factor the body of `_run` so it can be awaited directly:
+
 ```python
     async def generate_and_wait(self, game_id: str, asset_id: str) -> None:
         await self._run(game_id, asset_id)
 ```
+
 (If `_run` currently assumes queue/lock bookkeeping, keep that bookkeeping in `_drain` and ensure `_run` itself is self-contained generation — adjust only if the test reveals coupling.)
 
 - [ ] **Step 4: Run — expect PASS**
@@ -511,6 +531,7 @@ Expected: PASS.
 - [ ] **Step 5: Write failing test for the tool**
 
 `studio/backend/tests/test_agent_tools.py`:
+
 ```python
 from app.agent_tools import ToolFactory, ToolContext
 
@@ -617,11 +638,13 @@ git commit -m "feat(studio): generate_asset LangChain tool + ToolFactory + await
 ## Task 4: Chat-model seam + ReplayToolCallingChatModel + cassette schema
 
 **Files:**
+
 - Modify: `studio/backend/app/providers.py`
 - Modify: `studio/backend/app/replay/cassette.py`
 - Test: `studio/backend/tests/test_providers.py` (append), `studio/backend/tests/test_replay.py` (append)
 
 **Interfaces:**
+
 - Produces:
   - `def build_chat_model(settings: Settings, model: str) -> BaseChatModel`
   - `class ReplayToolCallingChatModel(BaseChatModel)` — deterministic; emits a recorded `AIMessage(tool_calls=[...])` then, on the follow-up invocation (after a `ToolMessage`), a recorded text answer. Driven by a **run cassette**.
@@ -629,15 +652,18 @@ git commit -m "feat(studio): generate_asset LangChain tool + ToolFactory + await
 - Consumes: `settings.provider_mode`, existing `DEFAULT_FIXTURES_DIR`.
 
 **Run cassette schema** (`tests/fixtures/replay/run/default.json`):
+
 ```json
 {
   "tool_calls": [{ "name": "generate_asset", "args": { "description": "a knight", "style": "pixel" } }],
   "final": ["All set — ", "I generated a knight sprite."]
 }
 ```
+
 Semantics: first model invocation (no prior `ToolMessage` in input) → return `AIMessage` with those `tool_calls` and empty content. A subsequent invocation (a `ToolMessage` is present) → stream the `final` chunks as the answer with no tool calls. This deterministically drives one tool round-trip.
 
 - [ ] **Step 1: Add `load_run_cassette`** to `studio/backend/app/replay/cassette.py`:
+
 ```python
 import json
 
@@ -652,6 +678,7 @@ def load_run_cassette(fixtures_dir: Path) -> dict:
 - [ ] **Step 2: Write the seed cassette**
 
 `studio/backend/tests/fixtures/replay/run/default.json`:
+
 ```json
 {
   "tool_calls": [{ "name": "generate_asset", "args": { "description": "a knight", "style": "pixel" } }],
@@ -662,6 +689,7 @@ def load_run_cassette(fixtures_dir: Path) -> dict:
 - [ ] **Step 3: Write failing test**
 
 `studio/backend/tests/test_providers.py` (append):
+
 ```python
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -699,6 +727,7 @@ Run: `cd studio/backend && uv run pytest tests/test_providers.py -k replay_model
 Expected: FAIL (`ImportError: ReplayToolCallingChatModel`).
 
 - [ ] **Step 5: Implement in `studio/backend/app/providers.py`** (append; keep existing `LLMProvider`/`build_provider` intact for the not-yet-migrated plain-chat path):
+
 ```python
 from typing import Any, Optional
 
@@ -751,6 +780,7 @@ def build_chat_model(settings: "Settings", model: str) -> BaseChatModel:
         streaming=True,
     )
 ```
+
 (`bind_tools` is provided by `BaseChatModel`’s default; `create_react_agent` will call it. The replay model ignores bound tools and replays the scripted calls — deterministic by design.)
 
 - [ ] **Step 6: Run — expect PASS**
@@ -771,11 +801,13 @@ git commit -m "feat(studio): tool-capable chat-model seam + deterministic replay
 ## Task 5: TurnRunner (LangGraph agent + RunEvent mapping)
 
 **Files:**
+
 - Create: `studio/backend/app/turn_runner.py`
 - Modify: `studio/backend/pyproject.toml` (add `langgraph`)
 - Test: `studio/backend/tests/test_turn_runner.py`
 
 **Interfaces:**
+
 - Produces:
   - RunEvent dataclasses: `StepStarted(index, type, tool_name=None)`, `StepToken(index, delta)`, `StepCompleted(index, status, content, result=None)`, `RunFinished(status)`.
   - `class TurnRunner:`
@@ -786,14 +818,17 @@ git commit -m "feat(studio): tool-capable chat-model seam + deterministic replay
 **Event-mapping contract (assert this ordering in tests):** model text before any tool call opens a `final`/`thinking` text step that streams tokens; a tool call closes the open text step and emits `tool_call` (StepStarted+StepCompleted with args) then `tool_result` (StepCompleted with the tool's return); trailing model text opens a `final` step. For slice 1 the replay model emits: tool_call → tool_result → final text. So expected RunEvent order is: `StepStarted(0, tool_call, generate_asset)`, `StepCompleted(0, complete, <args json>)`, `StepStarted(1, tool_result, generate_asset)`, `StepCompleted(1, complete, <tool return>)`, `StepStarted(2, final)`, `StepToken(2, ...)`×N, `StepCompleted(2, complete, <full text>)`, `RunFinished(completed)`.
 
 - [ ] **Step 1: Add `langgraph`** to `studio/backend/pyproject.toml` dependencies:
+
 ```
 langgraph>=0.2
 ```
+
 Run: `cd studio/backend && uv sync`
 
 - [ ] **Step 2: Write failing test**
 
 `studio/backend/tests/test_turn_runner.py`:
+
 ```python
 from app.providers import ReplayToolCallingChatModel
 from app.turn_runner import TurnRunner, StepStarted, StepCompleted, StepToken, RunFinished
@@ -959,13 +994,15 @@ git commit -m "feat(studio): TurnRunner — LangGraph agent loop mapped to order
 
 ---
 
-## Task 6: RoomHub skill path (generalized queue + run_* events + snapshot)
+## Task 6: RoomHub skill path (generalized queue + run\_\* events + snapshot)
 
 **Files:**
+
 - Modify: `studio/backend/app/room_hub.py`
 - Test: `studio/backend/tests/test_room_hub.py` (append)
 
 **Interfaces:**
+
 - Produces on `RoomHub`:
   - `async def handle_skill_run(self, room_id, author, skill_name, args) -> None`
   - extends `active_snapshot`/`attach_subscriber` to also emit `run_snapshot` when a run is live.
@@ -979,6 +1016,7 @@ git commit -m "feat(studio): TurnRunner — LangGraph agent loop mapped to order
 - [ ] **Step 1: Write failing test** with a fake sio capturing emits and a stub TurnRunner yielding a scripted RunEvent sequence:
 
 `studio/backend/tests/test_room_hub.py` (append):
+
 ```python
 from app.turn_runner import StepStarted, StepToken, StepCompleted, RunFinished
 
@@ -1015,6 +1053,7 @@ Run: `cd studio/backend && uv run pytest tests/test_room_hub.py -k skill -v`
 Expected: FAIL (`AttributeError: handle_skill_run`).
 
 - [ ] **Step 3: Implement** — add keyword deps to `__init__`, add a `self._active_runs: dict[str, dict] = {}`, generalize the queue, and add:
+
 ```python
     async def handle_skill_run(self, room_id, author, skill_name, args):
         spec = self._skills.get(skill_name)
@@ -1079,7 +1118,9 @@ Expected: FAIL (`AttributeError: handle_skill_run`).
             await self._run_store.complete_step(run_id, ev.index, ev.status, ev.content)
             await self._sio.emit("run_step_completed", {"roomId": room_id, "runId": run_id, "stepIndex": ev.index, "status": ev.status, "content": ev.content}, room=room_id)
 ```
+
 In `_drain`, change the dequeue to read the descriptor and dispatch:
+
 ```python
                 descriptor = queue.pop(0)
             try:
@@ -1088,6 +1129,7 @@ In `_drain`, change the dequeue to read the descriptor and dispatch:
                 else:
                     await self._run_generation(room_id)
 ```
+
 And in `handle_prompt`, push `{"kind": "prompt", "messageId": user_msg.id}` instead of the bare id. Extend `attach_subscriber` to also emit a `run_snapshot` when `self._active_runs.get(room_id)` is set (fetch the run via `self._run_store.get_run` and emit `{"roomId", "run": run_wire(run)}`).
 
 - [ ] **Step 4: Run — expect PASS** (and re-run the whole hub suite to prove plain-chat is untouched)
@@ -1107,16 +1149,19 @@ git commit -m "feat(studio): RoomHub skill turns — run_* events, persistence, 
 ## Task 7: Socket `run_skill` + REST `GET /skills` + main.py wiring
 
 **Files:**
+
 - Modify: `studio/backend/app/sockets.py`, `studio/backend/app/rest.py`, `studio/backend/app/main.py`
 - Test: `studio/backend/tests/test_rest.py` (append), `studio/backend/tests/test_sockets.py` (append if present, else cover in e2e Task 8)
 
 **Interfaces:**
+
 - Produces: client→server `run_skill {roomId, skillName, args}`; REST `GET /skills → [{name, description, args}]`.
 - Consumes: `request.app.state.skill_registry`, `hub.handle_skill_run`.
 
 - [ ] **Step 1: Write failing REST test**
 
 `studio/backend/tests/test_rest.py` (append, mirroring the existing `GET /models` test + app fixture):
+
 ```python
 def test_get_skills_lists_registered(client):  # client fixture builds the app (see existing tests)
     res = client.get("/skills")
@@ -1131,6 +1176,7 @@ Run: `cd studio/backend && uv run pytest tests/test_rest.py -k skills -v`
 Expected: FAIL (404).
 
 - [ ] **Step 3: Implement the route** in `studio/backend/app/rest.py`:
+
 ```python
 @router.get("/skills")
 async def list_skills(request: Request) -> list[dict]:
@@ -1138,6 +1184,7 @@ async def list_skills(request: Request) -> list[dict]:
 ```
 
 - [ ] **Step 4: Add the socket handler** in `studio/backend/app/sockets.py` (inside `register_socket_handlers`):
+
 ```python
     @sio.on("run_skill")
     async def run_skill(sid, data):
@@ -1148,6 +1195,7 @@ async def list_skills(request: Request) -> list[dict]:
 ```
 
 - [ ] **Step 5: Wire in `studio/backend/app/main.py`** — in `build(settings)`, after `chat_service` and the asset subsystem are constructed:
+
 ```python
     from app.agent_tools import ToolFactory
     from app.runs import RunStore
@@ -1163,7 +1211,9 @@ async def list_skills(request: Request) -> list[dict]:
 
     fastapi_app.state.skill_registry = skill_registry
 ```
+
 Update the `RoomHub(...)` construction to pass the new keyword deps:
+
 ```python
     hub = RoomHub(
         sio, store, chat_service,
@@ -1171,6 +1221,7 @@ Update the `RoomHub(...)` construction to pass the new keyword deps:
         skills=skill_registry, tool_factory=tool_factory,
     )
 ```
+
 (Also give `RoomHub` references to `asset_store`/`asset_hub` it uses in `_run_skill` — pass them as keyword deps too, or attach via the existing `asset_hub`; keep them on `self._asset_store`/`self._asset_hub`.)
 
 - [ ] **Step 6: Run — expect PASS**
@@ -1191,12 +1242,14 @@ git commit -m "feat(studio): run_skill socket event + GET /skills + agent wiring
 ## Task 8: Authoritative realtime e2e + record-fixtures + committed guard
 
 **Files:**
+
 - Create: `studio/backend/tests/e2e/test_skill_runs.py`
 - Modify: `studio/backend/app/replay/record.py`, `studio/backend/tests/test_fixtures_committed.py`
 
 **Interfaces:** Consumes the running ASGI app + two Socket.IO clients (mirror `tests/e2e/test_realtime.py`).
 
 - [ ] **Step 1: Write the authoritative e2e** (`tests/e2e/test_skill_runs.py`) — two clients join one room; client A emits `run_skill`; **both** receive ordered `run_started → run_step_started(tool_call) → run_step_completed(tool_result) → run_started(final)/tokens → run_completed`, and an asset is attached to the room's game. Add a serialization case (two concurrent `run_skill`s do not overlap) and a mid-run join receiving `run_snapshot`. Model the structure exactly on the existing two-client realtime test in `tests/e2e/test_realtime.py` (same fixtures, same `socketio.AsyncSimpleClient` usage).
+
 ```python
 async def test_two_clients_watch_a_skill_run(e2e_app):  # fixture mirrors test_realtime.py
     a = await connect_client(e2e_app, "alice")
@@ -1220,6 +1273,7 @@ Expected: PASS (deterministic via the run cassette + replay comfy).
 - [ ] **Step 3: Extend `record.py`** with `_record_run(settings, out)` that, under `PROVIDER_MODE=live`, runs the real agent once over the `generate-sprite` skill and captures `{tool_calls, final}` into `tests/fixtures/replay/run/default.json`. Wire it into the module's `main()` alongside `_record_llm`/`_record_comfy`.
 
 - [ ] **Step 4: Guard the run cassette** in `tests/test_fixtures_committed.py`:
+
 ```python
 def test_run_cassette_is_real():
     from app.replay.cassette import load_run_cassette, DEFAULT_FIXTURES_DIR
@@ -1245,11 +1299,13 @@ git commit -m "test(studio): authoritative skill-run realtime e2e + run cassette
 ## Task 9: Frontend state + run reducers
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/state.ts`
 - Modify: `studio/frontend/src/plugins/llm-chat/reducers.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/reducers.spec.ts` (append)
 
 **Interfaces:**
+
 - Produces:
   - `interface ISkill { name: string; description: string; args: { name: string; type: 'string'|'number'|'boolean'; required: boolean }[] }`
   - `interface IRunStep { index: number; type: 'thinking'|'tool_call'|'tool_result'|'final'; toolName: string|null; content: string; status: 'running'|'complete'|'error' }`
@@ -1260,6 +1316,7 @@ git commit -m "test(studio): authoritative skill-run realtime e2e + run cassette
 - [ ] **Step 1: Add interfaces + slice fields** to `state.ts` (extend `ILlmChatState` and `makeInitialState` with `skills: [], skillsStatus: 'idle', runs: [], activeRunId: null`).
 
 - [ ] **Step 2: Write failing reducer tests** in `reducers.spec.ts` (append):
+
 ```typescript
 import { startRun, startStep, appendStepToken, completeStep, completeRun } from './reducers';
 import type { IRun } from './state';
@@ -1289,19 +1346,24 @@ Run: `cd studio/frontend && npx vitest run src/plugins/llm-chat/reducers.spec.ts
 Expected: FAIL (exports missing).
 
 - [ ] **Step 4: Implement the reducers** in `reducers.ts` (pure, immutable — mirror `appendToken`/`completeMessage`):
+
 ```typescript
 import type { IRun, IRunStep } from './state';
 
 export function startRun(runs: IRun[], run: IRun): IRun[] {
   const idx = runs.findIndex((r) => r.id === run.id);
   if (idx === -1) return [...runs, run];
-  const next = runs.slice(); next[idx] = run; return next;
+  const next = runs.slice();
+  next[idx] = run;
+  return next;
 }
 
 function patchRun(runs: IRun[], runId: string, fn: (r: IRun) => IRun): IRun[] {
   const idx = runs.findIndex((r) => r.id === runId);
   if (idx === -1) return runs;
-  const next = runs.slice(); next[idx] = fn(next[idx]); return next;
+  const next = runs.slice();
+  next[idx] = fn(next[idx]);
+  return next;
 }
 
 export function startStep(runs: IRun[], runId: string, step: IRunStep): IRun[] {
@@ -1346,16 +1408,19 @@ git commit -m "feat(frontend): run-timeline state + pure run reducers"
 
 ---
 
-## Task 10: socketClient run_* handlers + runSkill emit + action
+## Task 10: socketClient run\_\* handlers + runSkill emit + action
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/socketClient.ts`, `actions.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/socketClient.spec.ts` (append), `actions.spec.ts` (append)
 
 **Interfaces:**
+
 - Produces: inbound handlers for `run_started`, `run_step_started`, `run_step_token`, `run_step_completed`, `run_completed`, `run_snapshot` (each guarded by `isActive(roomId)`); socket emit `runSkill(roomId, skillName, args)`; action `runSkill(skillName, args)`.
 
 - [ ] **Step 1: Write failing socket test** (`socketClient.spec.ts`, append, mirroring the `token` test idiom):
+
 ```typescript
 it('run_started + run_step_token build a run in the slice', () => {
   const { sock } = connected(); // existing helper; sets activeRoomId='r1'
@@ -1372,42 +1437,45 @@ Run: `cd studio/frontend && npx vitest run src/plugins/llm-chat/socketClient.spe
 Expected: FAIL.
 
 - [ ] **Step 3: Implement** in `socketClient.ts` `registerInboundHandlers` (mirror existing guard+reduce idiom), importing the new reducers:
+
 ```typescript
-  s.on('run_started', (p) => {
-    const { roomId, run } = p as { roomId: string; run: IRun };
-    if (!isActive(roomId)) return;
-    slice().runs.set(startRun(slice().runs.get({ noproxy: true }) as IRun[], run));
-    slice().activeRunId.set(run.id);
-  });
-  s.on('run_step_started', (p) => {
-    const { roomId, runId, step } = p as { roomId: string; runId: string; step: IRunStep };
-    if (!isActive(roomId)) return;
-    slice().runs.set(startStep(slice().runs.get({ noproxy: true }) as IRun[], runId, step));
-  });
-  s.on('run_step_token', (p) => {
-    const { roomId, runId, stepIndex, delta } = p as { roomId: string; runId: string; stepIndex: number; delta: string };
-    if (!isActive(roomId)) return;
-    slice().runs.set(appendStepToken(slice().runs.get({ noproxy: true }) as IRun[], runId, stepIndex, delta));
-  });
-  s.on('run_step_completed', (p) => {
-    const { roomId, runId, stepIndex, status, content } = p as { roomId: string; runId: string; stepIndex: number; status: IRunStep['status']; content: string };
-    if (!isActive(roomId)) return;
-    slice().runs.set(completeStep(slice().runs.get({ noproxy: true }) as IRun[], runId, stepIndex, status, content));
-  });
-  s.on('run_completed', (p) => {
-    const { roomId, runId, status } = p as { roomId: string; runId: string; status: IRun['status'] };
-    if (!isActive(roomId)) return;
-    slice().runs.set(completeRun(slice().runs.get({ noproxy: true }) as IRun[], runId, status));
-  });
-  s.on('run_snapshot', (p) => {
-    const { roomId, run } = p as { roomId: string; run: IRun };
-    if (!isActive(roomId)) return;
-    slice().runs.set(applyRunSnapshot(slice().runs.get({ noproxy: true }) as IRun[], run));
-  });
+s.on('run_started', (p) => {
+  const { roomId, run } = p as { roomId: string; run: IRun };
+  if (!isActive(roomId)) return;
+  slice().runs.set(startRun(slice().runs.get({ noproxy: true }) as IRun[], run));
+  slice().activeRunId.set(run.id);
+});
+s.on('run_step_started', (p) => {
+  const { roomId, runId, step } = p as { roomId: string; runId: string; step: IRunStep };
+  if (!isActive(roomId)) return;
+  slice().runs.set(startStep(slice().runs.get({ noproxy: true }) as IRun[], runId, step));
+});
+s.on('run_step_token', (p) => {
+  const { roomId, runId, stepIndex, delta } = p as { roomId: string; runId: string; stepIndex: number; delta: string };
+  if (!isActive(roomId)) return;
+  slice().runs.set(appendStepToken(slice().runs.get({ noproxy: true }) as IRun[], runId, stepIndex, delta));
+});
+s.on('run_step_completed', (p) => {
+  const { roomId, runId, stepIndex, status, content } = p as { roomId: string; runId: string; stepIndex: number; status: IRunStep['status']; content: string };
+  if (!isActive(roomId)) return;
+  slice().runs.set(completeStep(slice().runs.get({ noproxy: true }) as IRun[], runId, stepIndex, status, content));
+});
+s.on('run_completed', (p) => {
+  const { roomId, runId, status } = p as { roomId: string; runId: string; status: IRun['status'] };
+  if (!isActive(roomId)) return;
+  slice().runs.set(completeRun(slice().runs.get({ noproxy: true }) as IRun[], runId, status));
+});
+s.on('run_snapshot', (p) => {
+  const { roomId, run } = p as { roomId: string; run: IRun };
+  if (!isActive(roomId)) return;
+  slice().runs.set(applyRunSnapshot(slice().runs.get({ noproxy: true }) as IRun[], run));
+});
 ```
+
 Add to the emit API: `runSkill: (roomId: string, skillName: string, args: Record<string, unknown>) => emit('run_skill', { roomId, skillName, args })`.
 
 - [ ] **Step 4: Add the action** in `actions.ts` (mirror `sendPrompt`, include in the injectable `socket` `Pick<...>` type):
+
 ```typescript
 export function runSkill(skillName: string, args: Record<string, unknown>): void {
   const roomId = chatSlice().activeRoomId.get();
@@ -1416,6 +1484,7 @@ export function runSkill(skillName: string, args: Record<string, unknown>): void
 ```
 
 - [ ] **Step 5: Write + run the action test** (`actions.spec.ts`, append):
+
 ```typescript
 it('runSkill forwards to the socket for the active room', () => {
   actions.__setDeps({ socket });
@@ -1424,6 +1493,7 @@ it('runSkill forwards to the socket for the active room', () => {
   expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' });
 });
 ```
+
 Run: `cd studio/frontend && npx vitest run src/plugins/llm-chat/socketClient.spec.ts src/plugins/llm-chat/actions.spec.ts`
 Expected: PASS.
 
@@ -1440,10 +1510,12 @@ git commit -m "feat(frontend): run_* socket handlers + runSkill action"
 ## Task 11: restClient.getSkills + skill loading
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/restClient.ts`, `actions.ts` (load skills on init)
 - Test: `studio/frontend/src/plugins/llm-chat/restClient.spec.ts` (append)
 
 - [ ] **Step 1: Write failing test** (`restClient.spec.ts`, append, mirror `getModels` test):
+
 ```typescript
 it('getSkills GETs /skills', async () => {
   const fetchMock = mockFetch([{ name: 'generate-sprite', description: 'd', args: [] }]);
@@ -1460,12 +1532,14 @@ Run: `cd studio/frontend && npx vitest run src/plugins/llm-chat/restClient.spec.
 Expected: FAIL.
 
 - [ ] **Step 3: Implement** in `restClient.ts`:
+
 ```typescript
 import type { ISkill } from './state';
 export async function getSkills(): Promise<ISkill[]> {
   return okJson<ISkill[]>(await fetch(`${BACKEND_URL}/skills`));
 }
 ```
+
 In `actions.ts` `initChat()`, fetch skills into the slice (set `skillsStatus` 'loading' → write `skills` → 'idle'; on throw → 'error'), mirroring how rooms/models are loaded.
 
 - [ ] **Step 4: Run — expect PASS**
@@ -1486,12 +1560,14 @@ git commit -m "feat(frontend): GET /skills client + load skills on init"
 ## Task 12: RunTimeline component (design-language cards)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/RunTimeline.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/RunTimeline.spec.tsx`
 
 **Interfaces:** A component subscribing to `runs` (scoped) and rendering each run's steps as cards: `tool_call`/`tool_result` → a tool card (tool name + status + content), `final`/`thinking` → streamed text. Uses only design-language tokens/classes (no raw colors). `data-testid="run-timeline"`, per-step `data-testid={`run-step-${index}`}`.
 
 - [ ] **Step 1: Write failing render test** (`RunTimeline.spec.tsx`):
+
 ```typescript
 import { render, screen } from '@testing-library/react';
 import { RunTimeline } from './RunTimeline';
@@ -1534,12 +1610,14 @@ git commit -m "feat(frontend): RunTimeline — streamed tool-call cards in the d
 ## Task 13: Slash-command composer + skill autocomplete
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx` (append)
 
 **Interfaces:** The composer detects a leading `/`; shows an autocomplete list of `skills` (testid `skill-autocomplete`, items `skill-option-<name>`); on submit of `/<name> key=value …`, parse into `{skillName, args}` and call `runSkill`; plain text still calls `sendPrompt`. Mount `<RunTimeline/>` above the composer (SLOT 1). Add a pure helper `parseSlashCommand(text): { skillName: string; args: Record<string,string> } | null` (exported for unit test).
 
 - [ ] **Step 1: Write failing tests** (`ChatRoomPane.spec.tsx`, append):
+
 ```typescript
 import { parseSlashCommand } from './ChatRoomPane';
 
@@ -1583,12 +1661,14 @@ git commit -m "feat(frontend): slash-command composer + skill autocomplete + mou
 ## Task 14: Playwright e2e (local-only)
 
 **Files:**
+
 - Create: `studio/frontend/e2e/skill-run.spec.ts` (match the repo's existing Playwright e2e location/config)
 - Test harness: existing `just e2e` (replay backend on :8000)
 
 **Interfaces:** Drives the real UI against a replay backend.
 
 - [ ] **Step 1: Write the spec** — open the studio, open/create a room bound to a game, type `/generate-sprite description="a knight"`, submit, assert the `run-timeline` shows a `generate_asset` tool card and a final message, then assert the generated asset appears on the Asset Board. Add a second-browser-context assertion that a second client watching the same room sees the run. Model structure on the existing chat Playwright spec.
+
 ```typescript
 test('generate-sprite skill runs end to end and lands on the Asset Board', async ({ page }) => {
   await openRoomWithGame(page);
@@ -1618,6 +1698,7 @@ git commit -m "test(studio): Playwright e2e — generate-sprite skill run to Ass
 ## Task 15: Migrate plain chat onto TurnRunner (LAST — behind the green suite)
 
 **Files:**
+
 - Modify: `studio/backend/app/room_hub.py`
 - Test: existing `tests/test_room_hub.py` + `tests/e2e/test_realtime.py` (must stay green — the safety net)
 
@@ -1662,12 +1743,13 @@ git commit -m "refactor(studio): route plain chat through TurnRunner (unified ex
 ## Self-Review (against the spec)
 
 **Spec coverage:**
+
 - §3.1 agentic on LangChain → Tasks 3–5 (tool, chat-model seam, LangGraph runner). ✅
 - §3.2 unified executor + wire-compat + migration-last → Tasks 6 (skill path on runner) + 15 (plain-chat migration behind the suite). ✅
 - §3.3 explicit `/skill` → Tasks 7 (`run_skill`) + 13 (composer). ✅
 - §3.4 repo-root `skills/` git-authored → Task 1 (`skills_dir` default = repo root; `skills/generate-sprite.md`). ✅
 - §3.5 frontmatter typed args + tool allowlist → Task 1 (`SkillSpec`, `validate_args`, unknown-tool fail-fast). ✅
-- §3.6 structured run timeline → Tasks 2 (Run model), 6 (run_* events), 9/12 (state + RunTimeline). ✅
+- §3.6 structured run timeline → Tasks 2 (Run model), 6 (run\_\* events), 9/12 (state + RunTimeline). ✅
 - §3.7 auto-run, no gate → Task 3 (tool runs inline, no approval). ✅
 - §5.1 `build_chat_model` seam → Task 4. ✅
 - §5.5 replay tool-calling + record + committed guard → Tasks 4 + 8. ✅

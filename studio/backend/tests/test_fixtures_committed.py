@@ -14,3 +14,9 @@ def test_comfy_default_cassette_is_a_real_png():
     assert image.startswith(b"\x89PNG")
     assert len(image) > 5_000  # a real generation, not the old ~70-byte 1x1
     assert len(progress) >= 1
+
+
+def test_run_cassette_is_real():
+    from app.replay.cassette import load_run_cassette, DEFAULT_FIXTURES_DIR
+    cas = load_run_cassette(DEFAULT_FIXTURES_DIR)
+    assert cas["tool_calls"] and "".join(cas["final"]).strip()

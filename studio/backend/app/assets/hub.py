@@ -90,6 +90,9 @@ class AssetHub:
         asset = await self._store.add_generation(asset_id, gen_id, seed, image_ref)
         await self._sio.emit("asset_completed", {"gameId": game_id, "asset": asset_wire(asset)}, room=game_id)
 
+    async def generate_and_wait(self, game_id: str, asset_id: str) -> None:
+        await self._run(game_id, asset_id)
+
     async def _emit_status(self, game_id: str, asset_id: str, status: str) -> None:
         depth = len(self._queues.get(game_id, []))
         await self._sio.emit(

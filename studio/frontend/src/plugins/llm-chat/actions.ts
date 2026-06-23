@@ -7,11 +7,12 @@ interface IRestDeps {
   getRooms: typeof realRest.getRooms;
   createRoom: typeof realRest.createRoom;
   getMessages: typeof realRest.getMessages;
+  getSkills: typeof realRest.getSkills;
 }
 
 // Injectable deps so actions are unit-testable without the module singletons.
 let rest: IRestDeps = realRest;
-let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping'> | null = null;
+let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill'> | null = null;
 let savePrefs = realSavePrefs;
 let started = false;
 
@@ -56,6 +57,17 @@ export async function loadRooms(): Promise<void> {
     chatSlice().roomsStatus.set('idle');
   } catch {
     chatSlice().roomsStatus.set('error');
+  }
+}
+
+export async function loadSkills(): Promise<void> {
+  chatSlice().skillsStatus.set('loading');
+  try {
+    const skills = await rest.getSkills();
+    chatSlice().skills.set(skills);
+    chatSlice().skillsStatus.set('idle');
+  } catch {
+    chatSlice().skillsStatus.set('error');
   }
 }
 
@@ -108,6 +120,11 @@ export function sendPrompt(text: string): void {
   if (roomId) sock().sendPrompt(roomId, text);
 }
 
+export function runSkill(skillName: string, args: Record<string, unknown>): void {
+  const roomId = chatSlice().activeRoomId.get();
+  if (roomId) sock().runSkill(roomId, skillName, args);
+}
+
 export function setTyping(isTyping: boolean): void {
   const roomId = chatSlice().activeRoomId.get();
   if (roomId) sock().setTyping(roomId, isTyping);
@@ -115,4 +132,5 @@ export function setTyping(isTyping: boolean): void {
 
 export function initChat(): void {
   void loadRooms();
+  void loadSkills();
 }

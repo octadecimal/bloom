@@ -8,6 +8,7 @@ const rest = {
   getRooms: vi.fn(),
   createRoom: vi.fn(),
   getMessages: vi.fn(),
+  getSkills: vi.fn(),
 };
 const socket = {
   connect: vi.fn(),
@@ -17,6 +18,7 @@ const socket = {
   leaveRoom: vi.fn(),
   sendPrompt: vi.fn(),
   setTyping: vi.fn(),
+  runSkill: vi.fn(),
 };
 const savePrefs = vi.fn();
 
@@ -73,6 +75,13 @@ describe('actions', () => {
     actions.setTyping(true);
     expect(socket.sendPrompt).toHaveBeenCalledWith('r1', 'hello');
     expect(socket.setTyping).toHaveBeenCalledWith('r1', true);
+  });
+
+  it('runSkill forwards to the socket for the active room', () => {
+    actions.__setDeps({ socket });
+    chatSlice().activeRoomId.set('r1');
+    actions.runSkill('generate-sprite', { description: 'knight' });
+    expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' });
   });
 
   describe('closeRoom', () => {
@@ -138,7 +147,7 @@ describe('actions', () => {
         sendPrompt: vi.fn(),
         setTyping: vi.fn(),
       };
-      const rest = { getRooms: vi.fn().mockResolvedValue([]), createRoom: vi.fn(), getMessages: vi.fn() };
+      const rest = { getRooms: vi.fn().mockResolvedValue([]), createRoom: vi.fn(), getMessages: vi.fn(), getSkills: vi.fn().mockResolvedValue([]) };
       __setDeps({ socket, rest });
       initChat();
       expect(socket.connect).not.toHaveBeenCalled();
@@ -173,6 +182,25 @@ describe('actions', () => {
       disconnectChat();
       expect(socket.disconnect).not.toHaveBeenCalled();
     });
+  });
+
+  it('initChat loads skills into the slice and sets skillsStatus idle', async () => {
+    const skill = { name: 'generate-sprite', description: 'd', args: [] };
+    rest.getRooms.mockResolvedValue([]);
+    rest.getSkills.mockResolvedValue([skill]);
+    initChat();
+    // Flush microtasks so the async load completes
+    await new Promise((r) => setTimeout(r, 0));
+    expect(chatSlice().skills.get()).toEqual([skill]);
+    expect(chatSlice().skillsStatus.get()).toBe('idle');
+  });
+
+  it('initChat sets skillsStatus error when getSkills fails', async () => {
+    rest.getRooms.mockResolvedValue([]);
+    rest.getSkills.mockRejectedValue(new Error('skills down'));
+    initChat();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(chatSlice().skillsStatus.get()).toBe('error');
   });
 
   it('openRoom guards against room-switch race: superseded fetch does not overwrite newer room history', async () => {

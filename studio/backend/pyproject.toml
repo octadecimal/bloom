@@ -13,6 +13,9 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "websockets>=16.0",
+    "python-frontmatter>=1.1",
+    "pyyaml>=6.0",
+    "langgraph>=0.2",
 ]
 
 [dependency-groups]
@@ -28,6 +31,9 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "e2e: end-to-end suite that spawns a live server (requires MongoDB)",
+]
+filterwarnings = [
+    "ignore::langgraph.warnings.LangGraphDeprecationWarning",
 ]
 
 [tool.uv]

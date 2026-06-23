@@ -29,6 +29,13 @@ def register_socket_handlers(sio, hub, presence):
         session = await sio.get_session(sid)
         await hub.handle_prompt(data["roomId"], session["displayName"], data["text"])
 
+    @sio.on("run_skill")
+    async def run_skill(sid, data):
+        session = await sio.get_session(sid)
+        await hub.handle_skill_run(
+            data["roomId"], session["displayName"], data["skillName"], data.get("args", {})
+        )
+
     @sio.on("typing")
     async def typing(sid, data):
         room_id = data["roomId"]

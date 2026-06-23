@@ -24,6 +24,28 @@ export interface IMessage {
 
 export type ConnState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
+export interface ISkill {
+  name: string;
+  description: string;
+  args: { name: string; type: 'string' | 'number' | 'boolean'; required: boolean }[];
+}
+
+export interface IRunStep {
+  index: number;
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'final';
+  toolName: string | null;
+  content: string;
+  status: 'running' | 'complete' | 'error';
+}
+
+export interface IRun {
+  id: string;
+  roomId: string;
+  skillName: string;
+  status: 'running' | 'completed' | 'error';
+  steps: IRunStep[];
+}
+
 export interface IAiStatus {
   state: 'idle' | 'generating' | 'queued';
   queueDepth: number;
@@ -46,6 +68,11 @@ export interface ILlmChatState {
   aiStatus: IAiStatus;
   roomLoadStatus: 'idle' | 'loading' | 'error';
   lastError: string | null;
+
+  skills: ISkill[];
+  skillsStatus: 'idle' | 'loading' | 'error';
+  runs: IRun[];
+  activeRunId: string | null;
 }
 
 export function makeInitialState(displayName: string, activeRoomId: string | null): ILlmChatState {
@@ -61,6 +88,10 @@ export function makeInitialState(displayName: string, activeRoomId: string | nul
     aiStatus: { state: 'idle', queueDepth: 0 },
     roomLoadStatus: 'idle',
     lastError: null,
+    skills: [],
+    skillsStatus: 'idle',
+    runs: [],
+    activeRunId: null,
   };
 }
 
