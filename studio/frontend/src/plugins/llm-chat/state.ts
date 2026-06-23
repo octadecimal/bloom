@@ -24,10 +24,24 @@ export interface IMessage {
 
 export type ConnState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
+export interface ISkillArg {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  required: boolean;
+  description?: string;
+  default?: string | number | boolean | null;
+  enum?: (string | number)[] | null;
+}
+
 export interface ISkill {
   name: string;
   description: string;
-  args: { name: string; type: 'string' | 'number' | 'boolean'; required: boolean }[];
+  args: ISkillArg[];
+}
+
+export interface ISkillFull extends ISkill {
+  tools: string[];
+  body: string;
 }
 
 export interface IRunStep {

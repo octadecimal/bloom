@@ -34,6 +34,31 @@ async def test_generate_asset_creates_and_attaches(mongo_db):
 
 
 @pytest.mark.asyncio
+async def test_generate_asset_size_and_opaque(mongo_db):
+    store = AssetStore(mongo_db)
+    hub = FakeHub(store)
+    factory = ToolFactory(store, hub)
+    ctx = ToolContext("r1", "g1", store, hub)
+    tool = factory.build(["generate_asset"], ctx)[0]
+    await tool.ainvoke({"description": "a forest", "size": "1024x576", "transparent": False})
+    asset = (await store.list_assets("g1"))[0]
+    assert (asset.width, asset.height) == (1024, 576)
+    assert asset.workflow == "schnell-opaque"
+
+
+@pytest.mark.asyncio
+async def test_generate_asset_defaults_unchanged(mongo_db):
+    store = AssetStore(mongo_db)
+    factory = ToolFactory(store, FakeHub(store))
+    ctx = ToolContext("r1", "g1", store, store and FakeHub(store))
+    tool = factory.build(["generate_asset"], ctx)[0]
+    await tool.ainvoke({"description": "a knight"})
+    asset = (await store.list_assets("g1"))[0]
+    assert (asset.width, asset.height) == (512, 512)
+    assert asset.workflow == "schnell-transparent"
+
+
+@pytest.mark.asyncio
 async def test_build_filters_to_allowlist(mongo_db):
     store = AssetStore(mongo_db)
     factory = ToolFactory(store, FakeHub(store))
