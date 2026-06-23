@@ -285,26 +285,9 @@ Expected: FAIL (`generate-background` not found).
 name: generate-background
 description: Generate a wide, opaque background/scene and add it to the Asset Board.
 args:
-  - {
-      name: description,
-      type: string,
-      required: true,
-      description: What the scene depicts,
-    }
-  - {
-      name: mood,
-      type: string,
-      enum: [bright, dark, neutral],
-      default: neutral,
-      description: Overall mood,
-    }
-  - {
-      name: aspect,
-      type: string,
-      enum: [wide, square],
-      default: wide,
-      description: Aspect ratio,
-    }
+  - { name: description, type: string, required: true, description: What the scene depicts }
+  - { name: mood, type: string, enum: [bright, dark, neutral], default: neutral, description: Overall mood }
+  - { name: aspect, type: string, enum: [wide, square], default: wide, description: Aspect ratio }
 tools: [generate_asset]
 ---
 
@@ -605,56 +588,56 @@ git commit -m "feat(api): add GET /skills/{name}, POST /skills, GET /tools"
 Add to `studio/frontend/src/plugins/llm-chat/restClient.spec.ts` (follow the existing `fetch` mock pattern in that file):
 
 ```ts
-it("getSkill fetches the full skill", async () => {
+it('getSkill fetches the full skill', async () => {
   const skill = {
-    name: "x",
-    description: "d",
+    name: 'x',
+    description: 'd',
     args: [],
-    tools: ["generate_asset"],
-    body: "b",
+    tools: ['generate_asset'],
+    body: 'b',
   };
   vi.stubGlobal(
-    "fetch",
+    'fetch',
     vi.fn(async () => new Response(JSON.stringify(skill), { status: 200 })),
   );
-  const { getSkill } = await import("./restClient");
-  expect(await getSkill("x")).toEqual(skill);
+  const { getSkill } = await import('./restClient');
+  expect(await getSkill('x')).toEqual(skill);
 });
 
-it("saveSkill surfaces the server detail on 400", async () => {
+it('saveSkill surfaces the server detail on 400', async () => {
   vi.stubGlobal(
-    "fetch",
+    'fetch',
     vi.fn(
       async () =>
-        new Response(JSON.stringify({ detail: "unknown tools" }), {
+        new Response(JSON.stringify({ detail: 'unknown tools' }), {
           status: 400,
         }),
     ),
   );
-  const { saveSkill } = await import("./restClient");
+  const { saveSkill } = await import('./restClient');
   await expect(
     saveSkill({
-      name: "x",
-      description: "",
+      name: 'x',
+      description: '',
       args: [],
-      tools: ["nuke"],
-      body: "",
+      tools: ['nuke'],
+      body: '',
     }),
-  ).rejects.toThrow("unknown tools");
+  ).rejects.toThrow('unknown tools');
 });
 
-it("getTools returns tool names", async () => {
+it('getTools returns tool names', async () => {
   vi.stubGlobal(
-    "fetch",
+    'fetch',
     vi.fn(
       async () =>
-        new Response(JSON.stringify([{ name: "generate_asset" }]), {
+        new Response(JSON.stringify([{ name: 'generate_asset' }]), {
           status: 200,
         }),
     ),
   );
-  const { getTools } = await import("./restClient");
-  expect(await getTools()).toEqual(["generate_asset"]);
+  const { getTools } = await import('./restClient');
+  expect(await getTools()).toEqual(['generate_asset']);
 });
 ```
 
@@ -670,7 +653,7 @@ Replace the `ISkill` interface:
 ```ts
 export interface ISkillArg {
   name: string;
-  type: "string" | "number" | "boolean";
+  type: 'string' | 'number' | 'boolean';
   required: boolean;
   description?: string;
   default?: string | number | boolean | null;
@@ -699,16 +682,14 @@ export async function getSkill(name: string): Promise<ISkillFull> {
 }
 
 export async function getTools(): Promise<string[]> {
-  const tools = await okJson<{ name: string }[]>(
-    await fetch(`${BACKEND_URL}/tools`),
-  );
+  const tools = await okJson<{ name: string }[]>(await fetch(`${BACKEND_URL}/tools`));
   return tools.map((t) => t.name);
 }
 
 export async function saveSkill(payload: ISkillFull): Promise<ISkillFull> {
   const res = await fetch(`${BACKEND_URL}/skills`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -753,50 +734,46 @@ git commit -m "feat(chat): enriched skill types + getSkill/saveSkill/getTools cl
 Create `studio/frontend/src/plugins/llm-chat/SkillForm.spec.tsx`:
 
 ```tsx
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { SkillForm } from "./SkillForm";
-import type { ISkill } from "./state";
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { SkillForm } from './SkillForm';
+import type { ISkill } from './state';
 
 const skill: ISkill = {
-  name: "generate-background",
-  description: "bg",
+  name: 'generate-background',
+  description: 'bg',
   args: [
-    { name: "description", type: "string", required: true },
+    { name: 'description', type: 'string', required: true },
     {
-      name: "mood",
-      type: "string",
+      name: 'mood',
+      type: 'string',
       required: false,
-      default: "neutral",
-      enum: ["bright", "dark", "neutral"],
+      default: 'neutral',
+      enum: ['bright', 'dark', 'neutral'],
     },
   ],
 };
 
-describe("SkillForm", () => {
-  it("renders a field per arg and prefills the default", () => {
+describe('SkillForm', () => {
+  it('renders a field per arg and prefills the default', () => {
     render(<SkillForm skill={skill} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    expect(
-      screen.getByTestId("skill-form-field-description"),
-    ).toBeInTheDocument();
-    const mood = screen.getByTestId(
-      "skill-form-field-mood",
-    ) as HTMLSelectElement;
-    expect(mood.value).toBe("neutral");
+    expect(screen.getByTestId('skill-form-field-description')).toBeInTheDocument();
+    const mood = screen.getByTestId('skill-form-field-mood') as HTMLSelectElement;
+    expect(mood.value).toBe('neutral');
   });
 
-  it("blocks submit until required fields are filled", () => {
+  it('blocks submit until required fields are filled', () => {
     const onSubmit = vi.fn();
     render(<SkillForm skill={skill} onSubmit={onSubmit} onCancel={vi.fn()} />);
-    fireEvent.click(screen.getByTestId("skill-form-submit"));
+    fireEvent.click(screen.getByTestId('skill-form-submit'));
     expect(onSubmit).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByTestId("skill-form-field-description"), {
-      target: { value: "a forest" },
+    fireEvent.change(screen.getByTestId('skill-form-field-description'), {
+      target: { value: 'a forest' },
     });
-    fireEvent.click(screen.getByTestId("skill-form-submit"));
+    fireEvent.click(screen.getByTestId('skill-form-submit'));
     expect(onSubmit).toHaveBeenCalledWith({
-      description: "a forest",
-      mood: "neutral",
+      description: 'a forest',
+      mood: 'neutral',
     });
   });
 });
@@ -810,37 +787,22 @@ Expected: FAIL (no such module).
 - [ ] **Step 3: Implement `SkillForm.tsx`**
 
 ```tsx
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import type { ISkill, ISkillArg } from "./state";
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import type { ISkill, ISkillArg } from './state';
 
 function initialValue(a: ISkillArg): string | boolean {
-  if (a.default !== undefined && a.default !== null)
-    return a.default as string | boolean;
-  return a.type === "boolean" ? false : "";
+  if (a.default !== undefined && a.default !== null) return a.default as string | boolean;
+  return a.type === 'boolean' ? false : '';
 }
 
-export function SkillForm({
-  skill,
-  onSubmit,
-  onCancel,
-}: {
-  skill: ISkill;
-  onSubmit: (args: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
-  const [values, setValues] = useState<Record<string, string | boolean>>(() =>
-    Object.fromEntries(skill.args.map((a) => [a.name, initialValue(a)])),
-  );
+export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubmit: (args: Record<string, unknown>) => void; onCancel: () => void }) {
+  const [values, setValues] = useState<Record<string, string | boolean>>(() => Object.fromEntries(skill.args.map((a) => [a.name, initialValue(a)])));
 
-  const missingRequired = skill.args.some(
-    (a) =>
-      a.required && (values[a.name] === "" || values[a.name] === undefined),
-  );
+  const missingRequired = skill.args.some((a) => a.required && (values[a.name] === '' || values[a.name] === undefined));
 
-  const set = (name: string, v: string | boolean) =>
-    setValues((prev) => ({ ...prev, [name]: v }));
+  const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
 
   const submit = () => {
     if (missingRequired) return;
@@ -848,24 +810,19 @@ export function SkillForm({
   };
 
   return (
-    <div
-      data-testid="skill-form"
-      className="flex flex-col gap-2 rounded-md border bg-surface p-2.5 text-sm shadow-md"
-    >
-      <div className="text-[10.5px] font-semibold text-accent-text">
-        /{skill.name}
-      </div>
+    <div data-testid="skill-form" className="flex flex-col gap-2 rounded-md border bg-surface p-2.5 text-sm shadow-md">
+      <div className="text-[10.5px] font-semibold text-accent-text">/{skill.name}</div>
       {skill.args.map((a) => (
         <label key={a.name} className="flex flex-col gap-0.5">
           <span className="text-[10.5px] text-muted-foreground">
             {a.name}
-            {a.required ? " *" : ""}
-            {a.description ? ` — ${a.description}` : ""}
+            {a.required ? ' *' : ''}
+            {a.description ? ` — ${a.description}` : ''}
           </span>
           {a.enum ? (
             <select
               data-testid={`skill-form-field-${a.name}`}
-              value={String(values[a.name] ?? "")}
+              value={String(values[a.name] ?? '')}
               className="rounded border bg-raised px-2 py-1 text-foreground"
               onChange={(e) => set(a.name, e.target.value)}
             >
@@ -876,7 +833,7 @@ export function SkillForm({
                 </option>
               ))}
             </select>
-          ) : a.type === "boolean" ? (
+          ) : a.type === 'boolean' ? (
             <input
               data-testid={`skill-form-field-${a.name}`}
               type="checkbox"
@@ -887,28 +844,18 @@ export function SkillForm({
           ) : (
             <Input
               data-testid={`skill-form-field-${a.name}`}
-              type={a.type === "number" ? "number" : "text"}
-              value={String(values[a.name] ?? "")}
+              type={a.type === 'number' ? 'number' : 'text'}
+              value={String(values[a.name] ?? '')}
               onChange={(e) => set(a.name, e.target.value)}
             />
           )}
         </label>
       ))}
       <div className="flex justify-end gap-2">
-        <Button
-          data-testid="skill-form-cancel"
-          size="sm"
-          variant="ghost"
-          onClick={onCancel}
-        >
+        <Button data-testid="skill-form-cancel" size="sm" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button
-          data-testid="skill-form-submit"
-          size="sm"
-          disabled={missingRequired}
-          onClick={submit}
-        >
+        <Button data-testid="skill-form-submit" size="sm" disabled={missingRequired} onClick={submit}>
           Run
         </Button>
       </div>
@@ -950,20 +897,20 @@ git commit -m "feat(chat): SkillForm renders typed inputs from a skill arg schem
 Add to `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx` (reuse the file's existing state-seeding + `runSkill` mock pattern; seed `skills` to include `generate-sprite` with a required `description` arg):
 
 ```tsx
-it("opens a form when an autocomplete option is clicked and runs on submit", () => {
+it('opens a form when an autocomplete option is clicked and runs on submit', () => {
   // seed an active room + a skill (follow the existing beforeEach/seed helper in this file)
   render(<ChatRoomPane />);
-  fireEvent.change(screen.getByTestId("chat-composer"), {
-    target: { value: "/generate-sprite" },
+  fireEvent.change(screen.getByTestId('chat-composer'), {
+    target: { value: '/generate-sprite' },
   });
-  fireEvent.click(screen.getByTestId("skill-option-generate-sprite"));
-  expect(screen.getByTestId("skill-form")).toBeInTheDocument();
-  fireEvent.change(screen.getByTestId("skill-form-field-description"), {
-    target: { value: "a knight" },
+  fireEvent.click(screen.getByTestId('skill-option-generate-sprite'));
+  expect(screen.getByTestId('skill-form')).toBeInTheDocument();
+  fireEvent.change(screen.getByTestId('skill-form-field-description'), {
+    target: { value: 'a knight' },
   });
-  fireEvent.click(screen.getByTestId("skill-form-submit"));
-  expect(runSkillMock).toHaveBeenCalledWith("generate-sprite", {
-    description: "a knight",
+  fireEvent.click(screen.getByTestId('skill-form-submit'));
+  expect(runSkillMock).toHaveBeenCalledWith('generate-sprite', {
+    description: 'a knight',
   });
 });
 ```
@@ -980,28 +927,19 @@ Expected: FAIL (clicking an option does nothing; no `skill-form`).
 Add the import:
 
 ```tsx
-import { SkillForm } from "./SkillForm";
+import { SkillForm } from './SkillForm';
 ```
 
 Give `SkillAutocomplete` an `onPick` prop and call it on click:
 
 ```tsx
-function SkillAutocomplete({
-  prefix,
-  onPick,
-}: {
-  prefix: string;
-  onPick: (name: string) => void;
-}) {
+function SkillAutocomplete({ prefix, onPick }: { prefix: string; onPick: (name: string) => void }) {
   const s = llmChatHooks.usePluginState();
   const skills = s.skills.get();
   const matches = skills.filter((sk) => sk.name.startsWith(prefix));
   if (matches.length === 0) return null;
   return (
-    <ul
-      data-testid="skill-autocomplete"
-      className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md"
-    >
+    <ul data-testid="skill-autocomplete" className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md">
       {matches.map((sk) => (
         <li
           key={sk.name}
@@ -1010,9 +948,7 @@ function SkillAutocomplete({
           onClick={() => onPick(sk.name)}
         >
           <span className="font-semibold text-accent-text">/{sk.name}</span>
-          {sk.description ? (
-            <span className="ml-2 text-muted-foreground">{sk.description}</span>
-          ) : null}
+          {sk.description ? <span className="ml-2 text-muted-foreground">{sk.description}</span> : null}
         </li>
       ))}
     </ul>
@@ -1024,9 +960,7 @@ In `ChatRoomPane`, add form state and render it. After `const [draft, setDraft] 
 
 ```tsx
 const [formSkillName, setFormSkillName] = useState<string | null>(null);
-const formSkill = formSkillName
-  ? (s.skills.get().find((sk) => sk.name === formSkillName) ?? null)
-  : null;
+const formSkill = formSkillName ? (s.skills.get().find((sk) => sk.name === formSkillName) ?? null) : null;
 ```
 
 Replace the autocomplete line `{slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} />}` with:
@@ -1039,18 +973,13 @@ Replace the autocomplete line `{slashPrefix !== null && <SkillAutocomplete prefi
       onSubmit={(args) => {
         runSkill(formSkill.name, args);
         setFormSkillName(null);
-        setDraft("");
+        setDraft('');
         setTyping(false);
       }}
       onCancel={() => setFormSkillName(null)}
     />
   ) : (
-    slashPrefix !== null && (
-      <SkillAutocomplete
-        prefix={slashPrefix}
-        onPick={(name) => setFormSkillName(name)}
-      />
-    )
+    slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} onPick={(name) => setFormSkillName(name)} />
   );
 }
 ```
@@ -1090,11 +1019,7 @@ git commit -m "feat(chat): open SkillForm from autocomplete and run on submit"
 In `studio/frontend/src/plugins/llm-chat/index.spec.ts`, update the pane-id assertion:
 
 ```ts
-expect(llmChat.panes.map((p) => p.id)).toEqual([
-  "llm-chat/room",
-  "llm-chat/settings",
-  "llm-chat/skill-editor",
-]);
+expect(llmChat.panes.map((p) => p.id)).toEqual(['llm-chat/room', 'llm-chat/settings', 'llm-chat/skill-editor']);
 ```
 
 - [ ] **Step 2 (RED): write the editor component test**
@@ -1102,65 +1027,55 @@ expect(llmChat.panes.map((p) => p.id)).toEqual([
 Create `studio/frontend/src/plugins/llm-chat/SkillEditorPane.spec.tsx`:
 
 ```tsx
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-vi.mock("./restClient", () => ({
-  getTools: vi.fn(async () => ["generate_asset"]),
+vi.mock('./restClient', () => ({
+  getTools: vi.fn(async () => ['generate_asset']),
   getSkill: vi.fn(async () => ({
-    name: "",
-    description: "",
+    name: '',
+    description: '',
     args: [],
     tools: [],
-    body: "",
+    body: '',
   })),
   saveSkill: vi.fn(async (p) => p),
 }));
 
-import { SkillEditorPane } from "./SkillEditorPane";
-import * as rest from "./restClient";
+import { SkillEditorPane } from './SkillEditorPane';
+import * as rest from './restClient';
 
-describe("SkillEditorPane", () => {
+describe('SkillEditorPane', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("loads tools and saves an authored skill", async () => {
+  it('loads tools and saves an authored skill', async () => {
     render(<SkillEditorPane />);
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("skill-editor-tool-generate_asset"),
-      ).toBeInTheDocument(),
-    );
-    fireEvent.change(screen.getByTestId("skill-editor-name"), {
-      target: { value: "my-skill" },
+    await waitFor(() => expect(screen.getByTestId('skill-editor-tool-generate_asset')).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId('skill-editor-name'), {
+      target: { value: 'my-skill' },
     });
-    fireEvent.change(screen.getByTestId("skill-editor-description"), {
-      target: { value: "d" },
+    fireEvent.change(screen.getByTestId('skill-editor-description'), {
+      target: { value: 'd' },
     });
-    fireEvent.change(screen.getByTestId("skill-editor-body"), {
-      target: { value: "use generate_asset" },
+    fireEvent.change(screen.getByTestId('skill-editor-body'), {
+      target: { value: 'use generate_asset' },
     });
-    fireEvent.click(screen.getByTestId("skill-editor-tool-generate_asset"));
-    fireEvent.click(screen.getByTestId("skill-editor-save"));
+    fireEvent.click(screen.getByTestId('skill-editor-tool-generate_asset'));
+    fireEvent.click(screen.getByTestId('skill-editor-save'));
     await waitFor(() => expect(rest.saveSkill).toHaveBeenCalled());
     const arg = (rest.saveSkill as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(arg.name).toBe("my-skill");
-    expect(arg.tools).toContain("generate_asset");
+    expect(arg.name).toBe('my-skill');
+    expect(arg.tools).toContain('generate_asset');
   });
 
-  it("shows the server error when save fails", async () => {
-    (rest.saveSkill as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error("unknown tools"),
-    );
+  it('shows the server error when save fails', async () => {
+    (rest.saveSkill as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('unknown tools'));
     render(<SkillEditorPane />);
-    fireEvent.change(screen.getByTestId("skill-editor-name"), {
-      target: { value: "bad" },
+    fireEvent.change(screen.getByTestId('skill-editor-name'), {
+      target: { value: 'bad' },
     });
-    fireEvent.click(screen.getByTestId("skill-editor-save"));
-    await waitFor(() =>
-      expect(screen.getByTestId("skill-editor-status")).toHaveTextContent(
-        "unknown tools",
-      ),
-    );
+    fireEvent.click(screen.getByTestId('skill-editor-save'));
+    await waitFor(() => expect(screen.getByTestId('skill-editor-status')).toHaveTextContent('unknown tools'));
   });
 });
 ```
@@ -1173,15 +1088,15 @@ Expected: FAIL (no module; pane list mismatch).
 - [ ] **Step 4: Implement `SkillEditorPane.tsx`**
 
 ```tsx
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { getTools, saveSkill } from "./restClient";
-import type { ISkillArg, ISkillFull } from "./state";
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { getTools, saveSkill } from './restClient';
+import type { ISkillArg, ISkillFull } from './state';
 
 interface IArgRow {
   name: string;
-  type: "string" | "number" | "boolean";
+  type: 'string' | 'number' | 'boolean';
   required: boolean;
   description: string;
   default: string;
@@ -1191,10 +1106,9 @@ interface IArgRow {
 function rowToArg(r: IArgRow): ISkillArg {
   const arg: ISkillArg = { name: r.name, type: r.type, required: r.required };
   if (r.description) arg.description = r.description;
-  if (r.default !== "")
-    arg.default = r.type === "number" ? Number(r.default) : r.default;
+  if (r.default !== '') arg.default = r.type === 'number' ? Number(r.default) : r.default;
   const en = r.enumCsv
-    .split(",")
+    .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
   if (en.length) arg.enum = en;
@@ -1202,28 +1116,18 @@ function rowToArg(r: IArgRow): ISkillArg {
 }
 
 function previewMarkdown(skill: ISkillFull): string {
-  const lines = [
-    "---",
-    `name: ${skill.name}`,
-    `description: ${skill.description}`,
-    `tools: [${skill.tools.join(", ")}]`,
-    "---",
-    "",
-    skill.body,
-  ];
-  return lines.join("\n");
+  const lines = ['---', `name: ${skill.name}`, `description: ${skill.description}`, `tools: [${skill.tools.join(', ')}]`, '---', '', skill.body];
+  return lines.join('\n');
 }
 
 export function SkillEditorPane() {
   const [tools, setTools] = useState<string[]>([]);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [body, setBody] = useState("");
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [body, setBody] = useState('');
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [rows, setRows] = useState<IArgRow[]>([]);
-  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(
-    null,
-  );
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     void getTools()
@@ -1239,28 +1143,22 @@ export function SkillEditorPane() {
     args: rows.map(rowToArg),
   };
 
-  const toggleTool = (t: string) =>
-    setSelectedTools((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-    );
+  const toggleTool = (t: string) => setSelectedTools((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
 
   const addRow = () =>
     setRows((prev) => [
       ...prev,
       {
-        name: "",
-        type: "string",
+        name: '',
+        type: 'string',
         required: false,
-        description: "",
-        default: "",
-        enumCsv: "",
+        description: '',
+        default: '',
+        enumCsv: '',
       },
     ]);
 
-  const setRow = (i: number, patch: Partial<IArgRow>) =>
-    setRows((prev) =>
-      prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
-    );
+  const setRow = (i: number, patch: Partial<IArgRow>) => setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const save = async () => {
     setStatus(null);
@@ -1276,35 +1174,17 @@ export function SkillEditorPane() {
   };
 
   return (
-    <div
-      data-testid="skill-editor-pane"
-      className="flex h-full flex-col gap-2 overflow-auto bg-surface p-2.5 text-sm"
-    >
+    <div data-testid="skill-editor-pane" className="flex h-full flex-col gap-2 overflow-auto bg-surface p-2.5 text-sm">
       <h2 className="text-base font-semibold text-foreground">Skill Editor</h2>
-      <Input
-        data-testid="skill-editor-name"
-        placeholder="name (a-z0-9-)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <Input
-        data-testid="skill-editor-description"
-        placeholder="description"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
+      <Input data-testid="skill-editor-name" placeholder="name (a-z0-9-)" value={name} onChange={(e) => setName(e.target.value)} />
+      <Input data-testid="skill-editor-description" placeholder="description" value={description} onChange={(e) => setDescription(e.target.value)} />
 
       <div className="flex flex-col gap-1">
         <span className="text-[10.5px] text-muted-foreground">Tools</span>
         <div className="flex flex-wrap gap-2">
           {tools.map((t) => (
             <label key={t} className="flex items-center gap-1 text-foreground">
-              <input
-                data-testid={`skill-editor-tool-${t}`}
-                type="checkbox"
-                checked={selectedTools.includes(t)}
-                onChange={() => toggleTool(t)}
-              />
+              <input data-testid={`skill-editor-tool-${t}`} type="checkbox" checked={selectedTools.includes(t)} onChange={() => toggleTool(t)} />
               {t}
             </label>
           ))}
@@ -1314,64 +1194,29 @@ export function SkillEditorPane() {
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <span className="text-[10.5px] text-muted-foreground">Args</span>
-          <Button
-            data-testid="skill-editor-add-arg"
-            size="sm"
-            variant="ghost"
-            onClick={addRow}
-          >
+          <Button data-testid="skill-editor-add-arg" size="sm" variant="ghost" onClick={addRow}>
             + arg
           </Button>
         </div>
         {rows.map((r, i) => (
-          <div
-            key={i}
-            data-testid={`skill-editor-arg-${i}`}
-            className="flex flex-wrap gap-1 rounded border bg-raised p-1"
-          >
-            <Input
-              className="w-24"
-              placeholder="name"
-              value={r.name}
-              onChange={(e) => setRow(i, { name: e.target.value })}
-            />
+          <div key={i} data-testid={`skill-editor-arg-${i}`} className="flex flex-wrap gap-1 rounded border bg-raised p-1">
+            <Input className="w-24" placeholder="name" value={r.name} onChange={(e) => setRow(i, { name: e.target.value })} />
             <select
               className="rounded border bg-surface px-1 text-foreground"
               value={r.type}
-              onChange={(e) =>
-                setRow(i, { type: e.target.value as IArgRow["type"] })
-              }
+              onChange={(e) => setRow(i, { type: e.target.value as IArgRow['type'] })}
             >
               <option value="string">string</option>
               <option value="number">number</option>
               <option value="boolean">boolean</option>
             </select>
             <label className="flex items-center gap-1 text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={r.required}
-                onChange={(e) => setRow(i, { required: e.target.checked })}
-              />
+              <input type="checkbox" checked={r.required} onChange={(e) => setRow(i, { required: e.target.checked })} />
               req
             </label>
-            <Input
-              className="w-28"
-              placeholder="description"
-              value={r.description}
-              onChange={(e) => setRow(i, { description: e.target.value })}
-            />
-            <Input
-              className="w-20"
-              placeholder="default"
-              value={r.default}
-              onChange={(e) => setRow(i, { default: e.target.value })}
-            />
-            <Input
-              className="w-28"
-              placeholder="enum a,b,c"
-              value={r.enumCsv}
-              onChange={(e) => setRow(i, { enumCsv: e.target.value })}
-            />
+            <Input className="w-28" placeholder="description" value={r.description} onChange={(e) => setRow(i, { description: e.target.value })} />
+            <Input className="w-20" placeholder="default" value={r.default} onChange={(e) => setRow(i, { default: e.target.value })} />
+            <Input className="w-28" placeholder="enum a,b,c" value={r.enumCsv} onChange={(e) => setRow(i, { enumCsv: e.target.value })} />
           </div>
         ))}
       </div>
@@ -1386,29 +1231,18 @@ export function SkillEditorPane() {
 
       <div className="flex flex-col gap-1">
         <span className="text-[10.5px] text-muted-foreground">Preview</span>
-        <pre
-          data-testid="skill-editor-preview"
-          className="overflow-auto rounded border bg-raised p-2 font-mono text-[11px] text-muted-foreground"
-        >
+        <pre data-testid="skill-editor-preview" className="overflow-auto rounded border bg-raised p-2 font-mono text-[11px] text-muted-foreground">
           {previewMarkdown(skill)}
         </pre>
       </div>
 
       <div className="flex items-center justify-between gap-2">
         {status && (
-          <span
-            data-testid="skill-editor-status"
-            className={status.ok ? "text-accent-text" : "text-destructive"}
-          >
+          <span data-testid="skill-editor-status" className={status.ok ? 'text-accent-text' : 'text-destructive'}>
             {status.msg}
           </span>
         )}
-        <Button
-          data-testid="skill-editor-save"
-          size="sm"
-          className="ml-auto"
-          onClick={save}
-        >
+        <Button data-testid="skill-editor-save" size="sm" className="ml-auto" onClick={save}>
           Save
         </Button>
       </div>
@@ -1420,7 +1254,7 @@ export function SkillEditorPane() {
 - [ ] **Step 5: Register the pane + command in `index.ts`**
 
 ```ts
-import { SkillEditorPane } from "./SkillEditorPane";
+import { SkillEditorPane } from './SkillEditorPane';
 ```
 
 Add to `panes`:
