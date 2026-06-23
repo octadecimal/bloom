@@ -68,3 +68,22 @@ async def test_replay_tool_model_raises_on_sentinel_model_agenerate():
     m = ReplayToolCallingChatModel(cassette=_cassette(), model=ERROR_SENTINEL_MODEL)
     with pytest.raises(RuntimeError, match="sentinel model"):
         await m.ainvoke([HumanMessage("x")])
+
+
+class _T:
+    def __init__(self, name): self.name = name
+
+
+async def test_bound_tools_filter_cassette_tool_calls():
+    cassette = {
+        "tool_calls": [
+            {"name": "generate_asset", "args": {"description": "knight"}},
+            {"name": "delete_asset", "args": {"asset_id": "a1"}},
+        ],
+        "final": ["ok"],
+    }
+    model = ReplayToolCallingChatModel(cassette=cassette)
+    bound = model.bind_tools([_T("delete_asset")])
+    result = await bound._agenerate([HumanMessage("go")])
+    calls = result.generations[0].message.tool_calls
+    assert [c["name"] for c in calls] == ["delete_asset"]
