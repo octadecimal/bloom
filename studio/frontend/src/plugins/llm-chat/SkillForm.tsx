@@ -30,7 +30,21 @@ export function SkillForm({
 
   const submit = () => {
     if (missingRequired) return;
-    onSubmit({ ...values });
+    const coerced: Record<string, unknown> = {};
+    for (const a of skill.args) {
+      const v = values[a.name];
+      if (a.type === 'number' && !a.enum && typeof v === 'string') {
+        if (v === '') {
+          // optional empty number field — omit it so backend default applies
+          if (a.required) coerced[a.name] = v;
+        } else {
+          coerced[a.name] = Number(v);
+        }
+      } else {
+        coerced[a.name] = v;
+      }
+    }
+    onSubmit(coerced);
   };
 
   return (
