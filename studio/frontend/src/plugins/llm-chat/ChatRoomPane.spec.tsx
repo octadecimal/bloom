@@ -147,5 +147,20 @@ describe('ChatRoomPane skill autocomplete', () => {
     fireEvent.change(screen.getByTestId('skill-form-field-description'), { target: { value: 'a knight' } });
     fireEvent.click(screen.getByTestId('skill-form-submit'));
     expect(actions.runSkill).toHaveBeenCalledWith('generate-sprite', { description: 'a knight' });
+    // After submit: form is gone and composer is cleared
+    expect(screen.queryByTestId('skill-form')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-composer')).toHaveValue('');
+  });
+
+  it('cancelling the form clears the composer and closes the form', () => {
+    chatSlice().skills.set([
+      { name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] },
+    ]);
+    render(<ChatRoomPane />);
+    fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/generate-sprite' } });
+    fireEvent.click(screen.getByTestId('skill-option-generate-sprite'));
+    fireEvent.click(screen.getByTestId('skill-form-cancel'));
+    expect(screen.queryByTestId('skill-form')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-composer')).toHaveValue('');
   });
 });

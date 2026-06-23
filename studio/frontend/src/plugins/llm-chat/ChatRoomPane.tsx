@@ -187,8 +187,14 @@ export function ChatRoomPane() {
   const s = llmChatHooks.usePluginState();
   const [draft, setDraft] = useState('');
   const [formSkillName, setFormSkillName] = useState<string | null>(null);
+  // Reading `skills` here intentionally subscribes ChatRoomPane to the skills
+  // leaf ONLY while a form is open (guarded by `formSkillName`); the no-form
+  // hot path never calls `.get()`, preserving render-count discipline.
   const formSkill = formSkillName
-    ? (s.skills.get({ noproxy: true }) as ISkill[]).find((sk) => sk.name === formSkillName) ?? null
+    ? (() => {
+        const found = s.skills.get().find((sk) => sk.name === formSkillName);
+        return found ? ({ ...found } as ISkill) : null;
+      })()
     : null;
   bumpRenderCount('ChatRoomPane');
 
@@ -237,7 +243,7 @@ export function ChatRoomPane() {
             setDraft('');
             setTyping(false);
           }}
-          onCancel={() => setFormSkillName(null)}
+          onCancel={() => { setFormSkillName(null); setDraft(''); setTyping(false); }}
         />
       ) : (
         slashPrefix !== null && (
