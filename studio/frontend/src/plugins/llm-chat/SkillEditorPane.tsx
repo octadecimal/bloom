@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { loadSkills } from './actions';
 import { getTools, saveSkill } from './restClient';
 import type { ISkillArg, ISkillFull } from './state';
 
@@ -63,6 +64,7 @@ export function SkillEditorPane() {
     setStatus(null);
     try {
       await saveSkill(skill);
+      await loadSkills();
       setStatus({ ok: true, msg: `Saved to skills/${name}.md — commit + PR it.` });
     } catch (e) {
       setStatus({ ok: false, msg: (e as Error).message });

@@ -7,8 +7,13 @@ vi.mock('./restClient', () => ({
   saveSkill: vi.fn(async (p) => p),
 }));
 
+vi.mock('./actions', () => ({
+  loadSkills: vi.fn(async () => {}),
+}));
+
 import { SkillEditorPane } from './SkillEditorPane';
 import * as rest from './restClient';
+import * as actions from './actions';
 
 describe('SkillEditorPane', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -25,6 +30,7 @@ describe('SkillEditorPane', () => {
     const arg = (rest.saveSkill as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.name).toBe('my-skill');
     expect(arg.tools).toContain('generate_asset');
+    expect(actions.loadSkills).toHaveBeenCalled();
   });
 
   it('shows the server error when save fails', async () => {
@@ -33,5 +39,6 @@ describe('SkillEditorPane', () => {
     fireEvent.change(screen.getByTestId('skill-editor-name'), { target: { value: 'bad' } });
     fireEvent.click(screen.getByTestId('skill-editor-save'));
     await waitFor(() => expect(screen.getByTestId('skill-editor-status')).toHaveTextContent('unknown tools'));
+    expect(actions.loadSkills).not.toHaveBeenCalled();
   });
 });
