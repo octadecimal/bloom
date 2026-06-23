@@ -1,4 +1,4 @@
-import type { IRoom, IMessage, ISkill } from './state';
+import type { IRoom, IMessage, ISkill, ISkillFull } from './state';
 import { BACKEND_URL } from './config';
 
 export interface IModelOption {
@@ -35,4 +35,26 @@ export async function createRoom(name: string, model?: string): Promise<IRoom> {
 
 export async function getMessages(roomId: string): Promise<IMessage[]> {
   return okJson<IMessage[]>(await fetch(`${BACKEND_URL}/rooms/${roomId}/messages`));
+}
+
+export async function getSkill(name: string): Promise<ISkillFull> {
+  return okJson<ISkillFull>(await fetch(`${BACKEND_URL}/skills/${name}`));
+}
+
+export async function getTools(): Promise<string[]> {
+  const tools = await okJson<{ name: string }[]>(await fetch(`${BACKEND_URL}/tools`));
+  return tools.map((t) => t.name);
+}
+
+export async function saveSkill(payload: ISkillFull): Promise<ISkillFull> {
+  const res = await fetch(`${BACKEND_URL}/skills`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.json().then((b) => b.detail).catch(() => null);
+    throw new Error(detail ?? `request failed: ${res.status}`);
+  }
+  return (await res.json()) as ISkillFull;
 }

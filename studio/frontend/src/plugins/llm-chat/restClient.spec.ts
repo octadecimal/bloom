@@ -57,4 +57,25 @@ describe('restClient', () => {
     expect(fetchMock).toHaveBeenCalledWith(`${BACKEND_URL}/skills`);
     expect(out[0].name).toBe('generate-sprite');
   });
+
+  it('getSkill fetches the full skill', async () => {
+    const skill = { name: 'x', description: 'd', args: [], tools: ['generate_asset'], body: 'b' };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(skill), { status: 200 })));
+    const { getSkill } = await import('./restClient');
+    expect(await getSkill('x')).toEqual(skill);
+  });
+
+  it('saveSkill surfaces the server detail on 400', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'unknown tools' }), { status: 400 })));
+    const { saveSkill } = await import('./restClient');
+    await expect(
+      saveSkill({ name: 'x', description: '', args: [], tools: ['nuke'], body: '' }),
+    ).rejects.toThrow('unknown tools');
+  });
+
+  it('getTools returns tool names', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{ name: 'generate_asset' }]), { status: 200 })));
+    const { getTools } = await import('./restClient');
+    expect(await getTools()).toEqual(['generate_asset']);
+  });
 });
