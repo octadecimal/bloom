@@ -35,7 +35,7 @@ foundation those later slices hang off of.
 - **Leverage libraries over hand-rolling.** The gate uses LangGraph's `interrupt()` +
   `MemorySaver` checkpointer — no bespoke HITL machinery. The react agent and the single
   forward stream are otherwise unchanged. (See `prefer-proven-libraries`.)
-- **Test/real parity is mandatory.** The interrupt sits *between* existing graph steps and
+- **Test/real parity is mandatory.** The interrupt sits _between_ existing graph steps and
   **adds no model invocation**, so the replay cassette's prompt sequence is unchanged. No
   new provider surface. (See `test-real-parity`.)
 - **E2e is the authoritative behavioral contract**, and browser e2e stays out of CI.
@@ -63,7 +63,7 @@ exactly what that would outgrow. LangGraph's `interrupt()` with a checkpointer *
 proven primitive for human-in-the-loop, so adopting it is leveraging the library, not
 rolling our own. The react agent and `astream_events` pass are otherwise untouched.
 
-### 3.3 Selective gating via `interrupt()` *inside* the tool — not `interrupt_before`
+### 3.3 Selective gating via `interrupt()` _inside_ the tool — not `interrupt_before`
 
 `interrupt_before=["tools"]` would pause the whole ToolNode and gate `list_assets` too.
 Instead, `delete_asset` calls `interrupt({...})` itself before deleting; `list_assets` never

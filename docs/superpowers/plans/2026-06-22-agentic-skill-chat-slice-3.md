@@ -22,6 +22,7 @@
 ## Reference map (exact paths the tasks touch)
 
 Backend (`studio/backend/`):
+
 - `app/agent_tools.py` — `ToolContext`, `build_generate_asset_tool`, `ToolFactory._BUILDERS`.
 - `app/turn_runner.py` — `TurnRunner.run`, `StepStarted/StepToken/StepCompleted/RunFinished`.
 - `app/room_hub.py` — `_run_skill`, `_project_run_event`, `attach_subscriber`, `_emit_status`.
@@ -35,6 +36,7 @@ Backend (`studio/backend/`):
 - Fixtures: `tests/fixtures/replay/run/default.json`.
 
 Frontend (`studio/frontend/src/plugins/`):
+
 - `llm-chat/state.ts` — `IRunStep` (line 47), `IRun` (line 55), `ILlmChatState.runs`.
 - `llm-chat/reducers.ts` — `startStep/appendStepToken/completeStep/...`.
 - `llm-chat/socketClient.ts` — inbound handlers (32–117), `emit` helper (150), `runSkill` (161).
@@ -51,10 +53,12 @@ Skill: `skills/manage-assets.md` (new). Repo-root `skills/` is the registry sour
 ### Task 1: `list_assets` read tool (ungated)
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Test: `studio/backend/tests/test_agent_tools.py`
 
 **Interfaces:**
+
 - Consumes: `ToolContext(room_id, game_id, asset_store, asset_hub)`; `AssetStore.list_assets(game_id) -> list[Asset]` (each `Asset` has `.id`, `.name`, `.category`).
 - Produces: `build_list_assets_tool(ctx) -> BaseTool` named `list_assets`; `ToolFactory._BUILDERS["list_assets"]`.
 
@@ -146,12 +150,14 @@ git commit -m "feat(tools): add ungated list_assets agent tool"
 ### Task 2: `delete_asset` destructive tool with `interrupt()` + board-removal notify
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Modify: `studio/backend/app/assets/hub.py`
 - Test: `studio/backend/tests/test_agent_tools.py`
 - Test: `studio/backend/tests/test_asset_hub.py`
 
 **Interfaces:**
+
 - Consumes: `AssetStore.get_asset(asset_id) -> Asset | None`, `AssetStore.delete_asset(asset_id) -> None`; `AssetHub.notify_deleted(game_id, asset_id)` (added here); module-level `interrupt` (patchable seam).
 - Produces: `build_delete_asset_tool(ctx) -> BaseTool` named `delete_asset`; `ToolFactory._BUILDERS["delete_asset"]`; `AssetHub.notify_deleted` emitting `asset_deleted`.
 - Interrupt payload contract: `{"tool": "delete_asset", "args": {"asset_id": <id>}, "label": "Delete '<name>' (id <id>) — this can't be undone."}`. Resume value is the string `"approve"` or `"deny"`.
@@ -323,10 +329,12 @@ git commit -m "feat(tools): add interrupt-gated delete_asset tool + asset_delete
 ### Task 3: `approval` RunStep type
 
 **Files:**
+
 - Modify: `studio/backend/app/runs.py`
 - Test: `studio/backend/tests/test_run_store.py`
 
 **Interfaces:**
+
 - Produces: `RunStep.type` Literal now includes `"approval"`.
 
 - [ ] **Step 1: Write the failing test**
@@ -370,10 +378,12 @@ git commit -m "feat(runs): add approval RunStep type"
 ### Task 4: `TurnRunner` interrupt detection + resume via `on_approval` callback
 
 **Files:**
+
 - Modify: `studio/backend/app/turn_runner.py`
 - Test: `studio/backend/tests/test_turn_runner.py`
 
 **Interfaces:**
+
 - Consumes: `create_react_agent(model, tools, prompt=...)`, `MemorySaver`, `Command`; the gated tool's `interrupt(...)` payload `{"tool","args","label"}`.
 - Produces:
   - New event dataclass `ApprovalRequired(action: dict)` (the interrupt payload).
@@ -608,10 +618,12 @@ git commit -m "feat(runner): detect interrupt, request approval, resume from che
 ### Task 5: Replay model selects cassette tool-calls by bound tools
 
 **Files:**
+
 - Modify: `studio/backend/app/providers.py`
 - Test: `studio/backend/tests/test_providers.py`
 
 **Interfaces:**
+
 - Produces: `ReplayToolCallingChatModel.bind_tools` records the bound tool **names**; `_agenerate`/`_astream` emit only cassette `tool_calls` whose `name` is in the bound set. With a single bound tool (e.g. `generate-sprite`) behavior is byte-for-byte unchanged; a different skill (`manage-assets`) replays only its own calls.
 
 - [ ] **Step 1: Write the failing test**
@@ -709,10 +721,12 @@ git commit -m "feat(replay): filter cassette tool-calls by bound tools"
 ### Task 6: RoomHub approval orchestration + `resolve_approval` + timeout
 
 **Files:**
+
 - Modify: `studio/backend/app/room_hub.py`
 - Test: `studio/backend/tests/test_room_hub.py`
 
 **Interfaces:**
+
 - Consumes: `TurnRunner.run(..., run_id, on_approval)`, `ApprovalRequired`, `RunStep(type="approval")`.
 - Produces:
   - `_run_skill` passes `run_id=run.id` and `on_approval=self._make_approval_cb(room_id, run.id)` to the runner; projects `ApprovalRequired` as an `approval` run step (`content` = `json.dumps(action)`, status `running`) and registers a per-run `asyncio.Future`.
@@ -911,10 +925,12 @@ git commit -m "feat(hub): orchestrate approval step, resolve_approval, timeout->
 ### Task 7: `resolve_approval` inbound socket event
 
 **Files:**
+
 - Modify: `studio/backend/app/sockets.py`
 - Test: `studio/backend/tests/e2e/test_sockets.py`
 
 **Interfaces:**
+
 - Consumes: `RoomHub.resolve_approval(room_id, run_id, decision)`.
 - Produces: `@sio.on("resolve_approval")` reading `{roomId, runId, decision}` → `hub.resolve_approval(...)`.
 
@@ -984,10 +1000,12 @@ git commit -m "feat(sockets): add resolve_approval inbound event"
 ### Task 8: `manage-assets` skill
 
 **Files:**
+
 - Create: `skills/manage-assets.md`
 - Test: `studio/backend/tests/test_skills.py`
 
 **Interfaces:**
+
 - Consumes: `SkillRegistry.load()` with `known_tools` including `list_assets` and `delete_asset` (Tasks 1–2).
 - Produces: a loadable skill `manage-assets` with `tools=["list_assets", "delete_asset"]` and one required `target` string arg.
 
@@ -1052,10 +1070,12 @@ git commit -m "feat(skills): add manage-assets skill (list + gated delete)"
 ### Task 9: Replay run cassette — add `delete_asset` call
 
 **Files:**
+
 - Modify: `studio/backend/tests/fixtures/replay/run/default.json`
 - Test: `studio/backend/tests/test_fixtures_committed.py` (guard must stay green), `tests/test_turn_runner.py` (already covers delete via inline cassette).
 
 **Interfaces:**
+
 - Produces: the global run cassette gains a `delete_asset` tool-call entry. Because the replay model now filters by bound tools (Task 5), `generate-sprite` still emits only `generate_asset`, and `manage-assets` emits only `delete_asset`. The `delete_asset` call targets the deterministic seeded id `e2e-doomed-asset` used by the Playwright test (Task 13).
 
 - [ ] **Step 1: Update the fixture**
@@ -1096,10 +1116,12 @@ git commit -m "test(replay): add delete_asset call to run cassette"
 ### Task 10: Frontend — `approval` step type + parsed action shape
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/state.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/state.test.ts` (or the existing state/reducers test file — match the project's vitest layout)
 
 **Interfaces:**
+
 - Produces:
   - `IRunStep.type` union includes `'approval'`.
   - `IApprovalAction { tool: string; args: Record<string, unknown>; label: string }`.
@@ -1116,7 +1138,9 @@ import { parseApprovalAction, type IRunStep } from './state';
 describe('parseApprovalAction', () => {
   it('parses an approval step content', () => {
     const step: IRunStep = {
-      index: 1, type: 'approval', toolName: null,
+      index: 1,
+      type: 'approval',
+      toolName: null,
       content: JSON.stringify({ tool: 'delete_asset', args: { asset_id: 'a1' }, label: "Delete 'knight'." }),
       status: 'running',
     };
@@ -1144,7 +1168,7 @@ In `studio/frontend/src/plugins/llm-chat/state.ts`:
 Extend the `IRunStep.type` union:
 
 ```ts
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval';
+type: 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval';
 ```
 
 Add the interface and parser:
@@ -1185,11 +1209,13 @@ git commit -m "feat(chat): add approval run-step type + action parser"
 ### Task 11: Frontend — `resolveApproval` emit + action
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/socketClient.ts`
 - Modify: `studio/frontend/src/plugins/llm-chat/actions.ts`
 - Test: the socketClient/actions vitest file (match existing layout)
 
 **Interfaces:**
+
 - Produces:
   - `socketClient.resolveApproval(roomId, runId, decision)` → `emit('resolve_approval', { roomId, runId, decision })`.
   - `actions.resolveApproval(runId, decision)` → uses `activeRoomId` and calls the socket method (mirror `runSkill` at `actions.ts:123`).
@@ -1252,11 +1278,13 @@ git commit -m "feat(chat): emit resolve_approval from socket client + action"
 ### Task 12: Frontend — approval card in the run timeline
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/ApprovalCard.tsx`
 - Modify: `studio/frontend/src/plugins/llm-chat/RunTimeline.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/ApprovalCard.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `parseApprovalAction` (Task 10), `actions.resolveApproval` (Task 11), `IRunStep`.
 - Produces: `ApprovalCard({ runId, step })` — renders the label + Approve/Deny; calls `resolveApproval(runId, decision)`; disables both buttons once `step.status === 'complete'`, then shows the recorded decision (parsed from the completed step content). `RunStepCard` dispatches `step.type === 'approval'` → `ApprovalCard`.
 
@@ -1271,7 +1299,9 @@ import { ApprovalCard } from './ApprovalCard';
 import * as actions from './actions';
 
 const pending = {
-  index: 1, type: 'approval' as const, toolName: null,
+  index: 1,
+  type: 'approval' as const,
+  toolName: null,
   content: JSON.stringify({ tool: 'delete_asset', args: { asset_id: 'a1' }, label: "Delete 'knight' — can't be undone." }),
   status: 'running' as const,
 };
@@ -1320,23 +1350,19 @@ import { resolveApproval } from './actions';
 
 export function ApprovalCard({ runId, step }: { runId: string; step: IRunStep }) {
   const resolved = step.status === 'complete';
-  const action = parseApprovalAction(step);            // label survives completion (hub preserves it)
+  const action = parseApprovalAction(step); // label survives completion (hub preserves it)
   const label = action?.label ?? 'Approve this action?';
   const decision = resolved ? safeDecision(step.content) : null;
   return (
     <div className="floating-card approval-card">
       <p className="approval-card__label">{label}</p>
       <div className="approval-card__actions">
-        <button
-          className="btn btn--accent"
-          disabled={resolved}
-          onClick={() => resolveApproval(runId, 'approve')}
-        >Approve</button>
-        <button
-          className="btn"
-          disabled={resolved}
-          onClick={() => resolveApproval(runId, 'deny')}
-        >Deny</button>
+        <button className="btn btn--accent" disabled={resolved} onClick={() => resolveApproval(runId, 'approve')}>
+          Approve
+        </button>
+        <button className="btn" disabled={resolved} onClick={() => resolveApproval(runId, 'deny')}>
+          Deny
+        </button>
       </div>
       {resolved && <p className="approval-card__outcome">{decision === 'approve' ? 'Approved' : 'Denied'}</p>}
     </div>
@@ -1344,7 +1370,11 @@ export function ApprovalCard({ runId, step }: { runId: string; step: IRunStep })
 }
 
 function safeDecision(content: string): string | null {
-  try { return (JSON.parse(content) as { decision?: string }).decision ?? null; } catch { return null; }
+  try {
+    return (JSON.parse(content) as { decision?: string }).decision ?? null;
+  } catch {
+    return null;
+  }
 }
 ```
 
@@ -1355,9 +1385,9 @@ Because the hub preserves the action (`tool`/`args`/`label`) in the completed st
 In `studio/frontend/src/plugins/llm-chat/RunTimeline.tsx`, add a branch in the `step.type` dispatch (lines 11–40). `RunStepCard` needs the `runId`; thread it from `RunStepList` (which has the `run`). Add:
 
 ```tsx
-  if (step.type === 'approval') {
-    return <ApprovalCard runId={runId} step={step} />;
-  }
+if (step.type === 'approval') {
+  return <ApprovalCard runId={runId} step={step} />;
+}
 ```
 
 Update `RunStepList` to pass `runId={run.id}` into each `RunStepCard`, and add `runId: string` to `RunStepCard`'s props. Import `ApprovalCard`.
@@ -1380,11 +1410,13 @@ git commit -m "feat(chat): render approval card in run timeline"
 ### Task 13: Frontend — asset board reacts to `asset_deleted`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/assets/socketClient.ts`
 - Modify: `studio/frontend/src/plugins/assets/reducers.ts`
 - Test: the assets reducers/socketClient vitest file
 
 **Interfaces:**
+
 - Consumes: socket event `asset_deleted` `{ gameId, assetId }`.
 - Produces: `removeAsset(assets: IAsset[], assetId: string): IAsset[]` reducer; an `asset_deleted` inbound handler that drops the asset from board state when `gameId` is active (mirror the `asset_completed` handler at `assets/socketClient.ts:40–45`).
 
@@ -1421,11 +1453,11 @@ export function removeAsset(assets: IAsset[], assetId: string): IAsset[] {
 In `studio/frontend/src/plugins/assets/socketClient.ts`, inside `registerInboundHandlers` (near the `asset_completed` handler), add — matching the file's `isActive(gameId)` / slice-write pattern exactly:
 
 ```ts
-  s.on('asset_deleted', (p) => {
-    const { gameId, assetId } = p as { gameId: string; assetId: string };
-    if (!isActive(gameId)) return;
-    slice().assets.set(removeAsset(read(), assetId));
-  });
+s.on('asset_deleted', (p) => {
+  const { gameId, assetId } = p as { gameId: string; assetId: string };
+  if (!isActive(gameId)) return;
+  slice().assets.set(removeAsset(read(), assetId));
+});
 ```
 
 (Use the precise `slice()/read()/isActive` helpers the neighboring handlers use; import `removeAsset`.)
@@ -1447,10 +1479,12 @@ git commit -m "feat(assets): drop asset from board on asset_deleted"
 ### Task 14: Playwright e2e — manage-assets approval flow (local-only)
 
 **Files:**
+
 - Create: `studio/frontend/e2e/manage-assets-approval.spec.ts` (match the existing e2e dir/layout)
 - Possibly modify: an e2e setup helper for seeding (match existing patterns)
 
 **Interfaces:**
+
 - Consumes: the full stack under replay; the seeded asset id `e2e-doomed-asset` referenced by the run cassette (Task 9).
 - Produces: an exhaustive client-side validation of the gate: approval card appears, Approve removes the asset from the board, Deny leaves it.
 
@@ -1526,11 +1560,12 @@ Expected: PASS (unit + non-browser e2e).
 - [ ] **Step 2: Frontend CI gates** (per `frontend-ci-gates` — all four):
 
 Run (from `studio/frontend`):
+
 - `npx prettier --check .`
 - `npx nx typecheck` (or the repo's typecheck command)
 - `npx vitest run`
 - the build (`npx nx build` or repo equivalent)
-Expected: all PASS. (vitest green ≠ types valid — run all four.)
+  Expected: all PASS. (vitest green ≠ types valid — run all four.)
 
 - [ ] **Step 3: Browser e2e** (local, not CI): `just e2e` with the replay backend on :8000. Expected: green, including the new approval specs.
 
