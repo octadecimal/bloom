@@ -68,4 +68,24 @@ test.describe('skill autocomplete keyboard navigation', () => {
     await composer.press('Escape');
     await expect(page.getByTestId('skill-autocomplete')).toBeHidden();
   });
+
+  test('matches a non-prefix substring (fuzzy, not just startsWith)', async ({ page }) => {
+    await openApp(page, 'alice');
+    await createRoom(page, `AC ${Date.now()}`);
+    const composer = page.getByTestId('chat-composer');
+    await composer.fill('/sprite');
+    // "sprite" is not a prefix of any skill name; prefix filtering would show nothing.
+    await expect(page.getByTestId('skill-option-generate-sprite')).toBeVisible();
+  });
+
+  test('highlights the typed characters in the matched name', async ({ page }) => {
+    await openApp(page, 'alice');
+    await createRoom(page, `AC ${Date.now()}`);
+    const composer = page.getByTestId('chat-composer');
+    await composer.fill('/sprite');
+    const option = page.getByTestId('skill-option-generate-sprite');
+    await expect(option).toBeVisible();
+    // The matched run renders inside <strong>; its text includes the typed chars.
+    await expect(option.locator('strong').first()).toContainText('sprite');
+  });
 });
