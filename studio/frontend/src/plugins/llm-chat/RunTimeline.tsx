@@ -1,5 +1,6 @@
 import { llmChatHooks } from './state';
 import type { IRunStep } from './state';
+import { ApprovalCard } from './ApprovalCard';
 
 // Readonly wrappers for hookstate-returned objects
 type IReadonlyRunStep = Readonly<IRunStep>;
@@ -8,7 +9,10 @@ type IReadonlyRun = {
   readonly steps: readonly IReadonlyRunStep[];
 };
 
-function RunStepCard({ step, index }: { step: IReadonlyRunStep; index: number }) {
+function RunStepCard({ step, index, runId }: { step: IReadonlyRunStep; index: number; runId: string }) {
+  if (step.type === 'approval') {
+    return <ApprovalCard runId={runId} step={step as IRunStep} />;
+  }
   const isToolStep = step.type === 'tool_call' || step.type === 'tool_result';
   const isError = step.status === 'error';
   const isRunning = step.status === 'running';
@@ -43,7 +47,7 @@ function RunStepList({ run }: { run: IReadonlyRun }) {
   return (
     <div className="flex flex-col gap-2">
       {run.steps.map((step) => (
-        <RunStepCard key={step.index} step={step} index={step.index} />
+        <RunStepCard key={step.index} step={step} index={step.index} runId={run.id} />
       ))}
     </div>
   );
