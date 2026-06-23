@@ -13,6 +13,9 @@ class SkillArg(BaseModel):
     name: str
     type: Literal["string", "number", "boolean"]
     required: bool = False
+    description: str = ""
+    default: str | float | bool | None = None
+    enum: list[str | float] | None = None
 
 
 class SkillSpec(BaseModel):
@@ -68,11 +71,16 @@ class SkillRegistry:
         out: dict = {}
         for a in spec.args:
             if a.name not in args or args[a.name] in (None, ""):
-                if a.required:
+                if a.default is not None:
+                    out[a.name] = a.default
+                elif a.required:
                     raise SkillError(f"missing required arg '{a.name}'")
                 continue
             try:
-                out[a.name] = _COERCE[a.type](args[a.name])
+                value = _COERCE[a.type](args[a.name])
             except (ValueError, TypeError) as e:
                 raise SkillError(f"arg '{a.name}' must be {a.type}") from e
+            if a.enum is not None and value not in a.enum:
+                raise SkillError(f"arg '{a.name}' must be one of {a.enum}")
+            out[a.name] = value
         return out
