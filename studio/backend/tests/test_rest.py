@@ -69,7 +69,7 @@ async def test_get_skill_full_and_404(ctx):
         assert ok.status_code == 200
         body = ok.json()
         assert body["name"] == "generate-sprite"
-        assert "body" in body and "tools" in body and isinstance(body["args"], list)
+        assert "description" in body and "body" in body and "tools" in body and isinstance(body["args"], list)
         missing = await client.get("/skills/nope")
         assert missing.status_code == 404
 
@@ -103,6 +103,7 @@ async def test_post_skill_writes_and_rejects(tmp_path):
             "tools": ["nuke"], "body": "x",
         })
         assert bad.status_code == 400
+        assert "detail" in bad.json() and bad.json()["detail"]
 
 
 @pytest.mark.asyncio
