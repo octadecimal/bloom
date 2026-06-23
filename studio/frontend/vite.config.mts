@@ -19,6 +19,8 @@ export default defineConfig(() => ({
     proxy: {
       '/rooms': { target: 'http://localhost:8000', changeOrigin: true },
       '/models': { target: 'http://localhost:8000', changeOrigin: true },
+      '/skills': { target: 'http://localhost:8000', changeOrigin: true },
+      '/tools': { target: 'http://localhost:8000', changeOrigin: true },
       '/health': { target: 'http://localhost:8000', changeOrigin: true },
       '/socket.io': { target: 'http://localhost:8000', changeOrigin: true, ws: true },
       '/games': { target: 'http://localhost:8000', changeOrigin: true },
