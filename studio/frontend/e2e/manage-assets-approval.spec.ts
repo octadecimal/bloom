@@ -16,12 +16,7 @@ const DOOMED_ID = 'e2e-doomed-asset';
 // Create a room via the API (to learn its gameId), seed the doomed asset onto that game,
 // then open the room through the picker so the app loads rooms + opens the game (which
 // REST-fetches the seeded asset onto the board).
-async function openSeededRoom(
-  page: Page,
-  request: APIRequestContext,
-  username: string,
-  roomName: string,
-): Promise<{ id: string; gameId: string }> {
+async function openSeededRoom(page: Page, request: APIRequestContext, username: string, roomName: string): Promise<{ id: string; gameId: string }> {
   const resp = await request.post(`${BACKEND}/rooms`, { data: { name: roomName } });
   expect(resp.ok()).toBeTruthy();
   const room = (await resp.json()) as { id: string; gameId: string };

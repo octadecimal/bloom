@@ -19,11 +19,7 @@ export function ApprovalCard({ runId, step }: { runId: string; step: IRunStep })
           Deny
         </Button>
       </div>
-      {resolved && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {decision === 'approve' ? 'Approved' : 'Denied'}
-        </p>
-      )}
+      {resolved && <p className="mt-1 text-xs text-muted-foreground">{decision === 'approve' ? 'Approved' : 'Denied'}</p>}
     </div>
   );
 }

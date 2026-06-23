@@ -12,7 +12,10 @@ interface IRestDeps {
 
 // Injectable deps so actions are unit-testable without the module singletons.
 let rest: IRestDeps = realRest;
-let socket: Pick<SocketClient, 'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill' | 'resolveApproval'> | null = null;
+let socket: Pick<
+  SocketClient,
+  'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill' | 'resolveApproval'
+> | null = null;
 let savePrefs = realSavePrefs;
 let started = false;
 

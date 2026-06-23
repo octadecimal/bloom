@@ -76,7 +76,11 @@ describe('assets socketClient', () => {
     client.connect();
     assetsSlice().assets.set([asset, { ...asset, id: 'a2', name: 'Other' }]);
     sock.fire('asset_deleted', { gameId: 'g1', assetId: 'a1' });
-    expect(assetsSlice().assets.get({ noproxy: true }).map((a) => a.id)).toEqual(['a2']);
+    expect(
+      assetsSlice()
+        .assets.get({ noproxy: true })
+        .map((a) => a.id),
+    ).toEqual(['a2']);
   });
 
   it('asset_deleted ignores events for a non-active game', () => {

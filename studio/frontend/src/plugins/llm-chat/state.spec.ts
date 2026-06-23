@@ -36,7 +36,9 @@ interface ILlmChatStateLike {
 describe('parseApprovalAction', () => {
   it('parses an approval step content', () => {
     const step: IRunStep = {
-      index: 1, type: 'approval', toolName: null,
+      index: 1,
+      type: 'approval',
+      toolName: null,
       content: JSON.stringify({ tool: 'delete_asset', args: { asset_id: 'a1' }, label: "Delete 'knight'." }),
       status: 'running',
     };

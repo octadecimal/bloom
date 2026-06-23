@@ -38,9 +38,7 @@ export async function seedAsset(gameId: string, assetId: string, name: string): 
       workflow: 'schnell-transparent',
       seed: null,
       status: 'done',
-      generations: [
-        { id: 'gen-e2e', seed: 1, image_ref: '/media/placeholder.png', created_at: new Date().toISOString() },
-      ],
+      generations: [{ id: 'gen-e2e', seed: 1, image_ref: '/media/placeholder.png', created_at: new Date().toISOString() }],
       selected_generation_id: 'gen-e2e',
       error: null,
     };
