@@ -34,9 +34,9 @@ test.describe('generate-sprite skill run', () => {
     await openApp(page, 'alice');
     await createRoom(page, roomName);
 
-    // Send the slash command by typing + clicking send (NOT autocomplete).
-    await page.getByTestId('chat-composer').fill('/generate-sprite description="a knight"');
-    await page.getByTestId('chat-send').click();
+    // Send the skill invocation with natural prose via Enter.
+    await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
+    await page.getByTestId('chat-composer').press('Enter');
 
     // --- Must-pass: run timeline becomes visible ---
     const timeline = page.getByTestId('run-timeline');
@@ -73,8 +73,8 @@ test.describe('generate-sprite skill run', () => {
     // Confirm the Asset Board is mounted (it renders automatically in the workbench layout).
     await expect(page.getByTestId('asset-board')).toBeVisible({ timeout: 10_000 });
 
-    await page.getByTestId('chat-composer').fill('/generate-sprite description="a knight"');
-    await page.getByTestId('chat-send').click();
+    await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
+    await page.getByTestId('chat-composer').press('Enter');
 
     // Wait for the run to complete (final confirming text in the timeline).
     await expect(page.getByTestId('run-timeline')).toContainText('Asset Board', { timeout: 30_000 });
@@ -102,8 +102,8 @@ test.describe('generate-sprite skill run', () => {
     await expect(b.getByTestId('chat-room-pane')).toBeVisible();
 
     // alice triggers the skill run
-    await a.getByTestId('chat-composer').fill('/generate-sprite description="a knight"');
-    await a.getByTestId('chat-send').click();
+    await a.getByTestId('chat-composer').fill('/generate-sprite a knight');
+    await a.getByTestId('chat-composer').press('Enter');
 
     // both clients see the run timeline with the tool name
     const timelineA = a.getByTestId('run-timeline');
