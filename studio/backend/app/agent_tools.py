@@ -61,7 +61,7 @@ def build_delete_asset_tool(ctx: ToolContext) -> BaseTool:
     async def delete_asset(asset_id: str) -> str:
         asset = await ctx.asset_store.get_asset(asset_id)
         if asset is None:
-            return f"No asset with id {asset_id} not found; nothing deleted."
+            return f"Asset {asset_id} not found; nothing deleted."
         label = f"Delete '{asset.name}' (id {asset_id}) — this can't be undone."
         decision = interrupt(
             {"tool": "delete_asset", "args": {"asset_id": asset_id}, "label": label}

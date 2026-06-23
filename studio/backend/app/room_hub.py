@@ -236,6 +236,9 @@ class RoomHub:
         finally:
             async with self._lock(room_id):
                 self._active_runs.pop(room_id, None)
+            entry = self._pending_approvals.pop(run.id, None)
+            if entry is not None and not entry["future"].done():
+                entry["future"].cancel()
             await self._run_store.complete_run(run.id, status)
             await self._sio.emit(
                 "run_completed", {"roomId": room_id, "runId": run.id, "status": status}, room=room_id
@@ -245,7 +248,7 @@ class RoomHub:
         """Register a pending approval step using the index reserved by the runner."""
         from app.runs import RunStep
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut = loop.create_future()
         # Register BEFORE emitting so resolve_approval arriving concurrently is safe.
         self._pending_approvals[run_id] = {"future": fut, "step_index": index, "action": action}
@@ -279,7 +282,7 @@ class RoomHub:
                 return "deny"
             fut = entry["future"]
             try:
-                decision = await asyncio.wait_for(asyncio.shield(fut), timeout=self._approval_timeout)
+                decision = await asyncio.wait_for(fut, timeout=self._approval_timeout)
             except asyncio.TimeoutError:
                 decision = "deny"
             await self._complete_approval(room_id, run_id, decision)

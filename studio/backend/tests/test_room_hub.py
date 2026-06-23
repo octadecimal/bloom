@@ -596,3 +596,41 @@ async def test_approval_timeout_denies(mongo_db):
     await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=3)
 
     assert runner.decision == "deny"
+
+
+class _RaisingAfterApprovalRunner:
+    """Yields StepStarted + StepCompleted + ApprovalRequired, then raises BEFORE
+    the on_approval callback is ever awaited — simulating a mid-run failure after
+    the approval entry has been registered but before it is resolved."""
+
+    async def run(self, *, messages, model, skill, args, ctx, run_id=None, on_approval=None):
+        action = {"tool": "delete_asset", "args": {"asset_id": "a1"}, "label": "Delete 'knight'."}
+        yield StepStarted(0, "tool_call", "delete_asset")
+        yield StepCompleted(0, "complete", "{'asset_id': 'a1'}", "delete_asset")
+        yield ApprovalRequired(action, 1)
+        # Raise immediately — never awaits on_approval, so the future is never resolved.
+        raise RuntimeError("boom")
+
+
+@pytest.mark.asyncio
+async def test_pending_approval_future_not_leaked_on_runner_failure(mongo_db):
+    """If the runner raises after registering an approval (but before resolving it),
+    _run_skill's finally block must cancel+remove the pending entry so
+    hub._pending_approvals is empty when the run is done."""
+    runner = _RaisingAfterApprovalRunner()
+    hub = _build_approval_hub(mongo_db, runner)
+    sio = hub._sio
+
+    await hub.handle_skill_run("r1", "Alice", "manage-assets", {"target": "knight"})
+
+    # Wait for run_completed (will have status="error")
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+    # The completed event must carry status="error"
+    completed_events = [(e, d) for e, d, _ in sio.events if e == "run_completed"]
+    assert completed_events and completed_events[-1][1]["status"] == "error"
+
+    # The pending_approvals dict must be empty — no future leak
+    assert hub._pending_approvals == {}, (
+        f"Expected no pending approvals after error, got: {hub._pending_approvals}"
+    )
