@@ -41,6 +41,7 @@ class RunFinished:
 @dataclass
 class ApprovalRequired:
     action: dict
+    index: int
 
 
 RunEvent = object  # documentation alias
@@ -81,7 +82,8 @@ class TurnRunner:
                 pending = await self._pending_interrupt(agent, config)
                 if pending is None:
                     break
-                yield ApprovalRequired(pending)
+                approval_index = state["index"]; state["index"] += 1
+                yield ApprovalRequired(pending, approval_index)
                 decision = await on_approval(pending) if on_approval else "deny"
                 state["skip_tool_start"] = pending.get("tool")
                 stream_input = Command(resume=decision)

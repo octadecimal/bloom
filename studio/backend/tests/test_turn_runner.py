@@ -118,6 +118,11 @@ async def test_runner_emits_approval_then_resumes_on_approve():
     # the gated tool_call step is not duplicated after resume
     tool_calls = [e for e in events if type(e).__name__ == "StepStarted" and getattr(e, "type", None) == "tool_call"]
     assert len(tool_calls) == 1
+    # index contract: approval reserves its own slot, no collision with step indices
+    assert approval.index == 1
+    started = [(e.index, e.type) for e in events if type(e).__name__ == "StepStarted"]
+    assert started == [(0, "tool_call"), (2, "tool_result"), (3, "final")]
+    assert sorted([i for i, _ in started] + [approval.index]) == [0, 1, 2, 3]
 
 
 @pytest.mark.asyncio
