@@ -3,10 +3,11 @@ import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { llmChatHooks } from './state';
+import { llmChatHooks, type ISkill } from './state';
 import { sendPrompt, setTyping, runSkill } from './actions';
 import { bumpRenderCount } from '../../app/renderCount';
 import { RunTimeline } from './RunTimeline';
+import { SkillForm } from './SkillForm';
 
 // ---------------------------------------------------------------------------
 // Pure helper — exported for unit tests
@@ -156,7 +157,7 @@ function AiStatusLine() {
  * `skills` leaf independently. This means a `skills` change re-renders only
  * this component, not `ChatRoomPane`, preserving the render-count discipline.
  */
-function SkillAutocomplete({ prefix }: { prefix: string }) {
+function SkillAutocomplete({ prefix, onPick }: { prefix: string; onPick: (name: string) => void }) {
   const s = llmChatHooks.usePluginState();
   const skills = s.skills.get();
   const matches = skills.filter((sk) => sk.name.startsWith(prefix));
@@ -164,7 +165,12 @@ function SkillAutocomplete({ prefix }: { prefix: string }) {
   return (
     <ul data-testid="skill-autocomplete" className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md">
       {matches.map((sk) => (
-        <li key={sk.name} data-testid={`skill-option-${sk.name}`} className="cursor-pointer rounded px-2 py-1 text-foreground hover:bg-raised">
+        <li
+          key={sk.name}
+          data-testid={`skill-option-${sk.name}`}
+          className="cursor-pointer rounded px-2 py-1 text-foreground hover:bg-raised"
+          onClick={() => onPick(sk.name)}
+        >
           <span className="font-semibold text-accent-text">/{sk.name}</span>
           {sk.description ? <span className="ml-2 text-muted-foreground">{sk.description}</span> : null}
         </li>
@@ -180,6 +186,10 @@ function SkillAutocomplete({ prefix }: { prefix: string }) {
 export function ChatRoomPane() {
   const s = llmChatHooks.usePluginState();
   const [draft, setDraft] = useState('');
+  const [formSkillName, setFormSkillName] = useState<string | null>(null);
+  const formSkill = formSkillName
+    ? (s.skills.get({ noproxy: true }) as ISkill[]).find((sk) => sk.name === formSkillName) ?? null
+    : null;
   bumpRenderCount('ChatRoomPane');
 
   if (s.activeRoomId.get() === null) {
@@ -218,7 +228,25 @@ export function ChatRoomPane() {
       <MessageList />
       <TypingLine />
       <RunTimeline />
-      {slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} />}
+      {formSkill ? (
+        <SkillForm
+          skill={formSkill}
+          onSubmit={(args) => {
+            runSkill(formSkill.name, args);
+            setFormSkillName(null);
+            setDraft('');
+            setTyping(false);
+          }}
+          onCancel={() => setFormSkillName(null)}
+        />
+      ) : (
+        slashPrefix !== null && (
+          <SkillAutocomplete
+            prefix={slashPrefix}
+            onPick={(name) => setFormSkillName(name)}
+          />
+        )
+      )}
       <div className="flex gap-2">
         <Input
           data-testid="chat-composer"
