@@ -21,10 +21,11 @@ test.describe('skill autocomplete keyboard navigation', () => {
     const composer = page.getByTestId('chat-composer');
     await composer.fill('/gen');
     await expect(page.getByTestId('skill-autocomplete')).toBeVisible();
-    // First option active by default.
-    await expect(page.getByTestId('skill-option-generate-sprite')).toHaveAttribute('data-active', 'true');
-    await composer.press('ArrowDown');
+    // Matches are backend-ordered (sorted *.md glob): generate-background sorts before
+    // generate-sprite, so the first (index 0) is active by default.
     await expect(page.getByTestId('skill-option-generate-background')).toHaveAttribute('data-active', 'true');
+    await composer.press('ArrowDown');
+    await expect(page.getByTestId('skill-option-generate-sprite')).toHaveAttribute('data-active', 'true');
   });
 
   test('Tab completes the highlighted name and hides the popup', async ({ page }) => {
