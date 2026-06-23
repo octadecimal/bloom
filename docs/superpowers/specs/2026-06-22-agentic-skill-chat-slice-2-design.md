@@ -137,6 +137,7 @@ studio/backend (Python)
   - Defaults reproduce current behavior exactly, so `generate-sprite` is unchanged.
   - Tool description updated to mention size/transparency.
 - **`skills/generate-background.md`:**
+
   ```markdown
   ---
   name: generate-background
