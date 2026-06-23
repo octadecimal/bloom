@@ -1,4 +1,7 @@
 {
-  "tool_calls": [{ "name": "generate_asset", "args": { "description": "a knight", "style": "pixel" } }],
+  "tool_calls": [
+    { "name": "generate_asset", "args": { "description": "a knight", "style": "pixel" } },
+    { "name": "delete_asset", "args": { "asset_id": "e2e-doomed-asset" } }
+  ],
   "final": ["All set — ", "I generated a knight sprite and added it to the Asset Board."]
 }
