@@ -1,9 +1,12 @@
 import asyncio
+import json
 import logging
 
 from app.models import message_wire
 
 logger = logging.getLogger(__name__)
+
+APPROVAL_TIMEOUT_SECONDS = 300
 
 
 class RoomHub:
@@ -38,6 +41,9 @@ class RoomHub:
         self._active: dict[str, dict] = {}
         # room_id -> {"runId": …} while a skill run is in progress
         self._active_runs: dict[str, dict] = {}
+        # run_id -> {"future": asyncio.Future, "step_index": int, "action": dict}
+        self._pending_approvals: dict[str, dict] = {}
+        self._approval_timeout = APPROVAL_TIMEOUT_SECONDS
 
     def _lock(self, room_id: str) -> asyncio.Lock:
         return self._locks.setdefault(room_id, asyncio.Lock())
@@ -215,8 +221,12 @@ class RoomHub:
         status = "completed"
         try:
             async for ev in self._runner.run(
-                messages=messages, model=room.model, skill=spec, args=descriptor["args"], ctx=ctx
+                messages=messages, model=room.model, skill=spec, args=descriptor["args"],
+                ctx=ctx, run_id=run.id, on_approval=self._make_approval_cb(room_id, run.id),
             ):
+                if type(ev).__name__ == "ApprovalRequired":
+                    await self._begin_approval(room_id, run.id, ev.action, ev.index)
+                    continue
                 await self._project_run_event(room_id, run.id, ev)
                 if type(ev).__name__ == "RunFinished":
                     status = ev.status
@@ -230,6 +240,82 @@ class RoomHub:
             await self._sio.emit(
                 "run_completed", {"roomId": room_id, "runId": run.id, "status": status}, room=room_id
             )
+
+    async def _begin_approval(self, room_id: str, run_id: str, action: dict, index: int) -> None:
+        """Register a pending approval step using the index reserved by the runner."""
+        from app.runs import RunStep
+
+        loop = asyncio.get_event_loop()
+        fut = loop.create_future()
+        # Register BEFORE emitting so resolve_approval arriving concurrently is safe.
+        self._pending_approvals[run_id] = {"future": fut, "step_index": index, "action": action}
+        await self._run_store.append_step(
+            run_id,
+            RunStep(index=index, type="approval", content=json.dumps(action), status="running"),
+        )
+        await self._sio.emit(
+            "run_step_started",
+            {
+                "roomId": room_id,
+                "runId": run_id,
+                "step": {
+                    "index": index,
+                    "type": "approval",
+                    "toolName": None,
+                    "content": json.dumps(action),
+                    "status": "running",
+                },
+            },
+            room=room_id,
+        )
+
+    def _make_approval_cb(self, room_id: str, run_id: str):
+        """Return a coroutine that blocks until the approval is resolved or times out."""
+
+        async def _cb(action: dict) -> str:
+            entry = self._pending_approvals.get(run_id)
+            if entry is None:
+                # Safety: no entry means something went wrong; deny by default.
+                return "deny"
+            fut = entry["future"]
+            try:
+                decision = await asyncio.wait_for(asyncio.shield(fut), timeout=self._approval_timeout)
+            except asyncio.TimeoutError:
+                decision = "deny"
+            await self._complete_approval(room_id, run_id, decision)
+            return decision
+
+        return _cb
+
+    async def _complete_approval(self, room_id: str, run_id: str, decision: str) -> None:
+        """Finalise the approval step: persist + emit run_step_completed."""
+        entry = self._pending_approvals.pop(run_id, None)
+        if entry is None:
+            return
+        index = entry["step_index"]
+        # Preserve the full action (tool/args/label) alongside the decision.
+        content = json.dumps({**entry["action"], "decision": decision})
+        await self._run_store.complete_step(run_id, index, "complete", content)
+        await self._sio.emit(
+            "run_step_completed",
+            {
+                "roomId": room_id,
+                "runId": run_id,
+                "stepIndex": index,
+                "status": "complete",
+                "content": content,
+            },
+            room=room_id,
+        )
+
+    async def resolve_approval(self, room_id: str, run_id: str, decision: str) -> None:
+        """Resolve a pending approval future. Idempotent; ignored for unknown/done runs."""
+        if decision not in ("approve", "deny"):
+            return
+        entry = self._pending_approvals.get(run_id)
+        if entry is None or entry["future"].done():
+            return
+        entry["future"].set_result(decision)
 
     async def _project_run_event(self, room_id: str, run_id: str, ev) -> None:
         from app.runs import RunStep

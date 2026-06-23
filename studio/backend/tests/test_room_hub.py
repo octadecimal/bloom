@@ -461,3 +461,138 @@ async def test_skill_run_error_still_completes(mongo_db):
     assert persisted.status == "error", (
         f"expected persisted status='error', got {persisted.status}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Approval gate tests (Task 6)
+# ---------------------------------------------------------------------------
+
+import json as _json
+
+from app.turn_runner import ApprovalRequired
+
+
+class _ApprovalRunner:
+    """Yields a delete tool_call, an ApprovalRequired (index=1), then finishes
+    after awaiting on_approval."""
+
+    def __init__(self):
+        self.decision = None
+
+    async def run(self, *, messages, model, skill, args, ctx, run_id=None, on_approval=None):
+        action = {"tool": "delete_asset", "args": {"asset_id": "a1"}, "label": "Delete 'knight'."}
+        yield StepStarted(0, "tool_call", "delete_asset")
+        yield StepCompleted(0, "complete", "{'asset_id': 'a1'}", "delete_asset")
+        # index=1: runner reserved slot 1 for the approval step
+        yield ApprovalRequired(action, 1)
+        decision = await on_approval(action)
+        self.decision = decision
+        yield StepStarted(2, "final")
+        yield StepCompleted(2, "complete", f"decision={decision}")
+        yield RunFinished("completed")
+
+
+class FakeSkillsWithManageAssets(FakeSkills):
+    """Extends FakeSkills to also serve manage-assets."""
+
+    def __init__(self):
+        super().__init__()
+        from types import SimpleNamespace
+        self._manage_spec = SimpleNamespace(
+            name="manage-assets",
+            body="manage",
+            tools=["list_assets", "delete_asset"],
+        )
+
+    def get(self, name):
+        if name == "manage-assets":
+            return self._manage_spec
+        return super().get(name)
+
+
+async def _wait(pred, timeout=2):
+    """Poll pred() every 10 ms until it returns truthy or timeout is reached."""
+    import asyncio as _asyncio
+    deadline = _asyncio.get_event_loop().time() + timeout
+    while not pred():
+        if _asyncio.get_event_loop().time() >= deadline:
+            raise TimeoutError("_wait timed out")
+        await _asyncio.sleep(0.01)
+
+
+def _build_approval_hub(mongo_db, runner, approval_timeout=None):
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()
+    run_store = RunStore(mongo_db)
+    skills = FakeSkillsWithManageAssets()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=runner, skills=skills)
+    if approval_timeout is not None:
+        hub._approval_timeout = approval_timeout
+    return hub
+
+
+@pytest.mark.asyncio
+async def test_skill_run_emits_approval_step_and_resolves_approve(mongo_db):
+    runner = _ApprovalRunner()
+    hub = _build_approval_hub(mongo_db, runner)
+    sio = hub._sio
+
+    # handle_skill_run spawns a background drain task; do NOT await for completion here
+    await hub.handle_skill_run("r1", "Alice", "manage-assets", {"target": "knight"})
+
+    # Wait until the approval run_step_started event appears
+    await asyncio.wait_for(
+        _wait(lambda: any(
+            e == "run_step_started" and d.get("step", {}).get("type") == "approval"
+            for e, d, _ in sio.events
+        )),
+        timeout=2,
+    )
+
+    # Extract runId from run_started event
+    run_id = next(d["run"]["id"] for e, d, _ in sio.events if e == "run_started")
+
+    # Resolve approval
+    await hub.resolve_approval("r1", run_id, "approve")
+
+    # Wait for run_completed
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+    # Assert run completed successfully
+    completed_events = [(e, d) for e, d, _ in sio.events if e == "run_completed"]
+    assert completed_events and completed_events[-1][1]["status"] == "completed"
+
+    # Assert approval step had index=1
+    approval_started = [
+        d for e, d, _ in sio.events
+        if e == "run_step_started" and d.get("step", {}).get("type") == "approval"
+    ]
+    assert approval_started, "approval run_step_started must be emitted"
+    assert approval_started[0]["step"]["index"] == 1
+
+    # Assert run_step_completed at stepIndex=1 contains decision and label
+    approval_completed = [
+        d for e, d, _ in sio.events
+        if e == "run_step_completed" and d.get("stepIndex") == 1
+    ]
+    assert approval_completed, "run_step_completed for approval step must be emitted"
+    content = _json.loads(approval_completed[0]["content"])
+    assert content.get("decision") == "approve"
+    assert "knight" in _json.dumps(content)  # label preserved
+
+
+@pytest.mark.asyncio
+async def test_approval_timeout_denies(mongo_db):
+    runner = _ApprovalRunner()
+    hub = _build_approval_hub(mongo_db, runner, approval_timeout=0.1)
+    sio = hub._sio
+
+    # Fire the skill run; the timeout will auto-deny without resolve_approval
+    await hub.handle_skill_run("r1", "Alice", "manage-assets", {"target": "knight"})
+
+    # Wait for run_completed (timeout path must drive the run to completion)
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=3)
+
+    assert runner.decision == "deny"
