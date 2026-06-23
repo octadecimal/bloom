@@ -24,3 +24,9 @@ async def test_append_step_token_and_complete(store):
     done = await store.complete_run(run.id, "completed")
     assert done.status == "completed" and done.completed_at is not None
     assert done.steps[0].content == "Hello" and done.steps[0].status == "complete"
+
+
+def test_run_step_accepts_approval_type():
+    from app.runs import RunStep
+    step = RunStep(index=2, type="approval", content="{}", status="running")
+    assert step.type == "approval"
