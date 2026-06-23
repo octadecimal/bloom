@@ -8,25 +8,12 @@ function initialValue(a: ISkillArg): string | boolean {
   return a.type === 'boolean' ? false : '';
 }
 
-export function SkillForm({
-  skill,
-  onSubmit,
-  onCancel,
-}: {
-  skill: ISkill;
-  onSubmit: (args: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
-  const [values, setValues] = useState<Record<string, string | boolean>>(
-    () => Object.fromEntries(skill.args.map((a) => [a.name, initialValue(a)])),
-  );
+export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubmit: (args: Record<string, unknown>) => void; onCancel: () => void }) {
+  const [values, setValues] = useState<Record<string, string | boolean>>(() => Object.fromEntries(skill.args.map((a) => [a.name, initialValue(a)])));
 
-  const missingRequired = skill.args.some(
-    (a) => a.required && (values[a.name] === '' || values[a.name] === undefined),
-  );
+  const missingRequired = skill.args.some((a) => a.required && (values[a.name] === '' || values[a.name] === undefined));
 
-  const set = (name: string, v: string | boolean) =>
-    setValues((prev) => ({ ...prev, [name]: v }));
+  const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
 
   const submit = () => {
     if (missingRequired) return;

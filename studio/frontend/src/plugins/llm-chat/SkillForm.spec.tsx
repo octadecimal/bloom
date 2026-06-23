@@ -15,17 +15,13 @@ const skill: ISkill = {
 const numberSkill: ISkill = {
   name: 'count-things',
   description: 'counts',
-  args: [
-    { name: 'count', type: 'number', required: false, default: 1 },
-  ],
+  args: [{ name: 'count', type: 'number', required: false, default: 1 }],
 };
 
 const booleanSkill: ISkill = {
   name: 'detailed-report',
   description: 'report',
-  args: [
-    { name: 'detailed', type: 'boolean', required: false, default: false },
-  ],
+  args: [{ name: 'detailed', type: 'boolean', required: false, default: false }],
 };
 
 describe('SkillForm', () => {

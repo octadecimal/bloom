@@ -137,9 +137,7 @@ describe('ChatRoomPane skill autocomplete', () => {
   });
 
   it('opens a form when an autocomplete option is clicked and runs on submit', () => {
-    chatSlice().skills.set([
-      { name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] },
-    ]);
+    chatSlice().skills.set([{ name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] }]);
     render(<ChatRoomPane />);
     fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/generate-sprite' } });
     fireEvent.click(screen.getByTestId('skill-option-generate-sprite'));
@@ -153,9 +151,7 @@ describe('ChatRoomPane skill autocomplete', () => {
   });
 
   it('cancelling the form clears the composer and closes the form', () => {
-    chatSlice().skills.set([
-      { name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] },
-    ]);
+    chatSlice().skills.set([{ name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] }]);
     render(<ChatRoomPane />);
     fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/generate-sprite' } });
     fireEvent.click(screen.getByTestId('skill-option-generate-sprite'));

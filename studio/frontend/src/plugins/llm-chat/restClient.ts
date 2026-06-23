@@ -53,7 +53,10 @@ export async function saveSkill(payload: ISkillFull): Promise<ISkillFull> {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const detail = await res.json().then((b) => b.detail).catch(() => null);
+    const detail = await res
+      .json()
+      .then((b) => b.detail)
+      .catch(() => null);
     throw new Error(detail ?? `request failed: ${res.status}`);
   }
   return (await res.json()) as ISkillFull;

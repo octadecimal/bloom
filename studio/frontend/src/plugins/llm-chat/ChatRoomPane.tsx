@@ -243,15 +243,14 @@ export function ChatRoomPane() {
             setDraft('');
             setTyping(false);
           }}
-          onCancel={() => { setFormSkillName(null); setDraft(''); setTyping(false); }}
+          onCancel={() => {
+            setFormSkillName(null);
+            setDraft('');
+            setTyping(false);
+          }}
         />
       ) : (
-        slashPrefix !== null && (
-          <SkillAutocomplete
-            prefix={slashPrefix}
-            onPick={(name) => setFormSkillName(name)}
-          />
-        )
+        slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} onPick={(name) => setFormSkillName(name)} />
       )}
       <div className="flex gap-2">
         <Input
