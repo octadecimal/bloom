@@ -12,18 +12,29 @@ class ToolContext:
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
-    async def generate_asset(description: str, style: str = "") -> str:
+    async def generate_asset(
+        description: str,
+        style: str = "",
+        size: str = "512x512",
+        transparent: bool = True,
+    ) -> str:
         prompt = description if not style else f"{description}, {style} style"
+        width, height = (int(x) for x in size.lower().split("x", 1))
+        workflow = "schnell-transparent" if transparent else "schnell-opaque"
         asset = await ctx.asset_store.create_asset(
-            ctx.game_id, description[:40] or "sprite", prompt, 512, 512, "schnell-transparent"
+            ctx.game_id, description[:40] or "asset", prompt, width, height, workflow
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
-        return f"Generated sprite '{asset.name}' (asset {asset.id}) and added it to the Asset Board."
+        return f"Generated '{asset.name}' (asset {asset.id}) and added it to the Asset Board."
 
     return StructuredTool.from_function(
         coroutine=generate_asset,
         name="generate_asset",
-        description="Generate a game sprite image from a text description and add it to the Asset Board.",
+        description=(
+            "Generate a game image from a text description and add it to the Asset Board. "
+            "size is 'WIDTHxHEIGHT' (default 512x512); set transparent=false for an opaque "
+            "background/scene."
+        ),
     )
 
 
