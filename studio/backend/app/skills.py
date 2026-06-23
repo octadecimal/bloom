@@ -34,6 +34,21 @@ _COERCE = {
 }
 
 
+def invocation_text(spec: "SkillSpec", text: str, args: dict) -> str:
+    """Build the user-facing message that conveys a skill invocation to the agent.
+
+    Prose (the user's typed description) wins; otherwise render the structured
+    args from the form; otherwise just the skill name.
+    """
+    prose = (text or "").strip()
+    if prose:
+        return prose
+    if args:
+        rendered = ", ".join(f'{k}="{v}"' for k, v in args.items())
+        return f"/{spec.name} {rendered}"
+    return f"/{spec.name}"
+
+
 class SkillRegistry:
     def __init__(self, skills_dir: Path, known_tools: set[str]):
         self._dir = Path(skills_dir)
@@ -68,13 +83,13 @@ class SkillRegistry:
             for s in self._skills.values()
         ]
 
-    def validate_args(self, spec: SkillSpec, args: dict) -> dict:
+    def validate_args(self, spec: SkillSpec, args: dict, *, enforce_required: bool = True) -> dict:
         out: dict = {}
         for a in spec.args:
             if a.name not in args or args[a.name] in (None, ""):
                 if a.default is not None:
                     out[a.name] = a.default
-                elif a.required:
+                elif a.required and enforce_required:
                     raise SkillError(f"missing required arg '{a.name}'")
                 continue
             try:

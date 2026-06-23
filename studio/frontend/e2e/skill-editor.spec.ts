@@ -62,7 +62,10 @@ test.describe('generate-background via form', () => {
 
     // The autocomplete dropdown must appear and contain the generate-background option.
     await expect(page.getByTestId('skill-autocomplete')).toBeVisible({ timeout: 5_000 });
-    await page.getByTestId('skill-option-generate-background').click();
+    // Tab completes the highlighted name inline ("/generate-background "); a bare Enter
+    // (no prose) then opens the typed form.
+    await page.getByTestId('chat-composer').press('Tab');
+    await page.getByTestId('chat-composer').press('Enter');
 
     // The SkillForm replaces autocomplete — fill the required `description` field.
     await expect(page.getByTestId('skill-form')).toBeVisible({ timeout: 5_000 });

@@ -42,8 +42,8 @@ test.describe.serial('manage-assets approval gate', () => {
     const card = page.getByTestId(`asset-card-${DOOMED_ID}`);
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    await page.getByTestId('chat-composer').fill(`/manage-assets target="${DOOMED_ID}"`);
-    await page.getByTestId('chat-send').click();
+    await page.getByTestId('chat-composer').fill(`/manage-assets ${DOOMED_ID}`);
+    await page.getByTestId('chat-composer').press('Enter');
 
     const approval = page.getByTestId('approval-card');
     await expect(approval).toBeVisible({ timeout: 15_000 });
@@ -61,8 +61,8 @@ test.describe.serial('manage-assets approval gate', () => {
     const card = page.getByTestId(`asset-card-${DOOMED_ID}`);
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    await page.getByTestId('chat-composer').fill(`/manage-assets target="${DOOMED_ID}"`);
-    await page.getByTestId('chat-send').click();
+    await page.getByTestId('chat-composer').fill(`/manage-assets ${DOOMED_ID}`);
+    await page.getByTestId('chat-composer').press('Enter');
 
     const approval = page.getByTestId('approval-card');
     await expect(approval).toBeVisible({ timeout: 15_000 });

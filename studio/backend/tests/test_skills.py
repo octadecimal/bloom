@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.skills import SkillRegistry, SkillError
+from app.skills import SkillRegistry, SkillError, SkillSpec, SkillArg, invocation_text
 
 
 def write(dir: Path, name: str, text: str) -> None:
@@ -147,6 +147,60 @@ def test_write_skill_rejects_bad_slug(tmp_path):
 def test_known_tools(tmp_path):
     reg = SkillRegistry(tmp_path, known_tools={"generate_asset"})
     assert reg.known_tools() == ["generate_asset"]
+
+
+# ---------------------------------------------------------------------------
+# invocation_text tests
+# ---------------------------------------------------------------------------
+
+
+def _spec():
+    return SkillSpec(name="generate-sprite", description="d", args=[], tools=[], body="b")
+
+
+def test_invocation_text_prefers_prose():
+    assert invocation_text(_spec(), "a knight in armor", {}) == "a knight in armor"
+
+
+def test_invocation_text_strips_prose():
+    assert invocation_text(_spec(), "  a knight  ", {"style": "pixel"}) == "a knight"
+
+
+def test_invocation_text_renders_args_when_no_prose():
+    out = invocation_text(_spec(), "", {"description": "a knight", "style": "pixel"})
+    assert out == '/generate-sprite description="a knight", style="pixel"'
+
+
+def test_invocation_text_bare_name_when_empty():
+    assert invocation_text(_spec(), "", {}) == "/generate-sprite"
+
+
+# ---------------------------------------------------------------------------
+# validate_args with enforce_required tests
+# ---------------------------------------------------------------------------
+
+
+def _reg():
+    return SkillRegistry(skills_dir=".", known_tools=set())
+
+
+def _required_spec():
+    return SkillSpec(
+        name="generate-sprite",
+        description="d",
+        args=[SkillArg(name="description", type="string", required=True)],
+        tools=[],
+        body="b",
+    )
+
+
+def test_validate_args_enforces_required_by_default():
+    with pytest.raises(SkillError):
+        _reg().validate_args(_required_spec(), {})
+
+
+def test_validate_args_skips_required_when_disabled():
+    assert _reg().validate_args(_required_spec(), {}, enforce_required=False) == {}
 
 
 def test_manage_assets_skill_loads_with_asset_tools():

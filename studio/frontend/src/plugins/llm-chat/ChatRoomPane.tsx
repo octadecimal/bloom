@@ -8,34 +8,7 @@ import { sendPrompt, setTyping, runSkill } from './actions';
 import { bumpRenderCount } from '../../app/renderCount';
 import { RunTimeline } from './RunTimeline';
 import { SkillForm } from './SkillForm';
-
-// ---------------------------------------------------------------------------
-// Pure helper — exported for unit tests
-// ---------------------------------------------------------------------------
-
-/**
- * Parse a slash command from the composer draft.
- * "/generate-sprite description="a knight" style=pixel"
- *   → { skillName: 'generate-sprite', args: { description: 'a knight', style: 'pixel' } }
- * "hello world" → null
- */
-export function parseSlashCommand(text: string): { skillName: string; args: Record<string, string> } | null {
-  const slashMatch = text.match(/^\/(\S+)\s*(.*)$/);
-  if (!slashMatch) return null;
-
-  const skillName = slashMatch[1];
-  const rest = slashMatch[2] ?? '';
-  const args: Record<string, string> = {};
-
-  const argRe = /(\w+)=(?:"([^"]*)"|(\S+))/g;
-  let m: RegExpExecArray | null;
-  while ((m = argRe.exec(rest)) !== null) {
-    // group 2 = quoted value, group 3 = bare value
-    args[m[1]] = m[2] !== undefined ? m[2] : m[3];
-  }
-
-  return { skillName, args };
-}
+import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './slashParse';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -153,23 +126,23 @@ function AiStatusLine() {
 }
 
 /**
- * Skill autocomplete popup — isolated sub-component so it subscribes to the
- * `skills` leaf independently. This means a `skills` change re-renders only
- * this component, not `ChatRoomPane`, preserving the render-count discipline.
+ * Skill autocomplete popup — presentational, receives matches + highlight from parent.
+ * Parent computes matches only while actively selecting, preserving render-count discipline.
  */
-function SkillAutocomplete({ prefix, onPick }: { prefix: string; onPick: (name: string) => void }) {
-  const s = llmChatHooks.usePluginState();
-  const skills = s.skills.get();
-  const matches = skills.filter((sk) => sk.name.startsWith(prefix));
+function SkillAutocomplete({ matches, highlight, onPick }: { matches: ISkill[]; highlight: number; onPick: (name: string) => void }) {
   if (matches.length === 0) return null;
   return (
     <ul data-testid="skill-autocomplete" className="m-0 list-none rounded-md border bg-surface p-1 text-sm shadow-md">
-      {matches.map((sk) => (
+      {matches.map((sk, i) => (
         <li
           key={sk.name}
           data-testid={`skill-option-${sk.name}`}
-          className="cursor-pointer rounded px-2 py-1 text-foreground hover:bg-raised"
-          onClick={() => onPick(sk.name)}
+          data-active={i === highlight ? 'true' : 'false'}
+          className={`cursor-pointer rounded px-2 py-1 text-foreground ${i === highlight ? 'bg-raised' : 'hover:bg-raised'}`}
+          onMouseDown={(e) => {
+            e.preventDefault(); // keep composer focus
+            onPick(sk.name);
+          }}
         >
           <span className="font-semibold text-accent-text">/{sk.name}</span>
           {sk.description ? <span className="ml-2 text-muted-foreground">{sk.description}</span> : null}
@@ -186,6 +159,8 @@ function SkillAutocomplete({ prefix, onPick }: { prefix: string; onPick: (name: 
 export function ChatRoomPane() {
   const s = llmChatHooks.usePluginState();
   const [draft, setDraft] = useState('');
+  const [highlight, setHighlight] = useState(0);
+  const [popupDismissed, setPopupDismissed] = useState(false);
   const [formSkillName, setFormSkillName] = useState<string | null>(null);
   // Reading `skills` here intentionally subscribes ChatRoomPane to the skills
   // leaf ONLY while a form is open (guarded by `formSkillName`); the no-form
@@ -209,19 +184,65 @@ export function ChatRoomPane() {
 
   const submit = () => {
     if (draft.trim()) {
-      const parsed = parseSlashCommand(draft.trim());
-      if (parsed) {
-        runSkill(parsed.skillName, parsed.args);
-      } else {
-        sendPrompt(draft.trim());
-      }
+      sendPrompt(draft.trim());
       setDraft('');
       setTyping(false);
     }
   };
 
-  // Derive autocomplete prefix: only non-empty when draft starts with "/"
-  const slashPrefix = draft.startsWith('/') ? draft.slice(1).split(' ')[0] : null;
+  // Compute slash context + matches WITHOUT subscribing on the hot path.
+  // Only read the skills leaf while actively selecting — preserves render-count discipline.
+  const slash = splitSlashDraft(draft);
+  const selecting = slash !== null && !slash.hasSpace && !popupDismissed;
+  const matches = selecting ? (s.skills.get() as ISkill[]).filter((sk) => sk.name.startsWith(slash!.skillName)) : [];
+  const popupOpen = selecting && matches.length > 0;
+
+  const accept = (name: string) => {
+    setDraft(`/${name} `);
+    setHighlight(0);
+    // Re-arm the popup: if the user backspaces the trailing space the name is
+    // being edited again, so a prior Esc dismissal should not linger.
+    setPopupDismissed(false);
+  };
+
+  const runProse = (name: string, prose: string) => {
+    runSkill(name, {}, prose);
+    setDraft('');
+    setTyping(false);
+  };
+
+  const onComposerKeyDown = (e: React.KeyboardEvent) => {
+    if (popupOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlight((h) => moveHighlight(h, 1, matches.length));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlight((h) => moveHighlight(h, -1, matches.length));
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPopupDismissed(true);
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        accept(matches[clampHighlight(highlight, matches.length)].name);
+        return;
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const decision = decideEnter(draft, matches, highlight);
+      if (decision.kind === 'accept') accept(decision.name);
+      else if (decision.kind === 'run') runProse(decision.name, decision.prose);
+      else if (decision.kind === 'form') setFormSkillName(decision.name);
+      else submit(); // 'send'
+    }
+  };
 
   return (
     <div data-testid="chat-room-pane" className="flex h-full flex-col gap-2 bg-surface p-2.5">
@@ -238,7 +259,7 @@ export function ChatRoomPane() {
         <SkillForm
           skill={formSkill}
           onSubmit={(args) => {
-            runSkill(formSkill.name, args);
+            runSkill(formSkill.name, args, '');
             setFormSkillName(null);
             setDraft('');
             setTyping(false);
@@ -250,7 +271,7 @@ export function ChatRoomPane() {
           }}
         />
       ) : (
-        slashPrefix !== null && <SkillAutocomplete prefix={slashPrefix} onPick={(name) => setFormSkillName(name)} />
+        popupOpen && <SkillAutocomplete matches={matches} highlight={clampHighlight(highlight, matches.length)} onPick={accept} />
       )}
       <div className="flex gap-2">
         <Input
@@ -261,11 +282,13 @@ export function ChatRoomPane() {
           onChange={(e) => {
             setDraft(e.target.value);
             setTyping(e.target.value.length > 0);
+            setPopupDismissed(false);
+            setHighlight(0);
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit();
-          }}
+          onKeyDown={onComposerKeyDown}
         />
+        {/* Send sends a plain prompt. Slash commands run via Enter (decideEnter);
+            clicking Send on a "/…" draft intentionally sends it as literal text. */}
         <Button data-testid="chat-send" size="icon" aria-label="Send" onClick={submit}>
           <ArrowUp className="h-4 w-4" />
         </Button>

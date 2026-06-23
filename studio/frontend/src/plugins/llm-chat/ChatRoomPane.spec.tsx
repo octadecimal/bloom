@@ -4,7 +4,7 @@ import { rootStore } from '../../state/rootStore';
 import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID, type IMessage } from './state';
 import { appendToken } from './reducers';
 import * as actions from './actions';
-import { ChatRoomPane, parseSlashCommand } from './ChatRoomPane';
+import { ChatRoomPane } from './ChatRoomPane';
 
 vi.spyOn(actions, 'sendPrompt').mockReturnValue(undefined);
 vi.spyOn(actions, 'setTyping').mockReturnValue(undefined);
@@ -113,50 +113,89 @@ describe('ChatRoomPane', () => {
   });
 });
 
-describe('parseSlashCommand', () => {
-  it('extracts name + key=value args', () => {
-    expect(parseSlashCommand('/generate-sprite description="a knight" style=pixel')).toEqual({
-      skillName: 'generate-sprite',
-      args: { description: 'a knight', style: 'pixel' },
-    });
-    expect(parseSlashCommand('hello world')).toBeNull();
-  });
+describe('ChatRoomPane skill autocomplete (keyboard)', () => {
+  const seedSkills = () =>
+    chatSlice().skills.set([
+      { name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] },
+      { name: 'generate-background', description: 'make a bg', args: [] },
+    ]);
 
-  it('handles a slash command with no args', () => {
-    expect(parseSlashCommand('/foo')).toEqual({ skillName: 'foo', args: {} });
-  });
-});
-
-describe('ChatRoomPane skill autocomplete', () => {
-  it('typing "/" shows skill autocomplete filtered by prefix', () => {
-    chatSlice().skills.set([{ name: 'generate-sprite', description: 'd', args: [] }]);
+  it('typing "/" shows the autocomplete filtered by prefix with the first item active', () => {
+    seedSkills();
     render(<ChatRoomPane />);
     fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/gen' } });
     expect(screen.getByTestId('skill-autocomplete')).toBeInTheDocument();
-    expect(screen.getByTestId('skill-option-generate-sprite')).toBeInTheDocument();
+    expect(screen.getByTestId('skill-option-generate-sprite')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('skill-option-generate-background')).toHaveAttribute('data-active', 'false');
   });
 
-  it('opens a form when an autocomplete option is clicked and runs on submit', () => {
-    chatSlice().skills.set([{ name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] }]);
+  it('ArrowDown moves the active highlight', () => {
+    seedSkills();
     render(<ChatRoomPane />);
-    fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/generate-sprite' } });
-    fireEvent.click(screen.getByTestId('skill-option-generate-sprite'));
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/gen' } });
+    fireEvent.keyDown(composer, { key: 'ArrowDown' });
+    expect(screen.getByTestId('skill-option-generate-background')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('Tab completes the active skill name inline and hides the popup', () => {
+    seedSkills();
+    render(<ChatRoomPane />);
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/gen' } });
+    fireEvent.keyDown(composer, { key: 'Tab' });
+    expect(composer).toHaveValue('/generate-sprite ');
+    expect(screen.queryByTestId('skill-autocomplete')).not.toBeInTheDocument();
+  });
+
+  it('typing prose then Enter runs the skill with the prose as text', () => {
+    seedSkills();
+    render(<ChatRoomPane />);
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/generate-sprite a knight' } });
+    fireEvent.keyDown(composer, { key: 'Enter' });
+    expect(actions.runSkill).toHaveBeenCalledWith('generate-sprite', {}, 'a knight');
+    expect(composer).toHaveValue('');
+  });
+
+  it('bare Enter after completion (no prose) opens the form', () => {
+    seedSkills();
+    render(<ChatRoomPane />);
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/generate-sprite ' } });
+    fireEvent.keyDown(composer, { key: 'Enter' });
     expect(screen.getByTestId('skill-form')).toBeInTheDocument();
+  });
+
+  it('Escape dismisses the popup', () => {
+    seedSkills();
+    render(<ChatRoomPane />);
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/gen' } });
+    fireEvent.keyDown(composer, { key: 'Escape' });
+    expect(screen.queryByTestId('skill-autocomplete')).not.toBeInTheDocument();
+  });
+
+  it('clicking an option completes it inline (does not open the form)', () => {
+    seedSkills();
+    render(<ChatRoomPane />);
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/gen' } });
+    fireEvent.mouseDown(screen.getByTestId('skill-option-generate-background'));
+    expect(composer).toHaveValue('/generate-background ');
+    expect(screen.queryByTestId('skill-form')).not.toBeInTheDocument();
+  });
+
+  it('the form path still runs the skill with structured args on submit', () => {
+    seedSkills();
+    render(<ChatRoomPane />);
+    const composer = screen.getByTestId('chat-composer');
+    fireEvent.change(composer, { target: { value: '/generate-sprite ' } });
+    fireEvent.keyDown(composer, { key: 'Enter' });
     fireEvent.change(screen.getByTestId('skill-form-field-description'), { target: { value: 'a knight' } });
     fireEvent.click(screen.getByTestId('skill-form-submit'));
-    expect(actions.runSkill).toHaveBeenCalledWith('generate-sprite', { description: 'a knight' });
-    // After submit: form is gone and composer is cleared
+    expect(actions.runSkill).toHaveBeenCalledWith('generate-sprite', { description: 'a knight' }, '');
     expect(screen.queryByTestId('skill-form')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-composer')).toHaveValue('');
-  });
-
-  it('cancelling the form clears the composer and closes the form', () => {
-    chatSlice().skills.set([{ name: 'generate-sprite', description: 'make a sprite', args: [{ name: 'description', type: 'string', required: true }] }]);
-    render(<ChatRoomPane />);
-    fireEvent.change(screen.getByTestId('chat-composer'), { target: { value: '/generate-sprite' } });
-    fireEvent.click(screen.getByTestId('skill-option-generate-sprite'));
-    fireEvent.click(screen.getByTestId('skill-form-cancel'));
-    expect(screen.queryByTestId('skill-form')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-composer')).toHaveValue('');
+    expect(composer).toHaveValue('');
   });
 });

@@ -33,7 +33,7 @@ def register_socket_handlers(sio, hub, presence):
     async def run_skill(sid, data):
         session = await sio.get_session(sid)
         await hub.handle_skill_run(
-            data["roomId"], session["displayName"], data["skillName"], data.get("args", {})
+            data["roomId"], session["displayName"], data["skillName"], data.get("args", {}), data.get("text", "")
         )
 
     @sio.on("resolve_approval")
