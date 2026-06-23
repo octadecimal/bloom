@@ -200,6 +200,8 @@ export function ChatRoomPane() {
   const accept = (name: string) => {
     setDraft(`/${name} `);
     setHighlight(0);
+    // Re-arm the popup: if the user backspaces the trailing space the name is
+    // being edited again, so a prior Esc dismissal should not linger.
     setPopupDismissed(false);
   };
 
@@ -285,6 +287,8 @@ export function ChatRoomPane() {
           }}
           onKeyDown={onComposerKeyDown}
         />
+        {/* Send sends a plain prompt. Slash commands run via Enter (decideEnter);
+            clicking Send on a "/…" draft intentionally sends it as literal text. */}
         <Button data-testid="chat-send" size="icon" aria-label="Send" onClick={submit}>
           <ArrowUp className="h-4 w-4" />
         </Button>
