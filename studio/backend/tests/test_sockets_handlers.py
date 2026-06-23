@@ -81,3 +81,45 @@ async def test_resolve_approval_handler_forwards_to_hub():
     await handler("sid1", {"roomId": "r1", "runId": "run1", "decision": "approve"})
 
     assert hub.resolve_approval_calls == [("r1", "run1", "approve")]
+
+
+@pytest.mark.asyncio
+async def test_run_skill_forwards_text():
+    """The 'text' field in the run_skill payload must be forwarded to handle_skill_run."""
+    recorded = {}
+
+    class _HubSpy(_Hub):
+        async def handle_skill_run(self, room_id, author, skill_name, args, text=""):
+            recorded["call"] = (room_id, author, skill_name, args, text)
+
+    sio = _Sio()
+    hub = _HubSpy()
+    presence = _FakePresence()
+
+    register_socket_handlers(sio, hub, presence)
+
+    handler = sio._handlers["run_skill"]
+    await handler("sid1", {"roomId": "r1", "skillName": "generate-sprite", "args": {}, "text": "a knight"})
+
+    assert recorded["call"] == ("r1", "Alice", "generate-sprite", {}, "a knight")
+
+
+@pytest.mark.asyncio
+async def test_run_skill_text_defaults_to_empty():
+    """When 'text' is absent from the payload, handle_skill_run receives text=''."""
+    recorded = {}
+
+    class _HubSpy(_Hub):
+        async def handle_skill_run(self, room_id, author, skill_name, args, text=""):
+            recorded["call"] = (room_id, author, skill_name, args, text)
+
+    sio = _Sio()
+    hub = _HubSpy()
+    presence = _FakePresence()
+
+    register_socket_handlers(sio, hub, presence)
+
+    handler = sio._handlers["run_skill"]
+    await handler("sid1", {"roomId": "r1", "skillName": "generate-sprite", "args": {}})
+
+    assert recorded["call"] == ("r1", "Alice", "generate-sprite", {}, "")

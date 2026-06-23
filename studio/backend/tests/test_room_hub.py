@@ -311,7 +311,7 @@ class FakeSkills:
     def get(self, name):
         return self._spec if name == "generate-sprite" else None
 
-    def validate_args(self, spec, args):
+    def validate_args(self, spec, args, *, enforce_required=True):
         return args
 
 
@@ -461,6 +461,26 @@ async def test_skill_run_error_still_completes(mongo_db):
     assert persisted.status == "error", (
         f"expected persisted status='error', got {persisted.status}"
     )
+
+
+@pytest.mark.asyncio
+async def test_handle_skill_run_persists_prose_invocation_message(mongo_db):
+    """Prose text supplied to handle_skill_run must be persisted as a user message
+    and emitted via message_created before the skill run begins."""
+    from app.runs import RunStore
+    sio = FakeSio()
+    store = SkillFakeStore()
+    chat = GatedChatService()
+    run_store = RunStore(mongo_db)
+    skills = FakeSkills()
+    runner = StubRunner()
+    hub = RoomHub(sio, store, chat, run_store=run_store, turn_runner=runner, skills=skills)
+
+    await hub.handle_skill_run("r1", "alice", "generate-sprite", {}, text="a knight in armor")
+
+    user_msgs = [m for m in store.messages if m.role == "user"]
+    assert user_msgs and user_msgs[-1].content == "a knight in armor"
+    assert "message_created" in sio.names()
 
 
 # ---------------------------------------------------------------------------

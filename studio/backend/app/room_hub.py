@@ -90,16 +90,27 @@ class RoomHub:
 
         asyncio.create_task(self._drain(room_id))
 
-    async def handle_skill_run(self, room_id: str, author: str, skill_name: str, args: dict) -> None:
+    async def handle_skill_run(self, room_id: str, author: str, skill_name: str, args: dict, text: str = "") -> None:
+        from app.skills import invocation_text
+
         spec = self._skills.get(skill_name)
         if spec is None:
             await self._sio.emit("error", {"roomId": room_id, "message": f"unknown skill {skill_name}"}, room=room_id)
             return
         try:
-            clean = self._skills.validate_args(spec, args)
+            # Prose path infers required args via the agent, so don't enforce them here.
+            clean = self._skills.validate_args(spec, args, enforce_required=not text.strip())
         except Exception as e:
             await self._sio.emit("error", {"roomId": room_id, "message": str(e)}, room=room_id)
             return
+
+        # Persist the invocation as a user message so the agent actually receives
+        # the user's intent (history is the agent's only context) and the chat
+        # transcript shows what was asked.
+        content = invocation_text(spec, text, clean)
+        user_msg = await self._store.add_message(room_id, author, "user", content, "complete")
+        await self._sio.emit("message_created", {"message": message_wire(user_msg)}, room=room_id)
+
         async with self._lock(room_id):
             self._queues.setdefault(room_id, []).append(
                 {"kind": "skill", "author": author, "skillName": skill_name, "args": clean}
