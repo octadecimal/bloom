@@ -103,7 +103,7 @@ def test_validate_args_rejects_out_of_enum(tmp_path):
 
 def test_repo_skills_dir_loads_background():
     from app.config import get_settings
-    reg = SkillRegistry(Path(get_settings().skills_dir), known_tools={"generate_asset"})
+    reg = SkillRegistry(Path(get_settings().skills_dir), known_tools={"generate_asset", "list_assets", "delete_asset"})
     reg.load()
     names = {s["name"] for s in reg.list_skills()}
     assert {"generate-sprite", "generate-background"} <= names
@@ -147,3 +147,13 @@ def test_write_skill_rejects_bad_slug(tmp_path):
 def test_known_tools(tmp_path):
     reg = SkillRegistry(tmp_path, known_tools={"generate_asset"})
     assert reg.known_tools() == ["generate_asset"]
+
+
+def test_manage_assets_skill_loads_with_asset_tools():
+    from app.config import get_settings
+    reg = SkillRegistry(Path(get_settings().skills_dir), known_tools={"generate_asset", "list_assets", "delete_asset"})
+    reg.load()
+    spec = reg.get("manage-assets")
+    assert spec is not None
+    assert spec.tools == ["list_assets", "delete_asset"]
+    assert any(a.name == "target" and a.required for a in spec.args)
