@@ -158,8 +158,7 @@ export function createSocketClient(makeSocket: MakeSocket) {
     leaveRoom: (roomId: string) => emit('leave_room', { roomId }),
     sendPrompt: (roomId: string, text: string) => emit('send_prompt', { roomId, text }),
     setTyping: (roomId: string, isTyping: boolean) => emit('typing', { roomId, isTyping }),
-    runSkill: (roomId: string, skillName: string, args: Record<string, unknown>, text = '') =>
-      emit('run_skill', { roomId, skillName, args, text }),
+    runSkill: (roomId: string, skillName: string, args: Record<string, unknown>, text = '') => emit('run_skill', { roomId, skillName, args, text }),
     resolveApproval: (roomId: string, runId: string, decision: 'approve' | 'deny') => emit('resolve_approval', { roomId, runId, decision }),
   };
 }

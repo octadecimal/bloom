@@ -25,11 +25,7 @@ export function clampHighlight(current: number, count: number): number {
   return Math.min(Math.max(current, 0), count - 1);
 }
 
-export type EnterDecision =
-  | { kind: 'accept'; name: string }
-  | { kind: 'run'; name: string; prose: string }
-  | { kind: 'form'; name: string }
-  | { kind: 'send' };
+export type EnterDecision = { kind: 'accept'; name: string } | { kind: 'run'; name: string; prose: string } | { kind: 'form'; name: string } | { kind: 'send' };
 
 /** Decide what Enter does given the current draft, visible matches, and highlight. */
 export function decideEnter(draft: string, matches: { name: string }[], highlight: number): EnterDecision {

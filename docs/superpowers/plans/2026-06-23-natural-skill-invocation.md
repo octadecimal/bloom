@@ -24,6 +24,7 @@
 ## File Structure
 
 **Backend (modify):**
+
 - `studio/backend/app/skills.py` — add `invocation_text()` helper; add `enforce_required` param to `validate_args()`.
 - `studio/backend/app/room_hub.py` — `handle_skill_run` gains `text` param, persists invocation user message, relaxed validation.
 - `studio/backend/app/sockets.py` — `run_skill` reads optional `text` from payload.
@@ -32,6 +33,7 @@
 - `studio/backend/tests/test_sockets_handlers.py` — run_skill forwards `text`.
 
 **Frontend (modify):**
+
 - `studio/frontend/src/plugins/llm-chat/socketClient.ts` — `runSkill` emits optional `text`.
 - `studio/frontend/src/plugins/llm-chat/actions.ts` — `runSkill(skillName, args, text?)`.
 - `studio/frontend/src/plugins/llm-chat/slashParse.ts` — **new** pure helpers (`splitSlashDraft`, `moveHighlight`, `clampHighlight`, `decideEnter`). Replaces `parseSlashCommand`.
@@ -39,11 +41,13 @@
 - `studio/frontend/src/plugins/llm-chat/SkillForm.tsx` — autofocus the first field on mount.
 
 **Frontend tests (modify / create):**
+
 - `studio/frontend/src/plugins/llm-chat/slashParse.spec.ts` — **new** unit tests for the pure helpers.
 - `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx` — rewrite slash/autocomplete tests for the new interaction model.
 - `studio/frontend/src/plugins/llm-chat/socketClient.spec.ts` / `actions.spec.ts` — update `runSkill` expectations.
 
 **E2e (modify / create):**
+
 - `studio/frontend/e2e/skill-run.spec.ts` — rewrite `description="a knight"` to natural prose.
 - `studio/frontend/e2e/skill-autocomplete.spec.ts` — **new** keyboard-navigation suite.
 
@@ -52,12 +56,14 @@
 ## Task 1: Backend — deliver the invocation to the agent (the bug fix)
 
 **Files:**
+
 - Modify: `studio/backend/app/skills.py`
 - Modify: `studio/backend/app/room_hub.py` (`handle_skill_run`, ~lines 93-108)
 - Modify: `studio/backend/app/sockets.py` (`run_skill`, lines 32-37)
 - Test: `studio/backend/tests/test_skills.py`, `studio/backend/tests/test_room_hub.py`, `studio/backend/tests/test_sockets_handlers.py`
 
 **Interfaces:**
+
 - Produces: `invocation_text(spec: SkillSpec, text: str, args: dict) -> str` (module function in `app/skills.py`).
 - Produces: `SkillRegistry.validate_args(spec, args, *, enforce_required: bool = True) -> dict`.
 - Produces: `RoomHub.handle_skill_run(room_id: str, author: str, skill_name: str, args: dict, text: str = "") -> None`.
@@ -320,11 +326,13 @@ git commit -m "fix(skills): deliver prose/args to the agent via a persisted invo
 ## Task 2: Frontend wire — thread prose `text` through `runSkill`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/socketClient.ts:161`
 - Modify: `studio/frontend/src/plugins/llm-chat/actions.ts:126-129`
 - Test: `studio/frontend/src/plugins/llm-chat/socketClient.spec.ts:233-237`, `studio/frontend/src/plugins/llm-chat/actions.spec.ts:81-86`
 
 **Interfaces:**
+
 - Produces: `runSkill(skillName: string, args: Record<string, unknown>, text?: string): void` (actions).
 - Produces: `socketClient.runSkill(roomId, skillName, args, text?: string)` → emits `{ roomId, skillName, args, text }` (text defaults to `''`).
 - Consumes: backend Task 1 `run_skill` payload `text` field.
@@ -336,14 +344,14 @@ git commit -m "fix(skills): deliver prose/args to the agent via a persisted invo
 In `socketClient.spec.ts`, change the existing `runSkill` test (lines 233-237) to pass and expect `text`:
 
 ```ts
-  it('runSkill emits run_skill to the socket with text', () => {
-    const { sock, emitted, client } = connected();
-    client.runSkill('r1', 'generate-sprite', { description: 'knight' }, 'a knight');
-    expect(emitted).toContainEqual({
-      event: 'run_skill',
-      payload: { roomId: 'r1', skillName: 'generate-sprite', args: { description: 'knight' }, text: 'a knight' },
-    });
+it('runSkill emits run_skill to the socket with text', () => {
+  const { sock, emitted, client } = connected();
+  client.runSkill('r1', 'generate-sprite', { description: 'knight' }, 'a knight');
+  expect(emitted).toContainEqual({
+    event: 'run_skill',
+    payload: { roomId: 'r1', skillName: 'generate-sprite', args: { description: 'knight' }, text: 'a knight' },
   });
+});
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -370,12 +378,12 @@ Expected: PASS.
 In `actions.spec.ts` (lines 81-86), update the expectation to forward `text`:
 
 ```ts
-  it('runSkill forwards to the socket for the active room', () => {
-    actions.__setDeps({ socket });
-    chatSlice().activeRoomId.set('r1');
-    actions.runSkill('generate-sprite', { description: 'knight' }, 'a knight');
-    expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' }, 'a knight');
-  });
+it('runSkill forwards to the socket for the active room', () => {
+  actions.__setDeps({ socket });
+  chatSlice().activeRoomId.set('r1');
+  actions.runSkill('generate-sprite', { description: 'knight' }, 'a knight');
+  expect(socket.runSkill).toHaveBeenCalledWith('r1', 'generate-sprite', { description: 'knight' }, 'a knight');
+});
 ```
 
 > The `socket` mock object in `actions.spec.ts` types `runSkill: vi.fn()`, which
@@ -419,10 +427,12 @@ git commit -m "feat(chat): thread prose text through runSkill to the backend"
 ## Task 3: Frontend — pure slash/keyboard helpers (`slashParse.ts`)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/slashParse.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/slashParse.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `splitSlashDraft(draft: string): { skillName: string; hasSpace: boolean; prose: string } | null` — `null` when not a slash draft.
   - `moveHighlight(current: number, delta: number, count: number): number` — wraps; returns `0` when `count === 0`.
@@ -532,11 +542,7 @@ export function clampHighlight(current: number, count: number): number {
   return Math.min(Math.max(current, 0), count - 1);
 }
 
-export type EnterDecision =
-  | { kind: 'accept'; name: string }
-  | { kind: 'run'; name: string; prose: string }
-  | { kind: 'form'; name: string }
-  | { kind: 'send' };
+export type EnterDecision = { kind: 'accept'; name: string } | { kind: 'run'; name: string; prose: string } | { kind: 'form'; name: string } | { kind: 'send' };
 
 /** Decide what Enter does given the current draft, visible matches, and highlight. */
 export function decideEnter(draft: string, matches: { name: string }[], highlight: number): EnterDecision {
@@ -572,16 +578,19 @@ git commit -m "feat(chat): add pure slash-parse + keyboard-nav helpers"
 ## Task 4: Frontend — keyboard-driven autocomplete in `ChatRoomPane`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx`
 - Modify: `studio/frontend/src/plugins/llm-chat/SkillForm.tsx` (autofocus first field)
 - Test: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `splitSlashDraft`, `moveHighlight`, `clampHighlight`, `decideEnter` (Task 3); `runSkill(name, args, text)` (Task 2).
 - Produces: `SkillAutocomplete` becomes presentational — `{ matches: ISkill[]; highlight: number; onPick: (name: string) => void }`. The highlighted `<li>` carries `data-active="true"`. Existing testids preserved: `skill-autocomplete`, `skill-option-<name>`.
 - Removes: `parseSlashCommand` export (and its tests) — replaced by `slashParse.ts`.
 
 > Behavior to implement (from the spec's interaction table):
+>
 > - Popup shows only when `splitSlashDraft(draft)` is non-null AND `!hasSpace`.
 > - ↑/↓ move highlight (wrap); Tab and Enter accept the highlight → set draft to `/<name> `; Esc dismisses (clear nothing, just hide the popup for this keystroke); click = accept.
 > - With popup closed: Enter runs `decideEnter` → `run` calls `runSkill(name, {}, prose)`; `form` opens the SkillForm; `send` calls `sendPrompt`.
@@ -743,53 +752,69 @@ import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './s
 (b) Add highlight state and a popup-suppression flag near the existing `useState` calls:
 
 ```tsx
-  const [draft, setDraft] = useState('');
-  const [highlight, setHighlight] = useState(0);
-  const [popupDismissed, setPopupDismissed] = useState(false);
-  const [formSkillName, setFormSkillName] = useState<string | null>(null);
+const [draft, setDraft] = useState('');
+const [highlight, setHighlight] = useState(0);
+const [popupDismissed, setPopupDismissed] = useState(false);
+const [formSkillName, setFormSkillName] = useState<string | null>(null);
 ```
 
 (c) Compute slash context + matches WITHOUT subscribing on the hot path. Replace the old `slashPrefix` line (~224):
 
 ```tsx
-  const slash = splitSlashDraft(draft);
-  const selecting = slash !== null && !slash.hasSpace && !popupDismissed;
-  // Only read the skills leaf while actually selecting — preserves render-count discipline.
-  const matches = selecting ? (s.skills.get() as ISkill[]).filter((sk) => sk.name.startsWith(slash!.skillName)) : [];
-  const popupOpen = selecting && matches.length > 0;
+const slash = splitSlashDraft(draft);
+const selecting = slash !== null && !slash.hasSpace && !popupDismissed;
+// Only read the skills leaf while actually selecting — preserves render-count discipline.
+const matches = selecting ? (s.skills.get() as ISkill[]).filter((sk) => sk.name.startsWith(slash!.skillName)) : [];
+const popupOpen = selecting && matches.length > 0;
 ```
 
 (d) Add an accept helper and the keydown handler. Place inside the component body:
 
 ```tsx
-  const accept = (name: string) => {
-    setDraft(`/${name} `);
-    setHighlight(0);
-    setPopupDismissed(false);
-  };
+const accept = (name: string) => {
+  setDraft(`/${name} `);
+  setHighlight(0);
+  setPopupDismissed(false);
+};
 
-  const runProse = (name: string, prose: string) => {
-    runSkill(name, {}, prose);
-    setDraft('');
-    setTyping(false);
-  };
+const runProse = (name: string, prose: string) => {
+  runSkill(name, {}, prose);
+  setDraft('');
+  setTyping(false);
+};
 
-  const onComposerKeyDown = (e: React.KeyboardEvent) => {
-    if (popupOpen) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => moveHighlight(h, 1, matches.length)); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => moveHighlight(h, -1, matches.length)); return; }
-      if (e.key === 'Escape') { e.preventDefault(); setPopupDismissed(true); return; }
-      if (e.key === 'Tab') { e.preventDefault(); accept(matches[clampHighlight(highlight, matches.length)].name); return; }
-    }
-    if (e.key === 'Enter') {
+const onComposerKeyDown = (e: React.KeyboardEvent) => {
+  if (popupOpen) {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const decision = decideEnter(draft, matches, highlight);
-      if (decision.kind === 'accept') accept(decision.name);
-      else if (decision.kind === 'run') runProse(decision.name, decision.prose);
-      else if (decision.kind === 'form') setFormSkillName(decision.name);
-      else submit(); // 'send'
+      setHighlight((h) => moveHighlight(h, 1, matches.length));
+      return;
     }
-  };
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => moveHighlight(h, -1, matches.length));
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setPopupDismissed(true);
+      return;
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      accept(matches[clampHighlight(highlight, matches.length)].name);
+      return;
+    }
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const decision = decideEnter(draft, matches, highlight);
+    if (decision.kind === 'accept') accept(decision.name);
+    else if (decision.kind === 'run') runProse(decision.name, decision.prose);
+    else if (decision.kind === 'form') setFormSkillName(decision.name);
+    else submit(); // 'send'
+  }
+};
 ```
 
 > `submit()` already exists (lines 210-221). Since `decideEnter` now owns the
@@ -797,13 +822,13 @@ import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './s
 > `parseSlashCommand` branch):
 >
 > ```tsx
->   const submit = () => {
->     if (draft.trim()) {
->       sendPrompt(draft.trim());
->       setDraft('');
->       setTyping(false);
->     }
->   };
+> const submit = () => {
+>   if (draft.trim()) {
+>     sendPrompt(draft.trim());
+>     setDraft('');
+>     setTyping(false);
+>   }
+> };
 > ```
 
 (e) When the draft changes, reset the dismissed flag and clamp the highlight. Update the composer `onChange`:
@@ -822,24 +847,26 @@ import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './s
 (g) Render the popup with the new props. Replace the old conditional (~252-254):
 
 ```tsx
-      {formSkill ? (
-        <SkillForm
-          skill={formSkill}
-          onSubmit={(args) => {
-            runSkill(formSkill.name, args, '');
-            setFormSkillName(null);
-            setDraft('');
-            setTyping(false);
-          }}
-          onCancel={() => {
-            setFormSkillName(null);
-            setDraft('');
-            setTyping(false);
-          }}
-        />
-      ) : (
-        popupOpen && <SkillAutocomplete matches={matches} highlight={clampHighlight(highlight, matches.length)} onPick={accept} />
-      )}
+{
+  formSkill ? (
+    <SkillForm
+      skill={formSkill}
+      onSubmit={(args) => {
+        runSkill(formSkill.name, args, '');
+        setFormSkillName(null);
+        setDraft('');
+        setTyping(false);
+      }}
+      onCancel={() => {
+        setFormSkillName(null);
+        setDraft('');
+        setTyping(false);
+      }}
+    />
+  ) : (
+    popupOpen && <SkillAutocomplete matches={matches} highlight={clampHighlight(highlight, matches.length)} onPick={accept} />
+  );
+}
 ```
 
 > The `formSkill` lookup block above (lines 193-198) stays as-is. The Send
@@ -853,18 +880,20 @@ import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './s
 So bare-Enter "focuses the form". In `SkillForm.tsx`, mark the first field. Change the `.map` to pass an `autoFocus` for index 0:
 
 ```tsx
-      {skill.args.map((a, i) => (
-        <label key={a.name} className="flex flex-col gap-0.5">
-          {/* ...span unchanged... */}
-          {a.enum ? (
-            <select autoFocus={i === 0} /* ...rest unchanged... */ />
-          ) : a.type === 'boolean' ? (
-            <input autoFocus={i === 0} /* ...rest unchanged... */ />
-          ) : (
-            <Input autoFocus={i === 0} /* ...rest unchanged... */ />
-          )}
-        </label>
-      ))}
+{
+  skill.args.map((a, i) => (
+    <label key={a.name} className="flex flex-col gap-0.5">
+      {/* ...span unchanged... */}
+      {a.enum ? (
+        <select autoFocus={i === 0} /* ...rest unchanged... */ />
+      ) : a.type === 'boolean' ? (
+        <input autoFocus={i === 0} /* ...rest unchanged... */ />
+      ) : (
+        <Input autoFocus={i === 0} /* ...rest unchanged... */ />
+      )}
+    </label>
+  ));
+}
 ```
 
 > If `skill.args` is empty (e.g. `generate-background`), there is no field to
@@ -897,10 +926,12 @@ git commit -m "feat(chat): keyboard-driven skill autocomplete (arrows/Tab/Enter/
 ## Task 5: E2e — rewrite skill-run to prose + add keyboard autocomplete suite
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/skill-run.spec.ts`
 - Create: `studio/frontend/e2e/skill-autocomplete.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the full app behavior from Tasks 1-4. Backend on :8000 in **replay** mode; frontend on :4200.
 
 > Per AGENTS.md these are the authoritative behavioral contract. Run with the
@@ -912,9 +943,9 @@ git commit -m "feat(chat): keyboard-driven skill autocomplete (arrows/Tab/Enter/
 Replace each `'/generate-sprite description="a knight"'` fill with natural prose, and drive it via Enter to exercise the real run path:
 
 ```ts
-    // was: .fill('/generate-sprite description="a knight"'); .click chat-send
-    await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
-    await page.getByTestId('chat-composer').press('Enter');
+// was: .fill('/generate-sprite description="a knight"'); .click chat-send
+await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
+await page.getByTestId('chat-composer').press('Enter');
 ```
 
 Apply the same change to all three tests in the file (single-client, asset-board, two-clients). The assertions (`generate_asset`, `Asset Board`, asset card) are unchanged — the replay cassette still emits them.
@@ -1038,12 +1069,14 @@ Expected: all pass.
 - [ ] **Step 2: Frontend CI gates (all four)**
 
 Run (from `studio/frontend`):
+
 ```
 npx prettier --check .
 npx nx typecheck frontend
 npx nx test frontend
 npx nx build frontend
 ```
+
 Expected: all pass. Fix prettier with `npx prettier --write .` if `--check` fails, then re-commit.
 
 - [ ] **Step 3: Full e2e green against replay**
@@ -1065,6 +1098,7 @@ gh pr create --fill
 ## Self-Review
 
 **Spec coverage:**
+
 - Keyboard model (↑/↓, Tab, Enter accept, Esc, click) → Task 3 (`decideEnter`/`moveHighlight`) + Task 4 (wiring) + Task 5 (e2e). ✓
 - Popup shown only while `/word` no space → Task 3 `splitSlashDraft` + Task 4 `selecting`/`popupOpen`. ✓
 - Prose → run with agent inference → Task 1 (persist invocation, relaxed validation) + Task 2 (`text` wire) + Task 4 (`runProse`). ✓

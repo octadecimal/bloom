@@ -14,19 +14,19 @@ highlight. Worse, two latent bugs make skills feel broken:
    from only the room's prior user messages (`turn_runner.py:73`). The `args`
    parameter is accepted but never injected into the prompt, and `run_skill`
    never persists the slash text as a message. So in **live** mode,
-   `/generate-sprite description="a knight"` sends the agent *nothing* about a
+   `/generate-sprite description="a knight"` sends the agent _nothing_ about a
    knight — it asks "what's the description?" again. Replay only works because
    the cassette is hardcoded. **This is the root cause of "the sprite generator
    asks for a description even after I provided one."**
 
 2. **Picking a skill discards what you typed.** Clicking a match opens a
-   *blank* `SkillForm`; any text already in the draft is thrown away.
+   _blank_ `SkillForm`; any text already in the draft is thrown away.
 
 ## Goal
 
 Make slash-invocation natural and keyboard-driven: **type `/`, Tab to complete,
 type a description as prose, Enter to run** — and let the skill (agent) infer
-its arguments from that prose. The typed form becomes the *optional* explicit
+its arguments from that prose. The typed form becomes the _optional_ explicit
 path, used only when no prose is supplied.
 
 ## Non-goals
@@ -42,17 +42,18 @@ The autocomplete popup is shown **only while the draft matches `/word` with no
 space** — i.e. while the user is still choosing a skill. Once a space exists,
 selection is over and the popup hides; trailing text is prose.
 
-| Key      | When                                            | Behavior |
-|----------|-------------------------------------------------|----------|
-| **↑ / ↓**| popup open                                      | Move the highlighted skill; wraps at both ends. |
-| **Tab**  | popup open                                       | Auto-complete: draft becomes `/<name> ` (trailing space), popup closes, focus stays in composer. |
-| **Enter**| popup open                                       | Same as Tab — accept the highlight, complete inline. |
-| **Esc**  | popup open                                       | Dismiss popup; draft unchanged. |
-| **Enter**| popup closed, draft = `/<name> ` **+ prose**     | **Run** the skill; prose is the agent's inference input. |
-| **Enter**| popup closed, draft = `/<name> ` **and nothing** | **Open + focus the form** for explicit arg entry. |
-| **Click**| popup open                                       | Same as Tab (complete inline) — consistent with Tab/Enter. |
+| Key       | When                                             | Behavior                                                                                         |
+| --------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| **↑ / ↓** | popup open                                       | Move the highlighted skill; wraps at both ends.                                                  |
+| **Tab**   | popup open                                       | Auto-complete: draft becomes `/<name> ` (trailing space), popup closes, focus stays in composer. |
+| **Enter** | popup open                                       | Same as Tab — accept the highlight, complete inline.                                             |
+| **Esc**   | popup open                                       | Dismiss popup; draft unchanged.                                                                  |
+| **Enter** | popup closed, draft = `/<name> ` **+ prose**     | **Run** the skill; prose is the agent's inference input.                                         |
+| **Enter** | popup closed, draft = `/<name> ` **and nothing** | **Open + focus the form** for explicit arg entry.                                                |
+| **Click** | popup open                                       | Same as Tab (complete inline) — consistent with Tab/Enter.                                       |
 
 Worked example:
+
 - `/gen` → popup lists `generate-sprite`, `generate-background` (highlight on
   first). `↓` moves highlight. `Tab` → draft = `/generate-sprite ` , popup gone.
 - Type `a knight in armor`, press `Enter` → run with prose
@@ -61,6 +62,7 @@ Worked example:
   focuses for explicit field entry.
 
 ### Highlight default & filtering
+
 - Matches filter by `name.startsWith(prefix)` (unchanged from today).
 - Highlight defaults to index 0 whenever the match set changes; clamp on
   filter changes so the index never points past the list.
@@ -86,6 +88,7 @@ synthetic line (e.g. `/generate-sprite (description="a knight", style="pixel")`)
 for the same reason.
 
 ### Where the change lands
+
 Refinement over the abstract description above: rather than appending the
 invocation message inside `TurnRunner`, we **persist it as a real user message**
 in `room_hub.handle_skill_run`. The existing `_run_skill` already reads room
@@ -104,17 +107,19 @@ transcript shows what was asked.
 - `TurnRunner.run`: **unchanged** (history already carries the invocation).
 
 ### Required-arg relaxation
+
 `SkillRegistry.validate_args` currently enforces required args. The prose path
 sends `args={}`, so enforcement would reject it with "missing required arg
 'description'". Therefore: **when prose `text` is supplied, skip required-arg
 enforcement** (the agent infers them). The form path keeps enforcement. Type
-coercion and enum checks still run for any args that *are* present.
+coercion and enum checks still run for any args that _are_ present.
 
 ### Replay/cassette impact — none for skill runs
+
 Verified: in **tool mode** (a skill run, `bind_tools` was called) the replay
 model `ReplayToolCallingChatModel` returns its tool calls and final text from
 the single run cassette **regardless of the prompt** (`providers.py:132-159`) —
-it is *not* prompt-keyed. So changing the invocation message does **not** break
+it is _not_ prompt-keyed. So changing the invocation message does **not** break
 the run cassette, and the skill-run e2e stays green against the existing fixture
 **without re-recording**. (Only plain-chat text mode is prompt-keyed, and this
 change doesn't touch that path.)
@@ -153,6 +158,7 @@ backend run_skill ──▶ handle_skill_run(text?, args)
 ```
 
 ### Render-count discipline
+
 The popup (`SkillAutocomplete`) stays an isolated sub-component subscribing to
 the `skills` leaf. The highlight index is local UI state. The keyboard reducer
 is a pure function (no store reads) so it is unit-testable and does not perturb
@@ -167,15 +173,17 @@ Per AGENTS.md: TDD for pure logic; Playwright e2e is the authoritative behaviora
 contract.
 
 **Unit (RED first):**
+
 - Keyboard reducer: highlight move + wrap; accept produces `/<name> `; clamp on
   match-set change; run-vs-form decision from `{ skillName, prose }`.
 - `splitSlashDraft` (prose extraction): `/gen` → choosing; `/generate-sprite a
-  knight` → `{ skillName, prose: "a knight" }`; `/generate-sprite ` →
+knight` → `{ skillName, prose: "a knight" }`; `/generate-sprite ` →
   `{ skillName, prose: "" }`.
 - Backend invocation-message builder: prose → verbatim; args → rendered
   `k="v"` summary; precedence prose-over-args.
 
 **E2e (authoritative, replay backend):**
+
 - Arrow-navigate the popup changes the highlighted option.
 - Tab completes the name into the composer (`/generate-sprite `) and dismisses
   the popup.

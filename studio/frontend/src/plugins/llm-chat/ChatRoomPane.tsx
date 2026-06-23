@@ -211,10 +211,26 @@ export function ChatRoomPane() {
 
   const onComposerKeyDown = (e: React.KeyboardEvent) => {
     if (popupOpen) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => moveHighlight(h, 1, matches.length)); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => moveHighlight(h, -1, matches.length)); return; }
-      if (e.key === 'Escape') { e.preventDefault(); setPopupDismissed(true); return; }
-      if (e.key === 'Tab') { e.preventDefault(); accept(matches[clampHighlight(highlight, matches.length)].name); return; }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlight((h) => moveHighlight(h, 1, matches.length));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlight((h) => moveHighlight(h, -1, matches.length));
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPopupDismissed(true);
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        accept(matches[clampHighlight(highlight, matches.length)].name);
+        return;
+      }
     }
     if (e.key === 'Enter') {
       e.preventDefault();
