@@ -3,10 +3,10 @@
 - **Date:** 2026-06-24
 - **Status:** Approved (design); ready for an implementation plan
 - **Scope:** Let parallel git worktrees run the dev stack (`just backend-serve-replay`
-  + `just e2e`) at the same time without colliding on the singleton ports
-  `:8000` (backend) / `:4200` (studio frontend) / `:4300` (runtime client) or on
-  shared Mongo data. Introduce a single per-worktree **port-offset** convention that
-  derives every port and the dev backend's Mongo DB + media dir.
+  - `just e2e`) at the same time without colliding on the singleton ports
+    `:8000` (backend) / `:4200` (studio frontend) / `:4300` (runtime client) or on
+    shared Mongo data. Introduce a single per-worktree **port-offset** convention that
+    derives every port and the dev backend's Mongo DB + media dir.
 - **Reads first:** [`AGENTS.md`](../../../AGENTS.md) (esp. "Working alongside other
   sessions"), [`docs/worktrees.md`](../../worktrees.md),
   [`studio/backend/tests/e2e/conftest.py`](../../../studio/backend/tests/e2e/conftest.py)
@@ -43,8 +43,8 @@ This effort makes the whole stack **offset-addressable**:
 
 - **Making `live` mode parallel.** The GPU / ComfyUI (`:8188`) and a live
   OpenRouter session remain true singletons — "one live stack at a time" still
-  holds. The offset shifts *ports and data namespaces*, not the one GPU. Live serve
-  recipes still parameterize their port (harmless), but parallel *live* work is not
+  holds. The offset shifts _ports and data namespaces_, not the one GPU. Live serve
+  recipes still parameterize their port (harmless), but parallel _live_ work is not
   a goal here.
 - **A port registry / lock service.** Offsets are allocated by scanning existing
   worktree `.env` files at `wt-new` time. No daemon, no lockfile.
@@ -91,15 +91,16 @@ and returns the resolved set:
 // tools/ports.ts  (shape — final names fixed in the plan)
 export interface IResolvedPorts {
   offset: number;
-  backend: number;      // VITE_BLOOM_BACKEND_PORT  ?? 8000 + offset
-  frontend: number;     // BLOOM_FRONTEND_PORT ?? VITE_FRONTEND_PORT ?? 4200 + offset
-  runtime: number;      // BLOOM_RUNTIME_PORT       ?? 4300 + offset
-  backendUrl: string;   // VITE_BLOOM_BACKEND_URL   ?? `http://localhost:${backend}`
+  backend: number; // VITE_BLOOM_BACKEND_PORT  ?? 8000 + offset
+  frontend: number; // BLOOM_FRONTEND_PORT ?? VITE_FRONTEND_PORT ?? 4200 + offset
+  runtime: number; // BLOOM_RUNTIME_PORT       ?? 4300 + offset
+  backendUrl: string; // VITE_BLOOM_BACKEND_URL   ?? `http://localhost:${backend}`
 }
 export function resolvePorts(env?: Record<string, string | undefined>): IResolvedPorts;
 ```
 
 Notes:
+
 - `resolvePorts` accepts an optional `env` map purely so the **unit test** can drive
   it without touching `process.env`. In production it defaults to
   `loadEnv(...) ⊕ process.env`.
@@ -110,13 +111,13 @@ Notes:
 
 ### 3.2 TS consumers (one resolver, zero duplicated math)
 
-| File | Uses |
-| --- | --- |
-| `studio/frontend/vite.config.mts` | `server.port` / `preview.port` = `frontend`; **all 9 proxy targets** → `http://localhost:${backend}` |
-| `studio/frontend/playwright.config.ts` | `baseURL` + `webServer.url` = `http://localhost:${frontend}` |
-| `studio/frontend/e2e/global-setup.ts` | health check at `backendUrl` |
-| `runtime/client/vite.config.mts` | `server.port` / `preview.port` = `runtime` |
-| `runtime/client/playwright.config.ts` | `baseURL` + `webServer.url` = `http://localhost:${runtime}` |
+| File                                   | Uses                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `studio/frontend/vite.config.mts`      | `server.port` / `preview.port` = `frontend`; **all 9 proxy targets** → `http://localhost:${backend}` |
+| `studio/frontend/playwright.config.ts` | `baseURL` + `webServer.url` = `http://localhost:${frontend}`                                         |
+| `studio/frontend/e2e/global-setup.ts`  | health check at `backendUrl`                                                                         |
+| `runtime/client/vite.config.mts`       | `server.port` / `preview.port` = `runtime`                                                           |
+| `runtime/client/playwright.config.ts`  | `baseURL` + `webServer.url` = `http://localhost:${runtime}`                                          |
 
 Import paths are relative to `tools/ports.ts` (e.g. `../../tools/ports` from
 `studio/frontend/`). The Playwright configs import `loadEnv` transitively via the
@@ -190,13 +191,13 @@ the single most important invariant of the change.
 
 ## 5. Components & boundaries
 
-| Unit | Purpose | Depends on | Testable in isolation? |
-| --- | --- | --- | --- |
-| `tools/ports.ts` `resolvePorts` | Pure offset→ports/URL resolution | `vite` (`loadEnv`) | **Yes** — unit test drives it with an injected `env` map |
-| Vite configs (×2) | Bind dev server + proxy to resolved ports | `tools/ports.ts` | Via running `serve`; observed port |
-| Playwright configs (×2) + global-setup | Target the resolved frontend/backend | `tools/ports.ts` | Via running `e2e` |
-| justfile recipes | Backend port + Mongo DB + media from offset | root `.env`, `sh` | Via running the recipe; observed port/DB |
-| `wt-new` allocation | Assign + persist the offset | existing worktree `.env`s | Via running `just wt-new`; observed `.env` |
+| Unit                                   | Purpose                                     | Depends on                | Testable in isolation?                                   |
+| -------------------------------------- | ------------------------------------------- | ------------------------- | -------------------------------------------------------- |
+| `tools/ports.ts` `resolvePorts`        | Pure offset→ports/URL resolution            | `vite` (`loadEnv`)        | **Yes** — unit test drives it with an injected `env` map |
+| Vite configs (×2)                      | Bind dev server + proxy to resolved ports   | `tools/ports.ts`          | Via running `serve`; observed port                       |
+| Playwright configs (×2) + global-setup | Target the resolved frontend/backend        | `tools/ports.ts`          | Via running `e2e`                                        |
+| justfile recipes                       | Backend port + Mongo DB + media from offset | root `.env`, `sh`         | Via running the recipe; observed port/DB                 |
+| `wt-new` allocation                    | Assign + persist the offset                 | existing worktree `.env`s | Via running `just wt-new`; observed `.env`               |
 
 ---
 

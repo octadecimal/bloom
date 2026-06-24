@@ -26,12 +26,14 @@
 ### Task 1: `tools/ports.ts` resolver (pure core, TDD)
 
 **Files:**
+
 - Create: `tools/ports.ts`
 - Create: `tools/ports.spec.ts`
 - Create: `tools/project.json` (registers an Nx project so CI's `run-many` covers it)
 - Create: `tools/tsconfig.json`
 
 **Interfaces:**
+
 - Consumes: nothing (leaf).
 - Produces:
   - `export interface IResolvedPorts { offset: number; backend: number; frontend: number; runtime: number; backendUrl: string }`
@@ -197,8 +199,7 @@ function offsetOf(value: string | undefined): number {
 export function resolvePorts(env: Record<string, string | undefined>): IResolvedPorts {
   const offset = offsetOf(env.BLOOM_PORT_OFFSET);
   const backend = port(env.VITE_BLOOM_BACKEND_PORT) ?? BASE.backend + offset;
-  const frontend =
-    port(env.BLOOM_FRONTEND_PORT) ?? port(env.VITE_FRONTEND_PORT) ?? BASE.frontend + offset;
+  const frontend = port(env.BLOOM_FRONTEND_PORT) ?? port(env.VITE_FRONTEND_PORT) ?? BASE.frontend + offset;
   const runtime = port(env.BLOOM_RUNTIME_PORT) ?? BASE.runtime + offset;
   const url = env.VITE_BLOOM_BACKEND_URL;
   const backendUrl = url && url.trim() !== '' ? url : `http://localhost:${backend}`;
@@ -237,9 +238,11 @@ git commit -m "feat(ports): pure BLOOM_PORT_OFFSET resolver + repo-env reader"
 ### Task 2: Studio frontend Vite config consumes the resolver
 
 **Files:**
+
 - Modify: `studio/frontend/vite.config.mts` (server port + preview port + all 9 proxy targets)
 
 **Interfaces:**
+
 - Consumes: `resolvePorts`, `readRepoEnv` from `../../tools/ports`.
 - Produces: nothing for later tasks.
 
@@ -335,10 +338,12 @@ git commit -m "feat(frontend): derive Vite dev port + proxy target from port off
 ### Task 3: Studio frontend Playwright config + global-setup follow the offset
 
 **Files:**
+
 - Modify: `studio/frontend/playwright.config.ts` (baseURL + webServer.url)
 - Modify: `studio/frontend/e2e/global-setup.ts` (health-check target)
 
 **Interfaces:**
+
 - Consumes: `resolvePorts`, `readRepoEnv` from `../../tools/ports` (config) and `../../../tools/ports` (global-setup).
 
 - [ ] **Step 1: Wire the resolver into the Playwright config**
@@ -412,10 +417,12 @@ git commit -m "test(frontend): point Playwright baseURL + health check at offset
 ### Task 4: Runtime client Vite + Playwright configs follow the offset
 
 **Files:**
+
 - Modify: `runtime/client/vite.config.mts` (server + preview port)
 - Modify: `runtime/client/playwright.config.ts` (baseURL + webServer.url)
 
 **Interfaces:**
+
 - Consumes: `resolvePorts`, `readRepoEnv` from `../../tools/ports`.
 
 - [ ] **Step 1: Wire the resolver into the runtime Vite config**
@@ -501,10 +508,12 @@ git commit -m "feat(client): derive runtime Vite port + Playwright baseURL from 
 ### Task 5: justfile derives backend port + isolated Mongo/media; `wt-new` auto-assigns the offset
 
 **Files:**
+
 - Modify: `justfile` (add `set dotenv-load`; `backend-serve`, `backend-serve-replay`, `preflight`, `wt-new`)
 - Create: `tools/wt-assign-offset.ps1`
 
 **Interfaces:**
+
 - Consumes: `BLOOM_PORT_OFFSET` from the root `.env` (made available to recipes by `set dotenv-load := true`).
 - Produces: a `BLOOM_PORT_OFFSET=N` line in each new worktree's `.env`.
 
@@ -630,6 +639,7 @@ git commit -m "feat(just): offset-derived backend port + isolated Mongo/media; w
 ### Task 6: Document the convention (AGENTS.md + docs/worktrees.md)
 
 **Files:**
+
 - Modify: `AGENTS.md` ("Working alongside other sessions" → the "One live stack at a time" bullet)
 - Modify: `docs/worktrees.md` (the isolation table + the "Upgrade path" section, which predicted this work)
 
@@ -655,7 +665,7 @@ with:
   replay backend isolates its data as `bloom_studio_wt{N}` / `var/media_wt{N}` on
   the one shared `mongod`. `just wt-new` auto-assigns the lowest free offset into
   the new worktree's `.env`. This lets parallel worktrees run `just
-  backend-serve-replay` + `just e2e` at the same time without colliding. The math
+backend-serve-replay` + `just e2e` at the same time without colliding. The math
   lives in two mirrored places — `tools/ports.ts` (frontend/runtime/Playwright) and
   the `justfile` (backend) — keep them in sync. See [`docs/worktrees.md`](docs/worktrees.md).
 - **Live mode is still a singleton.** The offset shifts ports + data, not the one
@@ -690,13 +700,13 @@ with:
 port derives from the worktree's `BLOOM_PORT_OFFSET` (primary = `0`), which
 `wt-new` auto-assigns:
 
-| Resource          | Base / form                      | Per worktree        |
-| ----------------- | -------------------------------- | ------------------- |
-| Vite frontend     | `:4200`                          | `4200 + offset`     |
-| Backend (uvicorn) | `:8000`                          | `8000 + offset`     |
-| Runtime client    | `:4300`                          | `4300 + offset`     |
-| Mongo database    | `bloom_studio` (one `mongod`)    | `bloom_studio_wt{N}`|
-| Media dir         | `var/media`                      | `var/media_wt{N}`   |
+| Resource          | Base / form                   | Per worktree         |
+| ----------------- | ----------------------------- | -------------------- |
+| Vite frontend     | `:4200`                       | `4200 + offset`      |
+| Backend (uvicorn) | `:8000`                       | `8000 + offset`      |
+| Runtime client    | `:4300`                       | `4300 + offset`      |
+| Mongo database    | `bloom_studio` (one `mongod`) | `bloom_studio_wt{N}` |
+| Media dir         | `var/media`                   | `var/media_wt{N}`    |
 
 So two worktrees can each run `just backend-serve-replay` + `just e2e` at once
 without colliding on a port or on Mongo data.
@@ -723,9 +733,10 @@ variables override the derived value: `VITE_BLOOM_BACKEND_PORT`,
 
 To set an offset by hand (e.g. a worktree created with raw `git worktree add`),
 add a line to that worktree's `.env`:
-
 ```
+
 BLOOM_PORT_OFFSET=1
+
 ```
 
 ## Still shared regardless of offset
