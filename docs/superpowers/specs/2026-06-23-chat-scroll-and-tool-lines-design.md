@@ -57,11 +57,13 @@ render-count discipline is preserved.
   updates a `pinnedRef` (a ref, not state, so scrolling does not re-render) and
   calls `setShowJump` **only when the boolean actually flips**, avoiding
   per-event state churn.
-- **Following content.** A `ResizeObserver` on the `<ul>` fires on both new
-  entries and streaming token growth (the latter never re-renders the list
-  shell, so a length-keyed effect would miss it). When it fires and
-  `pinnedRef.current` is `true`, set `scrollTop = scrollHeight`. This is what
-  keeps a streaming reply stuck to the bottom without extra React renders.
+- **Following content.** A `MutationObserver` on the `<ul>`
+  (`childList + subtree + characterData`) fires on both new entries and
+  streaming token text changes (the latter never re-renders the list shell, so a
+  length-keyed effect would miss it). When it fires and `pinnedRef.current` is
+  `true`, set `scrollTop = scrollHeight`. This keeps a streaming reply stuck to
+  the bottom without extra React renders, and `MutationObserver` is natively
+  available in jsdom so unit tests need no polyfill.
 - **Jump button.** Rendered only when `showJump` is true (i.e. the user has
   scrolled up). A small floating chevron (`lucide ArrowDown`) anchored
   bottom-right of the feed. Click → scroll to bottom and re-pin. Styled per the
