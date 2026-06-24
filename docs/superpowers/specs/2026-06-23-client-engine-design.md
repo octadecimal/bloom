@@ -140,11 +140,19 @@ engine → parent:  { v:1, kind:"ready", protocolVersion }   // emitted when the
 ```
 
 - **Handshake:** the engine posts `ready` once booted; the parent waits for `ready`
-  before sending `init`/ops — no lost-message races.
+  before sending `init`/ops — no lost-message races. Note: the engine does not
+  itself _gate_ on having sent `ready` (it will process any well-formed message it
+  receives); waiting for `ready` is the parent's responsibility.
 - **Versioned** (`v`, `protocolVersion`) from day one, the same contract discipline
-  the game-package format follows.
-- **Origin-validated**; the iframe is sandboxed; messages from unexpected origins
-  are ignored.
+  the game-package format follows. The engine ignores messages whose `v` does not
+  match its protocol version, and rejects a loaded document whose `version` is
+  unexpected.
+- **Origin validation is deferred to Plan 2.** This iteration accepts well-formed
+  messages from any origin and replies to `window.parent` with `'*'` — correct for
+  the trusted same-machine dev embed and for standalone. Pinning `event.origin` /
+  a `targetOrigin` allowlist is a **labeled, not built** seam: the studio
+  `ProtocolBridge` (Plan 2) knows the engine's origin and is where origin pinning
+  belongs.
 - **Reads are served studio-side** (see §6), so there is no query round-trip into
   the iframe on the hot path. An engine-side `query` op is a **labeled debug
   affordance**, not built now.
@@ -212,6 +220,8 @@ burst ever causes jank."
 - Unknown node/edge/port, type mismatch, duplicate ID, or a cyclic `child` edge →
   the op is **rejected with `error{code}`** and the model is left **untouched**.
 - `applyBatch` is **transactional**: validate all, then apply all, or apply none.
+- Loading a document whose `version` is unexpected is **rejected** (the versioned
+  contract fails loudly rather than silently downgrading).
 - Async texture-load failure → the sprite shows a placeholder; an `event` is
   surfaced; the model stays valid.
 - The engine never half-applies an op, so the model cannot rot across many turns.
@@ -253,6 +263,8 @@ browser e2e runs locally, not in CI.
   value/expression nodes, layout nodes, slot-mechanic nodes.
 - Per-frame coalescing & a general dataflow evaluation pass.
 - Engine-side `query` protocol; interaction/selection `event`s.
+- **postMessage origin pinning** (`event.origin` allowlist + non-`'*'` `targetOrigin`)
+  — belongs in the studio `ProtocolBridge`, which knows the engine's origin (Plan 2).
 - The **server-driven player mode** (the second driver of this same core).
 - Rich asset-load states beyond placeholder-on-failure.
 
