@@ -60,6 +60,35 @@ fn line_payout(model: &SlotModel, grid: &[Vec<Symbol>], line: &[usize]) -> u64 {
     model.paytable.lookup(target, count)
 }
 
+fn count_symbol(grid: &[Vec<Symbol>], sym: Symbol) -> usize {
+    grid.iter().flatten().filter(|&&s| s == sym).count()
+}
+
+fn scatter_symbol(model: &SlotModel) -> Option<Symbol> {
+    model
+        .symbols
+        .iter()
+        .find(|s| s.role == SymbolRole::Scatter)
+        .map(|s| s.id)
+}
+
+fn scatter_payout(model: &SlotModel, grid: &[Vec<Symbol>]) -> u64 {
+    match scatter_symbol(model) {
+        Some(sc) => model.paytable.lookup(sc, count_symbol(grid, sc) as u8),
+        None => 0,
+    }
+}
+
+/// Total payout for one grid: all paylines plus scatter pays (bet-multiples).
+fn eval_grid(model: &SlotModel, grid: &[Vec<Symbol>]) -> u64 {
+    let lines: u64 = model
+        .paylines
+        .iter()
+        .map(|line| line_payout(model, grid, line))
+        .sum();
+    lines + scatter_payout(model, grid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +172,35 @@ mod tests {
         let m = lines_model();
         let grid = vec![vec![9], vec![9], vec![9]];
         assert_eq!(line_payout(&m, &grid, &m.paylines[0]), 0);
+    }
+
+    fn scatter_model() -> SlotModel {
+        let mut m = lines_model();
+        m.paytable.entries.push(PaytableEntry { symbol: 9, count: 2, payout: 4 });
+        m.paytable.entries.push(PaytableEntry { symbol: 9, count: 3, payout: 20 });
+        m
+    }
+
+    #[test]
+    fn counts_a_symbol_across_the_grid() {
+        let grid = vec![vec![9], vec![0], vec![9]];
+        assert_eq!(count_symbol(&grid, 9), 2);
+        assert_eq!(count_symbol(&grid, 0), 1);
+    }
+
+    #[test]
+    fn scatter_pays_by_total_count() {
+        let m = scatter_model();
+        let grid = vec![vec![9], vec![0], vec![9]];
+        assert_eq!(scatter_payout(&m, &grid), 4);
+    }
+
+    #[test]
+    fn eval_grid_sums_lines_and_scatter() {
+        let m = scatter_model();
+        let grid = vec![vec![0], vec![0], vec![0]]; // line pays 10, no scatters
+        assert_eq!(eval_grid(&m, &grid), 10);
+        let grid2 = vec![vec![9], vec![9], vec![9]]; // line 0, scatter 20
+        assert_eq!(eval_grid(&m, &grid2), 20);
     }
 }
