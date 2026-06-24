@@ -146,15 +146,23 @@ browser e2e runs locally only; backend unit + non-browser e2e are CI-affordable.
 
 ### Section B — design-scene cassette + backend non-browser e2e (CI)
 
-- **Record the cassette** (`just record-fixtures`, **live** providers, local) by driving one
-  real `design-scene` run with a **fixed prompt** (proposed: _"Build a basic slot scene: a
-  1280×720 root stage with a reels container holding three symbol sprites"_). Prompt-keyed,
-  mirroring the gdd cassettes.
-- **New `studio/backend/tests/e2e/test_scene.py`** (CI, mirrors `tests/e2e/test_gdd.py`):
-  boot replay, a socket.io client joins the scene room, run the `design-scene` turn **through
-  TurnRunner (the real agent loop)**, and assert (a) the `game_scenes` doc gains a `Root`
-  node + child nodes, and (b) `scene_op` broadcasts are observed by the client. This is the
-  **agent-path** proof — distinct from any Plan 2 hub-level test that drove ops directly.
+- **Curate the run cassette** (NOT `just record-fixtures`). The replay chat model
+  (`app/providers.py` `ReplayToolCallingChatModel`) loads one run cassette
+  (`tests/fixtures/replay/run/default.json` = `{tool_calls, final}`) and **filters
+  `tool_calls` by the running skill's bound tool names**. That checked-in cassette is a
+  **hand-curated union across skills** (it already carries `generate_asset`, `delete_asset`,
+  and `ask_user_question` — the last is how `test_gdd` reaches its question interrupt). So
+  `design-scene`'s cassette is a deterministic sequence of `scene_*` calls **appended to that
+  same file** (Root → reels → three sprites + child edges); only `design-scene` binds
+  `scene_*` tools, so the calls are invisible to every other skill. `just record-fixtures`
+  is the wrong tool here — it only regenerates the minimal `generate_asset` capture and would
+  drop the curated union.
+- **Extend `studio/backend/tests/e2e/test_scene.py`** (CI; mirrors `tests/e2e/test_gdd.py`'s
+  `run_skill` invocation): boot replay, a socket.io client joins the scene room, run the
+  `design-scene` turn **through TurnRunner (the real agent loop)**, and assert (a) the
+  `game_scenes` doc gains a `Root` node + child nodes (read via a fresh `join_scene`
+  snapshot — there is no REST `getScene`), and (b) `scene_op` broadcasts are observed by the
+  client. This is the **agent-path** proof — additive to the Plan 2 empty-snapshot test.
 
 ### Section C — browser e2e: a real image renders in the iframe (local, authoritative)
 
