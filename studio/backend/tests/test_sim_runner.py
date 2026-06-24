@@ -16,6 +16,20 @@ def test_parse_result_line_pass():
     assert r.realized_rtp == pytest.approx(0.961)
     assert r.pool_size == 1000
 
+
+def test_parse_result_line_fail():
+    line = (
+        '{"type":"result","status":"fail","rtp":0.91,"volatility":4.0,'
+        '"hitFrequency":0.3,"baseRtp":0.91,"featureRtp":0.0,'
+        '"bonusHitRates":[],"realizedRtp":null,"poolSize":null,'
+        '"failure":"measured characteristics missed the target bands"}'
+    )
+    r = parse_result_line(line, ran_at="t")
+    assert r.status == "fail"
+    assert r.realized_rtp is None
+    assert r.pool_size is None
+    assert r.failure
+
 @pytest.mark.asyncio
 async def test_fake_runner_streams_then_returns():
     seen = []
