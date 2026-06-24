@@ -2,6 +2,9 @@
 
 Guidance for AI coding agents working in this repository.
 
+For product intent — why Bloom exists, who it's for, and what winning looks like —
+read [`docs/north-star.md`](docs/north-star.md) first.
+
 ## Commits
 
 - **Always use the semantic (Conventional Commits) format for every commit.**
