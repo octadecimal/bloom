@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from app.gdd.models import GDD_TAXONOMY, GddDoc, Status
+from app.gdd.models import GDD_TAXONOMY, GddDoc, Status, derive_status
+from app.gdd.schemas import schema_for
+from app.gdd.normalize import normalize_value
+from app.gdd.render import render
 
 
 class GddEditError(Exception):
@@ -72,21 +75,39 @@ class GddStore:
             )
         return doc
 
-    async def edit_doc(self, game_id: str, aspect: str, old_string: str,
-                       new_string: str, replace_all: bool = False) -> GddDoc:
+    async def set_fields(
+        self, game_id: str, aspect: str, fields: dict
+    ) -> tuple[GddDoc, list[str]]:
         doc = await self.get_doc(game_id, aspect)
         if doc is None:
-            raise GddEditError(f"No GDD doc for aspect '{aspect}'.")
-        count = doc.body.count(old_string)
-        if count == 0:
-            raise GddEditError(f"old_string not found in '{aspect}'.")
-        if count > 1 and not replace_all:
             raise GddEditError(
-                f"old_string is not unique in '{aspect}' ({count} matches); "
-                "pass replace_all=true or a longer, unique string."
+                f"No GDD doc for ({game_id}, {aspect}); seed the taxonomy first."
             )
-        new_body = doc.body.replace(old_string, new_string)
-        return await self.upsert_doc(game_id, aspect, body=new_body)
+        schema = schema_for(aspect)
+        by_key = {f.key: f for f in schema}
+        new_data = dict(doc.data)
+        warnings: list[str] = []
+        for key, raw in fields.items():
+            field = by_key.get(key)
+            if field is None:
+                warnings.append(f"unknown field '{key}' for aspect '{aspect}'")
+                continue
+            value, warn = normalize_value(field, raw)
+            if warn:
+                warnings.append(warn)
+            new_data[key] = value
+        status = derive_status(aspect, new_data)
+        body = render(schema, new_data)
+        await self._docs.update_one(
+            {"game_id": game_id, "aspect": aspect},
+            {"$set": {
+                "data": new_data, "body": body, "status": status,
+                "updated_at": _now().isoformat(),
+            }},
+        )
+        updated = await self.get_doc(game_id, aspect)
+        assert updated is not None
+        return updated, warnings
 
     async def set_status(self, game_id: str, aspect: str, status: Status) -> GddDoc:
         return await self.upsert_doc(game_id, aspect, status=status)
