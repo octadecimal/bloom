@@ -8,8 +8,8 @@ from app.gdd.render import render
 
 
 class GddEditError(Exception):
-    """Raised when edit_doc's old_string is missing or not unique, or when a
-    targeted (game, aspect) doc does not exist (e.g. upsert before seeding)."""
+    """Raised when a targeted (game, aspect) doc does not exist
+    (e.g. set_fields or upsert is called before the taxonomy is seeded)."""
 
 
 def _now() -> datetime:
