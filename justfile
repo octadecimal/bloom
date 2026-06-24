@@ -19,6 +19,10 @@ lint:
 sim-curate model target id pkg report:
     cargo run -p bloom-simulator --bin curate -- {{model}} {{target}} {{id}} {{pkg}} {{report}}
 
+# Build the release curation binary the studio backend shells out to.
+sim-build:
+    cargo build --release -p bloom-simulator
+
 # TypeScript / frontend
 ts-test:
     npx nx run-many -t test

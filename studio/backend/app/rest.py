@@ -23,6 +23,10 @@ class WriteSkillBody(BaseModel):
     body: str = ""
 
 
+class SetGddFieldsBody(BaseModel):
+    fields: dict
+
+
 @router.get("/health")
 async def health(request: Request) -> dict:
     settings = request.app.state.settings
@@ -108,6 +112,16 @@ async def list_gdd_docs(game_id: str, request: Request) -> list[dict]:
     store = request.app.state.gdd_store
     docs = await store.list_docs(game_id)
     return [gdd_wire(d) for d in docs]
+
+
+@router.put("/games/{game_id}/gdd/{aspect}")
+async def set_gdd_fields_rest(
+    game_id: str, aspect: str, body: SetGddFieldsBody, request: Request
+) -> dict:
+    store = request.app.state.gdd_store
+    await store.seed_taxonomy(game_id)  # idempotent: ensures the aspect doc exists
+    doc, warnings = await store.set_fields(game_id, aspect, body.fields)
+    return {"doc": gdd_wire(doc), "warnings": warnings}
 
 
 @router.get("/rooms/{room_id}/runs")
