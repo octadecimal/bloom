@@ -4,6 +4,7 @@
 mod eval;
 mod model;
 
+pub use eval::{evaluate, FeatureOutcome, RoundOutcome};
 pub use model::{
     from_payload, to_payload, BonusFeature, FreeSpinsConfig, Paytable, PaytableEntry, SlotModel,
     Symbol, SymbolDef, SymbolRole, TriggerSpec,

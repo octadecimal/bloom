@@ -123,6 +123,50 @@ fn run_bonus(
     }
 }
 
+/// One round's full result: the symbolic outcome ("what happened") and the
+/// payout in bet-multiples ("what it paid"). Both facts, never fused (umbrella §10).
+/// `features` has one entry per `model.bonuses`, in order (spec §3.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoundOutcome {
+    pub base_grid: Vec<Vec<Symbol>>,
+    pub base_payout: u64,
+    pub features: Vec<FeatureOutcome>,
+    pub feature_payout: u64,
+    pub total_payout: u64,
+}
+
+impl RoundOutcome {
+    /// True if any bonus feature triggered this round.
+    pub fn any_triggered(&self) -> bool {
+        self.features.iter().any(|f| f.triggered)
+    }
+}
+
+/// Expand one seed into one round. Deterministic: same `(model, seed)` always
+/// yields the same `RoundOutcome`, bit-for-bit, forever. Bonus features run in
+/// `model.bonuses` list order, each off the SAME PRNG stream (spec §3.1).
+pub fn evaluate(model: &SlotModel, seed: u64) -> RoundOutcome {
+    let mut rng = SplitMix64::new(seed);
+    let base_grid = spin(&model.reels, model.rows, &mut rng);
+    let base_payout = eval_grid(model, &base_grid);
+
+    let mut features = Vec::with_capacity(model.bonuses.len());
+    let mut feature_payout = 0;
+    for bonus in &model.bonuses {
+        let outcome = run_bonus(model, bonus, &base_grid, &mut rng);
+        feature_payout += outcome.payout;
+        features.push(outcome);
+    }
+
+    RoundOutcome {
+        base_grid,
+        base_payout,
+        features,
+        feature_payout,
+        total_payout: base_payout + feature_payout,
+    }
+}
+
 /// Run a free-spins feature. Retrigger re-checks THIS feature's own trigger
 /// against each feature-spin grid (spec §3.1 — no nesting/cross-triggering).
 fn run_free_spins(
@@ -326,4 +370,67 @@ mod tests {
         assert!(out.spins_played >= 2);
         assert_eq!(out.spins.len() as u32, out.spins_played);
     }
+
+    fn full_model() -> SlotModel {
+        // 3x1 base game; scatter 9 triggers 3 free spins at x2.
+        SlotModel {
+            symbols: vec![
+                SymbolDef { id: 0, role: SymbolRole::Normal },
+                SymbolDef { id: 1, role: SymbolRole::Wild },
+                SymbolDef { id: 9, role: SymbolRole::Scatter },
+            ],
+            reels: vec![vec![0, 1, 9, 0, 0], vec![0, 0, 9, 1, 0], vec![9, 0, 1, 0, 0]],
+            rows: 1,
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable {
+                entries: vec![
+                    PaytableEntry { symbol: 0, count: 3, payout: 5 },
+                    PaytableEntry { symbol: 9, count: 3, payout: 8 },
+                ],
+            },
+            bonuses: vec![BonusFeature::FreeSpins {
+                trigger: TriggerSpec { symbol: 9, min_count: 3 },
+                config: FreeSpinsConfig { spins_awarded: 3, retrigger: false, multiplier: 2, feature_reels: None },
+            }],
+        }
+    }
+
+    #[test]
+    fn evaluate_is_bit_reproducible() {
+        let m = full_model();
+        let first = evaluate(&m, 0xABCDEF);
+        for _ in 0..1000 {
+            assert_eq!(evaluate(&m, 0xABCDEF), first);
+        }
+    }
+
+    #[test]
+    fn evaluate_total_and_features_are_consistent() {
+        let m = full_model();
+        for seed in 0..3000u64 {
+            let o = evaluate(&m, seed);
+            assert_eq!(o.total_payout, o.base_payout + o.feature_payout);
+            assert_eq!(o.features.len(), 1); // one per model bonus
+            let summed: u64 = o.features.iter().map(|f| f.payout).sum();
+            assert_eq!(o.feature_payout, summed);
+            assert_eq!(o.any_triggered(), o.features.iter().any(|f| f.triggered));
+        }
+    }
+
+    #[test]
+    fn evaluate_golden_vector() {
+        // Pin exact outputs so any future drift fails loudly. Changing these is a
+        // re-certification event (a new mechanic version), never an edit.
+        let m = full_model();
+        let o = evaluate(&m, 12345);
+        assert_eq!(o.base_payout, GOLDEN_BASE);
+        assert_eq!(o.feature_payout, GOLDEN_FEATURE);
+        assert_eq!(o.features[0].spins_played, GOLDEN_SPINS);
+    }
+
+    // Verified from first run: seed 12345 lands a grid with no payline hit and
+    // fewer than 3 scatters — feature does not trigger, all payouts are 0.
+    const GOLDEN_BASE: u64 = 0;
+    const GOLDEN_FEATURE: u64 = 0;
+    const GOLDEN_SPINS: u32 = 0;
 }
