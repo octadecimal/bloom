@@ -40,6 +40,7 @@ export function createGameSocket() {
     sock.on('disconnect', () => gameSlice().connection.set('reconnecting'));
     sock.on('scene_snapshot', (p) => applyInbound('scene_snapshot', p));
     sock.on('scene_op', (p) => applyInbound('scene_op', p));
+    if (!import.meta.env.PROD) (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
   }
   function disconnect(): void {
     sock?.disconnect();
