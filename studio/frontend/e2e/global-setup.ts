@@ -1,7 +1,6 @@
 // studio/frontend/e2e/global-setup.ts
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
-
-const { backendUrl } = resolvePorts(readRepoEnv());
+const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
+const backendUrl = process.env.VITE_BLOOM_BACKEND_URL ?? `http://localhost:${8000 + offset}`;
 
 export default async function globalSetup() {
   const res = await fetch(`${backendUrl}/health`).catch(() => null);

@@ -1,8 +1,8 @@
 import { expect, type Page } from '@playwright/test';
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
 
+const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
 /** Backend base URL for direct Node-side API calls from specs — follows BLOOM_PORT_OFFSET. */
-export const BACKEND_URL = resolvePorts(readRepoEnv()).backendUrl;
+export const BACKEND_URL = process.env.VITE_BLOOM_BACKEND_URL ?? `http://localhost:${8000 + offset}`;
 
 export async function seedLocalStorage(page: Page, key: string, value: string) {
   await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [key, value]);

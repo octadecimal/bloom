@@ -136,9 +136,11 @@ directory and branch — so the protocol is short:
   replay backend isolates its data as `bloom_studio_wt{N}` / `var/media_wt{N}` on
   the one shared `mongod`. `just wt-new` auto-assigns the lowest free offset into
   the new worktree's `.env`. This lets parallel worktrees run `just
-backend-serve-replay` + `just e2e` at the same time without colliding. The math
-  lives in two mirrored places — `tools/ports.ts` (frontend/runtime/Playwright) and
-  the `justfile` (backend) — keep them in sync. See [`docs/worktrees.md`](docs/worktrees.md).
+backend-serve-replay` + `just e2e` at the same time without colliding. Each config
+  derives its port inline from `BLOOM_PORT_OFFSET` (the Vite/Playwright configs and
+  e2e helpers read it; the `justfile` does the same in `sh` for the backend) — the
+  base values (`8000` / `4200` / `4300`) are repeated in a few spots, so keep them in
+  sync. See [`docs/worktrees.md`](docs/worktrees.md).
 - **Live mode is still a singleton.** The offset shifts ports + data, not the one
   GPU/ComfyUI (`:8188`) or a live OpenRouter session — only one session runs the
   **live** stack at a time.

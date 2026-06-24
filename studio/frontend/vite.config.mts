@@ -5,11 +5,14 @@ import tailwindcss from '@tailwindcss/vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 import path from 'node:path';
-import { resolvePorts, readRepoEnv } from '../../tools/ports.ts';
 
 export default defineConfig(() => {
-  const { backend, frontend } = resolvePorts(readRepoEnv());
-  const target = `http://localhost:${backend}`;
+  // Per-worktree dev ports derive from a single BLOOM_PORT_OFFSET (0 = primary
+  // checkout = today's defaults). Inline on purpose — keep the base values in sync
+  // with the justfile and the other configs. See docs/worktrees.md.
+  const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
+  const frontend = 4200 + offset;
+  const target = `http://localhost:${8000 + offset}`;
   return {
     root: import.meta.dirname,
     cacheDir: '../../node_modules/.vite/studio/frontend',

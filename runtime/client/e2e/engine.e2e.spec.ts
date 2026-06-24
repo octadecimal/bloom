@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
 
-const RUNTIME_URL = `http://localhost:${resolvePorts(readRepoEnv()).runtime}`;
+const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
+const RUNTIME_URL = `http://localhost:${4300 + offset}`;
 
 const HARNESS = `
   <iframe id="engine" src="${RUNTIME_URL}/" width="640" height="480" style="border:0"></iframe>

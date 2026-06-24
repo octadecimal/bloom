@@ -1,10 +1,11 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { resolvePorts, readRepoEnv } from '../../tools/ports.ts';
 
 export default defineConfig(() => {
-  const { runtime } = resolvePorts(readRepoEnv());
+  // Runtime dev port derives from BLOOM_PORT_OFFSET (0 = default 4300). See docs/worktrees.md.
+  const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
+  const runtime = 4300 + offset;
   return {
     root: import.meta.dirname,
     cacheDir: '../../node_modules/.vite/runtime/client',

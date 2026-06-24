@@ -73,13 +73,13 @@ git branch -d <type>/<name>    # delete its branch once merged
 git worktree prune             # tidy stale metadata if a dir was deleted by hand
 ```
 
-## Overriding individual ports
+## The offset is the only knob
 
-`BLOOM_PORT_OFFSET` is the one knob you normally set (and `wt-new` sets it for you).
-For the rare case where one service needs a fixed port, the explicit per-service
-variables override the derived value: `VITE_BLOOM_BACKEND_PORT`,
-`BLOOM_FRONTEND_PORT` (alias `VITE_FRONTEND_PORT`), `BLOOM_RUNTIME_PORT`, and
-`VITE_BLOOM_BACKEND_URL` (a full backend base URL, e.g. for a LAN/remote backend).
+`BLOOM_PORT_OFFSET` is the one value you set (and `wt-new` sets it for you); every
+dev-stack port derives as `base + offset`. There are no per-service port overrides —
+if you need a worktree on different ports, change its offset. The one remaining
+escape hatch is `VITE_BLOOM_BACKEND_URL` (a full backend base URL, e.g. for a
+LAN/remote backend), which the frontend and the e2e health check honor as-is.
 
 To set an offset by hand (e.g. a worktree created with raw `git worktree add`),
 add a line to that worktree's `.env`:
