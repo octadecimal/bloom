@@ -186,3 +186,18 @@ async def test_resolve_question_ignored_for_approval_kind(mongo_db):
     await hub.resolve_question("r1", "runX", {"type": "suggestion", "value": "x"})
     assert not fut.done()
     fut.cancel()
+
+
+@pytest.mark.asyncio
+async def test_resolve_approval_ignored_for_question_kind(mongo_db):
+    """resolve_approval must not resolve a question entry (cross-channel guard)."""
+    runner = _QuestionRunner()
+    hub = _build_question_hub(mongo_db, runner)
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    hub._pending_approvals["runQ"] = {
+        "future": fut, "step_index": 0, "action": {}, "kind": "question",
+    }
+    await hub.resolve_approval("r1", "runQ", "approve")
+    assert not fut.done(), "approval channel must not resolve a question future"
+    fut.cancel()

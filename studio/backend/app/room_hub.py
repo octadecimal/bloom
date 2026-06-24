@@ -392,6 +392,10 @@ class RoomHub:
         entry = self._pending_approvals.get(run_id)
         if entry is None or entry["future"].done():
             return
+        # Question and approval entries share _pending_approvals; never let an
+        # approval event resolve a parked question future (would corrupt the answer).
+        if entry.get("kind") == "question":
+            return
         entry["future"].set_result(decision)
 
     async def resolve_question(self, room_id: str, run_id: str, answer: dict) -> None:
