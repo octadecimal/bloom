@@ -23,7 +23,13 @@ export class Reconciler {
       case 'parentSet':
         this.renderer.setParent(change.childId, change.parentId);
         return;
-      // 'propSet' / 'dataBound' / 'dataUnbound' handled in Tasks 9–10
+      case 'propSet': {
+        const node = this.model.getNode(change.id);
+        if (node && node.type === 'Texture') return; // reactivity handled in Task 10
+        this.renderer.setProp(change.id, change.path, change.value);
+        return;
+      }
+      // 'dataBound' / 'dataUnbound' handled in Tasks 10+
       default:
         return;
     }
@@ -37,6 +43,7 @@ export class Reconciler {
       await this.renderer.mount(node.id, { width, height });
     } else {
       this.renderer.createObject(node.id, node.type);
+      for (const [key, value] of Object.entries(node.props)) this.renderer.setProp(node.id, key, value);
     }
   }
 }
