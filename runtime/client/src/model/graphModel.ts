@@ -125,4 +125,32 @@ export class GraphModel {
     cursor[finalKey] = value;
     return [{ kind: 'propSet', id, path, value }];
   }
+
+  applyBatch(ops: Op[]): IChange[] {
+    const snapshot = this.toDocument();
+    const changes: IChange[] = [];
+    try {
+      for (const op of ops) changes.push(...this.apply(op));
+      return changes;
+    } catch (err) {
+      this.restore(snapshot);
+      throw err;
+    }
+  }
+
+  load(doc: IGameDocument): IChange[] {
+    this.nodes.clear();
+    this.edges.clear();
+    const ops: Op[] = [];
+    for (const node of Object.values(doc.nodes)) ops.push({ kind: 'addNode', id: node.id, type: node.type, props: node.props });
+    for (const e of doc.edges) ops.push({ kind: 'connect', edgeId: e.id, type: e.type, from: e.from, to: e.to });
+    return this.applyBatch(ops);
+  }
+
+  private restore(doc: IGameDocument): void {
+    this.nodes.clear();
+    this.edges.clear();
+    for (const node of Object.values(doc.nodes)) this.nodes.set(node.id, { id: node.id, type: node.type, props: { ...node.props } });
+    for (const e of doc.edges) this.edges.set(e.id, { ...e });
+  }
 }
