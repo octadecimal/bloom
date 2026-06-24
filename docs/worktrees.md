@@ -46,12 +46,12 @@ across worktrees safely.
 
 **Shared — single-tenant — across the whole machine:**
 
-| Resource | Port / form | Rule |
-| --- | --- | --- |
-| Vite frontend | `:4200` | one at a time |
-| Backend (uvicorn) | `:8000` | one at a time |
-| MongoDB | native Windows Service, `:27017` | one shared instance |
-| ComfyUI | `:8188`, one GPU | one at a time |
+| Resource          | Port / form                      | Rule                |
+| ----------------- | -------------------------------- | ------------------- |
+| Vite frontend     | `:4200`                          | one at a time       |
+| Backend (uvicorn) | `:8000`                          | one at a time       |
+| MongoDB           | native Windows Service, `:27017` | one shared instance |
+| ComfyUI           | `:8188`, one GPU                 | one at a time       |
 
 **The rule: only one session runs the live app stack at a time.** Whoever needs the
 running app (`just serve-frontend` + `just backend-serve`, `just e2e`, asset
