@@ -33,3 +33,27 @@ def load_run_cassette(fixtures_dir: Path) -> dict:
     if not path.exists():
         return {"tool_calls": [], "final": ["ok"]}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_run_cassettes(fixtures_dir: Path) -> dict[str, dict]:
+    """Load run cassettes keyed by normalized prompt.
+
+    Each ``run/*.json`` is ``{tool_calls, final}`` with an optional ``prompt``.
+    ``default.json`` becomes ``"__default__"`` (the fallback). Files with a
+    ``prompt`` are also keyed by ``normalize_prompt(prompt)``.
+    """
+    out: dict[str, dict] = {}
+    run_dir = Path(fixtures_dir) / "run"
+    if not run_dir.is_dir():
+        return out
+    for path in sorted(run_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        cassette = {
+            "tool_calls": data.get("tool_calls", []),
+            "final": data.get("final", ["ok"]),
+        }
+        if path.name == "default.json":
+            out["__default__"] = cassette
+        if "prompt" in data:
+            out[normalize_prompt(data["prompt"])] = cassette
+    return out
