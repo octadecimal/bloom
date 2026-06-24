@@ -5,8 +5,24 @@ import { seedLocalStorage } from './helpers';
 //   engine :4300 (nx serve client), backend :8000 (replay), studio :4200.
 // Drives ops through the real socket-dispatch path (window.__gameApplyInbound)
 // so the reducer + ProtocolBridge + engine-iframe render run without an LLM.
+//
+// Cross-origin note: the engine iframe is served from :4300; reading
+// iframe.contentWindow is blocked by the browser (SecurityError). Instead we
+// listen for the engine's postMessage acks on the studio top window — those
+// travel from :4300 → :4200 and are fully accessible here.
 
 async function openAppAtRoom(page: Page, username: string): Promise<string> {
+  // Install message recorder BEFORE navigation so init-script runs first.
+  await page.addInitScript(() => {
+    (window as any).__engineMsgs = [];
+    window.addEventListener('message', (e) => {
+      const d = e.data;
+      if (d && (d.kind === 'ack' || d.kind === 'ready' || d.kind === 'error')) {
+        (window as any).__engineMsgs.push({ origin: e.origin, kind: d.kind });
+      }
+    });
+  });
+
   await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username } }));
   await page.goto('/');
   await page.getByPlaceholder(/new room/i).fill(`Scene E2E ${Date.now()}`);
@@ -16,22 +32,28 @@ async function openAppAtRoom(page: Page, username: string): Promise<string> {
   return page.url();
 }
 
-test('ops mutate the engine iframe scene live and keep hookstate in sync', async ({ page }) => {
+test('ops are delivered to and acknowledged by the engine iframe (cross-frame, live, no reload)', async ({ page }) => {
   await openAppAtRoom(page, 'ada');
 
-  // Open the Game Scene pane via the host openPane helper exposed in dev.
-  await page.evaluate(() => (window as any).__host?.openPane?.('game/preview'));
-  const frame = page.getByTestId('game-engine-frame');
-  await expect(frame).toBeVisible();
+  // Open the Game Scene pane via the View menu (data-testid="view-open-game/preview").
+  await page.getByTestId('menu-view').click();
+  await expect(page.getByTestId('view-open-game/preview')).toBeVisible();
+  await page.getByTestId('view-open-game/preview').click();
 
-  // Wait for the engine iframe to boot and the bridge to be ready.
-  await expect
-    .poll(async () => page.evaluate(() => !!(document.querySelector('[data-testid=game-engine-frame]') as HTMLIFrameElement)?.contentWindow))
-    .toBe(true);
+  // Wait for the iframe to be visible (activeGameId must be set for it to render).
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
 
+  // Wait for the engine handshake — the engine posts {kind:'ready'} to window.parent.
+  await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs.some((m: any) => m.kind === 'ready')), { timeout: 20000 }).toBe(true);
+
+  // Confirm gameId is set (openGame sets window.__gameActiveId in dev mode).
   const gameId = await page.evaluate(() => (window as any).__gameActiveId ?? null);
+  expect(gameId).toBeTruthy();
 
-  // Drive ops through the real socket-dispatch path.
+  // Capture baseline ack count before sending ops.
+  const before: number = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'ack').length);
+
+  // Drive 3 ops through the real socket-dispatch path (same path as live ops from the backend).
   await page.evaluate((gid) => {
     const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
     apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
@@ -42,14 +64,13 @@ test('ops mutate the engine iframe scene live and keep hookstate in sync', async
     });
   }, gameId);
 
-  // The engine iframe's model reflects the ops (proves cross-frame render, no reload).
+  // Assert the engine acked all 3 ops (cross-frame render proof).
   await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const f = document.querySelector('[data-testid=game-engine-frame]') as HTMLIFrameElement;
-        const model = (f.contentWindow as any)?.__engineModel;
-        return model ? Object.keys(model.toDocument().nodes).length : 0;
-      }),
-    )
-    .toBeGreaterThanOrEqual(2);
+    .poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'ack').length - b, before), {
+      timeout: 10000,
+    })
+    .toBeGreaterThanOrEqual(3);
+
+  // Assert no engine errors during the session.
+  expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
 });
