@@ -150,3 +150,33 @@ async def test_delete_asset_unknown_id_returns_not_found_without_interrupt(monke
     out = await tool.ainvoke({"asset_id": "missing"})
     assert "not found" in out.lower()
     assert store.deleted == []
+
+
+class _Gen:
+    def __init__(self, id, image_ref):
+        self.id, self.image_ref = id, image_ref
+
+
+class _AssetWithGen:
+    def __init__(self, id, name, category, selected_generation_id, generations):
+        self.id, self.name, self.category = id, name, category
+        self.selected_generation_id = selected_generation_id
+        self.generations = generations
+
+
+@pytest.mark.asyncio
+async def test_list_assets_includes_selected_generation_media_path():
+    asset = _AssetWithGen("a1", "knight", "sprite", "g2",
+                          [_Gen("g1", "/media/x/a1/g1.png"), _Gen("g2", "/media/x/a1/g2.png")])
+    tool = build_list_assets_tool(ToolContext("r1", "g1", _ListStore([asset]), None))
+    out = await tool.ainvoke({})
+    assert "/media/x/a1/g2.png" in out  # the SELECTED generation's path
+    assert "/media/x/a1/g1.png" not in out
+
+
+@pytest.mark.asyncio
+async def test_list_assets_marks_assets_without_a_generation():
+    asset = _AssetWithGen("a2", "sky", None, None, [])
+    tool = build_list_assets_tool(ToolContext("r1", "g1", _ListStore([asset]), None))
+    out = await tool.ainvoke({})
+    assert "a2" in out and "no image yet" in out.lower()

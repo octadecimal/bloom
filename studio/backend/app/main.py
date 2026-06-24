@@ -23,6 +23,11 @@ from app.gdd.store import GddStore
 from app.scene.hub import GameSceneHub
 from app.scene.sockets import register_scene_handlers
 from app.scene.store import GameSceneStore
+from app.simulator.store import SlotModelStore
+from app.simulator.hub import CurationHub
+from app.simulator.runner import build_curation_runner
+from app.simulator.sockets import register_sim_handlers
+from app.simulator.rest import router as sim_router
 from app.presence import PresenceRegistry
 from app.providers import build_provider, build_chat_model
 from app.rest import router
@@ -86,6 +91,9 @@ def build(settings: Settings) -> AppContext:
     scene_store = GameSceneStore(mongo[settings.mongo_db])
     scene_hub = GameSceneHub(sio, scene_store)
 
+    sim_store = SlotModelStore(mongo[settings.mongo_db])
+    sim_hub = CurationHub(sio, sim_store, build_curation_runner(settings), gdd_store)
+
     run_store = RunStore(mongo[settings.mongo_db])
     fastapi_app.state.run_store = run_store
     tool_factory = ToolFactory(asset_store, asset_hub, gdd_store=gdd_store, gdd_hub=gdd_hub,
@@ -109,12 +117,16 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.asset_store = asset_store
     fastapi_app.state.gdd_store = gdd_store
     fastapi_app.state.skill_registry = skill_registry
+    fastapi_app.state.sim_store = sim_store
+    fastapi_app.state.sim_hub = sim_hub
     fastapi_app.include_router(assets_router)
+    fastapi_app.include_router(sim_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
     register_scene_handlers(sio, scene_hub)
+    register_sim_handlers(sio, sim_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 

@@ -1,4 +1,5 @@
 import { PixiRenderer } from './render/pixiRenderer';
+import { resolveTextureSrc } from './render/resolveSrc';
 import { createEngine } from './engine';
 import type { InboundMessage, OutboundMessage } from './protocol/messages';
 import { parseParentOrigin, originAllowed } from './protocol/origin';
@@ -6,16 +7,23 @@ import { parseParentOrigin, originAllowed } from './protocol/origin';
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
 
+const params = new URLSearchParams(window.location.search);
+
 // When embedded by the studio, the iframe src carries ?parentOrigin=<studio origin>.
 // Standalone (no param) keeps Plan 1 behavior: accept any origin, post with '*'.
 const expectedOrigin = parseParentOrigin(window.location.search);
 
+// The studio also passes ?mediaBase=<backend origin> so root-relative /media paths
+// resolve to the cross-origin backend. Empty in standalone → identity resolution.
+const mediaBase = params.get('mediaBase') ?? '';
+
 const post = (m: OutboundMessage) => window.parent?.postMessage(m, expectedOrigin ?? '*');
-const renderer = new PixiRenderer(stage);
+const renderer = new PixiRenderer(stage, (s) => resolveTextureSrc(s, mediaBase));
 const { host, model } = createEngine({ renderer, post });
 
 // Test/standalone observability.
 (window as unknown as { __engineModel: typeof model }).__engineModel = model;
+(window as unknown as { __engineRenderer: typeof renderer }).__engineRenderer = renderer;
 
 window.addEventListener('message', (event: MessageEvent) => {
   if (!originAllowed(expectedOrigin, event.origin)) return;
@@ -25,7 +33,7 @@ window.addEventListener('message', (event: MessageEvent) => {
 host.start();
 
 // Standalone mode: ?doc=<url> loads a document file directly (no studio).
-const docUrl = new URLSearchParams(window.location.search).get('doc');
+const docUrl = params.get('doc');
 if (docUrl) {
   void fetch(docUrl)
     .then((r) => r.json())
