@@ -74,3 +74,58 @@ test('ops are delivered to and acknowledged by the engine iframe (cross-frame, l
   // Assert no engine errors during the session.
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
 });
+
+test('a generated asset renders as a real sprite texture in the engine iframe (live, no reload)', async ({ page }) => {
+  await openAppAtRoom(page, 'ada');
+
+  // 1. Author + generate one asset (replay produces a real >64px image on disk).
+  await page.getByTestId('asset-name').fill('Wild');
+  await page.getByTestId('asset-prompt').fill('a glowing wild symbol');
+  await page.getByTestId('asset-workflow').selectOption('schnell-transparent');
+  await page.getByRole('button', { name: 'Add asset' }).click();
+  await page.getByTestId('asset-generate').click();
+  await expect(page.getByTestId('asset-selected-image')).toBeVisible({ timeout: 30_000 });
+
+  // 2. Open the Game Scene pane and wait for the engine handshake.
+  //    (Do this before fetching assets so that window.__gameActiveId is guaranteed set.)
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs?.some((m: any) => m.kind === 'ready')), { timeout: 20000 }).toBe(true);
+
+  // 3. Read the actual game ID (set by openGame when the room route loaded).
+  const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
+  expect(gameId).toBeTruthy();
+
+  // 4. Read the asset's selected media path from the backend wire.
+  const imageRef = await page.evaluate(async (gid) => {
+    const assets = await (await fetch(`/games/${gid}/assets`)).json();
+    const a = assets[0];
+    const sel = a.generations.find((g: any) => g.id === a.selectedGenerationId) ?? a.generations[0];
+    return sel.imageRef as string;
+  }, gameId);
+  expect(imageRef).toMatch(/^\/media\//);
+
+  // 5. Build a root → sprite, add a Texture(src=imageRef), bind it with a data edge.
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
+      const op = (o: unknown) => apply('scene_op', { gameId: gid, op: o });
+      op({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
+      op({ kind: 'addNode', id: 'sym', type: 'Sprite' });
+      op({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
+      op({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });
+      op({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'sym', port: 'texture' } });
+    },
+    { gid: gameId, ref: imageRef },
+  );
+
+  // 6. Inside the cross-origin engine frame, poll the sprite's texture size > 64.
+  const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
+  await expect
+    .poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym')?.width ?? 0), { timeout: 20000 })
+    .toBeGreaterThan(64);
+
+  // 7. No engine errors during the session.
+  expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
+});

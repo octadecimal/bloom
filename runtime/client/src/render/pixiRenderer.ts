@@ -113,4 +113,12 @@ export class PixiRenderer implements IRenderer {
     const obj = this.objects.get(spriteId);
     if (obj instanceof Sprite) obj.texture = (texture as Texture) ?? Texture.EMPTY;
   }
+
+  textureSizeOf(id: string): { width: number; height: number } | null {
+    const obj = this.objects.get(id);
+    if (!(obj instanceof Sprite)) return null;
+    const tex = obj.texture;
+    if (!tex) return null;
+    return { width: tex.width, height: tex.height };
+  }
 }

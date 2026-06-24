@@ -8,3 +8,12 @@ export const ENGINE_PORT: string = (import.meta.env.VITE_BLOOM_ENGINE_PORT as st
 export function engineOrigin(): string {
   return `${window.location.protocol}//${window.location.hostname}:${ENGINE_PORT}`;
 }
+
+// The studio backend (default :8000) serves /media. The engine iframe is
+// cross-origin, so it needs an absolute, host-derived backend origin — never a
+// hardcoded localhost (LAN rule), mirroring engineOrigin() above.
+export const BACKEND_PORT: string = (import.meta.env.VITE_BLOOM_BACKEND_PORT as string | undefined) ?? '8000';
+
+export function backendOrigin(): string {
+  return `${window.location.protocol}//${window.location.hostname}:${BACKEND_PORT}`;
+}

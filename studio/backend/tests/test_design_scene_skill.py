@@ -12,5 +12,5 @@ def test_design_scene_skill_loads_with_known_scene_tools():
     reg.load()  # raises if any skill declares an unknown tool
     spec = reg.get("design-scene")
     assert spec is not None
-    assert set(spec.tools) == SCENE_TOOL_NAMES
+    assert set(spec.tools) == SCENE_TOOL_NAMES | {"list_assets"}
     assert "node" in spec.body.lower()  # encodes the node-graph authoring loop
