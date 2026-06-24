@@ -52,10 +52,12 @@ Tasks 1–2 deliver Feature A; Tasks 3–4 deliver Feature B. The two features s
 Pure, layout-free predicate that decides whether the feed viewport is pinned to the bottom. Foundation for Feature A; no React, fully unit-testable.
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/scroll.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/scroll.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `interface IScrollMetrics { scrollTop: number; clientHeight: number; scrollHeight: number }`
@@ -138,12 +140,14 @@ git commit -m "feat(llm-chat): add isAtBottom scroll helper"
 Wrap the message `<ul>` in a component that follows content while pinned, leaves the user alone when scrolled up, and shows a floating "jump to latest" button. Bubbles are passed as `children`, so the scroller's own `showJump` state never re-renders them.
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/MessageScroller.tsx`
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx` (the `MessageList` function, around lines 64–87)
 - Test (unit, render-count safety): `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx` (existing suite must still pass; add one jump-button test)
 - Test (e2e, authoritative): `studio/frontend/e2e/llm-chat.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `isAtBottom`, `IScrollMetrics` from `./scroll` (Task 1).
 - Produces: `function MessageScroller({ children }: { children: ReactNode }): JSX.Element` — renders `<ul data-testid="chat-messages">` (the scroll container, direct parent of the feed children) plus a `data-testid="chat-jump-latest"` button as an absolutely-positioned sibling (NOT a child of the `<ul>`, so feed child-ordering tests are unaffected).
 
@@ -251,13 +255,13 @@ import { MessageScroller } from './MessageScroller';
 Then replace the `return (...)` block of the `MessageList` function (currently the `<ul data-testid="chat-messages" …>…</ul>`, lines ~80–85) with:
 
 ```tsx
-  return (
-    <MessageScroller>
-      {feed.map((entry) =>
-        entry.kind === 'message' ? <ChatMessageBubble key={`m:${entry.id}`} index={entry.index} /> : <RunTurnBlock key={`r:${entry.id}`} index={entry.index} />,
-      )}
-    </MessageScroller>
-  );
+return (
+  <MessageScroller>
+    {feed.map((entry) =>
+      entry.kind === 'message' ? <ChatMessageBubble key={`m:${entry.id}`} index={entry.index} /> : <RunTurnBlock key={`r:${entry.id}`} index={entry.index} />,
+    )}
+  </MessageScroller>
+);
 ```
 
 (The `<ul data-testid="chat-messages">` now lives inside `MessageScroller`; `MessageList` no longer renders it directly.)
@@ -323,10 +327,12 @@ git commit -m "feat(llm-chat): sticky-bottom feed with jump-to-latest"
 Pure transform that folds each `tool_call` (+ its later `tool_result`) into a single merged tool entry, passing every other step type through untouched. Foundation for Feature B; no React.
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/toolFold.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/toolFold.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `IRunStep` from `./state`.
 - Produces:
   - `type IRenderStep = { kind: 'passthrough'; step: IRunStep } | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status'] }`
@@ -432,9 +438,7 @@ Create `studio/frontend/src/plugins/llm-chat/toolFold.ts`:
 ```ts
 import type { IRunStep } from './state';
 
-export type IRenderStep =
-  | { kind: 'passthrough'; step: IRunStep }
-  | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status'] };
+export type IRenderStep = { kind: 'passthrough'; step: IRunStep } | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status'] };
 
 type IToolEntry = Extract<IRenderStep, { kind: 'tool' }>;
 
@@ -496,11 +500,13 @@ git commit -m "feat(llm-chat): add foldToolSteps tool-pairing transform"
 Render the folded steps. Replace the two bordered tool cards with one subtle, borderless line: spinner + shimmering name while running, calm `✓` + muted name when done, `✕` + danger text on error. Add the token-only shimmer keyframe to `styles.css`.
 
 **Files:**
+
 - Modify: `studio/frontend/src/styles.css` (append after the scrollbar block, ~line 144)
 - Modify: `studio/frontend/src/plugins/llm-chat/RunTurnBlock.tsx` (`RunStepCard` tool branch, lines ~17–34; `RunTurnBlock` step mapping, lines ~68–72)
 - Test: `studio/frontend/src/plugins/llm-chat/RunTurnBlock.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `foldToolSteps`, `IRenderStep` from `./toolFold` (Task 3); `Loader2`, `Check`, `X` from `lucide-react`.
 - Produces: the merged tool line renders as `<div data-testid="run-step-${callIndex}" data-state="running|complete|error">` with no border/background. Approval/question/thinking/final rendering is unchanged.
 
@@ -659,15 +665,15 @@ function RunStepCard({ step, index, runId }: { step: IReadonlyRunStep; index: nu
 Finally, update the `RunTurnBlock` body to fold the steps and dispatch each render entry. Replace the steps `.map(...)` (lines ~68–72) with:
 
 ```tsx
-      <div className="flex min-w-0 flex-col gap-2">
-        {foldToolSteps(steps).map((entry: IRenderStep) =>
-          entry.kind === 'tool' ? (
-            <ToolLine key={`t:${entry.callIndex}`} callIndex={entry.callIndex} toolName={entry.toolName} status={entry.status} />
-          ) : (
-            <RunStepCard key={`s:${entry.step.index}`} step={entry.step} index={entry.step.index} runId={id} />
-          ),
-        )}
-      </div>
+<div className="flex min-w-0 flex-col gap-2">
+  {foldToolSteps(steps).map((entry: IRenderStep) =>
+    entry.kind === 'tool' ? (
+      <ToolLine key={`t:${entry.callIndex}`} callIndex={entry.callIndex} toolName={entry.toolName} status={entry.status} />
+    ) : (
+      <RunStepCard key={`s:${entry.step.index}`} step={entry.step} index={entry.step.index} runId={id} />
+    ),
+  )}
+</div>
 ```
 
 (`steps` is already read via `r.steps.get()` earlier in `RunTurnBlock`; `foldToolSteps` runs on every render of this block, which is exactly when steps change.)
@@ -701,16 +707,16 @@ git commit -m "feat(llm-chat): collapse tool steps into one borderless line"
 ## Final verification (before PR)
 
 - [ ] **Frontend CI gates** (all four — vitest green alone is not enough):
-  Run from `studio/frontend`:
+      Run from `studio/frontend`:
   - `npx prettier --check .`
   - `npx nx typecheck frontend` (or the repo's typecheck script)
   - `npx vitest run`
   - `npx nx build frontend` (or the repo's build script)
-  Expected: all pass. Fix any prettier/type errors before pushing.
+    Expected: all pass. Fix any prettier/type errors before pushing.
 
 - [ ] **Full e2e** (authoritative; replay backend on :8000, coordinate the singleton stack):
-  Run: `just e2e`
-  Expected: green, including the new scroll spec and the unchanged skill-run specs.
+      Run: `just e2e`
+      Expected: green, including the new scroll spec and the unchanged skill-run specs.
 
 - [ ] **Open the PR** (do not present a menu — push + PR directly, per AGENTS.md):
 
