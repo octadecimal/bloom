@@ -81,6 +81,8 @@ wt-new name type='feat':
     git worktree add ../bloom.wt/{{name}} -b {{type}}/{{name}}
     powershell -NoProfile -Command "if (Test-Path .env) { Copy-Item .env '../bloom.wt/{{name}}/.env' -Force }"
     @echo "Worktree ..\bloom.wt\{{name}} on {{type}}/{{name}} is ready. Inside it run: just bootstrap"
+    @echo "── active worktrees (who else is working where) ──"
+    git worktree list
 
 # Remove a worktree's directory (its branch is left intact).
 wt-rm name:
