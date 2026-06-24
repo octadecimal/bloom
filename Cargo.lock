@@ -29,6 +29,10 @@ dependencies = [
 [[package]]
 name = "bloom-math"
 version = "0.0.0"
+dependencies = [
+ "postcard",
+ "serde",
+]
 
 [[package]]
 name = "bloom-package"
