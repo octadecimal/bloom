@@ -229,6 +229,21 @@ body {
   border-radius: 6px;
 }
 
+/* Snappier drop-preview: halve dockview's animation timing so the overlay tracks the cursor
+   more tightly. Dockview drives ALL drop-preview motion off a single custom property,
+   --dv-transition-duration, which it declares on two elements — .dv-drop-target-container
+   (300ms, the anchor sliding between groups; the dominant, most visible duration) and
+   .dv-drop-target (70ms, the quadrant slide within one target). Because the library sets the
+   variable on those elements directly, an inherited value on the theme root won't win — so
+   override it on the same selectors, scoped under our theme class. Specificity 0,2,0 beats
+   dockview's 0,1,0, so no !important and no JS; this is the library's own theming knob. */
+.dockview-theme-bloom .dv-drop-target-container {
+  --dv-transition-duration: 150ms;
+}
+.dockview-theme-bloom .dv-drop-target {
+  --dv-transition-duration: 35ms;
+}
+
 /* Resizer sash is invisible until hovered; the canvas gap provides the separation. */
 .dockview-theme-bloom .dv-sash {
   background: transparent;
