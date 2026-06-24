@@ -1,14 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
+import { resolvePorts, readRepoEnv } from '../../tools/ports.mts';
+
+const { runtime } = resolvePorts(readRepoEnv());
+const baseURL = `http://localhost:${runtime}`;
 
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   reporter: 'list',
-  use: { baseURL: 'http://localhost:4300', trace: 'on-first-retry' },
+  use: { baseURL, trace: 'on-first-retry' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'npx nx serve client',
-    url: 'http://localhost:4300',
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,
   },
