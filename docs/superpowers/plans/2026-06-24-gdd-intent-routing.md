@@ -11,8 +11,8 @@
 ## Global Constraints
 
 - **Source of truth for client behavior is the e2e suite.** Browser e2e (Playwright) is **not** run in CI; backend service e2e (socket/REST, `tests/e2e/`) is CI-affordable and is what this plan adds. Run `just backend-serve-replay` then `cd studio/backend && uv run pytest tests/e2e/<file> -v -m e2e`.
-- **Replay determinism:** e2e runs under `PROVIDER_MODE=replay`. Tool-bearing turns replay the **run cassette**; the replay model filters cassette `tool_calls` by the *bound* tool names and (new in this plan) selects the cassette by the last Human prompt, falling back to `__default__` (`run/default.json`). Hand-authoring keyed cassettes matches established practice (the GDD paytable call was hand-added to `default.json`).
-- **Do not modify `run/default.json`.** Existing skill e2e (design-game, generate-sprite, delete-asset) rely on it via bound-filtering. New behavior comes from *new* keyed cassette files only.
+- **Replay determinism:** e2e runs under `PROVIDER_MODE=replay`. Tool-bearing turns replay the **run cassette**; the replay model filters cassette `tool_calls` by the _bound_ tool names and (new in this plan) selects the cassette by the last Human prompt, falling back to `__default__` (`run/default.json`). Hand-authoring keyed cassettes matches established practice (the GDD paytable call was hand-added to `default.json`).
+- **Do not modify `run/default.json`.** Existing skill e2e (design-game, generate-sprite, delete-asset) rely on it via bound-filtering. New behavior comes from _new_ keyed cassette files only.
 - **Reuse, don't rebuild:** route through the existing `TurnRunner` skill path and the existing approval/question gate in `room_hub`. No new run executor; no new socket events.
 - **TDD:** every task is RED → GREEN → commit. Write the failing test first, watch it fail, implement minimally, watch it pass.
 - **Commits:** Conventional Commits (`feat(gdd): …`, `test(gdd): …`).
@@ -679,9 +679,13 @@ git commit -m "feat(gdd): route game-room plain chat through the design-router"
 {
   "prompt": "set the bonus hit rate to 1:200",
   "tool_calls": [
-    { "name": "set_gdd_fields", "args": {
+    {
+      "name": "set_gdd_fields",
+      "args": {
         "aspect": "math-model",
-        "fields": { "bonus_hit_rate": "1:200" } } }
+        "fields": { "bonus_hit_rate": "1:200" }
+      }
+    }
   ],
   "final": ["Set Math Model → bonus hit rate = 1:200."]
 }
@@ -693,10 +697,14 @@ git commit -m "feat(gdd): route game-room plain chat through the design-router"
 {
   "prompt": "set the hit rate to 1:200",
   "tool_calls": [
-    { "name": "ask_user_question", "args": {
+    {
+      "name": "ask_user_question",
+      "args": {
         "question": "Which hit rate do you mean?",
         "suggestions": ["Base-game hit frequency", "Bonus hit rate"],
-        "aspect": "math-model" } }
+        "aspect": "math-model"
+      }
+    }
   ],
   "final": ["Which hit rate did you mean?"]
 }
@@ -1067,6 +1075,7 @@ git commit -m "test(gdd): migrate realtime plain-chat e2e to the routed run wire
 **Placeholder scan:** none. Every code step shows complete code or complete JSON; every command states expected output. The only environment action is starting `just backend-serve-replay` before the e2e steps.
 
 **Type consistency:**
+
 - `field_catalog() -> dict[str, list[dict]]` defined in Task 1; consumed by `_render_catalog` in Task 2 (iterates `cat.items()`, reads `f["key"|"label"|"type"|"required"|"enum"]`) — matches the emitted keys exactly.
 - `build_design_router_spec() -> SkillSpec` (Task 2) returns `name`, `tools`, `args=[]`, `body`; consumed in Task 4 via `spec.name` / `spec.tools` (used by `_run_skill`'s `set(spec.tools) & GDD_TOOL_NAMES` seed guard).
 - `load_run_cassettes(fixtures_dir) -> dict[str, dict]` (Task 3) feeds `ReplayToolCallingChatModel.run_cassettes: dict` (Task 3) and `build_chat_model` (Task 3) — consistent.
