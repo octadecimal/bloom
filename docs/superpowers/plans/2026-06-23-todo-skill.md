@@ -29,9 +29,11 @@
 ### Task 1: Create the `/todo` skill instruction file
 
 **Files:**
+
 - Create: `.claude/skills/todo/SKILL.md`
 
 **Interfaces:**
+
 - Consumes: the `gh` CLI (`gh auth status`, `gh label create`, `gh issue create`, `gh issue list`, `gh issue close`).
 - Produces: a slash command `/todo` available to any session in any bloom worktree. No code symbols are exported; downstream tasks rely only on the file existing at this exact path with valid frontmatter (`name: todo`).
 
@@ -132,6 +134,7 @@ Close the issue that matches what the user finished.
    ```
 
    Then confirm which issue (number + title) you closed.
+
 4. If two or more plausibly match, or none do, ask the user which issue number to close
    rather than closing the wrong one.
 
@@ -163,9 +166,11 @@ git commit -m "feat(todo): add /todo skill backed by GitHub issues"
 ### Task 2: Add the manual end-to-end verification checklist
 
 **Files:**
+
 - Create: `.claude/skills/todo/verify.md`
 
 **Interfaces:**
+
 - Consumes: the `/todo` skill from Task 1 (the commands it documents must match `SKILL.md`).
 - Produces: a human-runnable checklist; no code symbols.
 
@@ -238,9 +243,11 @@ git commit -m "docs(todo): add manual e2e verification checklist for /todo skill
 ### Task 3: Run the end-to-end verification and finish the branch
 
 **Files:**
+
 - Modify: none (this task executes the checklist and opens the PR).
 
 **Interfaces:**
+
 - Consumes: `.claude/skills/todo/SKILL.md` and `.claude/skills/todo/verify.md`.
 - Produces: a verified, merged `/todo` skill on `main`.
 
@@ -285,6 +292,7 @@ Expected: a PR is created against `main`. (Per repo policy, `main` is protected;
 ## Self-Review
 
 **1. Spec coverage:**
+
 - Skill is `.claude/skills/todo/SKILL.md`, pure instructions → Task 1. ✓
 - Store = GitHub Issues in `octadecimal/bloom`, pinned via `--repo` on every `gh` call → Task 1 (Add/Query/Complete). ✓
 - `todo` label + `@me` assignee → Task 1 Add step. ✓

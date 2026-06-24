@@ -8,7 +8,7 @@
 
 Let the user jot a todo from any session with a single command, persisting it as a
 **GitHub issue** in the repo. A future session can then list those issues and reason
-over them — the load-bearing use case being: *"from my todos, what should I do next?"*
+over them — the load-bearing use case being: _"from my todos, what should I do next?"_
 
 The defining insight: a Claude Code skill is **instructions, not code**. "Querying"
 therefore needs no search engine — it is a session running `gh issue list` and
@@ -72,7 +72,7 @@ question/command, the skill asks one clarifying question rather than guessing.
 
 ## Tags
 
-Native issue labels *are* the tags. Keep it light: an optional inline `#tag` in the
+Native issue labels _are_ the tags. Keep it light: an optional inline `#tag` in the
 user's input maps to an additional label (created via the same idempotent
 `gh label create` bootstrap if missing). Tags are never required — the `todo` label is
 always applied regardless.
