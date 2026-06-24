@@ -42,9 +42,7 @@ describe('RunTurnBlock', () => {
   });
 
   it('marks a tool with no result yet as data-state=running', () => {
-    chatSlice().runs.set([
-      run({ steps: [{ index: 0, type: 'tool_call', toolName: 'generate_asset', content: '{}', status: 'complete' }] }),
-    ]);
+    chatSlice().runs.set([run({ steps: [{ index: 0, type: 'tool_call', toolName: 'generate_asset', content: '{}', status: 'complete' }] })]);
     render(<RunTurnBlock index={0} />);
     expect(screen.getByTestId('run-step-0').getAttribute('data-state')).toBe('running');
   });
