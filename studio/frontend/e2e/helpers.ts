@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.mts';
+import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
 
 /** Backend base URL for direct Node-side API calls from specs — follows BLOOM_PORT_OFFSET. */
 export const BACKEND_URL = resolvePorts(readRepoEnv()).backendUrl;

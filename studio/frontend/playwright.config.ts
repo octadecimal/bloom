@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { resolvePorts, readRepoEnv } from '../../tools/ports.mts';
+import { resolvePorts, readRepoEnv } from '../../tools/ports.ts';
 
 const { frontend } = resolvePorts(readRepoEnv());
 const baseURL = `http://localhost:${frontend}`;

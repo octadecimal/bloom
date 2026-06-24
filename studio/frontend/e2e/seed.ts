@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.mts';
+import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
 
 // Direct-to-Mongo seeding for the manage-assets approval e2e. The replay backend
 // (`just backend-serve-replay`) uses MONGO_DB=bloom_studio on localhost:27017.

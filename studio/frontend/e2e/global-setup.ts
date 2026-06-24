@@ -1,5 +1,5 @@
 // studio/frontend/e2e/global-setup.ts
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.mts';
+import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
 
 const { backendUrl } = resolvePorts(readRepoEnv());
 

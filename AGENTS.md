@@ -137,7 +137,7 @@ directory and branch — so the protocol is short:
   the one shared `mongod`. `just wt-new` auto-assigns the lowest free offset into
   the new worktree's `.env`. This lets parallel worktrees run `just
 backend-serve-replay` + `just e2e` at the same time without colliding. The math
-  lives in two mirrored places — `tools/ports.mts` (frontend/runtime/Playwright) and
+  lives in two mirrored places — `tools/ports.ts` (frontend/runtime/Playwright) and
   the `justfile` (backend) — keep them in sync. See [`docs/worktrees.md`](docs/worktrees.md).
 - **Live mode is still a singleton.** The offset shifts ports + data, not the one
   GPU/ComfyUI (`:8188`) or a live OpenRouter session — only one session runs the

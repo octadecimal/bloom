@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resolvePorts, readRepoEnv } from '../../../tools/ports.mts';
+import { resolvePorts, readRepoEnv } from '../../../tools/ports.ts';
 
 const RUNTIME_URL = `http://localhost:${resolvePorts(readRepoEnv()).runtime}`;
 

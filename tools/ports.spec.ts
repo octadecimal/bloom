@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePorts } from './ports.mts';
+import { resolvePorts } from './ports';
 
 describe('resolvePorts', () => {
   it('returns the current defaults when the offset is unset', () => {

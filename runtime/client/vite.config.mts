@@ -1,7 +1,7 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { resolvePorts, readRepoEnv } from '../../tools/ports.mts';
+import { resolvePorts, readRepoEnv } from '../../tools/ports.ts';
 
 export default defineConfig(() => {
   const { runtime } = resolvePorts(readRepoEnv());
