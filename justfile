@@ -64,3 +64,33 @@ e2e-live:
 # Requires OPENROUTER_API_KEY in .env and ComfyUI running on :8188.
 record-fixtures:
     cd studio/backend && PROVIDER_MODE=live uv run python -m app.replay.record
+
+# ── Parallel worktrees (see docs/worktrees.md) ──────────────────────────────
+# Run wt-new / wt-rm from the PRIMARY checkout (C:\code\bloom). Worktrees are
+# created as siblings at ..\bloom.wt\<name>, one Claude session each. Each
+# worktree installs its own deps; the live stack stays one-session-at-a-time.
+
+# List every worktree and the branch it's on.
+wt-ls:
+    git worktree list
+
+# Create a sibling worktree on a new branch and copy local .env into it.
+# Usage:  just wt-new gdd-viewer            -> ..\bloom.wt\gdd-viewer  on feat/gdd-viewer
+#         just wt-new audit-store fix       -> ..\bloom.wt\audit-store on fix/audit-store
+wt-new name type='feat':
+    git worktree add ../bloom.wt/{{name}} -b {{type}}/{{name}}
+    powershell -NoProfile -Command "if (Test-Path .env) { Copy-Item .env '../bloom.wt/{{name}}/.env' -Force }"
+    @echo "Worktree ..\bloom.wt\{{name}} on {{type}}/{{name}} is ready. Inside it run: just bootstrap"
+    @echo "── active worktrees (who else is working where) ──"
+    git worktree list
+
+# Remove a worktree's directory (its branch is left intact).
+wt-rm name:
+    git worktree remove ../bloom.wt/{{name}}
+    @echo "Removed worktree {{name}}. Branch kept — delete it with: git branch -d {{name}}"
+
+# Install all per-worktree deps. Run this INSIDE a freshly-created worktree.
+bootstrap:
+    npm install
+    cd studio/backend && uv sync
+    @echo "Bootstrapped. (Cargo builds on demand; Mongo is shared — start it with: just mongo-up)"
