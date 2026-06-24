@@ -75,8 +75,8 @@ test.describe('generate-background via form', () => {
     // Submit the form.
     await page.getByTestId('skill-form-submit').click();
 
-    // --- Run timeline must appear and contain the tool call ---
-    const timeline = page.getByTestId('run-timeline');
+    // --- Unified feed must contain the run's tool call ---
+    const timeline = page.getByTestId('chat-messages');
     await expect(timeline).toBeVisible({ timeout: 10_000 });
     await expect(timeline).toContainText('generate_asset', { timeout: 15_000 });
 
