@@ -17,6 +17,9 @@ from app.assets.sockets import register_asset_handlers
 from app.assets.store import AssetStore
 from app.chat_service import ChatService
 from app.config import Settings, get_settings
+from app.gdd.hub import GddHub
+from app.gdd.sockets import register_gdd_handlers
+from app.gdd.store import GddStore
 from app.presence import PresenceRegistry
 from app.providers import build_provider, build_chat_model
 from app.rest import router
@@ -74,9 +77,12 @@ def build(settings: Settings) -> AppContext:
     comfy = build_comfy_provider(settings)
     asset_hub = AssetHub(sio, asset_store, comfy, media)
 
+    gdd_store = GddStore(mongo[settings.mongo_db])
+    gdd_hub = GddHub(sio, gdd_store)
+
     run_store = RunStore(mongo[settings.mongo_db])
     fastapi_app.state.run_store = run_store
-    tool_factory = ToolFactory(asset_store, asset_hub)
+    tool_factory = ToolFactory(asset_store, asset_hub, gdd_store=gdd_store, gdd_hub=gdd_hub)
     skill_registry = SkillRegistry(Path(settings.skills_dir), tool_factory.known_tool_names())
     skill_registry.load()
     turn_runner = TurnRunner(lambda model: build_chat_model(settings, model), tool_factory)
@@ -87,16 +93,19 @@ def build(settings: Settings) -> AppContext:
         run_store=run_store, turn_runner=turn_runner,
         skills=skill_registry, tool_factory=tool_factory,
         asset_store=asset_store, asset_hub=asset_hub,
+        gdd_store=gdd_store, gdd_hub=gdd_hub,
     )
     register_socket_handlers(sio, hub, presence)
 
     fastapi_app.state.game_store = games
     fastapi_app.state.asset_store = asset_store
+    fastapi_app.state.gdd_store = gdd_store
     fastapi_app.state.skill_registry = skill_registry
     fastapi_app.include_router(assets_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
+    register_gdd_handlers(sio, gdd_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 

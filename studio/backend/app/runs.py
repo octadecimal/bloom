@@ -11,7 +11,7 @@ def _now() -> datetime:
 
 class RunStep(_WireModel):
     index: int
-    type: Literal["thinking", "tool_call", "tool_result", "final", "approval"]
+    type: Literal["thinking", "tool_call", "tool_result", "final", "approval", "question"]
     tool_name: str | None = None
     content: str = ""
     status: Literal["running", "complete", "error"] = "running"

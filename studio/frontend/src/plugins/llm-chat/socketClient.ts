@@ -160,6 +160,7 @@ export function createSocketClient(makeSocket: MakeSocket) {
     setTyping: (roomId: string, isTyping: boolean) => emit('typing', { roomId, isTyping }),
     runSkill: (roomId: string, skillName: string, args: Record<string, unknown>, text = '') => emit('run_skill', { roomId, skillName, args, text }),
     resolveApproval: (roomId: string, runId: string, decision: 'approve' | 'deny') => emit('resolve_approval', { roomId, runId, decision }),
+    resolveQuestion: (roomId: string, runId: string, answer: { type: string; value?: string }) => emit('resolve_question', { roomId, runId, answer }),
   };
 }
 
