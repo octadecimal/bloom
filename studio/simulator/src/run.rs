@@ -2,9 +2,13 @@
 //! → build+sign. Approach A: a model that misses targets FAILS; the simulator
 //! never reshapes the pool to force a target.
 
+use crate::curate::{freeze_pool, CurateError, Pool};
+use crate::measure::{measure, simulate};
+use crate::seedgen::generate_seeds;
 use crate::target::{Metrics, TargetSpec};
-#[cfg(test)]
-use crate::target::HitRateBand;
+use bloom_math::mechanics::slots::{to_payload, SlotModel};
+use bloom_package::{build, Envelope, PackageContent};
+use ed25519_dalek::SigningKey;
 
 /// Check measured metrics against the target bands (RTP, volatility, and EACH
 /// feature's hit-rate). Err carries the metrics so the caller (human / future
@@ -32,9 +36,159 @@ pub fn verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum RunError {
+    /// The model's measured characteristics missed the target bands.
+    VerifyFailed(Metrics),
+    /// The pool could not be frozen within the honesty guardrail.
+    Curate(CurateError),
+}
+
+#[derive(Debug)]
+pub struct CurationOutput {
+    pub package_bytes: Vec<u8>,
+    pub metrics: Metrics,
+    pub pool: Pool,
+    /// Human-readable provenance (NOT embedded in the signed package; the
+    /// package format is certified and unchanged — see the design spec).
+    pub report: String,
+}
+
+/// Generate → simulate → measure → verify → freeze → build+sign.
+pub fn run_curation(
+    model: &SlotModel,
+    target: &TargetSpec,
+    master_seed: u64,
+    package_id: &str,
+    signing_key: &SigningKey,
+) -> Result<CurationOutput, RunError> {
+    let seeds = generate_seeds(master_seed, target.candidate_count);
+    let samples = simulate(model, &seeds);
+    let metrics = measure(&samples);
+
+    verify(&metrics, target).map_err(RunError::VerifyFailed)?;
+
+    let pool = freeze_pool(&samples, target, metrics.rtp).map_err(RunError::Curate)?;
+
+    let content = PackageContent {
+        envelope: Envelope {
+            package_id: package_id.to_string(),
+            package_version: 1,
+            mechanic: "slots@1".to_string(),
+        },
+        math_payload: to_payload(model),
+        seeds: pool.seeds.clone(),
+        presentation: Vec::new(),
+    };
+    let package_bytes = build(&content, signing_key);
+
+    let bonus_rates = metrics
+        .bonus_hit_rates
+        .iter()
+        .enumerate()
+        .map(|(i, r)| format!("bonus_hit_rate[{i}]={r:.5}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let report = format!(
+        "package_id={package_id}\nmechanic=slots@1\nmaster_seed={master_seed}\n\
+         candidate_count={}\npool_size={}\n\
+         measured_rtp={:.5}\nrealized_rtp={:.5}\nvolatility={:.5}\n\
+         hit_frequency={:.5}\nbase_rtp={:.5}\nfeature_rtp={:.5}\n{}\n",
+        target.candidate_count,
+        target.pool_size,
+        metrics.rtp,
+        pool.realized_rtp,
+        metrics.volatility,
+        metrics.hit_frequency,
+        metrics.base_rtp,
+        metrics.feature_rtp,
+        bonus_rates,
+    );
+
+    Ok(CurationOutput { package_bytes, metrics, pool, report })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::target::HitRateBand;
+    use bloom_math::mechanics::slots::{
+        evaluate, from_payload, Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
+    };
+    use bloom_package::verify_and_load;
+    use ed25519_dalek::SigningKey;
+
+    fn measurable_model() -> SlotModel {
+        SlotModel {
+            symbols: vec![
+                SymbolDef { id: 0, role: SymbolRole::Normal },
+                SymbolDef { id: 1, role: SymbolRole::Normal },
+                SymbolDef { id: 2, role: SymbolRole::Normal },
+            ],
+            reels: vec![vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
+            rows: 1,
+            paylines: vec![vec![0]],
+            paytable: Paytable {
+                entries: vec![
+                    PaytableEntry { symbol: 1, count: 1, payout: 1 },
+                    PaytableEntry { symbol: 2, count: 1, payout: 5 },
+                ],
+            },
+            bonuses: vec![],
+        }
+    }
+
+    fn target_09() -> TargetSpec {
+        TargetSpec {
+            rtp_target: 0.9,
+            rtp_tolerance: 0.02,
+            volatility_min: 0.0,
+            volatility_max: 1e9,
+            bonus_hit_rate_bands: vec![], // no bonuses in this model
+            pool_size: 10_000,
+            candidate_count: 200_000,
+            realized_correction_band: 0.05,
+        }
+    }
+
+    fn key() -> SigningKey {
+        SigningKey::from_bytes(&[7u8; 32])
+    }
+
+    #[test]
+    fn run_curation_builds_a_loadable_package() {
+        let out = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let content = verify_and_load(&out.package_bytes, &key().verifying_key()).expect("loads");
+        assert_eq!(content.seeds.len(), 10_000);
+        assert_eq!(content.envelope.mechanic, "slots@1");
+    }
+
+    #[test]
+    fn run_curation_is_reproducible() {
+        let a = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let b = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        assert_eq!(a.pool.seeds, b.pool.seeds);
+        assert_eq!(a.package_bytes, b.package_bytes);
+    }
+
+    #[test]
+    fn freeze_boundary_determinism_holds() {
+        let out = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let content = verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
+        let model = from_payload(&content.math_payload).unwrap();
+        let sum: u64 = content.seeds.iter().map(|&s| evaluate(&model, s).total_payout).sum();
+        let reexpanded_rtp = sum as f64 / content.seeds.len() as f64;
+        assert!((reexpanded_rtp - out.pool.realized_rtp).abs() < 1e-9);
+    }
+
+    #[test]
+    fn missing_target_fails_loudly() {
+        let mut t = target_09();
+        t.rtp_target = 0.50; // model is ~0.9, far outside tolerance
+        let err = run_curation(&measurable_model(), &t, 2026, "pkg-test", &key()).unwrap_err();
+        assert!(matches!(err, RunError::VerifyFailed(_)));
+    }
 
     fn target(bands: Vec<HitRateBand>) -> TargetSpec {
         TargetSpec {
