@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.catalog import build_model_catalog
 from app.models import message_wire, room_wire
+from app.runs import run_wire
 from app.skills import SkillError
 
 router = APIRouter()
@@ -109,6 +110,4 @@ async def list_runs(room_id: str, request: Request) -> list[dict]:
         raise HTTPException(status_code=404, detail="room not found")
     run_store = request.app.state.run_store
     runs = await run_store.list_runs(room_id)
-    from app.runs import run_wire
-
     return [run_wire(r) for r in runs]
