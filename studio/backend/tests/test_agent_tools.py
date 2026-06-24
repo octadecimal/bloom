@@ -19,7 +19,7 @@ async def test_known_tool_names():
     assert f.known_tool_names() == {
         "generate_asset", "list_assets", "delete_asset",
         "list_gdd_docs", "read_gdd_doc", "write_gdd_doc",
-        "edit_gdd_doc", "set_doc_status",
+        "edit_gdd_doc", "set_doc_status", "ask_user_question",
     }
 
 

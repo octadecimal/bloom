@@ -162,6 +162,41 @@ def build_set_doc_status_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_ask_user_question_tool(ctx: ToolContext) -> BaseTool:
+    async def ask_user_question(
+        question: str,
+        suggestions: list[str] = None,
+        allow_free_text: bool = True,
+        allow_delegate: bool = True,
+        aspect: str = None,
+    ) -> str:
+        payload = {
+            "kind": "question",
+            "tool": "ask_user_question",
+            "question": question,
+            "suggestions": suggestions or [],
+            "allowFreeText": allow_free_text,
+            "allowDelegate": allow_delegate,
+            "aspect": aspect,
+        }
+        answer = interrupt(payload)
+        if isinstance(answer, dict) and answer.get("type") == "delegate":
+            return ("The user delegated this decision to you. Use your best "
+                    "judgment to choose, apply it, and note in the doc that you "
+                    "made this call.")
+        if isinstance(answer, dict):
+            return str(answer.get("value", ""))
+        return str(answer)
+
+    return StructuredTool.from_function(
+        coroutine=ask_user_question, name="ask_user_question",
+        description="Ask the user ONE focused question to resolve a material "
+                    "design gap. Provide 2-4 concrete suggestions. The run pauses "
+                    "until the user picks one, types their own, or delegates "
+                    "('you decide'). aspect is the related GDD doc aspect.",
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -172,7 +207,7 @@ class ToolFactory:
         "write_gdd_doc": build_write_gdd_doc_tool,
         "edit_gdd_doc": build_edit_gdd_doc_tool,
         "set_doc_status": build_set_doc_status_tool,
-        # ask_user_question added in Task 5
+        "ask_user_question": build_ask_user_question_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None):
