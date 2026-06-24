@@ -26,17 +26,20 @@
 ## File Structure
 
 **Rust (`studio/simulator/`):**
+
 - `src/run.rs` (modify) — add `CurationProgress`, `StreamedOutcome`, `run_curation_streamed`; refactor `run_curation` to delegate.
 - `src/bin/curate_json.rs` (create) — NDJSON streaming CLI.
 - `justfile` (modify) — add `sim-build` recipe.
 
 **Backend (`studio/backend/app/simulator/`, new package):**
+
 - `__init__.py`, `models.py`, `targets.py`, `runner.py`, `store.py`, `hub.py`, `rest.py`, `sockets.py`.
 - `studio/backend/app/main.py` (modify) — DI wiring.
 - `studio/backend/app/config.py` (modify) — `simulator_bin` setting.
 - `studio/backend/tests/` — `test_sim_targets.py`, `test_sim_store.py`, `test_sim_runner.py`, `test_sim_hub.py`, `test_sim_rest.py`, `test_sim_curate_binary.py` (e2e-marked).
 
 **Frontend (`studio/frontend/src/plugins/simulator/`, new plugin):**
+
 - `config.ts`, `state.ts`, `restClient.ts`, `reducers.ts`, `socketClient.ts`, `actions.ts`, `index.ts`, `SimulatorPane.tsx` + `.spec` files.
 - `studio/frontend/src/plugins/index.ts` (modify) — register plugin.
 - `studio/frontend/src/app/routes/RoomRoute.tsx` (modify) — open/close on game change.
@@ -49,10 +52,12 @@
 Add a progress-reporting orchestration in the library, with `run_curation` delegating to it (so existing behavior/tests are unchanged). Progress is cosmetic: chunked simulation preserves order and bit-reproducibility.
 
 **Files:**
+
 - Modify: `studio/simulator/src/run.rs`
 - Test: `studio/simulator/src/run.rs` (`#[cfg(test)]` module — extend existing tests)
 
 **Interfaces:**
+
 - Consumes: `bloom_math::mechanics::slots::{SlotModel, to_payload}`, `crate::measure::{simulate, measure, RoundSample}`, `crate::seedgen::generate_seeds`, `crate::curate::freeze_pool`, `crate::target::{Metrics, TargetSpec}`, `bloom_package::{build, Envelope, PackageContent}`, `ed25519_dalek::SigningKey`.
 - Produces:
   - `pub enum CurationProgress { Phase(&'static str), Simulating { done: usize, total: usize } }`
@@ -232,11 +237,13 @@ git commit -m "feat(sim): streaming curation pipeline with progress callback"
 A thin binary that reads model + target JSON, runs `run_curation_streamed`, and prints newline-delimited JSON progress lines then a final result line to stdout. The signed package is written to a file path. Verify-fail and correction-band-fail are **valid outcomes** (exit 0, `status:"fail"`); only bad input / IO error exits non-zero.
 
 **Files:**
+
 - Create: `studio/simulator/src/bin/curate_json.rs`
 - Modify: `justfile` (add `sim-build`)
 - Test: `studio/simulator/src/bin/curate_json.rs` (`#[cfg(test)]` for the pure JSON-line helpers)
 
 **Interfaces:**
+
 - Consumes: `bloom_simulator::run::{run_curation_streamed, CurationProgress, RunError}`, `bloom_simulator::target::{HitRateBand, TargetSpec}`, `bloom_math::mechanics::slots::SlotModel`, `ed25519_dalek::SigningKey`, `serde`, `serde_json`.
 - Produces (stdout NDJSON contract the backend parses):
   - progress: `{"type":"progress","phase":"simulate","done":N,"total":M}` (phase ∈ generate|simulate|measure|verify|freeze|sign; `done`/`total` only for simulate)
@@ -445,11 +452,13 @@ git commit -m "feat(sim): curate_json streaming NDJSON binary + sim-build recipe
 ## Task 3: Backend — wire models (`app/simulator/models.py`)
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/__init__.py` (empty)
 - Create: `studio/backend/app/simulator/models.py`
 - Test: `studio/backend/tests/test_sim_models.py`
 
 **Interfaces:**
+
 - Produces:
   - `class CurationParams(_WireModel)`: `pool_size:int, candidate_count:int, master_seed:int, rtp_tolerance:float, realized_correction_band:float, bonus_rate_tolerance:float`
   - `class MetricsWire(_WireModel)`: `rtp, volatility, hit_frequency, base_rtp, feature_rtp: float; bonus_hit_rates: list[float]`
@@ -564,10 +573,12 @@ git commit -m "feat(sim): backend wire models for slot model + curation result"
 Pure functions mapping the structured GDD `math-model` `data` dict → the Rust target JSON. No store/IO here (decoupled from the unmerged GDD branch); the hub feeds the dict in Task 7.
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/targets.py`
 - Test: `studio/backend/tests/test_sim_targets.py`
 
 **Interfaces:**
+
 - Consumes: `CurationParams` (Task 3).
 - Produces:
   - `VOLATILITY_BANDS: dict[str, tuple[float, float]]`
@@ -713,10 +724,12 @@ git commit -m "feat(sim): derive simulator TargetSpec from GDD math-model intent
 ## Task 5: Backend — `CurationRunner` seam + subprocess impl (`app/simulator/runner.py`)
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/runner.py`
 - Test: `studio/backend/tests/test_sim_runner.py` (unit, Fake) and `studio/backend/tests/test_sim_curate_binary.py` (real subprocess, `@pytest.mark.e2e`).
 
 **Interfaces:**
+
 - Consumes: `CurationResult`, `MetricsWire` (Task 3); `app.config.Settings`.
 - Produces:
   - `@dataclass class CurationProgress: phase:str; done:int|None=None; total:int|None=None`
@@ -942,10 +955,12 @@ git commit -m "feat(sim): CurationRunner seam + subprocess impl over curate_json
 ## Task 6: Backend — `SlotModelStore` (`app/simulator/store.py`)
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/store.py`
 - Test: `studio/backend/tests/test_sim_store.py`
 
 **Interfaces:**
+
 - Consumes: `SlotModelDoc`, `CurationParams`, `CurationResult`, `default_params` (Task 3).
 - Produces `class SlotModelStore`:
   - `__init__(self, db)` — collection `slot_models`.
@@ -1092,10 +1107,12 @@ git commit -m "feat(sim): SlotModelStore persisting model+params+result per game
 Loads the stored model + params, reads the GDD `math-model` `data`, derives the target, runs the runner, streams `curation_progress`, persists + emits `curation_complete`/`curation_failed`. **Depends on the merged structured GDD** for the `math-model` `data` dict.
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/hub.py`
 - Test: `studio/backend/tests/test_sim_hub.py`
 
 **Interfaces:**
+
 - Consumes: `SlotModelStore` (Task 6), `CurationRunner` + `CurationProgress` (Task 5), `derive_target` + `TargetGap` (Task 4), `sim_wire` (Task 3); a GDD reader with `async def get_doc(game_id, aspect) -> doc|None` where `doc.data` is the structured dict (the merged `GddStore`).
 - Produces `class CurationHub`:
   - `__init__(self, sio, store, runner, gdd_store)`
@@ -1259,10 +1276,12 @@ git commit -m "feat(sim): CurationHub derives target, runs curation, streams eve
 ## Task 8: Backend — REST router (`app/simulator/rest.py`)
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/rest.py`
 - Test: `studio/backend/tests/test_sim_rest.py`
 
 **Interfaces:**
+
 - Consumes: `request.app.state.sim_store` (`SlotModelStore`), `request.app.state.sim_hub` (`CurationHub`); `CurationParams`, `sim_wire`.
 - Produces `router = APIRouter()` with:
   - `GET  /games/{game_id}/slot-model` → `sim_wire(get_or_seed)`
@@ -1376,10 +1395,12 @@ git commit -m "feat(sim): REST endpoints for slot model + curation"
 ## Task 9: Backend — Socket handlers (`app/simulator/sockets.py`)
 
 **Files:**
+
 - Create: `studio/backend/app/simulator/sockets.py`
 - Test: `studio/backend/tests/test_sim_sockets.py`
 
 **Interfaces:**
+
 - Consumes: `CurationHub` (Task 7).
 - Produces: `def register_sim_handlers(sio, hub)` registering `join_sim` (→ `hub.attach_subscriber`) and `leave_sim` (→ `sio.leave_room`).
 
@@ -1447,11 +1468,13 @@ git commit -m "feat(sim): socket handlers for curation subscription"
 ## Task 10: Backend — DI wiring + settings (`main.py`, `config.py`)
 
 **Files:**
+
 - Modify: `studio/backend/app/config.py` (add `simulator_bin`)
 - Modify: `studio/backend/app/main.py` (construct store+hub, app.state, include_router, register handlers)
 - Test: `studio/backend/tests/test_sim_wiring.py`
 
 **Interfaces:**
+
 - Consumes: `SlotModelStore`, `CurationHub`, `build_curation_runner`, `register_sim_handlers`, `router as sim_router`, and the existing `gdd_store` (from main's gdd wiring).
 
 - [ ] **Step 1: Write the failing test**
@@ -1543,10 +1566,12 @@ git commit -m "feat(sim): wire SlotModelStore + CurationHub + routes into the ap
 ## Task 11: Frontend — config, state, restClient
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/simulator/config.ts`, `state.ts`, `restClient.ts`
 - Test: `studio/frontend/src/plugins/simulator/restClient.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `SIMULATOR_PLUGIN_ID = 'simulator'`
   - `interface ISimulatorState { connection; activeGameId:string|null; modelText:string; params:ICurationParams|null; derivedTargetError:string|null; status:'idle'|'running'|'pass'|'fail'|'error'; progress:{phase:string;done:number|null;total:number|null}|null; result:ICurationResult|null; loadStatus:'idle'|'loading'|'error' }`
@@ -1561,11 +1586,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getSlotModel, putSlotModel, curate } from './restClient';
 
 describe('simulator restClient', () => {
-  beforeEach(() => { vi.restoreAllMocks(); });
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('GETs the slot model', async () => {
     const doc = { id: 'd1', gameId: 'g1', model: {}, params: {}, result: null };
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(doc), { status: 200 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(doc), { status: 200 })),
+    );
     const got = await getSlotModel('g1');
     expect(got.gameId).toBe('g1');
   });
@@ -1619,8 +1649,12 @@ export interface ICurationParams {
 }
 
 export interface IMetrics {
-  rtp: number; volatility: number; hitFrequency: number;
-  baseRtp: number; featureRtp: number; bonusHitRates: number[];
+  rtp: number;
+  volatility: number;
+  hitFrequency: number;
+  baseRtp: number;
+  featureRtp: number;
+  bonusHitRates: number[];
 }
 
 export interface ICurationResult {
@@ -1633,8 +1667,11 @@ export interface ICurationResult {
 }
 
 export interface ISlotModelDoc {
-  id: string; gameId: string; model: unknown;
-  params: ICurationParams; result: ICurationResult | null;
+  id: string;
+  gameId: string;
+  model: unknown;
+  params: ICurationParams;
+  result: ICurationResult | null;
 }
 
 export interface ISimulatorState {
@@ -1650,8 +1687,14 @@ export interface ISimulatorState {
 
 export function makeInitialState(): ISimulatorState {
   return {
-    connection: 'disconnected', activeGameId: null, modelText: '',
-    params: null, status: 'idle', progress: null, result: null, loadStatus: 'idle',
+    connection: 'disconnected',
+    activeGameId: null,
+    modelText: '',
+    params: null,
+    status: 'idle',
+    progress: null,
+    result: null,
+    loadStatus: 'idle',
   };
 }
 
@@ -1676,10 +1719,7 @@ export async function getSlotModel(gameId: string): Promise<ISlotModelDoc> {
   return okJson<ISlotModelDoc>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model`));
 }
 
-export async function putSlotModel(
-  gameId: string,
-  patch: { model?: unknown; params?: ICurationParams },
-): Promise<ISlotModelDoc> {
+export async function putSlotModel(gameId: string, patch: { model?: unknown; params?: ICurationParams }): Promise<ISlotModelDoc> {
   return okJson<ISlotModelDoc>(
     await fetch(`${BACKEND_URL}/games/${gameId}/slot-model`, {
       method: 'PUT',
@@ -1695,9 +1735,7 @@ export async function curate(gameId: string): Promise<void> {
 }
 
 export async function getResult(gameId: string): Promise<ICurationResult | null> {
-  return okJson<ICurationResult | null>(
-    await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/result`),
-  );
+  return okJson<ICurationResult | null>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/result`));
 }
 ```
 
@@ -1718,10 +1756,12 @@ git commit -m "feat(sim): frontend state slice + rest client"
 ## Task 12: Frontend — reducers, socket client, actions
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/simulator/reducers.ts`, `socketClient.ts`, `actions.ts`
 - Test: `studio/frontend/src/plugins/simulator/reducers.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - reducers: `applyProgress(state, p)`, `applyResultDoc(state, doc)` returning partial updates / pure transforms used by the socket client.
   - `simSock()` singleton: `connect`, `disconnect`, `joinSim(gameId)`, `leaveSim(gameId)`.
@@ -1798,16 +1838,23 @@ export function createSimSocket() {
       simulatorSlice().progress.set(null);
     });
   }
-  function disconnect(): void { sock?.disconnect(); sock = null; }
+  function disconnect(): void {
+    sock?.disconnect();
+    sock = null;
+  }
   return {
-    connect, disconnect,
+    connect,
+    disconnect,
     joinSim: (gameId: string) => sock?.emit('join_sim', { gameId }),
     leaveSim: (gameId: string) => sock?.emit('leave_sim', { gameId }),
   };
 }
 
 let client: ReturnType<typeof createSimSocket> | null = null;
-export function simSock() { if (!client) client = createSimSocket(); return client; }
+export function simSock() {
+  if (!client) client = createSimSocket();
+  return client;
+}
 ```
 
 ```ts
@@ -1816,7 +1863,9 @@ import { simSock } from './socketClient';
 import { simulatorSlice } from './state';
 import { getSlotModel } from './restClient';
 
-export function initSim(): void { simSock().connect(); }
+export function initSim(): void {
+  simSock().connect();
+}
 
 export async function openGameSim(gameId: string): Promise<void> {
   const s = simulatorSlice();
@@ -1840,8 +1889,12 @@ export function closeGameSim(): void {
   const prev = s.activeGameId.get();
   if (prev) simSock().leaveSim(prev);
   s.activeGameId.set(null);
-  s.modelText.set(''); s.params.set(null); s.result.set(null);
-  s.progress.set(null); s.status.set('idle'); s.loadStatus.set('idle');
+  s.modelText.set('');
+  s.params.set(null);
+  s.result.set(null);
+  s.progress.set(null);
+  s.status.set('idle');
+  s.loadStatus.set('idle');
 }
 ```
 
@@ -1862,12 +1915,14 @@ git commit -m "feat(sim): frontend socket client + actions + reducers"
 ## Task 13: Frontend — pane, plugin registration, RoomRoute wiring
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/simulator/SimulatorPane.tsx`, `index.ts`
 - Modify: `studio/frontend/src/plugins/index.ts` (register)
 - Modify: `studio/frontend/src/app/routes/RoomRoute.tsx` (open/close on game)
 - Test: `studio/frontend/src/plugins/simulator/SimulatorPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `simulatorHooks`, `simulatorSlice` (Task 11); `putSlotModel`, `curate` (Task 11); `openGameSim`, `closeGameSim`, `initSim` (Task 12).
 - Produces: `export const simulator: IPlugin<ISimulatorState>` with pane id `simulator/viewer`.
 
@@ -1901,7 +1956,10 @@ describe('SimulatorPane', () => {
       simulatorSlice().result.set({
         status: 'pass',
         metrics: { rtp: 0.96, volatility: 4, hitFrequency: 0.3, baseRtp: 0.9, featureRtp: 0.06, bonusHitRates: [] },
-        realizedRtp: 0.96, poolSize: 1000, failure: null, ranAt: 't',
+        realizedRtp: 0.96,
+        poolSize: 1000,
+        failure: null,
+        ranAt: 't',
       });
     });
     render(<SimulatorPane {...({} as never)} />);
@@ -1953,10 +2011,8 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
     }
   }
 
-  const badge =
-    status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : status === 'error' ? 'ERROR' : '';
-  const badgeClass =
-    status === 'pass' ? 'text-success' : status === 'fail' || status === 'error' ? 'text-danger' : 'text-text-3';
+  const badge = status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : status === 'error' ? 'ERROR' : '';
+  const badgeClass = status === 'pass' ? 'text-success' : status === 'fail' || status === 'error' ? 'text-danger' : 'text-text-3';
 
   return (
     <div className="flex h-full flex-col bg-surface">
@@ -1990,16 +2046,33 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
       <div className="flex-1 overflow-auto p-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="text-sm text-text-2">Verdict</span>
-          <span data-testid="curation-status" className={`text-sm font-semibold ${badgeClass}`}>{badge}</span>
+          <span data-testid="curation-status" className={`text-sm font-semibold ${badgeClass}`}>
+            {badge}
+          </span>
         </div>
         {result && (
           <table className="text-xs text-text-1">
             <tbody>
-              <tr><td className="pr-4 text-text-2">Measured RTP</td><td data-testid="metric-rtp">{result.metrics.rtp.toFixed(4)}</td></tr>
-              <tr><td className="pr-4 text-text-2">Realized RTP</td><td>{result.realizedRtp?.toFixed(4) ?? '—'}</td></tr>
-              <tr><td className="pr-4 text-text-2">Volatility</td><td>{result.metrics.volatility.toFixed(3)}</td></tr>
-              <tr><td className="pr-4 text-text-2">Hit frequency</td><td>{result.metrics.hitFrequency.toFixed(4)}</td></tr>
-              <tr><td className="pr-4 text-text-2">Pool size</td><td>{result.poolSize ?? '—'}</td></tr>
+              <tr>
+                <td className="pr-4 text-text-2">Measured RTP</td>
+                <td data-testid="metric-rtp">{result.metrics.rtp.toFixed(4)}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-text-2">Realized RTP</td>
+                <td>{result.realizedRtp?.toFixed(4) ?? '—'}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-text-2">Volatility</td>
+                <td>{result.metrics.volatility.toFixed(3)}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-text-2">Hit frequency</td>
+                <td>{result.metrics.hitFrequency.toFixed(4)}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 text-text-2">Pool size</td>
+                <td>{result.poolSize ?? '—'}</td>
+              </tr>
             </tbody>
           </table>
         )}
@@ -2051,13 +2124,13 @@ import { openGameSim, closeGameSim } from '../../plugins/simulator/actions';
 next to the other `if (found.gameId) void openGame...` calls add:
 
 ```ts
-    if (found.gameId) void openGameSim(found.gameId);
+if (found.gameId) void openGameSim(found.gameId);
 ```
 
 and in the unmount cleanup (next to `closeGame(); closeGameDocs();`) add:
 
 ```ts
-    closeGameSim();
+closeGameSim();
 ```
 
 - [ ] **Step 6: Run the component test to verify it passes**
@@ -2082,9 +2155,11 @@ git commit -m "feat(sim): simulator pane + plugin registration + room wiring"
 ## Task 14: End-to-end (Playwright) — author → curate → PASS, and FAIL
 
 **Files:**
+
 - Create: `studio/frontend/e2e/simulator.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `seedLocalStorage` from `./helpers`; the running stack (backend :8000 + frontend). Real curation (small `candidateCount`), deterministic, offline — no cassettes.
 
 - [ ] **Step 1: Write the e2e spec**
@@ -2098,9 +2173,20 @@ const BACKEND = process.env.VITE_BLOOM_BACKEND_URL ?? 'http://localhost:8000';
 
 // A 1-reel model with closed-form RTP 0.9 (5x sym0, 4x sym1->1, 1x sym2->5).
 const MODEL_09 = {
-  symbols: [{ id: 0, role: 'normal' }, { id: 1, role: 'normal' }, { id: 2, role: 'normal' }],
-  reels: [[0, 0, 0, 0, 0, 1, 1, 1, 1, 2]], rows: 1, paylines: [[0]],
-  paytable: { entries: [{ symbol: 1, count: 1, payout: 1 }, { symbol: 2, count: 1, payout: 5 }] },
+  symbols: [
+    { id: 0, role: 'normal' },
+    { id: 1, role: 'normal' },
+    { id: 2, role: 'normal' },
+  ],
+  reels: [[0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
+  rows: 1,
+  paylines: [[0]],
+  paytable: {
+    entries: [
+      { symbol: 1, count: 1, payout: 1 },
+      { symbol: 2, count: 1, payout: 5 },
+    ],
+  },
   bonuses: [],
 };
 

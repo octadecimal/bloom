@@ -156,13 +156,13 @@ so they are never duplicated in our store; `result.target` records the resolved
 A pure module maps the GDD `math-model` structured fields to the simulator's
 `TargetSpec` characteristics:
 
-| GDD `math-model` field        | → `TargetSpec`                              | Mapping                                                       |
-| ----------------------------- | ------------------------------------------- | ------------------------------------------------------------ |
-| `rtp` (percent)               | `rtp_target`                                | `0.96` direct                                                |
-| `volatility` (enum)           | `volatility_min` / `volatility_max`         | defined enum→numeric-band table (low/medium/medium-high/high) |
-| `bonus_hit_rate` (ratio)      | one `HitRateBand` per model bonus           | `1:200` → center `0.005` ± tolerance band                     |
-| `hit_frequency` (percent)     | (informational; reported vs measured)       | not a hard band in slice 1                                    |
-| `params.*` (our store)        | `pool_size`, `candidate_count`, tolerances, `realized_correction_band` | from `CurationParams`              |
+| GDD `math-model` field    | → `TargetSpec`                                                         | Mapping                                                       |
+| ------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `rtp` (percent)           | `rtp_target`                                                           | `0.96` direct                                                 |
+| `volatility` (enum)       | `volatility_min` / `volatility_max`                                    | defined enum→numeric-band table (low/medium/medium-high/high) |
+| `bonus_hit_rate` (ratio)  | one `HitRateBand` per model bonus                                      | `1:200` → center `0.005` ± tolerance band                     |
+| `hit_frequency` (percent) | (informational; reported vs measured)                                  | not a hard band in slice 1                                    |
+| `params.*` (our store)    | `pool_size`, `candidate_count`, tolerances, `realized_correction_band` | from `CurationParams`                                         |
 
 The enum→band and ratio→band mappings are **defined, unit-tested pure functions**.
 Band widths come from `params` / sensible defaults. The number of
