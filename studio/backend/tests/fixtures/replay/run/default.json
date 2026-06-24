@@ -5,7 +5,8 @@
     { "name": "ask_user_question", "args": {
         "question": "What should trigger the free-spins bonus?",
         "suggestions": ["3+ scatter symbols", "a random wild-driven trigger"],
-        "aspect": "bonus-features" } }
+        "aspect": "bonus-features" } },
+    { "name": "scene_apply_batch", "args": { "ops_json": "[{\"kind\":\"addNode\",\"id\":\"root\",\"type\":\"Root\",\"props\":{\"width\":1280,\"height\":720}},{\"kind\":\"addNode\",\"id\":\"reels\",\"type\":\"Container\",\"props\":{}},{\"kind\":\"addNode\",\"id\":\"sym.1\",\"type\":\"Sprite\",\"props\":{}},{\"kind\":\"addNode\",\"id\":\"sym.2\",\"type\":\"Sprite\",\"props\":{}},{\"kind\":\"addNode\",\"id\":\"sym.3\",\"type\":\"Sprite\",\"props\":{}},{\"kind\":\"connect\",\"edgeId\":\"e.root.reels\",\"type\":\"child\",\"from\":{\"node\":\"root\",\"port\":\"children\"},\"to\":{\"node\":\"reels\",\"port\":\"parent\"}},{\"kind\":\"connect\",\"edgeId\":\"e.reels.1\",\"type\":\"child\",\"from\":{\"node\":\"reels\",\"port\":\"children\"},\"to\":{\"node\":\"sym.1\",\"port\":\"parent\"}},{\"kind\":\"connect\",\"edgeId\":\"e.reels.2\",\"type\":\"child\",\"from\":{\"node\":\"reels\",\"port\":\"children\"},\"to\":{\"node\":\"sym.2\",\"port\":\"parent\"}},{\"kind\":\"connect\",\"edgeId\":\"e.reels.3\",\"type\":\"child\",\"from\":{\"node\":\"reels\",\"port\":\"children\"},\"to\":{\"node\":\"sym.3\",\"port\":\"parent\"}}]" } }
   ],
   "final": ["All set — ", "I generated a knight sprite and added it to the Asset Board."]
 }
