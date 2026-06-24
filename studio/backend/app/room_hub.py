@@ -38,8 +38,10 @@ class RoomHub:
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
         self._router_spec = None
-        # queues hold turn descriptors: {"kind": "prompt", "messageId": id}
-        # or {"kind": "skill", "author": …, "skillName": …, "args": …}
+        # queues hold turn descriptors: {"kind": "prompt"} (no-tool plain chat)
+        # or {"kind": "skill", "author": …, "skillName": …, "args": …,
+        #     "spec": <SkillSpec>?} — "spec" is set for the synthetic design-router
+        # turn routed from game-room plain chat; registry-driven skills omit it.
         self._queues: dict[str, list[dict]] = {}
         self._busy: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}

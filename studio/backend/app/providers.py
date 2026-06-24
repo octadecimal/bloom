@@ -143,6 +143,14 @@ class ReplayToolCallingChatModel(BaseChatModel):
         With prompt-keyed run cassettes, select by the last Human message
         (mirroring text-mode keying), falling back to the default run cassette.
         Otherwise use the single ``cassette`` (legacy / unit-test shape).
+
+        Sharp edge: the design-router binds all GDD tools, so an UNKEYED
+        game-room prompt falls back to ``__default__`` — whose bound-filtered
+        calls include set_gdd_fields(paytable) + ask_user_question. Under replay
+        that makes a casual message spuriously draft a paytable and park on a
+        question. New game-room e2e prompts must add their own keyed cassette
+        (see tests/fixtures/replay/run/chat-*.json) rather than relying on the
+        default.
         """
         if self.run_cassettes:
             key = normalize_prompt(self._last_human(messages))
