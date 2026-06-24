@@ -57,12 +57,7 @@ export function QuestionCard({ runId, step }: { runId: string; step: IRunStep })
   };
 
   return (
-    <div
-      data-testid="question-card"
-      className="rounded-md border border-hairline bg-surface p-2"
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-    >
+    <div data-testid="question-card" className="rounded-md border border-hairline bg-surface p-2" tabIndex={0} onKeyDown={onKeyDown}>
       <p className="text-sm text-text-1">{q.question}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {q.suggestions.map((s, i) => (
@@ -91,15 +86,13 @@ export function QuestionCard({ runId, step }: { runId: string; step: IRunStep })
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <Button type="submit" variant="ghost">Send</Button>
+          <Button type="submit" variant="ghost">
+            Send
+          </Button>
         </form>
       )}
       {q.allowDelegate && (
-        <Button
-          variant="ghost"
-          className="mt-2 text-accent-text"
-          onClick={() => resolveQuestion(runId, { type: 'delegate' })}
-        >
+        <Button variant="ghost" className="mt-2 text-accent-text" onClick={() => resolveQuestion(runId, { type: 'delegate' })}>
           You decide
         </Button>
       )}

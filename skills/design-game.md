@@ -3,7 +3,7 @@ name: design-game
 description: Draft the game's Game Design Document from your description, then
   interview you to resolve the highest-impact gaps until the design is solid.
 args:
-  - { name: focus, type: string, required: false, description: "Optionally target one aspect (e.g. math-model)." }
+  - { name: focus, type: string, required: false, description: 'Optionally target one aspect (e.g. math-model).' }
 tools: [list_gdd_docs, read_gdd_doc, write_gdd_doc, edit_gdd_doc, set_doc_status, ask_user_question]
 ---
 

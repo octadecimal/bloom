@@ -3,8 +3,15 @@ import type { IGddDoc } from './state';
 import { upsertDoc } from './reducers';
 
 const doc = (aspect: string, order: number, body = ''): IGddDoc => ({
-  id: aspect, gameId: 'g1', aspect, title: aspect, order, body,
-  status: 'empty', createdAt: '', updatedAt: '',
+  id: aspect,
+  gameId: 'g1',
+  aspect,
+  title: aspect,
+  order,
+  body,
+  status: 'empty',
+  createdAt: '',
+  updatedAt: '',
 });
 
 describe('gdd reducers', () => {

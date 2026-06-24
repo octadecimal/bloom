@@ -139,10 +139,7 @@ export function resolveApproval(runId: string, decision: 'approve' | 'deny'): vo
   if (roomId) sock().resolveApproval(roomId, runId, decision);
 }
 
-export function resolveQuestion(
-  runId: string,
-  answer: { type: 'suggestion' | 'freetext' | 'delegate'; value?: string },
-): void {
+export function resolveQuestion(runId: string, answer: { type: 'suggestion' | 'freetext' | 'delegate'; value?: string }): void {
   const roomId = chatSlice().activeRoomId.get();
   if (roomId) sock().resolveQuestion(roomId, runId, answer);
 }

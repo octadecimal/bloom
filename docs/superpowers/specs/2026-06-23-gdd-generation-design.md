@@ -9,7 +9,7 @@
 ## 1. Purpose
 
 Bloom is a Unity-like application for AI-driven casino game development. A core
-part of that work is *designing* the game — its requirements, mechanics, and
+part of that work is _designing_ the game — its requirements, mechanics, and
 math — before anything is built. This feature lets a user describe a game in
 natural language and have the AI collaboratively produce a **Game Design
 Document**: a collection of markdown specifications, one per aspect of the game.
@@ -54,15 +54,15 @@ decisions.
 
 ## 3. Approach
 
-**Chosen: Approach A — the GDD interview as a built-in *skill*, maximizing reuse
+**Chosen: Approach A — the GDD interview as a built-in _skill_, maximizing reuse
 of the existing skill / run / interrupt machinery.**
 
 The feature maps almost entirely onto primitives that already exist:
 
 - An agentic run that drafts artifacts, calls tools, and pauses at an
-  `interrupt()` for human input is *exactly* today's skill/run/approval loop
+  `interrupt()` for human input is _exactly_ today's skill/run/approval loop
   (`TurnRunner` → react-agent → `interrupt()` → `ApprovalCard`).
-- Generated, per-game content with a live-updating viewer is *exactly* the
+- Generated, per-game content with a live-updating viewer is _exactly_ the
   Asset Board pattern (`AssetStore` + Socket.IO + `plugins/assets`).
 
 So the genuinely new work is small and orthogonal:
@@ -84,7 +84,7 @@ So the genuinely new work is small and orthogonal:
   editable markdown, and is a heavier first slice. Rejected for v1; its key
   benefit (a structured gap list) is captured as a future upgrade.
 - **Approach C — hybrid**: Approach A plus one structured `rank_gaps` tool that
-  makes the gap list first-class and *visible* (an "open gaps" tracker in the
+  makes the gap list first-class and _visible_ (an "open gaps" tracker in the
   viewer). A natural **A-now, C-later** progression; the data model is designed
   so promoting to C is additive.
 
@@ -113,18 +113,18 @@ GddStore (Mongo, per-game)  ──Socket.IO push──▶  GDD viewer pane (read
 
 ### New vs. reused
 
-| Concern        | New                                                            | Reused                                                              |
-| -------------- | -------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Storage        | `GddStore` (Mongo)                                             | Mongo client, `_WireModel` camelCase-alias pattern                 |
-| Agent tools    | `write/edit/list/read_gdd_doc`, `set_doc_status`, `ask_user_question` | `ToolFactory`, `ToolContext`                                |
-| HITL           | Generalized **question interrupt** + `QuestionCard`            | `interrupt()`, RoomHub pending-approval plumbing, `ApprovalCard`   |
-| Orchestration  | `skills/design-game.md` (built-in)                            | `TurnRunner`, `SkillRegistry`, runs, sockets                       |
-| UI             | `plugins/gdd` viewer pane                                      | plugin host, Dockview, Hookstate, `SocketClient`                   |
+| Concern       | New                                                                   | Reused                                                           |
+| ------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Storage       | `GddStore` (Mongo)                                                    | Mongo client, `_WireModel` camelCase-alias pattern               |
+| Agent tools   | `write/edit/list/read_gdd_doc`, `set_doc_status`, `ask_user_question` | `ToolFactory`, `ToolContext`                                     |
+| HITL          | Generalized **question interrupt** + `QuestionCard`                   | `interrupt()`, RoomHub pending-approval plumbing, `ApprovalCard` |
+| Orchestration | `skills/design-game.md` (built-in)                                    | `TurnRunner`, `SkillRegistry`, runs, sockets                     |
+| UI            | `plugins/gdd` viewer pane                                             | plugin host, Dockview, Hookstate, `SocketClient`                 |
 
-**Key reuse insight:** the interview run *is* a normal run. It appears in the
+**Key reuse insight:** the interview run _is_ a normal run. It appears in the
 unified chat feed, emits the same step events, and is gated by the same
 interrupt/RoomHub machinery. We are not inventing a parallel execution path; we
-are adding a richer *kind* of interrupt and a new artifact type for tools to
+are adding a richer _kind_ of interrupt and a new artifact type for tools to
 write.
 
 **"Until confident":** gap state lives in the agent's working context (the
@@ -186,15 +186,15 @@ A fixed, ordered list seeded as a backend config constant (`GDD_TAXONOMY`).
 Editing the taxonomy is a code change for v1 — acceptable, given the "fixed
 taxonomy" decision. Proposed default for a slot-style casino game:
 
-| order | aspect (key)    | title              | covers                                              |
-| ----- | --------------- | ------------------ | --------------------------------------------------- |
-| 1     | `theme`         | Theme & Narrative  | setting, tone, story hook, target audience          |
-| 2     | `math-model`    | Math Model         | RTP target, volatility, hit frequency, max win cap  |
-| 3     | `symbols-reels` | Symbols & Reels    | grid size, ways/paylines, symbol set, wild/scatter  |
-| 4     | `paytable`      | Paytable           | per-symbol payouts, win evaluation rules            |
-| 5     | `bonus-features`| Bonus Features     | free spins, bonus rounds, triggers, multipliers     |
-| 6     | `ui-ux`         | UI / UX & Layout   | screen layout, controls, key visual moments         |
-| 7     | `audio`         | Audio              | music direction, SFX cues, win celebrations         |
+| order | aspect (key)     | title             | covers                                             |
+| ----- | ---------------- | ----------------- | -------------------------------------------------- |
+| 1     | `theme`          | Theme & Narrative | setting, tone, story hook, target audience         |
+| 2     | `math-model`     | Math Model        | RTP target, volatility, hit frequency, max win cap |
+| 3     | `symbols-reels`  | Symbols & Reels   | grid size, ways/paylines, symbol set, wild/scatter |
+| 4     | `paytable`       | Paytable          | per-symbol payouts, win evaluation rules           |
+| 5     | `bonus-features` | Bonus Features    | free spins, bonus rounds, triggers, multipliers    |
+| 6     | `ui-ux`          | UI / UX & Layout  | screen layout, controls, key visual moments        |
+| 7     | `audio`          | Audio             | music direction, SFX cues, win celebrations        |
 
 The taxonomy seeds the draft-all pass: on kickoff the backend idempotently
 ensures one `GddDoc` per aspect exists (`status: empty`), so the viewer
@@ -206,13 +206,13 @@ The agent refines docs surgically, the same way Claude Code edits files —
 targeted block replacement, not whole-body regeneration (which is wasteful and
 causes the model to silently reword untouched sections).
 
-| tool             | purpose                                                  | shape                                              |
-| ---------------- | -------------------------------------------------------- | -------------------------------------------------- |
-| `list_gdd_docs`  | read all docs + status into context                      | `(game_id) -> [{aspect, title, body, status}]`     |
-| `read_gdd_doc`   | read one doc's exact current text (for precise matching) | `(aspect) -> {body, status}`                       |
-| `write_gdd_doc`  | create / full-write a doc — the **initial draft-all** pass| `(aspect, title, body, status)`                    |
-| `edit_gdd_doc`   | **targeted block replacement** — the surgical edit       | `(aspect, old_string, new_string, replace_all?)`   |
-| `set_doc_status` | flip status without touching body                        | `(aspect, status)`                                 |
+| tool             | purpose                                                    | shape                                            |
+| ---------------- | ---------------------------------------------------------- | ------------------------------------------------ |
+| `list_gdd_docs`  | read all docs + status into context                        | `(game_id) -> [{aspect, title, body, status}]`   |
+| `read_gdd_doc`   | read one doc's exact current text (for precise matching)   | `(aspect) -> {body, status}`                     |
+| `write_gdd_doc`  | create / full-write a doc — the **initial draft-all** pass | `(aspect, title, body, status)`                  |
+| `edit_gdd_doc`   | **targeted block replacement** — the surgical edit         | `(aspect, old_string, new_string, replace_all?)` |
+| `set_doc_status` | flip status without touching body                          | `(aspect, status)`                               |
 
 **`edit_gdd_doc` semantics mirror Claude Code's Edit tool exactly:**
 
@@ -239,7 +239,7 @@ noted future seam, not v1.
 
 ## 7. The question interrupt primitive
 
-The one genuinely new primitive, and it *generalizes* what already exists. Today
+The one genuinely new primitive, and it _generalizes_ what already exists. Today
 `interrupt()` powers a binary approve/reject gate (`delete_asset` →
 `ApprovalRequired` → `ApprovalCard`). We widen the payload so that **approval
 becomes a special case of a question.**
@@ -263,8 +263,8 @@ becomes a special case of a question.**
 { type: "suggestion" | "freetext" | "delegate", value: str | null }
 ```
 
-- `type: "delegate"` ("you decide") returns a sentinel to the agent meaning *use
-  your best judgment*. The agent then picks an option, applies it, and notes in
+- `type: "delegate"` ("you decide") returns a sentinel to the agent meaning _use
+  your best judgment_. The agent then picks an option, applies it, and notes in
   the doc that it was an AI-made decision. (External data sources to inform that
   choice are the explicitly-deferred future hook; v1 is the model's own
   judgment.)
@@ -284,7 +284,7 @@ generous).
 **Run trace:** add a `question` step type (alongside
 `thinking / tool_call / tool_result / final / approval`) recording the question,
 the options, and the resolved answer, so the unified feed shows the question
-*and* the chosen answer inline, and it persists in run history.
+_and_ the chosen answer inline, and it persists in run history.
 
 **`QuestionCard` (frontend):** question text → suggestion chips (label + optional
 detail) → free-text field (if allowed) → "You decide" button (if allowed). On
@@ -315,19 +315,19 @@ shows the 7-section skeleton, then watches it fill in live.
 
 1. **Draft-all** — for each aspect, `write_gdd_doc` a best-effort draft from the
    user's description. Where information is missing, apply a sensible casino-genre
-   default *but* mark the doc `needs_input` and remember the gap.
+   default _but_ mark the doc `needs_input` and remember the gap.
 2. **Rank gaps** — review the drafts; order the unresolved ambiguities by how
    much they materially shape the game (bonus trigger, RTP target, volatility
    rank high; flavor text low).
 3. **Interview (one at a time, blocking)** — for the top gap, `ask_user_question`
-   with a crisp question + 2–4 *concrete* casino-design options + free-text +
+   with a crisp question + 2–4 _concrete_ casino-design options + free-text +
    "you decide." Apply the answer with a surgical `edit_gdd_doc` to the relevant
    block (read-before-edit), update status, then **re-rank** and continue.
 4. **Finalize** — `set_doc_status` → `complete` for resolved docs; summarize
    decisions made and defaults assumed.
 
 **Prompt guardrails** (what makes it "grill us" rather than nag): one question at
-a time; only ask about *material* gaps; never re-ask something already answered;
+a time; only ask about _material_ gaps; never re-ask something already answered;
 questions must offer real, opinionated options (not open-ended "what do you
 want?"); prefer block-edits over whole-doc rewrites.
 
@@ -357,7 +357,7 @@ tiers / 1 rationed accent; no raw colors, enforced by the guard test):
 ```
 
 - **Status markers** map to `GddDoc.status` (`empty / drafted / needs_input /
-  complete`). The rationed accent is spent on the single most important signal —
+complete`). The rationed accent is spent on the single most important signal —
   `needs_input` (where the interview still wants the user) — keeping everything
   else in the neutral text tiers.
 - **Live behavior:** as the run seeds, drafts, and block-edits docs, the pane
