@@ -108,6 +108,14 @@ gh pr merge --squash --delete-branch   # 0 approvals required; self-merge is OK
 - **When finishing a development branch, don't present a merge/PR options menu —
   default to push + open a PR** (`git push -u` then `gh pr create`). `main` is
   protected, so PR is the only path anyway; just do it without asking.
+- **After a PR merges, always clean up its worktree and branch.** Merge with
+  `gh pr merge --squash --delete-branch` (removes the remote branch), then from
+  the **primary checkout** (`C:\code\bloom`, never from inside the worktree being
+  removed) run `git worktree remove <path>`, `git worktree prune`, and
+  `git branch -D <branch>`. You can't delete the worktree the current session is
+  rooted in (the OS locks the directory) — deregister it and delete the branch
+  anyway, then note the leftover folder for manual `rm`. Keeps `git worktree list`
+  and the branch list from accumulating merged cruft.
 
 ## Working alongside other sessions
 
