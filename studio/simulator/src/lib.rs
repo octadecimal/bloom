@@ -3,3 +3,4 @@
 //! characteristics; the pool is a faithful sample (see the design spec).
 
 pub mod seedgen;
+pub mod measure;
