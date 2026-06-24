@@ -12,6 +12,8 @@ export class GraphModel {
         return this.addNode(op.id, op.type, op.props);
       case 'removeNode':
         return this.removeNode(op.id);
+      case 'setProp':
+        return this.setProp(op.id, op.path, op.value);
       default:
         throw new OpError('unknown_op', `unknown op kind: ${(op as { kind: string }).kind}`);
     }
@@ -39,5 +41,19 @@ export class GraphModel {
     if (!this.nodes.has(id)) throw new OpError('unknown_node', `no such node: ${id}`);
     this.nodes.delete(id);
     return [{ kind: 'nodeRemoved', id }];
+  }
+
+  private setProp(id: string, path: string, value: import('./document').JsonValue): IChange[] {
+    const node = this.nodes.get(id);
+    if (!node) throw new OpError('unknown_node', `no such node: ${id}`);
+    const keys = path.split('.');
+    let cursor = node.props as Record<string, unknown>;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const k = keys[i];
+      if (typeof cursor[k] !== 'object' || cursor[k] === null) cursor[k] = {};
+      cursor = cursor[k] as Record<string, unknown>;
+    }
+    cursor[keys[keys.length - 1]] = value;
+    return [{ kind: 'propSet', id, path, value }];
   }
 }
