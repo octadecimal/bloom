@@ -36,6 +36,13 @@ pub fn verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics> {
     }
 }
 
+/// Coarse progress signal for a curation run (cosmetic; never affects the result).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CurationProgress {
+    Phase(&'static str),
+    Simulating { done: usize, total: usize },
+}
+
 #[derive(Debug, Clone)]
 pub enum RunError {
     /// The model's measured characteristics missed the target bands.
@@ -54,22 +61,54 @@ pub struct CurationOutput {
     pub report: String,
 }
 
-/// Generate → simulate → measure → verify → freeze → build+sign.
-pub fn run_curation(
+/// A streamed run always carries the measured metrics, plus the pass/fail outcome.
+#[derive(Debug)]
+pub struct StreamedOutcome {
+    pub metrics: Metrics,
+    pub outcome: Result<CurationOutput, RunError>,
+}
+
+/// Like `run_curation`, but reports progress and always returns the measured
+/// metrics. `run_curation` delegates here with a no-op callback.
+pub fn run_curation_streamed(
     model: &SlotModel,
     target: &TargetSpec,
     master_seed: u64,
     package_id: &str,
     signing_key: &SigningKey,
-) -> Result<CurationOutput, RunError> {
+    on_progress: &mut dyn FnMut(CurationProgress),
+) -> StreamedOutcome {
+    on_progress(CurationProgress::Phase("generate"));
     let seeds = generate_seeds(master_seed, target.candidate_count);
-    let samples = simulate(model, &seeds);
+
+    // Chunked simulation: identical results to a single `simulate` call (each seed
+    // is evaluated the same way; order preserved by concatenation) but lets us
+    // report sub-progress through the dominant step.
+    let total = seeds.len();
+    let chunk = (total / 100).max(1);
+    let mut samples = Vec::with_capacity(total);
+    let mut done = 0usize;
+    for part in seeds.chunks(chunk) {
+        samples.extend(simulate(model, part));
+        done += part.len();
+        on_progress(CurationProgress::Simulating { done, total });
+    }
+
+    on_progress(CurationProgress::Phase("measure"));
     let metrics = measure(&samples);
 
-    verify(&metrics, target).map_err(RunError::VerifyFailed)?;
+    on_progress(CurationProgress::Phase("verify"));
+    if let Err(m) = verify(&metrics, target) {
+        return StreamedOutcome { metrics, outcome: Err(RunError::VerifyFailed(m)) };
+    }
 
-    let pool = freeze_pool(&samples, target, metrics.rtp).map_err(RunError::Curate)?;
+    on_progress(CurationProgress::Phase("freeze"));
+    let pool = match freeze_pool(&samples, target, metrics.rtp) {
+        Ok(p) => p,
+        Err(e) => return StreamedOutcome { metrics, outcome: Err(RunError::Curate(e)) },
+    };
 
+    on_progress(CurationProgress::Phase("sign"));
     let content = PackageContent {
         envelope: Envelope {
             package_id: package_id.to_string(),
@@ -89,29 +128,31 @@ pub fn run_curation(
         .map(|(i, r)| format!("bonus_hit_rate[{i}]={r:.5}"))
         .collect::<Vec<_>>()
         .join("\n");
-
     let report = format!(
         "package_id={package_id}\nmechanic=slots@1\nmaster_seed={master_seed}\n\
          candidate_count={}\npool_size={}\n\
          measured_rtp={:.5}\nrealized_rtp={:.5}\nvolatility={:.5}\n\
          hit_frequency={:.5}\nbase_rtp={:.5}\nfeature_rtp={:.5}\n{}\n",
-        target.candidate_count,
-        target.pool_size,
-        metrics.rtp,
-        pool.realized_rtp,
-        metrics.volatility,
-        metrics.hit_frequency,
-        metrics.base_rtp,
-        metrics.feature_rtp,
-        bonus_rates,
+        target.candidate_count, target.pool_size,
+        metrics.rtp, pool.realized_rtp, metrics.volatility,
+        metrics.hit_frequency, metrics.base_rtp, metrics.feature_rtp, bonus_rates,
     );
 
-    Ok(CurationOutput {
-        package_bytes,
-        metrics,
-        pool,
-        report,
-    })
+    StreamedOutcome {
+        metrics: metrics.clone(),
+        outcome: Ok(CurationOutput { package_bytes, metrics, pool, report }),
+    }
+}
+
+/// Generate → simulate → measure → verify → freeze → build+sign.
+pub fn run_curation(
+    model: &SlotModel,
+    target: &TargetSpec,
+    master_seed: u64,
+    package_id: &str,
+    signing_key: &SigningKey,
+) -> Result<CurationOutput, RunError> {
+    run_curation_streamed(model, target, master_seed, package_id, signing_key, &mut |_| {}).outcome
 }
 
 #[cfg(test)]
@@ -270,5 +311,36 @@ mod tests {
             max: 0.05,
         }]);
         assert!(verify(&metrics(0.955, 3.0, vec![0.20]), &t).is_err());
+    }
+
+    #[test]
+    fn streamed_matches_run_curation_on_pass() {
+        let mut seen: Vec<String> = Vec::new();
+        let s = run_curation_streamed(
+            &measurable_model(), &target_09(), 2026, "pkg-test", &key(),
+            &mut |p| match p {
+                CurationProgress::Phase(name) => seen.push(name.to_string()),
+                CurationProgress::Simulating { done, total } => {
+                    assert!(done <= total);
+                    seen.push("simulating".to_string());
+                }
+            },
+        );
+        // metrics always present; outcome equals the legacy path's package bytes.
+        let legacy = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let streamed = s.outcome.expect("passes");
+        assert_eq!(streamed.package_bytes, legacy.package_bytes);
+        assert!((s.metrics.rtp - 0.9).abs() < 0.02);
+        assert!(seen.iter().any(|n| n == "simulating"));
+        assert!(seen.iter().any(|n| n == "freeze"));
+    }
+
+    #[test]
+    fn streamed_reports_metrics_even_on_verify_fail() {
+        let mut t = target_09();
+        t.rtp_target = 0.50; // model ~0.9 -> verify fails
+        let s = run_curation_streamed(&measurable_model(), &t, 2026, "pkg-test", &key(), &mut |_| {});
+        assert!(matches!(s.outcome, Err(RunError::VerifyFailed(_))));
+        assert!((s.metrics.rtp - 0.9).abs() < 0.02); // metrics still measured
     }
 }
