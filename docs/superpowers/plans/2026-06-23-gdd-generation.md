@@ -20,10 +20,12 @@
 - **Skill files** live in `C:\code\bloom\skills\` and are git-tracked; `SkillRegistry` validates each skill's `tools` against `ToolFactory.known_tool_names()`.
 
 **Backend commands** (run from `studio/backend`):
+
 - Unit: `uv run pytest -m "not e2e" -q`
 - Service e2e: `uv run pytest -m e2e -q`
 
 **Frontend commands** (run from `studio/frontend`):
+
 - Unit: `npx vitest run`
 - CI gate quartet: `npx prettier --check .` · `npx nx run-many -t typecheck` · `npx nx run-many -t test` · `npx nx run-many -t build`
 
@@ -32,6 +34,7 @@
 ## File Structure
 
 **Backend (new):**
+
 - `studio/backend/app/gdd/__init__.py`
 - `studio/backend/app/gdd/models.py` — `GddDoc`, `Status`, `GDD_TAXONOMY`, `GDD_TOOL_NAMES`, `gdd_wire()`
 - `studio/backend/app/gdd/store.py` — `GddStore`, `GddEditError`
@@ -41,6 +44,7 @@
 - Tests: `tests/test_gdd_models.py`, `tests/test_gdd_store.py`, `tests/test_gdd_tools.py`, `tests/test_question_interrupt.py`, `tests/test_design_game_skill.py`, `tests/e2e/test_gdd.py`
 
 **Backend (modified):**
+
 - `studio/backend/app/agent_tools.py` — extend `ToolContext`; add 6 tool builders; register in `_BUILDERS`; extend `ToolFactory.__init__`
 - `studio/backend/app/runs.py` — add `"question"` to `RunStep.type`
 - `studio/backend/app/room_hub.py` — branch interrupt handling (approval vs question); add `resolve_question`; seed taxonomy on a gdd-tool skill run; pass gdd into `ToolContext`
@@ -57,11 +61,13 @@
 ## Task 1: GddDoc model, taxonomy, and wire helper
 
 **Files:**
+
 - Create: `studio/backend/app/gdd/__init__.py` (empty)
 - Create: `studio/backend/app/gdd/models.py`
 - Test: `studio/backend/tests/test_gdd_models.py`
 
 **Interfaces:**
+
 - Produces: `GddDoc` (pydantic, `_WireModel`), `Status = Literal["empty","drafted","needs_input","complete"]`, `GDD_TAXONOMY: list[dict]` (each `{aspect, title, order}`), `GDD_TOOL_NAMES: set[str]`, `gdd_wire(doc) -> dict`.
 
 - [ ] **Step 1: Write the failing test**
@@ -177,10 +183,12 @@ git commit -m "feat(gdd): GddDoc model, fixed taxonomy, and wire helper"
 ## Task 2: GddStore (persistence + surgical edit)
 
 **Files:**
+
 - Create: `studio/backend/app/gdd/store.py`
 - Test: `studio/backend/tests/test_gdd_store.py`
 
 **Interfaces:**
+
 - Consumes: `GddDoc`, `Status`, `GDD_TAXONOMY` (Task 1).
 - Produces:
   - `GddStore(db)` with async methods: `seed_taxonomy(game_id) -> list[GddDoc]`, `list_docs(game_id) -> list[GddDoc]`, `get_doc(game_id, aspect) -> GddDoc | None`, `upsert_doc(game_id, aspect, *, title=None, body=None, status=None) -> GddDoc`, `edit_doc(game_id, aspect, old_string, new_string, replace_all=False) -> GddDoc`, `set_status(game_id, aspect, status) -> GddDoc`.
@@ -368,11 +376,13 @@ git commit -m "feat(gdd): GddStore with idempotent seeding and surgical edit_doc
 ## Task 3: GddHub (write + emit) and socket handlers
 
 **Files:**
+
 - Create: `studio/backend/app/gdd/hub.py`
 - Create: `studio/backend/app/gdd/sockets.py`
 - Test: `studio/backend/tests/test_gdd_hub.py`
 
 **Interfaces:**
+
 - Consumes: `GddStore`, `GddEditError` (Task 2), `gdd_wire` (Task 1).
 - Produces:
   - `GddHub(sio, store)` async methods: `seed_taxonomy(game_id) -> list[GddDoc]`, `write_doc(game_id, aspect, title, body, status) -> GddDoc`, `edit_doc(game_id, aspect, old_string, new_string, replace_all=False) -> GddDoc`, `set_status(game_id, aspect, status) -> GddDoc`, `attach(game_id, sid)`. Each mutation emits `gdd_doc_updated` to `room=game_id`; `attach` emits `gdd_snapshot` to the sid.
@@ -517,10 +527,12 @@ git commit -m "feat(gdd): GddHub write+emit and join_gdd/leave_gdd socket handle
 ## Task 4: GDD document agent tools
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Test: `studio/backend/tests/test_gdd_tools.py`
 
 **Interfaces:**
+
 - Consumes: `GddStore`, `GddEditError`, `GddHub`.
 - Modifies `ToolContext` to add `gdd_store` and `gdd_hub` fields (default `None`); adds builders `build_list_gdd_docs_tool`, `build_read_gdd_doc_tool`, `build_write_gdd_doc_tool`, `build_edit_gdd_doc_tool`, `build_set_doc_status_tool` and registers them in `ToolFactory._BUILDERS`. Extends `ToolFactory.__init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None)`.
 - Produces tool names: `list_gdd_docs`, `read_gdd_doc`, `write_gdd_doc`, `edit_gdd_doc`, `set_doc_status` (the 6th, `ask_user_question`, is Task 5).
@@ -737,6 +749,7 @@ git commit -m "feat(gdd): document CRUD + surgical edit agent tools"
 This generalizes the approve/reject gate so the same RoomHub future/resume plumbing carries a richer question payload. Approval behavior is preserved unchanged (parity).
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (add `ask_user_question` builder + register)
 - Modify: `studio/backend/app/runs.py` (add `"question"` step type)
 - Modify: `studio/backend/app/room_hub.py` (branch interrupt handling; add `resolve_question`)
@@ -744,6 +757,7 @@ This generalizes the approve/reject gate so the same RoomHub future/resume plumb
 - Test: `studio/backend/tests/test_question_interrupt.py`
 
 **Interfaces:**
+
 - Consumes: `interrupt` (LangGraph, already imported in `agent_tools.py`), the existing `ApprovalRequired` event + `on_approval` callback + `_pending_approvals` registry.
 - Produces:
   - Tool `ask_user_question(question, suggestions=[], allow_free_text=True, allow_delegate=True, aspect=None) -> str`. Raises `interrupt(payload)` where `payload = {"kind":"question","tool":"ask_user_question","question",...}`. On resume: `{"type":"delegate"}` → returns a "use your judgment" sentence; otherwise returns `answer["value"]`.
@@ -981,12 +995,14 @@ git commit -m "feat(gdd): generalize the interrupt into a question gate (ask_use
 ## Task 6: Wire stores/hub into the app + REST endpoint + kickoff seeding
 
 **Files:**
+
 - Modify: `studio/backend/app/main.py`
 - Modify: `studio/backend/app/rest.py`
 - Modify: `studio/backend/app/room_hub.py` (seed taxonomy + pass gdd into `ToolContext`)
 - Test: `studio/backend/tests/test_gdd_rest.py`
 
 **Interfaces:**
+
 - Consumes: `GddStore`, `GddHub`, `register_gdd_handlers`, `GDD_TOOL_NAMES`, `gdd_wire`.
 - Produces: `GET /games/{game_id}/gdd/docs -> list[dict]` (wired docs); `app.state.gdd_store`; `RoomHub` seeds the taxonomy when a started skill's tools intersect `GDD_TOOL_NAMES`, and builds `ToolContext` with `gdd_store`/`gdd_hub`.
 
@@ -1080,10 +1096,12 @@ git commit -m "feat(gdd): wire GddStore/GddHub, REST docs endpoint, kickoff seed
 ## Task 7: The `design-game` built-in skill
 
 **Files:**
+
 - Create: `skills/design-game.md`
 - Test: `studio/backend/tests/test_design_game_skill.py`
 
 **Interfaces:**
+
 - Consumes: `SkillRegistry`, `ToolFactory.known_tool_names()` (all 6 GDD tool names now registered).
 - Produces: a loadable `SkillSpec` named `design-game` whose `tools` are all known.
 
@@ -1116,14 +1134,16 @@ Expected: FAIL — `reg.get("design-game")` is `None`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```markdown
-<!-- skills/design-game.md -->
----
+## <!-- skills/design-game.md -->
+
 name: design-game
 description: Draft the game's Game Design Document from your description, then
-  interview you to resolve the highest-impact gaps until the design is solid.
+interview you to resolve the highest-impact gaps until the design is solid.
 args:
-  - { name: focus, type: string, required: false, description: "Optionally target one aspect (e.g. math-model)." }
-tools: [list_gdd_docs, read_gdd_doc, write_gdd_doc, edit_gdd_doc, set_doc_status, ask_user_question]
+
+- { name: focus, type: string, required: false, description: "Optionally target one aspect (e.g. math-model)." }
+  tools: [list_gdd_docs, read_gdd_doc, write_gdd_doc, edit_gdd_doc, set_doc_status, ask_user_question]
+
 ---
 
 You are designing a casino slot game with the user. The GDD is a fixed set of
@@ -1173,10 +1193,12 @@ git commit -m "feat(gdd): built-in design-game interview skill"
 ## Task 8: Backend service e2e — a full `design-game` run (replay)
 
 **Files:**
+
 - Create: `studio/backend/tests/e2e/test_gdd.py`
 - Possibly: record a replay cassette (`just record-fixtures`) if the design-game model turn is not yet captured.
 
 **Interfaces:**
+
 - Consumes: the `live_server` fixture, Socket.IO client patterns from `tests/e2e/test_skill_runs.py`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1261,6 +1283,7 @@ git commit -m "test(gdd): service e2e for design-game seeding + question gate"
 ## Task 9: Frontend — `question` run-step type + `QuestionCard`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/state.ts` (add `question` to `RunStepType`; add `IQuestion` + `parseQuestion`)
 - Modify: `studio/frontend/src/plugins/llm-chat/socketClient.ts` (add `resolveQuestion`)
 - Modify: `studio/frontend/src/plugins/llm-chat/actions.ts` (add `resolveQuestion`)
@@ -1269,6 +1292,7 @@ git commit -m "test(gdd): service e2e for design-game seeding + question gate"
 - Test: `studio/frontend/src/plugins/llm-chat/QuestionCard.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `IRunStep` (existing), the socket emit pattern, `chatSlice`.
 - Produces:
   - `RunStepType` includes `'question'`.
@@ -1350,8 +1374,7 @@ Expected: FAIL — cannot find `./QuestionCard`.
 In `state.ts`, widen the union and add the interface + parser:
 
 ```typescript
-export type RunStepType =
-  | 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval' | 'question';
+export type RunStepType = 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval' | 'question';
 
 export interface IQuestion {
   question: string;
@@ -1393,10 +1416,7 @@ resolveQuestion: (
 In `actions.ts`:
 
 ```typescript
-export function resolveQuestion(
-  runId: string,
-  answer: { type: 'suggestion' | 'freetext' | 'delegate'; value?: string },
-): void {
+export function resolveQuestion(runId: string, answer: { type: 'suggestion' | 'freetext' | 'delegate'; value?: string }): void {
   const roomId = chatSlice().activeRoomId.get();
   if (roomId) sock().resolveQuestion(roomId, runId, answer);
 }
@@ -1451,15 +1471,13 @@ export function QuestionCard({ runId, step }: { runId: string; step: IRunStep })
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <Button type="submit" variant="ghost">Send</Button>
+          <Button type="submit" variant="ghost">
+            Send
+          </Button>
         </form>
       )}
       {q.allowDelegate && (
-        <Button
-          variant="ghost"
-          className="mt-2 text-accent-text"
-          onClick={() => resolveQuestion(runId, { type: 'delegate' })}
-        >
+        <Button variant="ghost" className="mt-2 text-accent-text" onClick={() => resolveQuestion(runId, { type: 'delegate' })}>
           You decide
         </Button>
       )}
@@ -1495,10 +1513,12 @@ git commit -m "feat(gdd): question run-step type and QuestionCard (suggestions/f
 ## Task 10: Frontend — `gdd` plugin scaffolding (state, REST, socket, reducers)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/gdd/config.ts`, `state.ts`, `restClient.ts`, `socketClient.ts`, `reducers.ts`, `actions.ts`
 - Test: `studio/frontend/src/plugins/gdd/reducers.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `IGddDoc { id; gameId; aspect; title; order; body; status: 'empty'|'drafted'|'needs_input'|'complete'; createdAt; updatedAt }`.
   - `IGddState { connection; activeGameId: string | null; docs: IGddDoc[]; docsStatus: 'idle'|'loading'|'error' }`.
@@ -1517,8 +1537,15 @@ import type { IGddDoc } from './state';
 import { upsertDoc } from './reducers';
 
 const doc = (aspect: string, order: number, body = ''): IGddDoc => ({
-  id: aspect, gameId: 'g1', aspect, title: aspect, order, body,
-  status: 'empty', createdAt: '', updatedAt: '',
+  id: aspect,
+  gameId: 'g1',
+  aspect,
+  title: aspect,
+  order,
+  body,
+  status: 'empty',
+  createdAt: '',
+  updatedAt: '',
 });
 
 describe('gdd reducers', () => {
@@ -1605,9 +1632,7 @@ export function gddSlice(): State<IGddState> {
 import type { IGddDoc } from './state';
 
 export function upsertDoc(docs: IGddDoc[], doc: IGddDoc): IGddDoc[] {
-  const next = docs.some((d) => d.aspect === doc.aspect)
-    ? docs.map((d) => (d.aspect === doc.aspect ? doc : d))
-    : [...docs, doc];
+  const next = docs.some((d) => d.aspect === doc.aspect) ? docs.map((d) => (d.aspect === doc.aspect ? doc : d)) : [...docs, doc];
   return next.slice().sort((a, b) => a.order - b.order);
 }
 ```
@@ -1716,12 +1741,14 @@ git commit -m "feat(gdd): frontend gdd plugin scaffolding (state, rest, socket, 
 ## Task 11: Frontend — `GddViewerPane` + plugin registration
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/gdd/GddViewerPane.tsx`
 - Create: `studio/frontend/src/plugins/gdd/index.ts`
 - Modify: `studio/frontend/src/plugins/index.ts`
 - Test: `studio/frontend/src/plugins/gdd/GddViewerPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `gddHooks`, `gddSlice`, `makeInitialState`, `openGameDocs`, the chat hooks (`llmChatHooks`) to derive the active game from the active room.
 - Produces: `GddViewerPane` component; `gdd` plugin (`IPlugin<IGddState>`) with pane `gdd/viewer` and command `gdd/open-viewer`; registered in `PLUGINS`.
 
@@ -1740,8 +1767,15 @@ vi.mock('./actions', () => ({ openGameDocs: vi.fn(), initGdd: vi.fn() }));
 const fakeProps = {} as Parameters<typeof GddViewerPane>[0];
 
 const doc = (aspect: string, order: number, status: IGddDoc['status']): IGddDoc => ({
-  id: aspect, gameId: 'g1', aspect, title: aspect, order, body: `# ${aspect}`,
-  status, createdAt: '', updatedAt: '',
+  id: aspect,
+  gameId: 'g1',
+  aspect,
+  title: aspect,
+  order,
+  body: `# ${aspect}`,
+  status,
+  createdAt: '',
+  updatedAt: '',
 });
 
 beforeEach(() => {
@@ -1809,16 +1843,16 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
           <li key={d.aspect}>
             <button
               data-testid={`gdd-aspect-${d.aspect}`}
-              onClick={() => gddHooks.usePluginState // selection set below
-                ? undefined : undefined}
+              onClick={() =>
+                gddHooks.usePluginState // selection set below
+                  ? undefined
+                  : undefined
+              }
               className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm text-text-1 hover:bg-raised-hover"
               onClickCapture={() => s.selectedAspect.set(d.aspect)}
             >
               <span>{d.title}</span>
-              <span
-                data-testid={`gdd-status-${d.aspect}`}
-                className={d.status === 'needs_input' ? 'text-accent-text' : 'text-text-3'}
-              >
+              <span data-testid={`gdd-status-${d.aspect}`} className={d.status === 'needs_input' ? 'text-accent-text' : 'text-text-3'}>
                 {STATUS_LABEL[d.status]}
               </span>
             </button>
@@ -1879,9 +1913,11 @@ git commit -m "feat(gdd): read-only GDD viewer pane and plugin registration"
 ## Task 12: Playwright e2e — full GDD design flow (authoritative)
 
 **Files:**
+
 - Create: `studio/frontend/e2e/gdd.spec.ts` (mirror existing specs in `studio/frontend/e2e/`)
 
 **Interfaces:**
+
 - Consumes: the running replay backend on :8000 (`just backend-serve-replay`) and the e2e harness (`just e2e`).
 
 - [ ] **Step 1: Write the failing test**
@@ -1919,10 +1955,12 @@ test('design-game seeds the GDD and asks a question in chat', async ({ page }) =
 - [ ] **Step 2: Run test to verify it fails**
 
 Start the replay backend, then run the suite:
+
 ```bash
 just backend-serve-replay   # in one shell
 just e2e                    # in another (BLOOM_E2E_TIER unset → replay)
 ```
+
 Expected: FAIL where assertions reference not-yet-wired UI; iterate on testids/helpers to match the existing e2e patterns.
 
 - [ ] **Step 3: Adjust selectors/helpers to existing e2e conventions**
@@ -1946,6 +1984,7 @@ git commit -m "test(gdd): Playwright e2e for the design-game flow"
 ## Self-Review
 
 **Spec coverage (each spec section → task):**
+
 - §5 data model / taxonomy → Task 1; `GddStore` → Task 2.
 - §6 doc-mutation tools incl. surgical `edit_gdd_doc` (read-before-edit, unique match) → Tasks 2 (store) + 4 (tools).
 - §7 question interrupt (generalizes approval; `question` step; resume payload; park-no-timeout; persisted answer) → Tasks 5 (backend) + 9 (frontend).
