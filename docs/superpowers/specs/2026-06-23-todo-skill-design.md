@@ -6,44 +6,40 @@
 
 ## Purpose
 
-Let the user jot a todo from any session with a single command, persisting it to a
-known markdown file in the repo. A future session can then read that file and reason
-over it — the load-bearing use case being: *"from my todos, what should I do next?"*
+Let the user jot a todo from any session with a single command, persisting it as a
+**GitHub issue** in the repo. A future session can then list those issues and reason
+over them — the load-bearing use case being: *"from my todos, what should I do next?"*
 
 The defining insight: a Claude Code skill is **instructions, not code**. "Querying"
-therefore needs no search engine — it is simply a session reading a known file and
-reasoning about it. The skill's real job is narrow:
+therefore needs no search engine — it is a session running `gh issue list` and
+reasoning about the results. GitHub Issues give this for free: native open/closed
+state, labels (tags), full-text search, timestamps, and assignees. The skill's job is
+narrow:
 
-1. **Capture well** — append todos in a consistent, human- and machine-readable shape.
-2. **Live at a known path** — so any session can read and prioritize, even without
-   invoking the skill.
+1. **Capture well** — create a labelled, assigned issue from a one-line todo.
+2. **Use a known, filterable store** — so any session can list and prioritize.
 
 ## What it is
 
 A project-level Claude Code skill at `.claude/skills/todo/SKILL.md`. Pure instructions,
 no executable code. Committed to the repo so it is available from every worktree and
-every session. It manages exactly one file: `docs/TODO.md`.
+every session. It wraps the `gh` CLI; it does **not** create or edit any file in the
+repo.
 
-## The file: `docs/TODO.md`
+## Store: GitHub Issues in the current repo
 
-```markdown
-# Bloom TODO
+- Issues are created in the **current repo**. `gh` resolves the repo from the
+  worktree's git remote, so the skill works unchanged from any bloom worktree.
+- Every `/todo` issue carries **`--label todo`** and **`--assignee @me`**. This keeps
+  personal captures cleanly separable from the repo's real bug/feature issues, and lets
+  queries scope to "my open todos."
+- **Label bootstrap:** before creating an issue, ensure the `todo` label exists. Run
+  `gh label create todo` and treat an "already exists" failure as success (idempotent).
 
-## Open
-- [ ] Wire up durable Mongo checkpointer for run state  <!-- 2026-06-23 -->
-- [ ] Collapse run steps into persisted chat messages #chat  <!-- 2026-06-22 -->
+## Preconditions
 
-## Done
-- [x] Fuzzy skill autocomplete  <!-- added 2026-06-22, done 2026-06-23 -->
-```
-
-- A markdown checkbox list under two headings: `## Open` and `## Done`.
-- Each entry: plain-text task + an auto-stamped `added` date inside an HTML comment
-  (`<!-- 2026-06-23 -->`). The comment is invisible in rendered markdown but readable
-  by a session, and is what lets a future session reason about recency/staleness.
-- Optional inline `#tags` — never required.
-- If `docs/TODO.md` does not exist, the skill creates it from the template above
-  (the two empty headings).
+The skill needs `gh` authenticated. It first checks `gh auth status`; if that fails it
+stops and tells the user to run `gh auth login`, rather than surfacing a cryptic error.
 
 ## The three modes (intent-based, single entry point)
 
@@ -51,36 +47,45 @@ The user always invokes `/todo <anything>`; the skill reads what follows and inf
 intent. (Approved over explicit subcommands — lower friction.)
 
 - **Add** — e.g. `/todo wire up the Mongo checkpointer`
-  Append a `- [ ]` line under `## Open` with today's date.
-  Date source on this Windows/PowerShell environment: `Get-Date -Format yyyy-MM-dd`.
+  Create an issue: `gh issue create --title "<text>" --label todo --assignee @me`.
+  The one-liner is the title; longer detail (if the user gave any) goes in `--body`.
+  Report the resulting issue number and URL back to the user.
 
 - **Query** — e.g. `/todo what should I do next?`, `/todo list`, `/todo show #chat`
-  Read `docs/TODO.md` and reason: prioritize, filter by tag, summarize. No parsing
-  logic — the model reads and thinks. This path also works by simply asking in a
-  session, since the file lives at a known path.
+  Run `gh issue list --label todo --assignee @me --state open` (adding `--search` or an
+  extra `--label` when the user narrows it), then **reason** over the results:
+  prioritize, filter, summarize. No parsing logic — the model reads and thinks.
 
 - **Complete** — e.g. `/todo done: fuzzy autocomplete`
-  Find the best-matching open item, flip `- [ ]` → `- [x]`, move it from `## Open`
-  to `## Done`, and append `, done <date>` to its comment.
+  List open todo issues, match the best one to the user's text, then
+  `gh issue close <number>`. If the match is ambiguous, ask the user which issue
+  rather than closing the wrong one.
 
 **Ambiguity rule:** if the input is neither a clear task to capture nor a clear
 question/command, the skill asks one clarifying question rather than guessing.
+
+## Tags
+
+Native issue labels *are* the tags. Keep it light: an optional inline `#tag` in the
+user's input maps to an additional label (created via the same idempotent
+`gh label create` bootstrap if missing). Tags are never required — the `todo` label is
+always applied regardless.
 
 ## Validation
 
 There is nothing to unit-test: the skill is a markdown instruction file, and its
 "logic" is the model following it. Validation is end-to-end and manual, done once:
 
-1. In a real session, `/todo <task>` → confirm a new `- [ ]` line appears under
-   `## Open` in `docs/TODO.md` with today's date.
-2. `/todo what should I do next?` → confirm the session reads the file and reasons
-   over the open items.
-3. `/todo done: <task>` → confirm the item flips to `- [x]` and moves to `## Done`
-   with a `done` date.
-4. With `docs/TODO.md` absent → confirm `/todo <task>` creates it from the template.
+1. `/todo <task>` → a `todo`-labelled issue assigned to the user is created; its number
+   and URL are reported.
+2. Fresh repo with no `todo` label → the label is auto-created, then the issue.
+3. `/todo what should I do next?` → the session lists open todo issues and reasons over
+   them.
+4. `/todo done: <task>` → the matching issue closes; an ambiguous match asks first.
+5. `gh` not authenticated → the skill stops with a clear "run `gh auth login`" message.
 
 ## Out of scope (YAGNI)
 
-Edit, delete, priority fields, due dates, multiple todo files, configurable sorting.
-The model infers priority from text + dates at query time; rigid fields would only add
-capture friction.
+Editing issue bodies, reopening closed issues, milestones/projects, due dates, a
+dedicated separate todos repo, and cross-repo todos. The model infers priority from the
+issue text + timestamps at query time.
