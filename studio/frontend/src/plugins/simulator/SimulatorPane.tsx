@@ -16,6 +16,7 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
 
   const status = s.status.get();
   const result = s.result.get();
+  const failure = s.failure.get();
   const progress = s.progress.get();
   const modelText = s.modelText.get();
 
@@ -98,6 +99,11 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
           </table>
         )}
         {result?.failure && <p className="mt-2 text-xs text-danger">{result.failure}</p>}
+        {status === 'error' && failure && (
+          <p data-testid="curation-error" className="text-sm text-danger">
+            {failure}
+          </p>
+        )}
       </div>
     </div>
   );

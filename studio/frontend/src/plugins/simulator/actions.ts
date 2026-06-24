@@ -16,6 +16,7 @@ export async function openGameSim(gameId: string): Promise<void> {
     s.modelText.set(JSON.stringify(doc.model ?? {}, null, 2));
     s.params.set(doc.params);
     s.result.set(doc.result);
+    s.failure.set(null);
     s.status.set(doc.result ? doc.result.status : 'idle');
     s.loadStatus.set('idle');
   } catch {
@@ -31,6 +32,7 @@ export function closeGameSim(): void {
   s.modelText.set('');
   s.params.set(null);
   s.result.set(null);
+  s.failure.set(null);
   s.progress.set(null);
   s.status.set('idle');
   s.loadStatus.set('idle');

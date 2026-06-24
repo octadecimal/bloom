@@ -45,12 +45,15 @@ class CurationHub:
                 room=game_id,
             )
 
+        pending: list[asyncio.Task] = []
         loop = asyncio.get_running_loop()
 
         def sync_progress(p):
-            loop.create_task(on_progress(p))
+            pending.append(loop.create_task(on_progress(p)))
 
         result = await self._runner.run(model, target, on_progress=sync_progress)
+        if pending:
+            await asyncio.gather(*pending)
         saved = await self._store.save_result(game_id, result)
 
         event = "curation_complete" if result.status in ("pass", "fail") else "curation_failed"

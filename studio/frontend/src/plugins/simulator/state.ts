@@ -47,6 +47,7 @@ export interface ISimulatorState {
   status: 'idle' | 'running' | 'pass' | 'fail' | 'error';
   progress: { phase: string; done: number | null; total: number | null } | null;
   result: ICurationResult | null;
+  failure: string | null;
   loadStatus: 'idle' | 'loading' | 'error';
 }
 
@@ -59,6 +60,7 @@ export function makeInitialState(): ISimulatorState {
     status: 'idle',
     progress: null,
     result: null,
+    failure: null,
     loadStatus: 'idle',
   };
 }

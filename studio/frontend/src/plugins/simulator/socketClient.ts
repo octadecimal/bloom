@@ -16,12 +16,14 @@ export function createSimSocket() {
       if (!isActive(p.gameId)) return;
       simulatorSlice().progress.set({ phase: p.phase, done: p.done, total: p.total });
       simulatorSlice().status.set('running');
+      simulatorSlice().failure.set(null);
     });
     const onDoc = (p: { gameId: string; doc: ISlotModelDoc }) => {
       if (!isActive(p.gameId)) return;
       const result = p.doc.result;
       simulatorSlice().result.set(result);
       simulatorSlice().progress.set(null);
+      simulatorSlice().failure.set(null);
       simulatorSlice().status.set(result ? statusFromResult(result) : 'idle');
     };
     sock.on('curation_complete', onDoc);
@@ -29,6 +31,8 @@ export function createSimSocket() {
       if (!isActive(p.gameId)) return;
       simulatorSlice().status.set('error');
       simulatorSlice().progress.set(null);
+      simulatorSlice().result.set(null);
+      simulatorSlice().failure.set(p.failure ?? null);
     });
   }
   function disconnect(): void {
