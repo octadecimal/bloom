@@ -95,3 +95,32 @@ test('two clients in one room both see the stream and each other in presence', a
   await a.close();
   await b.close();
 });
+
+test('feed sticks to the bottom while pinned, and offers jump-to-latest when scrolled up', async ({ page }) => {
+  await openChat(page, 'alice');
+  await createRoom(page, `Scroll ${Date.now()}`);
+
+  const feed = page.getByTestId('chat-messages');
+
+  // Fill the feed past one viewport so it becomes scrollable.
+  for (let i = 0; i < 12; i++) {
+    await page.getByTestId('chat-composer').fill(`message number ${i}`);
+    await page.getByTestId('chat-send').click();
+    await expect(feed).toContainText(`message number ${i}`);
+  }
+
+  // Pinned: the latest message is at/near the bottom and no jump button shows.
+  await expect(page.getByTestId('chat-jump-latest')).toHaveCount(0);
+  const atBottom = await feed.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight <= 48);
+  expect(atBottom).toBe(true);
+
+  // Scroll up → the jump button appears.
+  await feed.evaluate((el) => (el.scrollTop = 0));
+  await expect(page.getByTestId('chat-jump-latest')).toBeVisible();
+
+  // Click it → feed returns to the bottom and the button hides again.
+  await page.getByTestId('chat-jump-latest').click();
+  await expect(page.getByTestId('chat-jump-latest')).toHaveCount(0);
+  const backAtBottom = await feed.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight <= 48);
+  expect(backAtBottom).toBe(true);
+});

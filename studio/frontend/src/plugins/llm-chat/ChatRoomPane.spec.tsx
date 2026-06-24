@@ -85,6 +85,15 @@ describe('ChatRoomPane', () => {
     expect(screen.queryByTestId('chat-caret')).toBeNull();
   });
 
+  it('does not show the jump-to-latest button when freshly rendered (pinned)', () => {
+    chatSlice().messages.set([msg({ id: 'j1', content: 'hi', status: 'complete' })]);
+    render(<ChatRoomPane />);
+    // jsdom reports a zero-size container → isAtBottom true → pinned → no button.
+    expect(screen.queryByTestId('chat-jump-latest')).toBeNull();
+    // The scroll container is still present and is the parent of the feed item.
+    expect(screen.getByTestId('chat-messages')).toContainElement(screen.getByTestId('chat-msg-j1'));
+  });
+
   it('renders the error banner with the destructive token when lastError is set', () => {
     chatSlice().lastError.set('boom');
     render(<ChatRoomPane />);
