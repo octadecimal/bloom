@@ -13,21 +13,12 @@ class GddHub:
             await self._emit_updated(game_id, doc)
         return docs
 
-    async def write_doc(self, game_id: str, aspect: str, title: str,
-                        body: str, status: Status) -> GddDoc:
-        doc = await self._store.upsert_doc(
-            game_id, aspect, title=title, body=body, status=status
-        )
+    async def set_fields(
+        self, game_id: str, aspect: str, fields: dict
+    ) -> tuple[GddDoc, list[str]]:
+        doc, warnings = await self._store.set_fields(game_id, aspect, fields)
         await self._emit_updated(game_id, doc)
-        return doc
-
-    async def edit_doc(self, game_id: str, aspect: str, old_string: str,
-                       new_string: str, replace_all: bool = False) -> GddDoc:
-        doc = await self._store.edit_doc(
-            game_id, aspect, old_string, new_string, replace_all
-        )
-        await self._emit_updated(game_id, doc)
-        return doc
+        return doc, warnings
 
     async def set_status(self, game_id: str, aspect: str, status: Status) -> GddDoc:
         doc = await self._store.set_status(game_id, aspect, status)
