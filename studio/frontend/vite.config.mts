@@ -10,7 +10,7 @@ export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: '../../node_modules/.vite/studio/frontend',
   server: {
-    port: 4200,
+    port: Number(process.env.VITE_FRONTEND_PORT ?? 4200),
     host: '0.0.0.0',
     // Dev proxy: the browser talks only to the frontend origin (:4200) and Vite
     // forwards API + WebSocket to the backend. Lets the app be reached over the
@@ -29,7 +29,7 @@ export default defineConfig(() => ({
     },
   },
   preview: {
-    port: 4200,
+    port: Number(process.env.VITE_FRONTEND_PORT ?? 4200),
     host: '0.0.0.0',
   },
   plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
