@@ -23,13 +23,27 @@ export class Reconciler {
       case 'parentSet':
         this.renderer.setParent(change.childId, change.parentId);
         return;
+      case 'dataBound': {
+        if (change.edge.to.port === 'texture') await this.bindTexture(change.edge.from.node, change.edge.to.node);
+        return;
+      }
+      case 'dataUnbound': {
+        if (change.edge.to.port === 'texture') this.renderer.assignTexture(change.edge.to.node, null);
+        return;
+      }
       case 'propSet': {
         const node = this.model.getNode(change.id);
-        if (node && node.type === 'Texture') return; // reactivity handled in Task 10
+        if (node && node.type === 'Texture') {
+          if (change.path === 'src') {
+            for (const e of this.model.edgesBySource(change.id, 'data')) {
+              if (e.to.port === 'texture') await this.bindTexture(change.id, e.to.node);
+            }
+          }
+          return;
+        }
         this.renderer.setProp(change.id, change.path, change.value);
         return;
       }
-      // 'dataBound' / 'dataUnbound' handled in Tasks 10+
       default:
         return;
     }
@@ -45,6 +59,13 @@ export class Reconciler {
       this.renderer.createObject(node.id, node.type);
       for (const [key, value] of Object.entries(node.props)) this.renderer.setProp(node.id, key, value);
     }
+  }
+
+  private async bindTexture(textureNodeId: string, spriteId: string): Promise<void> {
+    const tex = this.model.getNode(textureNodeId);
+    const src = tex && typeof tex.props.src === 'string' ? tex.props.src : null;
+    const handle = src ? await this.renderer.loadTexture(src) : null;
+    this.renderer.assignTexture(spriteId, handle);
   }
 }
 
