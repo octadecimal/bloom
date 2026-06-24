@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>engine harness</title>
+  </head>
+  <body>
+    <iframe id="engine" src="http://localhost:4300/" width="640" height="480" style="border: 0"></iframe>
+    <script>
+      window.__sent = [];
+      window.__inbound = [];
+      const frame = document.getElementById('engine');
+      window.addEventListener('message', (e) => window.__inbound.push(e.data));
+      window.send = (msg) => {
+        window.__sent.push(msg);
+        frame.contentWindow.postMessage(msg, '*');
+      };
+      window.engineModel = () => frame.contentWindow.__engineModel.toDocument();
+    </script>
+  </body>
+</html>
