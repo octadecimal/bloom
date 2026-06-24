@@ -89,6 +89,68 @@ fn eval_grid(model: &SlotModel, grid: &[Vec<Symbol>]) -> u64 {
     lines + scatter_payout(model, grid)
 }
 
+/// One bonus feature's result within a round.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeatureOutcome {
+    pub triggered: bool,
+    pub spins_played: u32,
+    pub payout: u64,
+    pub spins: Vec<Vec<Vec<Symbol>>>,
+}
+
+impl FeatureOutcome {
+    fn untriggered() -> Self {
+        FeatureOutcome { triggered: false, spins_played: 0, payout: 0, spins: Vec::new() }
+    }
+}
+
+/// Evaluate ONE bonus feature against the base grid (spec §3.1: each feature
+/// checks its own trigger against the base grid only).
+fn run_bonus(
+    model: &SlotModel,
+    bonus: &BonusFeature,
+    base_grid: &[Vec<Symbol>],
+    rng: &mut SplitMix64,
+) -> FeatureOutcome {
+    match bonus {
+        BonusFeature::FreeSpins { trigger, config } => {
+            if count_symbol(base_grid, trigger.symbol) >= trigger.min_count as usize {
+                run_free_spins(model, trigger, config, rng)
+            } else {
+                FeatureOutcome::untriggered()
+            }
+        }
+    }
+}
+
+/// Run a free-spins feature. Retrigger re-checks THIS feature's own trigger
+/// against each feature-spin grid (spec §3.1 — no nesting/cross-triggering).
+fn run_free_spins(
+    model: &SlotModel,
+    trigger: &TriggerSpec,
+    config: &FreeSpinsConfig,
+    rng: &mut SplitMix64,
+) -> FeatureOutcome {
+    let reels = config.feature_reels.as_ref().unwrap_or(&model.reels);
+    let mut remaining = config.spins_awarded;
+    let mut spins_played: u32 = 0;
+    let mut payout: u64 = 0;
+    let mut spins = Vec::new();
+
+    while remaining > 0 {
+        remaining -= 1;
+        spins_played += 1;
+        let grid = spin(reels, model.rows, rng);
+        payout += eval_grid(model, &grid) * config.multiplier;
+        if config.retrigger && count_symbol(&grid, trigger.symbol) >= trigger.min_count as usize {
+            remaining += config.spins_awarded;
+        }
+        spins.push(grid);
+    }
+
+    FeatureOutcome { triggered: true, spins_played, payout, spins }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +264,66 @@ mod tests {
         assert_eq!(eval_grid(&m, &grid), 10);
         let grid2 = vec![vec![9], vec![9], vec![9]]; // line 0, scatter 20
         assert_eq!(eval_grid(&m, &grid2), 20);
+    }
+
+    #[test]
+    fn untriggered_feature_does_nothing() {
+        // Trigger needs 3 of symbol 9, base grid has none.
+        let m = lines_model();
+        let bonus = BonusFeature::FreeSpins {
+            trigger: TriggerSpec { symbol: 9, min_count: 3 },
+            config: FreeSpinsConfig { spins_awarded: 5, retrigger: false, multiplier: 2, feature_reels: None },
+        };
+        let base = vec![vec![0], vec![0], vec![0]];
+        let mut rng = SplitMix64::new(1);
+        let out = run_bonus(&m, &bonus, &base, &mut rng);
+        assert!(!out.triggered);
+        assert_eq!(out.spins_played, 0);
+        assert_eq!(out.payout, 0);
+    }
+
+    #[test]
+    fn triggered_feature_runs_spins_with_multiplier() {
+        // A model where every spin pays a fixed 2; feature multiplier 3 over 4 spins.
+        let m = SlotModel {
+            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }, SymbolDef { id: 9, role: SymbolRole::Scatter }],
+            reels: vec![vec![0], vec![0], vec![0]],
+            rows: 1,
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable { entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }] },
+            bonuses: vec![],
+        };
+        let trigger = TriggerSpec { symbol: 9, min_count: 1 };
+        let config = FreeSpinsConfig { spins_awarded: 4, retrigger: false, multiplier: 3, feature_reels: None };
+        let mut rng = SplitMix64::new(1);
+        let out = run_free_spins(&m, &trigger, &config, &mut rng);
+        assert!(out.triggered);
+        assert_eq!(out.spins_played, 4);
+        assert_eq!(out.payout, 4 * 2 * 3); // 24
+        assert_eq!(out.spins.len(), 4);
+    }
+
+    #[test]
+    fn retrigger_adds_spins_and_terminates() {
+        // Feature reel [9,0,0,0]: scatter sometimes appears, retriggering.
+        let m = SlotModel {
+            symbols: vec![SymbolDef { id: 9, role: SymbolRole::Scatter }, SymbolDef { id: 0, role: SymbolRole::Normal }],
+            reels: vec![vec![0], vec![0], vec![0]],
+            rows: 1,
+            paylines: vec![],
+            paytable: Paytable { entries: vec![] },
+            bonuses: vec![],
+        };
+        let trigger = TriggerSpec { symbol: 9, min_count: 3 };
+        let config = FreeSpinsConfig {
+            spins_awarded: 2,
+            retrigger: true,
+            multiplier: 1,
+            feature_reels: Some(vec![vec![9, 0, 0, 0], vec![9, 0, 0, 0], vec![9, 0, 0, 0]]),
+        };
+        let mut rng = SplitMix64::new(99);
+        let out = run_free_spins(&m, &trigger, &config, &mut rng);
+        assert!(out.spins_played >= 2);
+        assert_eq!(out.spins.len() as u32, out.spins_played);
     }
 }
