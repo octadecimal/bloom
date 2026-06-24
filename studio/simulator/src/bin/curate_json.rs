@@ -39,6 +39,29 @@ fn progress_line(p: &CurationProgress) -> String {
     }
 }
 
+fn result_line(
+    status: &str,
+    metrics: &bloom_simulator::target::Metrics,
+    realized_rtp: Option<f64>,
+    pool_size: Option<usize>,
+    failure: Option<&str>,
+) -> String {
+    serde_json::json!({
+        "type": "result",
+        "status": status,
+        "rtp": metrics.rtp,
+        "volatility": metrics.volatility,
+        "hitFrequency": metrics.hit_frequency,
+        "baseRtp": metrics.base_rtp,
+        "featureRtp": metrics.feature_rtp,
+        "bonusHitRates": metrics.bonus_hit_rates,
+        "realizedRtp": realized_rtp,
+        "poolSize": pool_size,
+        "failure": failure,
+    })
+    .to_string()
+}
+
 fn emit(line: String) {
     println!("{line}");
 }
@@ -97,25 +120,13 @@ fn main() {
         ),
     };
 
-    let result = json!({
-        "type": "result",
-        "status": status,
-        "rtp": m.rtp,
-        "volatility": m.volatility,
-        "hitFrequency": m.hit_frequency,
-        "baseRtp": m.base_rtp,
-        "featureRtp": m.feature_rtp,
-        "bonusHitRates": m.bonus_hit_rates,
-        "realizedRtp": realized,
-        "poolSize": pool_size,
-        "failure": failure,
-    });
-    emit(result.to_string());
+    emit(result_line(status, m, realized, pool_size, failure.as_deref()));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bloom_simulator::target::Metrics;
 
     #[test]
     fn phase_line_is_ndjson() {
@@ -132,5 +143,52 @@ mod tests {
         assert_eq!(v["phase"], "simulate");
         assert_eq!(v["done"], 5);
         assert_eq!(v["total"], 10);
+    }
+
+    #[test]
+    fn result_line_pass_shape() {
+        let metrics = Metrics {
+            rtp: 0.95,
+            volatility: 2.5,
+            hit_frequency: 0.35,
+            bonus_hit_rates: vec![0.1, 0.2],
+            base_rtp: 0.60,
+            feature_rtp: 0.35,
+        };
+        let s = result_line("pass", &metrics, Some(0.961), Some(1000), None);
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+
+        assert_eq!(v["type"], "result");
+        assert_eq!(v["status"], "pass");
+        assert_eq!(v["rtp"], 0.95);
+        assert_eq!(v["volatility"], 2.5);
+        assert_eq!(v["hitFrequency"], 0.35);
+        assert_eq!(v["baseRtp"], 0.60);
+        assert_eq!(v["featureRtp"], 0.35);
+        assert_eq!(v["realizedRtp"], 0.961);
+        assert_eq!(v["poolSize"], 1000);
+        assert!(v["failure"].is_null());
+    }
+
+    #[test]
+    fn result_line_fail_shape() {
+        let metrics = Metrics {
+            rtp: 0.94,
+            volatility: 2.3,
+            hit_frequency: 0.34,
+            bonus_hit_rates: vec![0.09],
+            base_rtp: 0.59,
+            feature_rtp: 0.35,
+        };
+        let s = result_line("fail", &metrics, None, None, Some("missed bands"));
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+
+        assert_eq!(v["status"], "fail");
+        assert!(v["realizedRtp"].is_null());
+        assert!(v["poolSize"].is_null());
+        assert_eq!(v["failure"], "missed bands");
+        assert_eq!(v["rtp"], 0.94);
+        assert_eq!(v["volatility"], 2.3);
+        assert_eq!(v["hitFrequency"], 0.34);
     }
 }
