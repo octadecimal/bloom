@@ -23,11 +23,13 @@
 ## File Structure
 
 **Backend**
+
 - `studio/backend/app/runs.py` — add `RunStore.list_runs(room_id)`.
 - `studio/backend/app/rest.py` — add `GET /rooms/{room_id}/runs`.
 - `studio/backend/app/main.py` — attach `fastapi_app.state.run_store = run_store`.
 
 **Frontend**
+
 - `studio/frontend/src/plugins/llm-chat/state.ts` — add `createdAt` to `IRun`.
 - `studio/frontend/src/plugins/llm-chat/feed.ts` — NEW: `IFeedEntry` + `buildFeed`.
 - `studio/frontend/src/plugins/llm-chat/RunTurnBlock.tsx` — NEW: grouped assistant turn (absorbs `RunStepCard` rendering).
@@ -37,6 +39,7 @@
 - `studio/frontend/src/plugins/llm-chat/RunTimeline.tsx` + `RunTimeline.spec.tsx` — DELETED.
 
 **Tests**
+
 - `studio/backend/tests/test_run_store.py`, `studio/backend/tests/test_rest.py`
 - `studio/frontend/src/plugins/llm-chat/feed.spec.ts` (NEW), `RunTurnBlock.spec.tsx` (NEW), `restClient.spec.ts`, `actions.spec.ts`, `reducers.spec.ts`, `ChatRoomPane.spec.tsx`
 - `studio/frontend/e2e/skill-run.spec.ts`
@@ -46,12 +49,14 @@
 ## Task 1: Backend — list runs endpoint
 
 **Files:**
+
 - Modify: `studio/backend/app/runs.py` (add `list_runs` to `RunStore`)
 - Modify: `studio/backend/app/main.py:64` area (attach `run_store` to app state)
 - Modify: `studio/backend/app/rest.py:94-101` area (new route after `/messages`)
 - Test: `studio/backend/tests/test_run_store.py`, `studio/backend/tests/test_rest.py`
 
 **Interfaces:**
+
 - Produces: `RunStore.list_runs(room_id: str) -> list[Run]` (sorted by `created_at` ascending); `GET /rooms/{room_id}/runs -> list[dict]` (each `run_wire(run)`), 404 when the room does not exist.
 
 - [ ] **Step 1: Write the failing store test**
@@ -167,10 +172,12 @@ git commit -m "feat(studio): GET /rooms/:id/runs + RunStore.list_runs"
 ## Task 2: Frontend — `IRun.createdAt`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/state.ts:72-78` (`IRun`)
 - Test: `studio/frontend/src/plugins/llm-chat/reducers.spec.ts`
 
 **Interfaces:**
+
 - Produces: `IRun.createdAt: string`. The `run_started` / `run_snapshot` wire already carries `createdAt`; `startRun` / `applyRunSnapshot` store the whole run object, so the field flows through unchanged — this task only types it and locks it with a test.
 
 - [ ] **Step 1: Write the failing reducer test**
@@ -225,19 +232,25 @@ git commit -m "feat(studio): add createdAt to IRun"
 ## Task 3: Frontend — `buildFeed` selector
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/feed.ts`
 - Test: `studio/frontend/src/plugins/llm-chat/feed.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (pure function over light descriptors).
 - Produces:
+
   ```ts
-  export interface IFeedEntry { kind: 'message' | 'run'; id: string; createdAt: string; index: number; }
-  export function buildFeed(
-    messages: { id: string; createdAt: string }[],
-    runs: { id: string; createdAt: string }[],
-  ): IFeedEntry[];
+  export interface IFeedEntry {
+    kind: 'message' | 'run';
+    id: string;
+    createdAt: string;
+    index: number;
+  }
+  export function buildFeed(messages: { id: string; createdAt: string }[], runs: { id: string; createdAt: string }[]): IFeedEntry[];
   ```
+
   `index` is the entry's position in its OWN source array (so renderers can subscribe to `s.messages[index]` / `s.runs[index]`). Sorted ascending by `createdAt`; equal timestamps keep message-before-run, then source order.
 
 - [ ] **Step 1: Write the failing tests**
@@ -301,10 +314,7 @@ export interface IFeedEntry {
  * subscribe to the matching hookstate node (`s.messages[index]` / `s.runs[index]`).
  * Stable: equal timestamps keep message-before-run, then source order.
  */
-export function buildFeed(
-  messages: { id: string; createdAt: string }[],
-  runs: { id: string; createdAt: string }[],
-): IFeedEntry[] {
+export function buildFeed(messages: { id: string; createdAt: string }[], runs: { id: string; createdAt: string }[]): IFeedEntry[] {
   const entries: IFeedEntry[] = [
     ...messages.map((m, index): IFeedEntry => ({ kind: 'message', id: m.id, createdAt: m.createdAt, index })),
     ...runs.map((r, index): IFeedEntry => ({ kind: 'run', id: r.id, createdAt: r.createdAt, index })),
@@ -333,10 +343,12 @@ git commit -m "feat(studio): buildFeed selector merging messages + runs by times
 ## Task 4: Frontend — `RunTurnBlock` component
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/llm-chat/RunTurnBlock.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/RunTurnBlock.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `IRun.createdAt` (Task 2); `chatSlice().runs[index]` hookstate node; `ApprovalCard`, `parseApprovalAction`.
 - Produces: `RunTurnBlock({ index }: { index: number })` — a grouped assistant-turn `<li>` (`data-testid="run-turn-${id}"`, `data-role="assistant"`) that reads `s.runs[index]` and renders its steps. Preserves the per-step testids (`run-step-${index}`), the `approval-card`, and the tool-name text. Calls `bumpRenderCount('RunTurnBlock')`.
 
@@ -387,7 +399,15 @@ describe('RunTurnBlock', () => {
   it('renders an approval step as the approval card', () => {
     chatSlice().runs.set([
       run({
-        steps: [{ index: 0, type: 'approval', toolName: null, content: JSON.stringify({ tool: 'delete_asset', args: {}, label: "This can't be undone" }), status: 'running' }],
+        steps: [
+          {
+            index: 0,
+            type: 'approval',
+            toolName: null,
+            content: JSON.stringify({ tool: 'delete_asset', args: {}, label: "This can't be undone" }),
+            status: 'running',
+          },
+        ],
       }),
     ]);
     render(<RunTurnBlock index={0} />);
@@ -500,11 +520,13 @@ git commit -m "feat(studio): RunTurnBlock — grouped assistant-turn for a skill
 ## Task 5: Frontend — render the unified feed; retire `RunTimeline`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx` (`MessageList`, imports, drop `<RunTimeline />`)
 - Delete: `studio/frontend/src/plugins/llm-chat/RunTimeline.tsx`, `studio/frontend/src/plugins/llm-chat/RunTimeline.spec.tsx`
 - Test: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `buildFeed` (Task 3), `RunTurnBlock` (Task 4), `ChatMessageBubble` (existing, index-based).
 - Produces: `MessageList` renders one `<ul data-testid="chat-messages">` whose children are `ChatMessageBubble` (message entries) and `RunTurnBlock` (run entries), ordered by `buildFeed`. `RunTimeline` no longer exists.
 
@@ -573,11 +595,7 @@ function MessageList() {
   return (
     <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-1.5 overflow-auto p-0">
       {feed.map((entry) =>
-        entry.kind === 'message' ? (
-          <ChatMessageBubble key={`m:${entry.id}`} index={entry.index} />
-        ) : (
-          <RunTurnBlock key={`r:${entry.id}`} index={entry.index} />
-        ),
+        entry.kind === 'message' ? <ChatMessageBubble key={`m:${entry.id}`} index={entry.index} /> : <RunTurnBlock key={`r:${entry.id}`} index={entry.index} />,
       )}
     </ul>
   );
@@ -587,6 +605,7 @@ function MessageList() {
 - [ ] **Step 5: Update imports and drop the standalone `<RunTimeline />`**
 
 In `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx`:
+
 - Remove `import { RunTimeline } from './RunTimeline';`
 - Add `import { RunTurnBlock } from './RunTurnBlock';` and `import { buildFeed } from './feed';`
 - Remove the `<RunTimeline />` line (~285) from the returned JSX.
@@ -614,11 +633,13 @@ git commit -m "feat(studio): render unified chat feed; retire RunTimeline"
 ## Task 6: Frontend — fetch runs on room open; reset on switch
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/restClient.ts` (add `getRuns`)
 - Modify: `studio/frontend/src/plugins/llm-chat/actions.ts` (`IRestDeps`, `openRoom`, `closeRoom`)
 - Test: `studio/frontend/src/plugins/llm-chat/restClient.spec.ts`, `studio/frontend/src/plugins/llm-chat/actions.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `IRun` (Task 2), `GET /rooms/:id/runs` (Task 1).
 - Produces: `getRuns(roomId: string): Promise<IRun[]>`; `openRoom` clears `runs`/`activeRunId`, fetches messages AND runs in parallel, and sets both (guarding on latest `activeRoomId`); `closeRoom` clears `runs`/`activeRunId`. `IRestDeps` gains `getRuns`.
 
@@ -658,6 +679,7 @@ Expected: PASS.
 - [ ] **Step 5: Write the failing actions tests**
 
 In `studio/frontend/src/plugins/llm-chat/actions.spec.ts`:
+
 - Add `getRuns: vi.fn(),` to the `rest` mock object.
 - Add these tests inside `describe('actions', …)`:
 
@@ -714,39 +736,39 @@ interface IRestDeps {
 In `openRoom`, add the resets alongside the existing `s.messages.set([])` block, and fetch runs in parallel with messages:
 
 ```ts
-  s.activeRoomId.set(roomId);
-  s.messages.set([]);
-  s.runs.set([]);
-  s.activeRunId.set(null);
-  s.members.set([]);
-  s.typing.set([]);
-  s.aiStatus.set({ state: 'idle', queueDepth: 0 });
-  s.roomLoadStatus.set('loading');
-  persist();
+s.activeRoomId.set(roomId);
+s.messages.set([]);
+s.runs.set([]);
+s.activeRunId.set(null);
+s.members.set([]);
+s.typing.set([]);
+s.aiStatus.set({ state: 'idle', queueDepth: 0 });
+s.roomLoadStatus.set('loading');
+persist();
 
-  try {
-    const [history, runs] = await Promise.all([rest.getMessages(roomId), rest.getRuns(roomId)]);
-    if (chatSlice().activeRoomId.get() !== roomId) return; // a newer openRoom won
-    s.messages.set(history);
-    s.runs.set(runs);
-    s.roomLoadStatus.set('idle');
-  } catch {
-    if (chatSlice().activeRoomId.get() !== roomId) return;
-    s.roomLoadStatus.set('error');
-  }
-  sock().joinRoom(roomId);
+try {
+  const [history, runs] = await Promise.all([rest.getMessages(roomId), rest.getRuns(roomId)]);
+  if (chatSlice().activeRoomId.get() !== roomId) return; // a newer openRoom won
+  s.messages.set(history);
+  s.runs.set(runs);
+  s.roomLoadStatus.set('idle');
+} catch {
+  if (chatSlice().activeRoomId.get() !== roomId) return;
+  s.roomLoadStatus.set('error');
+}
+sock().joinRoom(roomId);
 ```
 
 In `closeRoom`, add the resets:
 
 ```ts
-  s.activeRoomId.set(null);
-  s.messages.set([]);
-  s.runs.set([]);
-  s.activeRunId.set(null);
-  s.members.set([]);
-  s.typing.set([]);
-  persist();
+s.activeRoomId.set(null);
+s.messages.set([]);
+s.runs.set([]);
+s.activeRunId.set(null);
+s.members.set([]);
+s.typing.set([]);
+persist();
 ```
 
 - [ ] **Step 8: Run the actions tests to verify they pass**
@@ -794,9 +816,11 @@ Expected: PASS.
 ## Task 8: e2e — update the behavioral contract
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/skill-run.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the unified feed (`chat-messages`), `RunTurnBlock` (`run-turn-*`), preserved tool-name text + final text. `manage-assets-approval.spec.ts` uses `approval-card` (preserved) and needs NO change.
 
 - [ ] **Step 1: Repoint `skill-run.spec.ts` assertions from `run-timeline` to the feed**
@@ -826,9 +850,7 @@ test('a run block appears between chat bubbles in chronological order', async ({
   await expect(page.getByTestId('chat-messages')).toContainText('third plain message');
 
   // DOM order: the run-turn block sits before the last plain message.
-  const order = await page.getByTestId('chat-messages').evaluate((ul) =>
-    Array.from(ul.children).map((c) => c.getAttribute('data-testid') ?? ''),
-  );
+  const order = await page.getByTestId('chat-messages').evaluate((ul) => Array.from(ul.children).map((c) => c.getAttribute('data-testid') ?? ''));
   const runIdx = order.findIndex((t) => t.startsWith('run-turn-'));
   const lastMsgIdx = order.length - 1;
   expect(runIdx).toBeGreaterThan(0);
@@ -927,6 +949,7 @@ gh pr merge --squash --delete-branch
 ## Self-Review (author checklist — completed during planning)
 
 **Spec coverage:**
+
 - Frontend-fold, keep run model → Tasks 3-6 (selector + render, no backend model change). ✓
 - Reload gap in scope → Task 1 (endpoint) + Task 6 (fetch on open). ✓
 - Grouped assistant turn → Task 4 (`RunTurnBlock`). ✓

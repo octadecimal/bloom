@@ -11,10 +11,7 @@ export interface IFeedEntry {
  * subscribe to the matching hookstate node (`s.messages[index]` / `s.runs[index]`).
  * Stable: equal timestamps keep message-before-run, then source order.
  */
-export function buildFeed(
-  messages: { id: string; createdAt: string }[],
-  runs: { id: string; createdAt: string }[],
-): IFeedEntry[] {
+export function buildFeed(messages: { id: string; createdAt: string }[], runs: { id: string; createdAt: string }[]): IFeedEntry[] {
   const entries: IFeedEntry[] = [
     ...messages.map((m, index): IFeedEntry => ({ kind: 'message', id: m.id, createdAt: m.createdAt, index })),
     ...runs.map((r, index): IFeedEntry => ({ kind: 'run', id: r.id, createdAt: r.createdAt, index })),

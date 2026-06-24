@@ -40,7 +40,15 @@ describe('RunTurnBlock', () => {
   it('renders an approval step as the approval card', () => {
     chatSlice().runs.set([
       run({
-        steps: [{ index: 0, type: 'approval', toolName: null, content: JSON.stringify({ tool: 'delete_asset', args: {}, label: "This can't be undone" }), status: 'running' }],
+        steps: [
+          {
+            index: 0,
+            type: 'approval',
+            toolName: null,
+            content: JSON.stringify({ tool: 'delete_asset', args: {}, label: "This can't be undone" }),
+            status: 'running',
+          },
+        ],
       }),
     ]);
     render(<RunTurnBlock index={0} />);

@@ -220,7 +220,13 @@ describe('ChatRoomPane skill autocomplete (keyboard)', () => {
 
 describe('ChatRoomPane unified feed', () => {
   const run = (over: Partial<IRun>): IRun => ({
-    id: 'run1', roomId: 'r1', skillName: 's', status: 'running', steps: [], createdAt: '2026-06-23T00:00:02Z', ...over,
+    id: 'run1',
+    roomId: 'r1',
+    skillName: 's',
+    status: 'running',
+    steps: [],
+    createdAt: '2026-06-23T00:00:02Z',
+    ...over,
   });
 
   it('interleaves a run block between chat bubbles by timestamp', () => {

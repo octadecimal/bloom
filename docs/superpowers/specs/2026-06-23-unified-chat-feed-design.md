@@ -61,14 +61,12 @@ The feed is **derived, not stored** — no third source of truth. A pure selecto
 merges the two existing collections:
 
 ```ts
-type IFeedEntry =
-  | { kind: 'message'; id: string; createdAt: string }
-  | { kind: 'run'; id: string; createdAt: string };
+type IFeedEntry = { kind: 'message'; id: string; createdAt: string } | { kind: 'run'; id: string; createdAt: string };
 
 function buildFeed(messages: IMessage[], runs: IRun[]): IFeedEntry[];
 ```
 
-- Sorted by `createdAt` (ISO string), stable. A run is created *after* its
+- Sorted by `createdAt` (ISO string), stable. A run is created _after_ its
   invocation user message, so it naturally sorts immediately after that message.
 - Tie-break: stable sort preserves insertion order; when timestamps are equal the
   message precedes the run (messages pushed before runs in the merge input).
@@ -159,6 +157,7 @@ contract.
 ## Files touched
 
 **Frontend**
+
 - `studio/frontend/src/plugins/llm-chat/RunTimeline.tsx` — deleted.
 - `studio/frontend/src/plugins/llm-chat/RunTurnBlock.tsx` — new (grouped turn).
 - `studio/frontend/src/plugins/llm-chat/feed.ts` — new (`buildFeed` selector).
@@ -171,11 +170,13 @@ contract.
 - `studio/frontend/src/plugins/llm-chat/restClient.ts` — `getRuns`.
 
 **Backend**
+
 - `studio/backend/app/runs.py` — `RunStore.list_runs`.
 - `studio/backend/app/rest.py` — `GET /rooms/{room_id}/runs`.
 - `studio/backend/app/main.py` — `app.state.run_store = run_store`.
 
 **Tests**
+
 - Unit specs for `feed.ts`, `RunTurnBlock.tsx`, reducers, actions.
 - `studio/backend/tests/` — `list_runs` + the new endpoint.
 - e2e: update `skill-run.spec` / `manage-assets-approval.spec`; add interleave +
