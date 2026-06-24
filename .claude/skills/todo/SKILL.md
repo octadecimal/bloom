@@ -99,6 +99,7 @@ Close the issue that matches what the user finished.
    ```
 
    Then confirm which issue (number + title) you closed.
+
 4. If two or more plausibly match, or none do, ask the user which issue number to close
    rather than closing the wrong one.
 
