@@ -19,22 +19,49 @@ beforeEach(() => {
 });
 
 describe('RunTurnBlock', () => {
-  it('renders tool and final steps inside a grouped assistant turn', () => {
+  it('renders a completed tool as one borderless line with data-state=complete', () => {
     chatSlice().runs.set([
       run({
         steps: [
           { index: 0, type: 'tool_call', toolName: 'generate_asset', content: '{}', status: 'complete' },
-          { index: 1, type: 'final', toolName: null, content: 'Done.', status: 'running' },
+          { index: 1, type: 'tool_result', toolName: 'generate_asset', content: 'ok', status: 'complete' },
+          { index: 2, type: 'final', toolName: null, content: 'Done.', status: 'running' },
         ],
       }),
     ]);
     render(<RunTurnBlock index={0} />);
-    const block = screen.getByTestId('run-turn-run1');
-    expect(block.getAttribute('data-role')).toBe('assistant');
-    expect(screen.getByText(/generate_asset/)).toBeInTheDocument();
+    // The two tool steps collapse into ONE line keyed by the call index.
+    const tool = screen.getByTestId('run-step-0');
+    expect(tool.getAttribute('data-state')).toBe('complete');
+    expect(tool.textContent).toContain('generate_asset');
+    expect(tool.className).not.toContain('border'); // borderless
+    // No separate tool-result line is rendered.
+    expect(screen.queryByTestId('run-step-1')).toBeNull();
+    // The final step still renders as text.
     expect(screen.getByText('Done.')).toBeInTheDocument();
-    expect(screen.getByTestId('run-step-0')).toBeInTheDocument();
-    expect(screen.getByTestId('run-step-1')).toBeInTheDocument();
+  });
+
+  it('marks a tool with no result yet as data-state=running', () => {
+    chatSlice().runs.set([
+      run({ steps: [{ index: 0, type: 'tool_call', toolName: 'generate_asset', content: '{}', status: 'complete' }] }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    expect(screen.getByTestId('run-step-0').getAttribute('data-state')).toBe('running');
+  });
+
+  it('marks an errored tool as data-state=error', () => {
+    chatSlice().runs.set([
+      run({
+        steps: [
+          { index: 0, type: 'tool_call', toolName: 'delete_asset', content: '{}', status: 'complete' },
+          { index: 1, type: 'tool_result', toolName: 'delete_asset', content: 'boom', status: 'error' },
+        ],
+      }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    const tool = screen.getByTestId('run-step-0');
+    expect(tool.getAttribute('data-state')).toBe('error');
+    expect(tool.className).toContain('text-destructive');
   });
 
   it('renders an approval step as the approval card', () => {
