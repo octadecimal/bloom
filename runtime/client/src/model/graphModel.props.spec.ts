@@ -22,4 +22,11 @@ describe('GraphModel setProp', () => {
     const m = new GraphModel();
     expect(() => m.apply({ kind: 'setProp', id: 'ghost', path: 'alpha', value: 1 })).toThrow(OpError);
   });
+
+  it('rejects prototype-polluting path segments', () => {
+    const m = new GraphModel();
+    m.apply({ kind: 'addNode', id: 's', type: 'Sprite' });
+    expect(() => m.apply({ kind: 'setProp', id: 's', path: '__proto__.polluted', value: 1 })).toThrow(OpError);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined(); // prototype not polluted
+  });
 });

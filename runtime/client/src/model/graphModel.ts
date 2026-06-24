@@ -50,10 +50,14 @@ export class GraphModel {
     let cursor = node.props as Record<string, unknown>;
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') throw new OpError('invalid_path', `disallowed path segment: ${k}`);
       if (typeof cursor[k] !== 'object' || cursor[k] === null) cursor[k] = {};
       cursor = cursor[k] as Record<string, unknown>;
     }
-    cursor[keys[keys.length - 1]] = value;
+    const finalKey = keys[keys.length - 1];
+    if (finalKey === '__proto__' || finalKey === 'constructor' || finalKey === 'prototype')
+      throw new OpError('invalid_path', `disallowed path segment: ${finalKey}`);
+    cursor[finalKey] = value;
     return [{ kind: 'propSet', id, path, value }];
   }
 }
