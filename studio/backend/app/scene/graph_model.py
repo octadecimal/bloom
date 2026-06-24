@@ -117,3 +117,33 @@ class GraphModel:
                 return True
             cur = self._parent_of(cur)
         return False
+
+    def apply_batch(self, ops: list[dict]) -> None:
+        snapshot = self.to_document()
+        try:
+            for op in ops:
+                self.apply(op)
+        except Exception:
+            self._restore(snapshot)
+            raise
+
+    def load(self, doc: dict) -> None:
+        self._nodes.clear()
+        self._edges.clear()
+        ops: list[dict] = []
+        for node in doc.get("nodes", {}).values():
+            ops.append({"kind": "addNode", "id": node["id"], "type": node["type"],
+                        "props": node.get("props") or {}})
+        for e in doc.get("edges", []):
+            ops.append({"kind": "connect", "edgeId": e["id"], "type": e["type"],
+                        "from": e["from"], "to": e["to"]})
+        self.apply_batch(ops)
+
+    def _restore(self, doc: dict) -> None:
+        self._nodes.clear()
+        self._edges.clear()
+        for node in doc["nodes"].values():
+            self._nodes[node["id"]] = {"id": node["id"], "type": node["type"],
+                                       "props": dict(node["props"])}
+        for e in doc["edges"]:
+            self._edges[e["id"]] = dict(e)

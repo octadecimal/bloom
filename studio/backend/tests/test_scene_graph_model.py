@@ -151,3 +151,39 @@ def test_remove_node_cascades_incident_edges():
     m.apply({"kind": "removeNode", "id": "s"})
     assert m.get_edge("e2") is None and m.get_edge("e3") is None
     assert m.get_edge("e1") is not None  # untouched (not incident to s)
+
+
+def test_apply_batch_all_or_nothing():
+    m = GraphModel()
+    with pytest.raises(OpError):
+        m.apply_batch([
+            {"kind": "addNode", "id": "a", "type": "Sprite"},
+            {"kind": "addNode", "id": "a", "type": "Sprite"},  # duplicate
+        ])
+    assert m.get_node("a") is None  # first op rolled back
+
+
+def test_apply_batch_success():
+    m = GraphModel()
+    m.apply_batch([
+        {"kind": "addNode", "id": "root", "type": "Root"},
+        {"kind": "addNode", "id": "s", "type": "Sprite"},
+        _child("e1", "root", "s"),
+    ])
+    assert m.get_node("s") is not None and m.get_edge("e1") is not None
+
+
+def test_load_round_trips_document():
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {"width": 800, "height": 600}},
+            "s": {"id": "s", "type": "Sprite", "props": {"alpha": 1}},
+        },
+        "edges": [{"id": "e1", "type": "child",
+                   "from": {"node": "root", "port": "children"},
+                   "to": {"node": "s", "port": "parent"}}],
+    }
+    m = GraphModel()
+    m.load(doc)
+    assert m.to_document() == doc
