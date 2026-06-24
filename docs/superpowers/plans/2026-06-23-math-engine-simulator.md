@@ -25,12 +25,14 @@
 ## File map
 
 **`trusted/math` (enrich):**
+
 - Modify `trusted/math/Cargo.toml` — add `serde`, `postcard`.
 - Modify `trusted/math/src/mechanics/slots.rs` — module root: declares `model` + `eval`, re-exports them. (Old toy `SlotModel`/`expand` removed; `rng.rs`/`SplitMix64` unchanged and reused.)
 - Create `trusted/math/src/mechanics/slots/model.rs` — model schema (incl. `bonuses: Vec<BonusFeature>`) + serde + `to_payload`/`from_payload`.
 - Create `trusted/math/src/mechanics/slots/eval.rs` — `RoundOutcome` + `FeatureOutcome` + `evaluate` + payout/feature helpers.
 
 **`studio/simulator` (new crate):**
+
 - Modify root `Cargo.toml` — add `studio/simulator` member.
 - Create `studio/simulator/Cargo.toml`.
 - Create `studio/simulator/src/lib.rs` — module wiring.
@@ -49,11 +51,13 @@
 ### Task 1: Model schema (with bonus-feature list) + payload round-trip
 
 **Files:**
+
 - Modify: `trusted/math/Cargo.toml`
 - Modify: `trusted/math/src/mechanics/slots.rs`
 - Create: `trusted/math/src/mechanics/slots/model.rs`
 
 **Interfaces:**
+
 - Produces: `bloom_math::mechanics::slots::{Symbol, SymbolRole, SymbolDef, PaytableEntry, Paytable, TriggerSpec, FreeSpinsConfig, BonusFeature, SlotModel, to_payload, from_payload}`
   - `type Symbol = u8;`
   - `enum SymbolRole { Normal, Wild, Scatter }`
@@ -277,10 +281,12 @@ git commit -m "feat(math): add slots@1 model schema with bonus-feature list"
 ### Task 2: Base spin → grid
 
 **Files:**
+
 - Create: `trusted/math/src/mechanics/slots/eval.rs`
 - Modify: `trusted/math/src/mechanics/slots.rs`
 
 **Interfaces:**
+
 - Consumes: `SlotModel`, `Symbol` (Task 1); `crate::rng::SplitMix64`.
 - Produces (module-internal): `spin(reels: &[Vec<Symbol>], rows: usize, rng: &mut SplitMix64) -> Vec<Vec<Symbol>>` returning `grid[reel][row]`.
 
@@ -372,9 +378,11 @@ git commit -m "feat(math): add deterministic reel spin and grid window"
 ### Task 3: Line payout with wild substitution
 
 **Files:**
+
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 
 **Interfaces:**
+
 - Produces (module-internal): `role_of(model, sym) -> SymbolRole`, `is_wild(model, sym) -> bool`, `line_payout(model, grid, line) -> u64`.
 
 - [ ] **Step 1: Write the failing test**
@@ -503,9 +511,11 @@ git commit -m "feat(math): add payline evaluation with wild substitution"
 ### Task 4: Symbol counting, scatter pays, per-grid payout
 
 **Files:**
+
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 
 **Interfaces:**
+
 - Produces (module-internal): `count_symbol(grid, sym) -> usize`, `scatter_symbol(model) -> Option<Symbol>`, `scatter_payout(model, grid) -> u64`, `eval_grid(model, grid) -> u64`.
 
 - [ ] **Step 1: Write the failing test**
@@ -602,9 +612,11 @@ git commit -m "feat(math): add scatter pays and per-grid payout"
 ### Task 5: Bonus-feature evaluation (per-feature, frozen composition rule)
 
 **Files:**
+
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 
 **Interfaces:**
+
 - Produces:
   - `slots::FeatureOutcome { triggered: bool, spins_played: u32, payout: u64, spins: Vec<Vec<Vec<Symbol>>> }` (exported in Task 6)
   - module-internal: `run_bonus(model, bonus, base_grid, rng) -> FeatureOutcome`, `run_free_spins(model, trigger, config, rng) -> FeatureOutcome`.
@@ -766,10 +778,12 @@ git commit -m "feat(math): add per-feature bonus evaluation (free spins, retrigg
 ### Task 6: `RoundOutcome` + `evaluate` + bit-reproducibility golden vector
 
 **Files:**
+
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 - Modify: `trusted/math/src/mechanics/slots.rs`
 
 **Interfaces:**
+
 - Produces:
   - `slots::RoundOutcome { base_grid: Vec<Vec<Symbol>>, base_payout: u64, features: Vec<FeatureOutcome>, feature_payout: u64, total_payout: u64 }` with `fn any_triggered(&self) -> bool`
   - `slots::evaluate(model: &SlotModel, seed: u64) -> RoundOutcome`
@@ -843,13 +857,13 @@ In `eval.rs` `tests` module, add:
 ```
 
 > **As-built note (drift-detection gap):** seed `12345` on `full_model()` is a
-> *losing* spin, so the placeholders above stay `0` after Step 4 — an all-zero
+> _losing_ spin, so the placeholders above stay `0` after Step 4 — an all-zero
 > golden vector that an always-zero `evaluate` would also satisfy, leaving the
 > winning/triggering path unasserted. The shipped test was strengthened to keep
 > the losing-seed zeros as a negative control **and** pin a winning+triggering
 > seed (`53` → base `8`, feature `20`, total `28`, spins `3`), plus
 > `any_pay`/`any_trigger` population guards over the 3000-seed consistency loop.
-> A future re-derivation should pick a *triggering* golden seed, not rely on
+> A future re-derivation should pick a _triggering_ golden seed, not rely on
 > `12345`.
 
 - [ ] **Step 2: Run to verify it fails**
@@ -944,12 +958,14 @@ git commit -m "feat(math): add evaluate(model, seed) -> RoundOutcome with golden
 ### Task 7: Scaffold the crate + deterministic seed generation
 
 **Files:**
+
 - Modify: `Cargo.toml` (workspace)
 - Create: `studio/simulator/Cargo.toml`
 - Create: `studio/simulator/src/lib.rs`
 - Create: `studio/simulator/src/seedgen.rs`
 
 **Interfaces:**
+
 - Produces: `bloom_simulator::seedgen::generate_seeds(master_seed: u64, count: usize) -> Vec<u64>`.
 
 - [ ] **Step 1: Add the workspace member**
@@ -1045,10 +1061,12 @@ git commit -m "feat(sim): scaffold simulator crate with deterministic seed gener
 ### Task 8: Simulate (parallel) → RoundSample
 
 **Files:**
+
 - Create: `studio/simulator/src/measure.rs`
 - Modify: `studio/simulator/src/lib.rs`
 
 **Interfaces:**
+
 - Produces:
   - `bloom_simulator::measure::RoundSample { seed: u64, payout: u64, base_payout: u64, feature_payout: u64, feature_triggers: Vec<bool> }` (derives `Clone, PartialEq` — NOT `Copy`, it holds a `Vec`)
   - `bloom_simulator::measure::simulate(model: &SlotModel, seeds: &[u64]) -> Vec<RoundSample>`
@@ -1150,11 +1168,13 @@ git commit -m "feat(sim): simulate seeds through the math engine in parallel"
 ### Task 9: Measure → Metrics (per-feature hit-rates, RTP convergence)
 
 **Files:**
+
 - Create: `studio/simulator/src/target.rs`
 - Modify: `studio/simulator/src/measure.rs`
 - Modify: `studio/simulator/src/lib.rs`
 
 **Interfaces:**
+
 - Produces:
   - `bloom_simulator::target::Metrics { rtp: f64, volatility: f64, hit_frequency: f64, bonus_hit_rates: Vec<f64>, base_rtp: f64, feature_rtp: f64 }` (derives `Clone, PartialEq` — NOT `Copy`)
   - `bloom_simulator::measure::measure(samples: &[RoundSample]) -> Metrics`
@@ -1297,11 +1317,13 @@ git commit -m "feat(sim): measure RTP, volatility, per-feature hit-rate, RTP spl
 ### Task 10: Verify metrics against targets
 
 **Files:**
+
 - Modify: `studio/simulator/src/target.rs`
 - Create: `studio/simulator/src/run.rs`
 - Modify: `studio/simulator/src/lib.rs`
 
 **Interfaces:**
+
 - Produces:
   - `bloom_simulator::target::HitRateBand { min: f64, max: f64 }`
   - `bloom_simulator::target::TargetSpec { rtp_target: f64, rtp_tolerance: f64, volatility_min: f64, volatility_max: f64, bonus_hit_rate_bands: Vec<HitRateBand>, pool_size: usize, candidate_count: usize, realized_correction_band: f64 }` (derives `Clone` — NOT `Copy`)
@@ -1444,10 +1466,12 @@ git commit -m "feat(sim): verify metrics against RTP, volatility, per-feature ba
 ### Task 11: Freeze the pool (Approach A2, bounded faithful correction)
 
 **Files:**
+
 - Create: `studio/simulator/src/curate.rs`
 - Modify: `studio/simulator/src/lib.rs`
 
 **Interfaces:**
+
 - Produces:
   - `bloom_simulator::curate::Pool { seeds: Vec<u64>, realized_rtp: f64 }`
   - `bloom_simulator::curate::CurateError::OutsideCorrectionBand { needed: f64, band: f64 }`
@@ -1637,9 +1661,11 @@ git commit -m "feat(sim): freeze a faithful pool with bounded correction (A2)"
 ### Task 12: Orchestration — `run_curation` + package + provenance + freeze-boundary determinism
 
 **Files:**
+
 - Modify: `studio/simulator/src/run.rs`
 
 **Interfaces:**
+
 - Produces:
   - `bloom_simulator::run::RunError` (`VerifyFailed(Metrics)`, `Curate(CurateError)`)
   - `bloom_simulator::run::CurationOutput { package_bytes: Vec<u8>, metrics: Metrics, pool: Pool, report: String }`
@@ -1842,10 +1868,12 @@ git commit -m "feat(sim): run_curation builds a signed package with provenance r
 ### Task 13: CLI binary + `just` recipe
 
 **Files:**
+
 - Create: `studio/simulator/src/bin/curate.rs`
 - Modify: `justfile`
 
 **Interfaces:**
+
 - Consumes: `bloom_simulator::run::run_curation`, `bloom_simulator::target::{TargetSpec, HitRateBand}`, `serde_json`.
 
 - [ ] **Step 1: Write the binary**
@@ -1983,6 +2011,7 @@ git commit -m "feat(sim): add curate CLI and just recipe"
 ## Self-review (plan author)
 
 **Spec coverage:**
+
 - Model schema incl. `bonuses: Vec<BonusFeature>` + per-feature trigger (spec §3) → Task 1. ✓
 - Frozen §3.1 composition rule (independent triggers, list order, sum, retrigger-same-feature, no nesting) → Tasks 5–6 + Global Constraints. ✓
 - Enriched kernel `evaluate` with grid/lines/scatter/per-feature bonuses + per-feature breakdown (spec §4) → Tasks 2–6. ✓

@@ -92,14 +92,14 @@ Authored as JSON for now (by a human; by the AI later), and serialized into the
 package's `math_payload`. **The kernel owns the schema** so the simulator and the
 server deserialize it identically.
 
-| Field             | Meaning                                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------ |
-| **symbols**       | symbol ids + **role**: `normal` / `wild` / `scatter`. Art/name live in presentation, never here.       |
-| **reel strips**   | per-reel `Vec<Symbol>`; multiplicity encodes base-game probability (today's convention).               |
-| **grid**          | reels × rows (e.g. 5×3): the visible window. A spin picks a stop per reel and shows `rows` cells.       |
-| **paylines**      | list of row-index-per-reel patterns. Left-aligned matching runs; wild substitutes.                     |
-| **paytable**      | `(symbol, count) → payout` in bet-multiples. Scatters pay by count, anywhere on the grid.              |
-| **bonuses**       | a **list** of bonus features (`Vec<BonusFeature>`). `BonusFeature` is an enum with **one variant today** — `FreeSpins` — each carrying its **own trigger** (a symbol + min count, counted on the base grid) and config (spins awarded, retrigger, multiplier, optional feature strips). |
+| Field           | Meaning                                                                                                                                                                                                                                                                                 |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **symbols**     | symbol ids + **role**: `normal` / `wild` / `scatter`. Art/name live in presentation, never here.                                                                                                                                                                                        |
+| **reel strips** | per-reel `Vec<Symbol>`; multiplicity encodes base-game probability (today's convention).                                                                                                                                                                                                |
+| **grid**        | reels × rows (e.g. 5×3): the visible window. A spin picks a stop per reel and shows `rows` cells.                                                                                                                                                                                       |
+| **paylines**    | list of row-index-per-reel patterns. Left-aligned matching runs; wild substitutes.                                                                                                                                                                                                      |
+| **paytable**    | `(symbol, count) → payout` in bet-multiples. Scatters pay by count, anywhere on the grid.                                                                                                                                                                                               |
+| **bonuses**     | a **list** of bonus features (`Vec<BonusFeature>`). `BonusFeature` is an enum with **one variant today** — `FreeSpins` — each carrying its **own trigger** (a symbol + min count, counted on the base grid) and config (spins awarded, retrigger, multiplier, optional feature strips). |
 
 Integer-only throughout the outcome path (no floats), per `trusted/AGENTS.md`.
 
@@ -311,9 +311,9 @@ Proposed starting values (all are target-spec inputs, tunable per game; umbrella
 ## 10. Build order within this effort
 
 1. **Math engine enrichment** (`trusted/math`): model schema (incl. `bonuses` list
-   + `BonusFeature::FreeSpins`) → grid → line/scatter payout → per-feature bonus
-   loop (§3.1 rule) → `RoundOutcome` with per-feature breakdown; bit-reproducibility
-   + payout tests.
+   - `BonusFeature::FreeSpins`) → grid → line/scatter payout → per-feature bonus
+     loop (§3.1 rule) → `RoundOutcome` with per-feature breakdown; bit-reproducibility
+   - payout tests.
 2. **Simulator crate** (`studio/simulator`): generate → simulate (parallel) →
    measure → verify → freeze (A2) → build+sign; convergence, faithfulness,
    reproducibility, freeze-boundary tests.
