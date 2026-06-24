@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.catalog import build_model_catalog
+from app.gdd.models import gdd_wire
 from app.models import message_wire, room_wire
 from app.runs import run_wire
 from app.skills import SkillError
@@ -100,6 +101,13 @@ async def list_messages(room_id: str, request: Request) -> list[dict]:
         raise HTTPException(status_code=404, detail="room not found")
     messages = await store.list_messages(room_id)
     return [message_wire(m) for m in messages]
+
+
+@router.get("/games/{game_id}/gdd/docs")
+async def list_gdd_docs(game_id: str, request: Request) -> list[dict]:
+    store = request.app.state.gdd_store
+    docs = await store.list_docs(game_id)
+    return [gdd_wire(d) for d in docs]
 
 
 @router.get("/rooms/{room_id}/runs")

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 
+from app.gdd.models import GDD_TOOL_NAMES
 from app.models import message_wire
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ class RoomHub:
         tool_factory=None,
         asset_store=None,
         asset_hub=None,
+        gdd_store=None,
+        gdd_hub=None,
     ):
         self._sio = sio
         self._store = store
@@ -32,6 +35,8 @@ class RoomHub:
         self._tool_factory = tool_factory
         self._asset_store = asset_store
         self._asset_hub = asset_hub
+        self._gdd_store = gdd_store
+        self._gdd_hub = gdd_hub
         # queues hold turn descriptors: {"kind": "prompt", "messageId": id}
         # or {"kind": "skill", "author": …, "skillName": …, "args": …}
         self._queues: dict[str, list[dict]] = {}
@@ -219,6 +224,11 @@ class RoomHub:
 
         room = await self._store.get_room(room_id)
         spec = self._skills.get(descriptor["skillName"])
+
+        if (self._gdd_hub is not None and room.game_id
+                and set(spec.tools) & GDD_TOOL_NAMES):
+            await self._gdd_hub.seed_taxonomy(room.game_id)
+
         run = await self._run_store.create_run(room_id, spec.name, descriptor["args"])
         await self._emit_status(room_id, "generating")
         await self._sio.emit("run_started", {"roomId": room_id, "run": run_wire(run)}, room=room_id)
@@ -228,7 +238,8 @@ class RoomHub:
 
         history = await self._store.list_messages(room_id)
         messages = [{"role": m.role, "content": m.content} for m in history]
-        ctx = ToolContext(room_id, room.game_id, self._asset_store, self._asset_hub)
+        ctx = ToolContext(room_id, room.game_id, self._asset_store, self._asset_hub,
+                         gdd_store=self._gdd_store, gdd_hub=self._gdd_hub)
         status = "completed"
         try:
             async for ev in self._runner.run(
