@@ -54,4 +54,16 @@ describe('applyPixiProp', () => {
     expect(o.zIndex).toBe(7);
     expect(o.visible).toBe(false);
   });
+  it('defaults a missing scale axis to 1, not 0', () => {
+    const o = fakeObj();
+    applyPixiProp(o as never, 'scale', { x: 2 });
+    expect(o.scale.x).toBe(2);
+    expect(o.scale.y).toBe(1);
+  });
+  it('defaults a missing position axis to 0', () => {
+    const o = fakeObj();
+    applyPixiProp(o as never, 'position', { x: 10 });
+    expect(o.position.x).toBe(10);
+    expect(o.position.y).toBe(0);
+  });
 });

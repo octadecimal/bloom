@@ -12,7 +12,8 @@ export function applyPixiProp(obj: DisplayObject, path: string, value: JsonValue
     case 'anchor': {
       const v = (value ?? {}) as Vec2;
       const target = (obj as unknown as Record<string, { set(x: number, y: number): void }>)[path];
-      target.set(v.x ?? 0, v.y ?? 0);
+      const fallback = path === 'scale' ? 1 : 0;
+      target.set(v.x ?? fallback, v.y ?? fallback);
       return;
     }
     case 'position.x':
