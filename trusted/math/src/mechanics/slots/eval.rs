@@ -17,6 +17,49 @@ fn spin(reels: &[Vec<Symbol>], rows: usize, rng: &mut SplitMix64) -> Vec<Vec<Sym
         .collect()
 }
 
+fn role_of(model: &SlotModel, sym: Symbol) -> SymbolRole {
+    model
+        .symbols
+        .iter()
+        .find(|s| s.id == sym)
+        .map(|s| s.role)
+        .unwrap_or(SymbolRole::Normal)
+}
+
+fn is_wild(model: &SlotModel, sym: Symbol) -> bool {
+    role_of(model, sym) == SymbolRole::Wild
+}
+
+/// Left-aligned run payout for one payline. Wild substitutes; the paying
+/// symbol is the first non-wild on the line (all-wild lines pay as that wild).
+fn line_payout(model: &SlotModel, grid: &[Vec<Symbol>], line: &[usize]) -> u64 {
+    let syms: Vec<Symbol> = line
+        .iter()
+        .enumerate()
+        .map(|(reel, &row)| grid[reel][row])
+        .collect();
+
+    let target = syms
+        .iter()
+        .copied()
+        .find(|&s| !is_wild(model, s))
+        .unwrap_or(syms[0]);
+
+    if role_of(model, target) == SymbolRole::Scatter {
+        return 0; // scatters never pay on lines
+    }
+
+    let mut count: u8 = 0;
+    for &s in &syms {
+        if s == target || is_wild(model, s) {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    model.paytable.lookup(target, count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +94,54 @@ mod tests {
         let a = spin(&reels, 2, &mut SplitMix64::new(123));
         let b = spin(&reels, 2, &mut SplitMix64::new(123));
         assert_eq!(a, b);
+    }
+
+    fn lines_model() -> SlotModel {
+        // 3 reels, 1 row, one payline across the single row.
+        SlotModel {
+            symbols: vec![
+                SymbolDef { id: 0, role: SymbolRole::Normal },
+                SymbolDef { id: 1, role: SymbolRole::Wild },
+                SymbolDef { id: 9, role: SymbolRole::Scatter },
+            ],
+            reels: vec![vec![0], vec![0], vec![0]],
+            rows: 1,
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable {
+                entries: vec![
+                    PaytableEntry { symbol: 0, count: 2, payout: 3 },
+                    PaytableEntry { symbol: 0, count: 3, payout: 10 },
+                ],
+            },
+            bonuses: vec![],
+        }
+    }
+
+    #[test]
+    fn three_of_a_kind_pays() {
+        let m = lines_model();
+        let grid = vec![vec![0], vec![0], vec![0]];
+        assert_eq!(line_payout(&m, &grid, &m.paylines[0]), 10);
+    }
+
+    #[test]
+    fn wild_substitutes_in_a_run() {
+        let m = lines_model();
+        let grid = vec![vec![0], vec![1], vec![0]]; // 0, wild, 0
+        assert_eq!(line_payout(&m, &grid, &m.paylines[0]), 10);
+    }
+
+    #[test]
+    fn run_breaks_on_mismatch() {
+        let m = lines_model();
+        let grid = vec![vec![0], vec![0], vec![9]]; // 0, 0, scatter -> count 2
+        assert_eq!(line_payout(&m, &grid, &m.paylines[0]), 3);
+    }
+
+    #[test]
+    fn scatter_does_not_pay_on_a_line() {
+        let m = lines_model();
+        let grid = vec![vec![9], vec![9], vec![9]];
+        assert_eq!(line_payout(&m, &grid, &m.paylines[0]), 0);
     }
 }
