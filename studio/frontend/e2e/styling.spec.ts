@@ -31,6 +31,29 @@ test('shadcn Button renders with Tailwind utility classes applied', async ({ pag
   expect(height).toBe('28px');
 });
 
+test('drag-and-drop preview overlay resolves to the on-palette selection wash', async ({ page }) => {
+  await gotoWorkbench(page);
+  // Dockview paints the drop preview (.dv-drop-target-anchor) with
+  // var(--dv-drag-over-background-color). That overlay element only exists mid-drag,
+  // and dockview's native HTML5 DnD is unreliable to simulate — so probe the cascade
+  // directly: a throwaway element inside the bloom-themed root consuming that variable
+  // must resolve to a real color, not transparent. This is the exact regression: when
+  // the variable is orphaned the overlay paints rgba(0, 0, 0, 0) (invisible).
+  const themeRoot = page.locator('.dockview-theme-bloom').first();
+  await expect(themeRoot).toBeVisible();
+  const bg = await themeRoot.evaluate((root) => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = 'var(--dv-drag-over-background-color)';
+    root.appendChild(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
+  // The design language's --selection token: rgba(240, 100, 30, 0.14), the rationed
+  // orange "targeted region" wash. Non-transparent proves the overlay is visible again.
+  expect(bg).toBe('rgba(240, 100, 30, 0.14)');
+});
+
 test('settings pane select renders inside card chrome with token borders', async ({ page }) => {
   // Stub the models endpoint so this test is hermetic.
   await page.route('**/models', (r) =>
