@@ -47,6 +47,20 @@ describe('ProtocolHost', () => {
     expect(sent).toContainEqual({ v: 1, kind: 'ack', id: 'm3' });
   });
 
+  it('posts error with code internal when reconciliation throws a non-OpError', async () => {
+    const model = new GraphModel();
+    const fakeReconciler = {
+      applyChanges: async () => {
+        throw new Error('boom');
+      },
+    } as unknown as import('../render/reconciler').Reconciler;
+    const sent: OutboundMessage[] = [];
+    const host = new ProtocolHost({ model, reconciler: fakeReconciler, post: (m) => sent.push(m) });
+    await host.handle({ v: 1, kind: 'op', id: 'err1', op: { kind: 'addNode', id: 's', type: 'Sprite' } });
+    expect(sent.some((m) => m.kind === 'error' && m.id === 'err1' && m.code === 'internal')).toBe(true);
+    expect(sent.some((m) => m.kind === 'ack' && m.id === 'err1')).toBe(false);
+  });
+
   it('applies a batch and acks', async () => {
     const { host, sent, model } = setup();
     await host.handle({

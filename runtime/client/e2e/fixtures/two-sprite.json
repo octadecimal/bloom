@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "nodes": {
-    "root": { "id": "root", "type": "Root", "props": { "width": 640, "height": 480 } },
-    "s1": { "id": "s1", "type": "Sprite", "props": { "position": { "x": 100, "y": 100 } } }
-  },
-  "edges": [{ "id": "e1", "type": "child", "from": { "node": "root", "port": "children" }, "to": { "node": "s1", "port": "parent" } }]
-}

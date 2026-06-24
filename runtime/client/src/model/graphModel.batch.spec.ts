@@ -40,6 +40,11 @@ describe('GraphModel applyBatch', () => {
 });
 
 describe('GraphModel load', () => {
+  it('rejects a document with an unexpected version', () => {
+    const m = new GraphModel();
+    expect(() => m.load({ version: 2, nodes: {}, edges: [] } as never)).toThrow(OpError);
+  });
+
   it('loads a document into an empty scene', () => {
     const doc: IGameDocument = {
       version: 1,

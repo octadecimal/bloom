@@ -32,10 +32,12 @@ export class GraphModel {
     return e ? { ...e, from: { ...e.from }, to: { ...e.to } } : undefined;
   }
 
+  // Returns live internal IEdge references — query-only; callers must not mutate.
   edgesBySource(nodeId: string, port?: string): IEdge[] {
     return [...this.edges.values()].filter((e) => e.from.node === nodeId && (port === undefined || e.from.port === port));
   }
 
+  // Returns live internal IEdge references — query-only; callers must not mutate.
   edgesByTarget(nodeId: string, port?: string): IEdge[] {
     return [...this.edges.values()].filter((e) => e.to.node === nodeId && (port === undefined || e.to.port === port));
   }
@@ -139,6 +141,7 @@ export class GraphModel {
   }
 
   load(doc: IGameDocument): IChange[] {
+    if (doc.version !== 1) throw new OpError('bad_version', `unsupported document version: ${doc.version}`);
     this.nodes.clear();
     this.edges.clear();
     const ops: Op[] = [];
@@ -151,6 +154,7 @@ export class GraphModel {
     this.nodes.clear();
     this.edges.clear();
     for (const node of Object.values(doc.nodes)) this.nodes.set(node.id, { id: node.id, type: node.type, props: structuredClone(node.props) });
+    // Edges are only ever replaced wholesale (never mutated in place), so a shallow edge copy is safe for rollback.
     for (const e of doc.edges) this.edges.set(e.id, { ...e });
   }
 }
