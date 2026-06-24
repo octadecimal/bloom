@@ -5,7 +5,8 @@ from app.gdd.models import GDD_TAXONOMY, GddDoc, Status
 
 
 class GddEditError(Exception):
-    """Raised when edit_doc's old_string is missing or not unique."""
+    """Raised when edit_doc's old_string is missing or not unique, or when a
+    targeted (game, aspect) doc does not exist (e.g. upsert before seeding)."""
 
 
 def _now() -> datetime:

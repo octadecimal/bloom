@@ -143,6 +143,33 @@ body {
   background: transparent;
 }
 
+/* Tool-line "running" shimmer — token-only (no raw colours leave this file). */
+@keyframes bloom-tool-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.tool-shimmer {
+  background: linear-gradient(90deg, var(--text-3) 0%, var(--text-1) 50%, var(--text-3) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: bloom-tool-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-shimmer {
+    animation: none;
+    background: none;
+    color: var(--text-2);
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+  }
+}
+
 /* === Dockview "bloom" theme: floating panel cards on the canvas (mockup C) === */
 .dockview-theme-bloom {
   --dv-group-view-background-color: var(--surface);
@@ -161,6 +188,15 @@ body {
   --dv-icon-hover-background-color: var(--raised-hover);
   --dv-activegroup-visiblepanel-tab-border-color: var(--accent);
   --dv-tab-font-size: 12px;
+  /* Drag-and-drop preview overlay. Dockview paints .dv-drop-target-anchor with
+     var(--dv-drag-over-background-color); that variable is declared only in
+     dockview's .dockview-theme-abyss-spaced scope, which our custom
+     .dockview-theme-bloom class orphans — leaving the overlay transparent
+     (invisible) during a drag. Re-declare it on-palette with the design
+     language's own "targeted region" wash, edged with the rationed accent so the
+     drop zone reads clearly against the floating cards. */
+  --dv-drag-over-background-color: var(--selection);
+  --dv-drag-over-border-color: var(--accent);
   background: var(--canvas);
   color: var(--text-1);
 }
@@ -184,6 +220,13 @@ body {
 /* The wrapped active-tab indicator is the accent underline (model C signal). */
 .dockview-theme-bloom .dv-active-tab .dv-default-tab-content {
   color: var(--text-1);
+}
+
+/* Round the drag-and-drop preview overlay to sit nicely against the 9px cards.
+   (Dockview's spaced theme rounds this anchor too, but that rule is scoped to the
+   orphaned .dockview-theme-abyss-spaced class — see the --dv-drag-over-* note above.) */
+.dockview-theme-bloom .dv-drop-target-anchor {
+  border-radius: 6px;
 }
 
 /* Resizer sash is invisible until hovered; the canvas gap provides the separation. */

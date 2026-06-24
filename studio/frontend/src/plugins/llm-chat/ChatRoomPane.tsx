@@ -8,6 +8,7 @@ import { sendPrompt, setTyping, runSkill } from './actions';
 import { bumpRenderCount } from '../../app/renderCount';
 import { RunTurnBlock } from './RunTurnBlock';
 import { buildFeed } from './feed';
+import { MessageScroller } from './MessageScroller';
 import { SkillForm } from './SkillForm';
 import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './slashParse';
 import { fuzzyMatchSkills, type ISkillMatch } from './fuzzySkills';
@@ -78,11 +79,11 @@ function MessageList() {
   const runs = Array.from({ length: runCount }, (_, i) => ({ id: s.runs[i].id.get({ stealth: true }), createdAt: s.runs[i].createdAt.get({ stealth: true }) }));
   const feed = buildFeed(msgs, runs);
   return (
-    <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-1.5 overflow-auto p-0">
+    <MessageScroller>
       {feed.map((entry) =>
         entry.kind === 'message' ? <ChatMessageBubble key={`m:${entry.id}`} index={entry.index} /> : <RunTurnBlock key={`r:${entry.id}`} index={entry.index} />,
       )}
-    </ul>
+    </MessageScroller>
   );
 }
 
