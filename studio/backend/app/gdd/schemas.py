@@ -96,3 +96,25 @@ def schema_for(aspect: str) -> list[Field]:
 
 def required_param_keys(aspect: str) -> list[str]:
     return [f.key for f in schema_for(aspect) if f.required]
+
+
+def field_catalog() -> dict[str, list[dict]]:
+    """Machine-readable catalog of every aspect's fields for the design router.
+
+    Maps aspect -> ordered list of {key, label, type, role, required, enum}.
+    Seeds the design-router prompt with the addressable design surface.
+    """
+    return {
+        aspect: [
+            {
+                "key": f.key,
+                "label": f.label,
+                "type": f.type,
+                "role": f.role,
+                "required": f.required,
+                "enum": list(f.enum) if f.enum else None,
+            }
+            for f in fields
+        ]
+        for aspect, fields in ASPECT_SCHEMAS.items()
+    }

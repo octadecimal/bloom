@@ -32,3 +32,18 @@ def test_required_param_keys_lists_only_required():
     assert set(required_param_keys("math-model")) == {
         "rtp", "volatility", "bonus_hit_rate",
     }
+
+
+def test_field_catalog_covers_all_aspects_with_field_metadata():
+    from app.gdd.schemas import field_catalog
+    cat = field_catalog()
+    assert set(cat) == set(ASPECT_SCHEMAS)
+    mm = {f["key"]: f for f in cat["math-model"]}
+    assert mm["bonus_hit_rate"]["type"] == "ratio"
+    assert mm["bonus_hit_rate"]["required"] is True
+    assert mm["volatility"]["enum"] == ["low", "medium", "medium-high", "high"]
+    # text/number fields carry enum=None, not a missing key
+    assert mm["rtp"]["enum"] is None
+    for fields in cat.values():
+        for f in fields:
+            assert {"key", "label", "type", "role", "required", "enum"} <= set(f)
