@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { llmChatHooks } from './state';
 import type { IRunStep } from './state';
 import { ApprovalCard } from './ApprovalCard';
@@ -41,8 +42,10 @@ function RunStepCard({ step, index, runId }: { step: IReadonlyRunStep; index: nu
 
 // A skill run renders as ONE assistant turn: AI avatar + accent rail (mirroring
 // the assistant chat bubble) wrapping the run's steps. Subscribes only to its own
-// run node, so a run_step_token re-renders this block alone.
-export function RunTurnBlock({ index }: { index: number }) {
+// run node, so a run_step_token re-renders this block alone. Wrapped in memo so a
+// parent (MessageList) re-render from an unrelated append does not re-render it;
+// its own run-node subscription still drives re-renders while its steps stream.
+export const RunTurnBlock = memo(function RunTurnBlock({ index }: { index: number }) {
   const s = llmChatHooks.usePluginState();
   const r = s.runs[index];
   bumpRenderCount('RunTurnBlock');
@@ -65,4 +68,4 @@ export function RunTurnBlock({ index }: { index: number }) {
       </div>
     </li>
   );
-}
+});
