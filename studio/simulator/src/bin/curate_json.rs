@@ -12,7 +12,10 @@ use serde_json::json;
 use std::fs;
 
 #[derive(Deserialize)]
-struct BandJson { min: f64, max: f64 }
+struct BandJson {
+    min: f64,
+    max: f64,
+}
 
 #[derive(Deserialize)]
 struct TargetJson {
@@ -29,9 +32,7 @@ struct TargetJson {
 
 fn progress_line(p: &CurationProgress) -> String {
     match p {
-        CurationProgress::Phase(name) => {
-            json!({ "type": "progress", "phase": name }).to_string()
-        }
+        CurationProgress::Phase(name) => json!({ "type": "progress", "phase": name }).to_string(),
         CurationProgress::Simulating { done, total } => {
             json!({ "type": "progress", "phase": "simulate", "done": done, "total": total })
                 .to_string()
@@ -73,17 +74,25 @@ fn main() {
         std::process::exit(2);
     }
 
-    let model: SlotModel = match fs::read_to_string(&args[1]).map_err(|e| e.to_string())
+    let model: SlotModel = match fs::read_to_string(&args[1])
+        .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
     {
         Ok(m) => m,
-        Err(e) => { eprintln!("bad model json: {e}"); std::process::exit(2); }
+        Err(e) => {
+            eprintln!("bad model json: {e}");
+            std::process::exit(2);
+        }
     };
-    let tj: TargetJson = match fs::read_to_string(&args[2]).map_err(|e| e.to_string())
+    let tj: TargetJson = match fs::read_to_string(&args[2])
+        .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
     {
         Ok(t) => t,
-        Err(e) => { eprintln!("bad target json: {e}"); std::process::exit(2); }
+        Err(e) => {
+            eprintln!("bad target json: {e}");
+            std::process::exit(2);
+        }
     };
 
     let target = TargetSpec {
@@ -91,8 +100,14 @@ fn main() {
         rtp_tolerance: tj.rtp_tolerance,
         volatility_min: tj.volatility_min,
         volatility_max: tj.volatility_max,
-        bonus_hit_rate_bands: tj.bonus_hit_rate_bands.iter()
-            .map(|b| HitRateBand { min: b.min, max: b.max }).collect(),
+        bonus_hit_rate_bands: tj
+            .bonus_hit_rate_bands
+            .iter()
+            .map(|b| HitRateBand {
+                min: b.min,
+                max: b.max,
+            })
+            .collect(),
         pool_size: tj.pool_size,
         candidate_count: tj.candidate_count,
         realized_correction_band: tj.realized_correction_band,
@@ -100,27 +115,52 @@ fn main() {
 
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only (umbrella §9)
     let mut on_progress = |p: CurationProgress| emit(progress_line(&p));
-    let s = run_curation_streamed(&model, &target, tj.master_seed, &args[3], &signing_key, &mut on_progress);
+    let s = run_curation_streamed(
+        &model,
+        &target,
+        tj.master_seed,
+        &args[3],
+        &signing_key,
+        &mut on_progress,
+    );
 
     let m = &s.metrics;
     let (status, realized, pool_size, failure) = match &s.outcome {
         Ok(out) => {
             if let Err(e) = fs::write(&args[4], &out.package_bytes) {
-                eprintln!("write package failed: {e}"); std::process::exit(1);
+                eprintln!("write package failed: {e}");
+                std::process::exit(1);
             }
-            ("pass", Some(out.pool.realized_rtp), Some(out.pool.seeds.len()), None)
+            (
+                "pass",
+                Some(out.pool.realized_rtp),
+                Some(out.pool.seeds.len()),
+                None,
+            )
         }
         Err(RunError::VerifyFailed(_)) => (
-            "fail", None, None,
+            "fail",
+            None,
+            None,
             Some("measured characteristics missed the target bands".to_string()),
         ),
         Err(RunError::Curate(e)) => (
-            "fail", None, None,
-            Some(format!("curation guardrail: {e:?} — retune the model, not the pool")),
+            "fail",
+            None,
+            None,
+            Some(format!(
+                "curation guardrail: {e:?} — retune the model, not the pool"
+            )),
         ),
     };
 
-    emit(result_line(status, m, realized, pool_size, failure.as_deref()));
+    emit(result_line(
+        status,
+        m,
+        realized,
+        pool_size,
+        failure.as_deref(),
+    ));
 }
 
 #[cfg(test)]
