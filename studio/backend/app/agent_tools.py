@@ -47,21 +47,34 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def _selected_media_ref(asset) -> str | None:
+    sel = getattr(asset, "selected_generation_id", None)
+    if not sel:
+        return None
+    for g in getattr(asset, "generations", []) or []:
+        if getattr(g, "id", None) == sel:
+            return getattr(g, "image_ref", None)
+    return None
+
+
 def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
     async def list_assets() -> str:
         assets = await ctx.asset_store.list_assets(ctx.game_id)
         if not assets:
             return "The Asset Board is empty."
-        lines = [
-            f"- {a.id}: {a.name}" + (f" ({a.category})" if getattr(a, 'category', None) else "")
-            for a in assets
-        ]
+        lines = []
+        for a in assets:
+            head = f"- {a.id}: {a.name}" + (f" ({a.category})" if getattr(a, "category", None) else "")
+            ref = _selected_media_ref(a)
+            lines.append(f"{head} — {ref}" if ref else f"{head} — (no image yet)")
         return "Assets on the board:\n" + "\n".join(lines)
 
     return StructuredTool.from_function(
         coroutine=list_assets,
         name="list_assets",
-        description="List the assets on the Asset Board (id, name, category) for the current game.",
+        description="List the assets on the Asset Board for the current game: id, "
+                    "name, category, and the image's media URL (use that URL as a "
+                    "Texture's src). Assets with no generation show '(no image yet)'.",
     )
 
 
