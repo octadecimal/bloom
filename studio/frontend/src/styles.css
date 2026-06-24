@@ -143,6 +143,33 @@ body {
   background: transparent;
 }
 
+/* Tool-line "running" shimmer — token-only (no raw colours leave this file). */
+@keyframes bloom-tool-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.tool-shimmer {
+  background: linear-gradient(90deg, var(--text-3) 0%, var(--text-1) 50%, var(--text-3) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: bloom-tool-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-shimmer {
+    animation: none;
+    background: none;
+    color: var(--text-2);
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+  }
+}
+
 /* === Dockview "bloom" theme: floating panel cards on the canvas (mockup C) === */
 .dockview-theme-bloom {
   --dv-group-view-background-color: var(--surface);
