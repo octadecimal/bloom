@@ -94,6 +94,7 @@ class ReplayToolCallingChatModel(BaseChatModel):
     """
 
     cassette: dict
+    run_cassettes: dict = {}
     llm_cassettes: dict = {}
     replay_token_delay: float = 0.0
     model: str = ""
@@ -129,8 +130,39 @@ class ReplayToolCallingChatModel(BaseChatModel):
             or []
         )
 
-    def _cassette_tool_calls(self) -> list:
-        calls = self.cassette.get("tool_calls") or []
+    def _last_human(self, messages: list[BaseMessage]) -> str:
+        last = ""
+        for m in messages:
+            if isinstance(m, HumanMessage):
+                last = m.content if isinstance(m.content, str) else str(m.content)
+        return last
+
+    def _run_cassette(self, messages: list[BaseMessage]) -> dict:
+        """Pick the run cassette for this turn.
+
+        With prompt-keyed run cassettes, select by the last Human message
+        (mirroring text-mode keying), falling back to the default run cassette.
+        Otherwise use the single ``cassette`` (legacy / unit-test shape).
+
+        Sharp edge: the design-router binds all GDD tools, so an UNKEYED
+        game-room prompt falls back to ``__default__`` — whose bound-filtered
+        calls include set_gdd_fields(paytable) + ask_user_question. Under replay
+        that makes a casual message spuriously draft a paytable and park on a
+        question. New game-room e2e prompts must add their own keyed cassette
+        (see tests/fixtures/replay/run/chat-*.json) rather than relying on the
+        default.
+        """
+        if self.run_cassettes:
+            key = normalize_prompt(self._last_human(messages))
+            return (
+                self.run_cassettes.get(key)
+                or self.run_cassettes.get("__default__")
+                or self.cassette
+            )
+        return self.cassette
+
+    def _tool_calls_for(self, cassette: dict) -> list:
+        calls = cassette.get("tool_calls") or []
         if self._bound_names:
             calls = [c for c in calls if c["name"] in self._bound_names]
         return calls
@@ -148,7 +180,8 @@ class ReplayToolCallingChatModel(BaseChatModel):
             msg = AIMessage(content="".join(self._text_chunks(messages)))
             return ChatResult(generations=[ChatGeneration(message=msg)])
         has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
-        cassette_calls = self._cassette_tool_calls()
+        cassette = self._run_cassette(messages)
+        cassette_calls = self._tool_calls_for(cassette)
         if not has_tool_result and cassette_calls:
             calls = [
                 {"name": c["name"], "args": c["args"], "id": f"call_{i}"}
@@ -156,7 +189,7 @@ class ReplayToolCallingChatModel(BaseChatModel):
             ]
             msg = AIMessage(content="", tool_calls=calls)
         else:
-            msg = AIMessage(content="".join(self.cassette.get("final", ["ok"])))
+            msg = AIMessage(content="".join(cassette.get("final", ["ok"])))
         return ChatResult(generations=[ChatGeneration(message=msg)])
 
     async def _astream(
@@ -182,14 +215,15 @@ class ReplayToolCallingChatModel(BaseChatModel):
                 yield ChatGenerationChunk(message=chunk)
             return
         has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
-        if not has_tool_result and self._cassette_tool_calls():
+        cassette = self._run_cassette(messages)
+        if not has_tool_result and self._tool_calls_for(cassette):
             # First turn: emit a single non-streaming tool-call chunk
             result = await self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
             msg = result.generations[0].message
             yield ChatGenerationChunk(message=AIMessageChunk(content=msg.content, tool_calls=msg.tool_calls))
         else:
             # Final turn: stream each token from the cassette
-            for token in self.cassette.get("final", ["ok"]):
+            for token in cassette.get("final", ["ok"]):
                 chunk = AIMessageChunk(content=token)
                 if run_manager:
                     await run_manager.on_llm_new_token(token, chunk=chunk)
@@ -198,10 +232,15 @@ class ReplayToolCallingChatModel(BaseChatModel):
 
 def build_chat_model(settings: Settings, model: str) -> BaseChatModel:
     if settings.provider_mode == "replay":
-        from app.replay.cassette import DEFAULT_FIXTURES_DIR, load_run_cassette
+        from app.replay.cassette import (
+            DEFAULT_FIXTURES_DIR, load_run_cassettes,
+        )
 
+        run_cassettes = load_run_cassettes(DEFAULT_FIXTURES_DIR)
+        default = run_cassettes.get("__default__", {"tool_calls": [], "final": ["ok"]})
         return ReplayToolCallingChatModel(
-            cassette=load_run_cassette(DEFAULT_FIXTURES_DIR),
+            cassette=default,
+            run_cassettes=run_cassettes,
             llm_cassettes=load_llm_cassettes(DEFAULT_FIXTURES_DIR),
             replay_token_delay=settings.replay_token_delay,
             model=model,

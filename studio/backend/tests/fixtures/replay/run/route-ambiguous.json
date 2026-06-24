@@ -1,0 +1,10 @@
+{
+  "prompt": "set the hit rate to 1:200",
+  "tool_calls": [
+    { "name": "ask_user_question", "args": {
+        "question": "Which hit rate do you mean?",
+        "suggestions": ["Base-game hit frequency", "Bonus hit rate"],
+        "aspect": "math-model" } }
+  ],
+  "final": ["Which hit rate did you mean?"]
+}

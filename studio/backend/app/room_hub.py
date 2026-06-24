@@ -37,8 +37,11 @@ class RoomHub:
         self._asset_hub = asset_hub
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
-        # queues hold turn descriptors: {"kind": "prompt", "messageId": id}
-        # or {"kind": "skill", "author": …, "skillName": …, "args": …}
+        self._router_spec = None
+        # queues hold turn descriptors: {"kind": "prompt"} (no-tool plain chat)
+        # or {"kind": "skill", "author": …, "skillName": …, "args": …,
+        #     "spec": <SkillSpec>?} — "spec" is set for the synthetic design-router
+        # turn routed from game-room plain chat; registry-driven skills omit it.
         self._queues: dict[str, list[dict]] = {}
         self._busy: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
@@ -86,14 +89,48 @@ class RoomHub:
         user_msg = await self._store.add_message(room_id, author, "user", text, "complete")
         await self._sio.emit("message_created", {"message": message_wire(user_msg)}, room=room_id)
 
+        descriptor = await self._prompt_descriptor(room_id, author)
+
         async with self._lock(room_id):
-            self._queues.setdefault(room_id, []).append({"kind": "prompt", "messageId": user_msg.id})
+            self._queues.setdefault(room_id, []).append(descriptor)
             if room_id in self._busy:
                 await self._emit_status(room_id, "queued")
                 return
             self._busy.add(room_id)
 
         asyncio.create_task(self._drain(room_id))
+
+    def _can_route_design(self) -> bool:
+        """The design-router needs the full agent/run stack plus a GDD hub."""
+        return (
+            self._gdd_hub is not None
+            and self._run_store is not None
+            and self._runner is not None
+        )
+
+    def _design_router_spec(self):
+        from app.gdd.router import build_design_router_spec
+
+        if self._router_spec is None:
+            self._router_spec = build_design_router_spec()
+        return self._router_spec
+
+    async def _prompt_descriptor(self, room_id: str, author: str) -> dict:
+        """Decide how a plain-chat prompt runs.
+
+        In a game room with the agent stack wired, freeform chat runs the
+        design-router agent so a design decision can edit the GDD without an
+        explicit /design-game. Rooms without a game keep the no-tool path.
+        """
+        if self._can_route_design():
+            room = await self._store.get_room(room_id)
+            if room is not None and getattr(room, "game_id", None):
+                spec = self._design_router_spec()
+                return {
+                    "kind": "skill", "author": author,
+                    "skillName": spec.name, "args": {}, "spec": spec,
+                }
+        return {"kind": "prompt"}
 
     async def handle_skill_run(self, room_id: str, author: str, skill_name: str, args: dict, text: str = "") -> None:
         from app.skills import invocation_text
@@ -223,7 +260,7 @@ class RoomHub:
         from app.agent_tools import ToolContext
 
         room = await self._store.get_room(room_id)
-        spec = self._skills.get(descriptor["skillName"])
+        spec = descriptor.get("spec") or self._skills.get(descriptor["skillName"])
 
         if (self._gdd_hub is not None and room.game_id
                 and set(spec.tools) & GDD_TOOL_NAMES):
