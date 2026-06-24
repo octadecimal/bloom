@@ -21,20 +21,23 @@ no script to execute.
    "GitHub CLI isn't authenticated — run `gh auth login`, then try `/todo` again."
    Do not attempt any issue operation until auth succeeds.
 
-2. Ensure the `todo` label exists (idempotent — safe to run every time before creating):
+2. Ensure the `todo` label exists (idempotent — `--force` upserts, so this is safe to
+   run every time before creating and won't error if the label already exists):
 
    ```
-   gh label create todo --description "Personal todo captured via /todo" --color ededed
+   gh label create todo --description "Personal todo captured via /todo" --color ededed --force
    ```
-
-   If this fails because the label already exists, treat it as success and continue.
 
 ## Determine intent
 
 Read whatever the user typed after `/todo` and pick exactly one mode:
 
-- **Complete** — the text starts with `done:` / `done ` / `complete:` / `finish:` /
-  `close:`, or otherwise clearly says a task is finished. → go to **Complete**.
+- **Complete** — the text clearly says an existing todo is finished, e.g. it starts
+  with `done:` / `complete:` / `close:` (a colon-prefixed marker) or plainly states a
+  task is done. Treat a bare leading word like "done" WITHOUT a colon as a normal task
+  to Add unless the rest of the text clearly refers to finishing an existing todo
+  (e.g. `/todo done documenting the API` is an Add, not a Complete). When unsure, fall
+  through to the ambiguity rule below. → go to **Complete**.
 - **Query** — the text is a question or a list/show request ("what should I do next?",
   "list", "show", "what's open", "show #chat", or empty input). → go to **Query**.
 - **Add** — anything else (an imperative task to capture, e.g. "wire up the Mongo
@@ -55,7 +58,9 @@ gh issue create --title "<the todo text>" --label todo --assignee @me
 - To add detail: append `--body "<longer detail>"`.
 - Optional tags: if the user's text contains `#word` tokens, add each as a label with
   `--label <word>` (bootstrap each first with the same idempotent
-  `gh label create <word> ...` as above). The `todo` label is ALWAYS applied regardless.
+  `gh label create <word> ... --force` as above) and STRIP the `#word` tokens from the
+  title so the tag isn't duplicated in the title text. The `todo` label is ALWAYS
+  applied regardless.
 - Report back the created issue number and URL (gh prints the URL on success).
 
 ## Query

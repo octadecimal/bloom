@@ -42,7 +42,7 @@ to `SKILL.md`. Requires `gh` authenticated against the current repo's remote.
 
 ## Cleanup
 
-Close or delete any issues created during verification:
+Close any issues created during verification:
 
 ```
 gh issue list --label todo --assignee @me --state open
