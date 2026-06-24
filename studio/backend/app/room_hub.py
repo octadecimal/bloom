@@ -25,6 +25,8 @@ class RoomHub:
         asset_hub=None,
         gdd_store=None,
         gdd_hub=None,
+        scene_store=None,
+        scene_hub=None,
     ):
         self._sio = sio
         self._store = store
@@ -37,6 +39,8 @@ class RoomHub:
         self._asset_hub = asset_hub
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
+        self._scene_store = scene_store
+        self._scene_hub = scene_hub
         # queues hold turn descriptors: {"kind": "prompt", "messageId": id}
         # or {"kind": "skill", "author": …, "skillName": …, "args": …}
         self._queues: dict[str, list[dict]] = {}
@@ -239,7 +243,8 @@ class RoomHub:
         history = await self._store.list_messages(room_id)
         messages = [{"role": m.role, "content": m.content} for m in history]
         ctx = ToolContext(room_id, room.game_id, self._asset_store, self._asset_hub,
-                         gdd_store=self._gdd_store, gdd_hub=self._gdd_hub)
+                         gdd_store=self._gdd_store, gdd_hub=self._gdd_hub,
+                         scene_store=self._scene_store, scene_hub=self._scene_hub)
         status = "completed"
         try:
             async for ev in self._runner.run(
