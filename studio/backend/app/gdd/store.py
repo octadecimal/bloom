@@ -65,7 +65,10 @@ class GddStore:
             {"game_id": game_id, "aspect": aspect}, {"$set": fields}
         )
         doc = await self.get_doc(game_id, aspect)
-        assert doc is not None  # seeded before any write
+        if doc is None:
+            raise GddEditError(
+                f"No GDD doc for ({game_id}, {aspect}); seed the taxonomy first."
+            )
         return doc
 
     async def edit_doc(self, game_id: str, aspect: str, old_string: str,

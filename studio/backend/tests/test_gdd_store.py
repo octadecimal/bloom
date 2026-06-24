@@ -1,5 +1,15 @@
 import pytest
+import pytest_asyncio
 from app.gdd.store import GddStore, GddEditError
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_gdd_docs(mongo_db):
+    # The shared mongo_db fixture does not wipe gdd_docs, so clear it here to
+    # keep each test deterministic regardless of leftover state from prior runs.
+    await mongo_db["gdd_docs"].delete_many({})
+    yield
+    await mongo_db["gdd_docs"].delete_many({})
 
 
 @pytest.mark.asyncio
@@ -56,3 +66,14 @@ async def test_set_status(mongo_db):
     await store.seed_taxonomy("g1")
     doc = await store.set_status("g1", "audio", "complete")
     assert doc.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_upsert_doc_raises_when_aspect_unseeded(mongo_db):
+    store = GddStore(mongo_db)
+    # No seed_taxonomy: the (game, aspect) does not exist.
+    with pytest.raises(GddEditError) as excinfo:
+        await store.upsert_doc("g1", "theme", body="x")
+    # Must be a real, clear error -- not a bare AssertionError.
+    assert not isinstance(excinfo.value, AssertionError)
+    assert "seed" in str(excinfo.value).lower()
