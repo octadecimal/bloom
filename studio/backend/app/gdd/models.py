@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
+from app.gdd.schemas import schema_for
+
 Status = Literal["empty", "drafted", "needs_input", "complete"]
 
 
@@ -17,6 +19,7 @@ class GddDoc(_WireModel):
     aspect: str
     title: str
     order: int
+    data: dict = {}
     body: str = ""
     status: Status = "empty"
     created_at: datetime
@@ -34,10 +37,21 @@ GDD_TAXONOMY: list[dict] = [
 ]
 
 GDD_TOOL_NAMES: set[str] = {
-    "list_gdd_docs", "read_gdd_doc", "write_gdd_doc",
-    "edit_gdd_doc", "set_doc_status", "ask_user_question",
+    "list_gdd_docs", "read_gdd_doc", "set_gdd_fields",
+    "set_doc_status", "ask_user_question",
 }
 
 
 def gdd_wire(doc: GddDoc) -> dict:
     return doc.model_dump(by_alias=True, mode="json")
+
+
+def derive_status(aspect: str, data: dict) -> Status:
+    if not data:
+        return "empty"
+    schema = schema_for(aspect)
+    missing = [
+        f.key for f in schema
+        if f.required and data.get(f.key) in (None, "", [], {})
+    ]
+    return "needs_input" if missing else "drafted"

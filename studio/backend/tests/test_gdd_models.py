@@ -1,5 +1,8 @@
+# studio/backend/tests/test_gdd_models.py
 from datetime import datetime, timezone
-from app.gdd.models import GddDoc, GDD_TAXONOMY, GDD_TOOL_NAMES, gdd_wire
+from app.gdd.models import (
+    GddDoc, GDD_TAXONOMY, GDD_TOOL_NAMES, gdd_wire, derive_status,
+)
 
 
 def _doc() -> GddDoc:
@@ -19,10 +22,10 @@ def test_taxonomy_is_seven_ordered_aspects():
     assert [t["order"] for t in GDD_TAXONOMY] == [1, 2, 3, 4, 5, 6, 7]
 
 
-def test_gdd_tool_names_cover_the_six_tools():
+def test_gdd_tool_names_are_the_structured_set():
     assert GDD_TOOL_NAMES == {
-        "list_gdd_docs", "read_gdd_doc", "write_gdd_doc",
-        "edit_gdd_doc", "set_doc_status", "ask_user_question",
+        "list_gdd_docs", "read_gdd_doc", "set_gdd_fields",
+        "set_doc_status", "ask_user_question",
     }
 
 
@@ -32,3 +35,15 @@ def test_gdd_wire_uses_camelcase_aliases():
     assert wire["aspect"] == "math-model"
     assert wire["status"] == "drafted"
     assert "game_id" not in wire
+
+
+def test_doc_defaults_to_empty_data():
+    assert _doc().data == {}
+
+
+def test_derive_status_empty_partial_complete():
+    assert derive_status("math-model", {}) == "empty"
+    # required for math-model: rtp, volatility, bonus_hit_rate
+    assert derive_status("math-model", {"rtp": 0.96}) == "needs_input"
+    full = {"rtp": 0.96, "volatility": "high", "bonus_hit_rate": "1:200"}
+    assert derive_status("math-model", full) == "drafted"
