@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { llmChatHooks } from './state';
 import type { IRunStep } from './state';
 import { ApprovalCard } from './ApprovalCard';
+import { QuestionCard } from './QuestionCard';
 import { bumpRenderCount } from '../../app/renderCount';
 
 type IReadonlyRunStep = Readonly<IRunStep>;
@@ -9,6 +10,9 @@ type IReadonlyRunStep = Readonly<IRunStep>;
 function RunStepCard({ step, index, runId }: { step: IReadonlyRunStep; index: number; runId: string }) {
   if (step.type === 'approval') {
     return <ApprovalCard runId={runId} step={step as IRunStep} />;
+  }
+  if (step.type === 'question') {
+    return <QuestionCard runId={runId} step={step as IRunStep} />;
   }
   const isToolStep = step.type === 'tool_call' || step.type === 'tool_result';
   const isError = step.status === 'error';
