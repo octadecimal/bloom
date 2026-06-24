@@ -2,10 +2,21 @@
   "tool_calls": [
     { "name": "generate_asset", "args": { "description": "a knight", "style": "pixel" } },
     { "name": "delete_asset", "args": { "asset_id": "e2e-doomed-asset" } },
+    { "name": "set_gdd_fields", "args": {
+        "aspect": "paytable",
+        "fields": {
+          "payouts": [
+            { "symbol": "Wild", "3oak": 10, "4oak": 50, "5oak": 500 },
+            { "symbol": "Cyber Seven", "3oak": 5, "4oak": 25, "5oak": 200 },
+            { "symbol": "Neon Bell", "3oak": 4, "4oak": 15, "5oak": 120 },
+            { "symbol": "Bar", "3oak": 3, "4oak": 10, "5oak": 80 },
+            { "symbol": "Ace", "3oak": 2, "4oak": 5, "5oak": 40 }
+          ]
+        } } },
     { "name": "ask_user_question", "args": {
         "question": "What should trigger the free-spins bonus?",
         "suggestions": ["3+ scatter symbols", "a random wild-driven trigger"],
         "aspect": "bonus-features" } }
   ],
-  "final": ["All set — ", "I generated a knight sprite and added it to the Asset Board."]
+  "final": ["All set — ", "I drafted the GDD and asked you about the bonus trigger."]
 }
