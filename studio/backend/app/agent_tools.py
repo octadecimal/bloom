@@ -1,9 +1,11 @@
+import json
 from dataclasses import dataclass
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
 
 from app.gdd.store import GddEditError
+from app.scene.document import OpError
 
 
 @dataclass
@@ -14,6 +16,8 @@ class ToolContext:
     asset_hub: object
     gdd_store: object = None
     gdd_hub: object = None
+    scene_store: object = None
+    scene_hub: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -200,6 +204,120 @@ def build_ask_user_question_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_scene_add_node_tool(ctx: ToolContext) -> BaseTool:
+    async def scene_add_node(node_id: str, type: str, props_json: str = "") -> str:
+        try:
+            props = json.loads(props_json) if props_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return f"Invalid props_json: {e}"
+        op = {"kind": "addNode", "id": node_id, "type": type, "props": props}
+        try:
+            await ctx.scene_hub.apply_op(ctx.game_id, op)
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Added {type} node '{node_id}'."
+
+    return StructuredTool.from_function(
+        coroutine=scene_add_node, name="scene_add_node",
+        description="Add a scene node. type is Root|Container|Sprite|Texture. "
+                    "node_id is a stable, semantic id you choose (e.g. 'reels', "
+                    "'sym.r2c1'). props_json is an optional JSON object of initial "
+                    "props (e.g. '{\"position\":{\"x\":100,\"y\":80}}').",
+    )
+
+
+def build_scene_set_prop_tool(ctx: ToolContext) -> BaseTool:
+    async def scene_set_prop(node_id: str, path: str, value_json: str) -> str:
+        try:
+            value = json.loads(value_json)
+        except json.JSONDecodeError as e:
+            return f"Invalid value_json: {e}"
+        op = {"kind": "setProp", "id": node_id, "path": path, "value": value}
+        try:
+            await ctx.scene_hub.apply_op(ctx.game_id, op)
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Set {node_id}.{path}."
+
+    return StructuredTool.from_function(
+        coroutine=scene_set_prop, name="scene_set_prop",
+        description="Set one prop on a node. path supports nesting (e.g. "
+                    "'position.x'). value_json is the JSON-encoded value "
+                    "(e.g. '0.5', 'true', '{\"x\":10,\"y\":20}').",
+    )
+
+
+def build_scene_connect_tool(ctx: ToolContext) -> BaseTool:
+    async def scene_connect(edge_id: str, type: str, from_node: str, from_port: str,
+                            to_node: str, to_port: str) -> str:
+        op = {"kind": "connect", "edgeId": edge_id, "type": type,
+              "from": {"node": from_node, "port": from_port},
+              "to": {"node": to_node, "port": to_port}}
+        try:
+            await ctx.scene_hub.apply_op(ctx.game_id, op)
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Connected {edge_id} ({type})."
+
+    return StructuredTool.from_function(
+        coroutine=scene_connect, name="scene_connect",
+        description="Connect two nodes. type 'child' parents a node "
+                    "(from_port='children', to_port='parent'); type 'data' binds a "
+                    "Texture to a Sprite (from_port='data', to_port='texture').",
+    )
+
+
+def build_scene_disconnect_tool(ctx: ToolContext) -> BaseTool:
+    async def scene_disconnect(edge_id: str) -> str:
+        try:
+            await ctx.scene_hub.apply_op(ctx.game_id, {"kind": "disconnect", "edgeId": edge_id})
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Disconnected {edge_id}."
+
+    return StructuredTool.from_function(
+        coroutine=scene_disconnect, name="scene_disconnect",
+        description="Remove an edge by its id.",
+    )
+
+
+def build_scene_remove_node_tool(ctx: ToolContext) -> BaseTool:
+    async def scene_remove_node(node_id: str) -> str:
+        try:
+            await ctx.scene_hub.apply_op(ctx.game_id, {"kind": "removeNode", "id": node_id})
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Removed node '{node_id}' (and its edges)."
+
+    return StructuredTool.from_function(
+        coroutine=scene_remove_node, name="scene_remove_node",
+        description="Remove a node and all edges touching it.",
+    )
+
+
+def build_scene_apply_batch_tool(ctx: ToolContext) -> BaseTool:
+    async def scene_apply_batch(ops_json: str) -> str:
+        try:
+            ops = json.loads(ops_json)
+        except json.JSONDecodeError as e:
+            return f"Invalid ops_json: {e}"
+        if not isinstance(ops, list):
+            return "ops_json must be a JSON array of op objects."
+        try:
+            await ctx.scene_hub.apply_batch(ctx.game_id, ops)
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Applied {len(ops)} ops atomically."
+
+    return StructuredTool.from_function(
+        coroutine=scene_apply_batch, name="scene_apply_batch",
+        description="Apply many ops atomically (all-or-nothing). ops_json is a JSON "
+                    "array of op objects matching the add/remove/setProp/connect/"
+                    "disconnect shapes. Use for building a group (e.g. a reel of "
+                    "symbols) in one step.",
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -210,13 +328,22 @@ class ToolFactory:
         "set_gdd_fields": build_set_gdd_fields_tool,
         "set_doc_status": build_set_doc_status_tool,
         "ask_user_question": build_ask_user_question_tool,
+        "scene_add_node": build_scene_add_node_tool,
+        "scene_set_prop": build_scene_set_prop_tool,
+        "scene_connect": build_scene_connect_tool,
+        "scene_disconnect": build_scene_disconnect_tool,
+        "scene_remove_node": build_scene_remove_node_tool,
+        "scene_apply_batch": build_scene_apply_batch_tool,
     }
 
-    def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None):
+    def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,
+                 scene_store=None, scene_hub=None):
         self._asset_store = asset_store
         self._asset_hub = asset_hub
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
+        self._scene_store = scene_store
+        self._scene_hub = scene_hub
 
     def known_tool_names(self) -> set[str]:
         return set(self._BUILDERS)
