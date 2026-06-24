@@ -86,4 +86,14 @@ describe('GraphModel connect/disconnect', () => {
     expect(m.edgesBySource('tex', 'data').map((e) => e.id)).toEqual(['e2']);
     expect(m.edgesByTarget('s', 'texture').map((e) => e.id)).toEqual(['e2']);
   });
+
+  it('getEdge returns a copy that cannot mutate internal state', () => {
+    const m = withNodes();
+    m.apply(data('e2', 'tex', 's'));
+    const got = m.getEdge('e2')!;
+    got.from.node = 'HACKED';
+    got.to.port = 'HACKED';
+    expect(m.getEdge('e2')!.from.node).toBe('tex');
+    expect(m.getEdge('e2')!.to.port).toBe('texture');
+  });
 });

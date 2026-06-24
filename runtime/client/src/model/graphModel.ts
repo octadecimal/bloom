@@ -28,7 +28,8 @@ export class GraphModel {
   }
 
   getEdge(id: string): IEdge | undefined {
-    return this.edges.get(id);
+    const e = this.edges.get(id);
+    return e ? { ...e, from: { ...e.from }, to: { ...e.to } } : undefined;
   }
 
   edgesBySource(nodeId: string, port?: string): IEdge[] {
@@ -42,7 +43,7 @@ export class GraphModel {
   toDocument(): IGameDocument {
     const nodes: Record<string, INode> = {};
     for (const [id, n] of this.nodes) nodes[id] = { id: n.id, type: n.type, props: { ...n.props } };
-    return { version: 1, nodes, edges: [...this.edges.values()].map((e) => ({ ...e })) };
+    return { version: 1, nodes, edges: [...this.edges.values()].map((e) => ({ ...e, from: { ...e.from }, to: { ...e.to } })) };
   }
 
   private addNode(id: string, type: INode['type'], props?: INode['props']): IChange[] {
