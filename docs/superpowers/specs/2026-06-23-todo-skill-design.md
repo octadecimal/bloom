@@ -26,15 +26,18 @@ no executable code. Committed to the repo so it is available from every worktree
 every session. It wraps the `gh` CLI; it does **not** create or edit any file in the
 repo.
 
-## Store: GitHub Issues in the current repo
+## Store: GitHub Issues in `octadecimal/bloom`
 
-- Issues are created in the **current repo**. `gh` resolves the repo from the
-  worktree's git remote, so the skill works unchanged from any bloom worktree.
+- The skill is **bound to a fixed repo: `octadecimal/bloom`**. Every `gh` command passes
+  `--repo octadecimal/bloom`, so todos always land in that repo regardless of which
+  directory or worktree `/todo` is invoked from. (Pinned explicitly rather than relying
+  on `gh`'s ambient repo resolution, so the binding is deterministic.)
 - Every `/todo` issue carries **`--label todo`** and **`--assignee @me`**. This keeps
   personal captures cleanly separable from the repo's real bug/feature issues, and lets
   queries scope to "my open todos."
-- **Label bootstrap:** before creating an issue, ensure the `todo` label exists. Run
-  `gh label create todo` and treat an "already exists" failure as success (idempotent).
+- **Label bootstrap:** before creating an issue, force-upsert the `todo` label with
+  `gh label create todo … --force --repo octadecimal/bloom` (idempotent — exits 0 even
+  when the label already exists).
 
 ## Preconditions
 
@@ -46,9 +49,12 @@ stops and tells the user to run `gh auth login`, rather than surfacing a cryptic
 The user always invokes `/todo <anything>`; the skill reads what follows and infers
 intent. (Approved over explicit subcommands — lower friction.)
 
+All `gh` commands below pass `--repo octadecimal/bloom` (omitted here for brevity).
+
 - **Add** — e.g. `/todo wire up the Mongo checkpointer`
   Create an issue: `gh issue create --title "<text>" --label todo --assignee @me`.
   The one-liner is the title; longer detail (if the user gave any) goes in `--body`.
+  Recognized `#tags` become extra labels and are stripped from the title.
   Report the resulting issue number and URL back to the user.
 
 - **Query** — e.g. `/todo what should I do next?`, `/todo list`, `/todo show #chat`
@@ -78,7 +84,7 @@ There is nothing to unit-test: the skill is a markdown instruction file, and its
 
 1. `/todo <task>` → a `todo`-labelled issue assigned to the user is created; its number
    and URL are reported.
-2. Fresh repo with no `todo` label → the label is auto-created, then the issue.
+2. `octadecimal/bloom` with no `todo` label yet → the label is force-upserted, then the issue.
 3. `/todo what should I do next?` → the session lists open todo issues and reasons over
    them.
 4. `/todo done: <task>` → the matching issue closes; an ambiguous match asks first.

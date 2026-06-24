@@ -5,9 +5,13 @@ description: Capture, list, and complete personal todos as GitHub issues. Use wh
 
 # /todo — personal todos as GitHub issues
 
-Capture and manage the user's personal todos as GitHub issues in the current repo.
-This skill is pure instructions: you (the model) run `gh` commands directly. There is
-no script to execute.
+Capture and manage the user's personal todos as GitHub issues. This skill is pure
+instructions: you (the model) run `gh` commands directly. There is no script to execute.
+
+**Target repo:** this skill is bound to **`octadecimal/bloom`**. Every `gh` command
+below passes `--repo octadecimal/bloom` so todos always land in that repo, regardless
+of which directory or worktree `/todo` is invoked from. Do not omit the flag and do not
+target any other repo.
 
 ## Preconditions (always check first)
 
@@ -25,7 +29,7 @@ no script to execute.
    run every time before creating and won't error if the label already exists):
 
    ```
-   gh label create todo --description "Personal todo captured via /todo" --color ededed --force
+   gh label create todo --description "Personal todo captured via /todo" --color ededed --force --repo octadecimal/bloom
    ```
 
 ## Determine intent
@@ -52,13 +56,13 @@ Create an issue from the user's text. The one-liner is the title; if the user su
 extra detail, put it in the body.
 
 ```
-gh issue create --title "<the todo text>" --label todo --assignee @me
+gh issue create --title "<the todo text>" --label todo --assignee @me --repo octadecimal/bloom
 ```
 
 - To add detail: append `--body "<longer detail>"`.
 - Optional tags: if the user's text contains `#word` tokens, add each as a label with
   `--label <word>` (bootstrap each first with the same idempotent
-  `gh label create <word> ... --force` as above) and STRIP the `#word` tokens from the
+  `gh label create <word> ... --force --repo octadecimal/bloom` as above) and STRIP the `#word` tokens from the
   title so the tag isn't duplicated in the title text. The `todo` label is ALWAYS
   applied regardless.
 - Report back the created issue number and URL (gh prints the URL on success).
@@ -69,7 +73,7 @@ List the user's open todos, then reason over them — prioritize, summarize, or 
 "what should I do next?". Do not just dump the raw list; think about it.
 
 ```
-gh issue list --label todo --assignee @me --state open
+gh issue list --label todo --assignee @me --state open --repo octadecimal/bloom
 ```
 
 - If the user narrowed the request (e.g. `show #chat`), add `--label <tag>` or
@@ -91,7 +95,7 @@ Close the issue that matches what the user finished.
 3. If exactly one clearly matches, close it:
 
    ```
-   gh issue close <number>
+   gh issue close <number> --repo octadecimal/bloom
    ```
 
    Then confirm which issue (number + title) you closed.
@@ -101,4 +105,4 @@ Close the issue that matches what the user finished.
 ## Out of scope
 
 Don't edit issue bodies, reopen closed issues, set milestones/projects/due dates, or
-target any repo other than the current one. Keep it to create / list / close.
+target any repo other than `octadecimal/bloom`. Keep it to create / list / close.

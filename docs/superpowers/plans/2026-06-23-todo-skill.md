@@ -12,7 +12,11 @@
 
 - The skill is **pure instructions, no executable code** — no scripts, no source files beyond Markdown.
 - Skill lives at `.claude/skills/todo/SKILL.md` (project-level, committed so every worktree/session has it).
-- Store = GitHub Issues in the **current repo** (`gh` resolves repo from the worktree's git remote).
+- Store = GitHub Issues in **`octadecimal/bloom`** — every `gh` command passes
+  `--repo octadecimal/bloom` so the binding is deterministic, not dependent on the
+  invoking directory. (Note: the embedded file snapshots below predate this pin and the
+  post-review polish; the committed `SKILL.md`/`verify.md` and the design spec are
+  authoritative.)
 - Every created issue carries `--label todo` and `--assignee @me`.
 - The `todo` label is bootstrapped idempotently (`gh label create todo`; treat "already exists" as success).
 - Preconditions check: `gh auth status` must pass; otherwise the skill stops and tells the user to run `gh auth login`.
@@ -282,7 +286,7 @@ Expected: a PR is created against `main`. (Per repo policy, `main` is protected;
 
 **1. Spec coverage:**
 - Skill is `.claude/skills/todo/SKILL.md`, pure instructions → Task 1. ✓
-- Store = GitHub Issues in current repo → Task 1 (Add/Query/Complete all use `gh` against current repo). ✓
+- Store = GitHub Issues in `octadecimal/bloom`, pinned via `--repo` on every `gh` call → Task 1 (Add/Query/Complete). ✓
 - `todo` label + `@me` assignee → Task 1 Add step. ✓
 - Idempotent label bootstrap → Task 1 Preconditions. ✓
 - `gh auth status` precondition with `gh auth login` message → Task 1 Preconditions. ✓
