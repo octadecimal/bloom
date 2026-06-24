@@ -14,6 +14,11 @@ fmt:
 lint:
     cargo clippy --workspace --all-targets
 
+# Run a slot curation: model + target JSON -> signed package + report.
+# Usage: just sim-curate game/model.json game/target.json my-game out.pkg out.report.txt
+sim-curate model target id pkg report:
+    cargo run -p bloom-simulator --bin curate -- {{model}} {{target}} {{id}} {{pkg}} {{report}}
+
 # TypeScript / frontend
 ts-test:
     npx nx run-many -t test
