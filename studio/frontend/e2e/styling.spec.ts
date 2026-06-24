@@ -54,6 +54,32 @@ test('drag-and-drop preview overlay resolves to the on-palette selection wash', 
   expect(bg).toBe('rgba(240, 100, 30, 0.14)');
 });
 
+test('drop-preview animation speed is halved from dockview defaults (150ms / 35ms)', async ({ page }) => {
+  await gotoWorkbench(page);
+  // The drop-preview slide timing is dockview's --dv-transition-duration, declared by the
+  // library directly on .dv-drop-target-container (300ms, the cross-group anchor move — the
+  // dominant, most visible duration) and .dv-drop-target (70ms, the in-target quadrant slide).
+  // Those elements only exist mid-drag and native DnD is unreliable to simulate, so probe the
+  // cascade directly — same technique as the overlay-color test above — with a throwaway element
+  // carrying each class so it resolves the value our theme override sets.
+  const themeRoot = page.locator('.dockview-theme-bloom').first();
+  await expect(themeRoot).toBeVisible();
+  const durations = await themeRoot.evaluate((root) => {
+    const read = (className: string) => {
+      const probe = document.createElement('div');
+      probe.className = className;
+      root.appendChild(probe);
+      const value = getComputedStyle(probe).getPropertyValue('--dv-transition-duration').trim();
+      probe.remove();
+      return value;
+    };
+    return { container: read('dv-drop-target-container'), target: read('dv-drop-target') };
+  });
+  // Halved from dockview's 300ms / 70ms defaults via the bloom theme override.
+  expect(durations.container).toBe('150ms');
+  expect(durations.target).toBe('35ms');
+});
+
 test('settings pane select renders inside card chrome with token borders', async ({ page }) => {
   // Stub the models endpoint so this test is hermetic.
   await page.route('**/models', (r) =>
