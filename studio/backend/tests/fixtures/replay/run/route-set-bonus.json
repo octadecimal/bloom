@@ -1,0 +1,9 @@
+{
+  "prompt": "set the bonus hit rate to 1:200",
+  "tool_calls": [
+    { "name": "set_gdd_fields", "args": {
+        "aspect": "math-model",
+        "fields": { "bonus_hit_rate": "1:200" } } }
+  ],
+  "final": ["Set Math Model → bonus hit rate = 1:200."]
+}
