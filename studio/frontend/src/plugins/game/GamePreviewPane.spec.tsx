@@ -24,5 +24,7 @@ describe('GamePreviewPane', () => {
     const frame = screen.getByTestId('game-engine-frame') as HTMLIFrameElement;
     expect(frame.getAttribute('src')).toContain(`:4300/?parentOrigin=`);
     expect(frame.getAttribute('src')).toContain(encodeURIComponent(window.location.origin));
+    expect(frame.getAttribute('src')).toContain('mediaBase=');
+    expect(frame.getAttribute('src')).toContain(encodeURIComponent(`http://localhost:8000`));
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { gameHooks, gameSlice, type IGameDocument } from './state';
-import { engineOrigin } from './config';
+import { engineOrigin, backendOrigin } from './config';
 import { ProtocolBridge, setBridge, clearBridge } from './protocolBridge';
 
 export function GamePreviewPane(_props: IDockviewPanelProps) {
@@ -43,7 +43,7 @@ export function GamePreviewPane(_props: IDockviewPanelProps) {
     );
   }
 
-  const src = `${engineOrigin()}/?parentOrigin=${encodeURIComponent(window.location.origin)}`;
+  const src = `${engineOrigin()}/?parentOrigin=${encodeURIComponent(window.location.origin)}&mediaBase=${encodeURIComponent(backendOrigin())}`;
   return (
     <div className="flex h-full flex-col bg-surface">
       <iframe ref={frameRef} data-testid="game-engine-frame" title="Game scene preview" src={src} className="h-full w-full flex-1 border-0" />
