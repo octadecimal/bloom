@@ -109,6 +109,24 @@ gh pr merge --squash --delete-branch   # 0 approvals required; self-merge is OK
   default to push + open a PR** (`git push -u` then `gh pr create`). `main` is
   protected, so PR is the only path anyway; just do it without asking.
 
+## Working alongside other sessions
+
+Several sessions (e.g. parallel Claude sessions) may share this one repository.
+Worktrees make branch/file collisions impossible — each session gets its own
+directory and branch — so the protocol is short:
+
+- **Never do feature work in the primary checkout (`C:\code\bloom`).** Spin your
+  own worktree first: `just wt-new <name>` (full guide in
+  [`docs/worktrees.md`](docs/worktrees.md)). Treat the primary checkout as
+  coordination-only.
+- **`git worktree list` (or `just wt-ls`) is the registry.** Run it first to see
+  every active worktree and the branch it's on — that's how you know who else is
+  working where before you touch anything.
+- **One live stack at a time.** The dev stack is singletons — ports
+  `:4200` / `:8000` / `:8188` and one Mongo service / one GPU. Parallel edits and
+  unit tests are safe; before `serve` / `e2e` / asset generation, confirm no other
+  session already has the stack running.
+
 ## Session hygiene
 
 - At **sub-project boundaries** — after a PR merges, or once a spec or plan is
