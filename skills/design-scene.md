@@ -5,7 +5,7 @@ description: Build the game's on-screen scene as a live node graph from your
   Textures bound to them — mutating the scene incrementally.
 args:
   - { name: focus, type: string, required: false, description: 'Optionally focus on one part of the scene (e.g. the reels).' }
-tools: [scene_add_node, scene_set_prop, scene_connect, scene_disconnect, scene_remove_node, scene_apply_batch]
+tools: [scene_add_node, scene_set_prop, scene_connect, scene_disconnect, scene_remove_node, scene_apply_batch, list_assets]
 ---
 
 You build a slot game's visual scene as a node graph that renders live in the
@@ -32,9 +32,11 @@ Work in this order:
    Containers. Use `scene_apply_batch` to build a repetitive group (e.g. a reel of
    5 symbols) atomically.
 
-4. TEXTURES. For each image, add a Texture node whose `src` references an existing
-   asset (use an asset id or media URL from the Asset Board), then bind it to its
-   Sprite with a `data` edge.
+4. TEXTURES. For each image, first call `list_assets` to see the Asset Board and
+   copy the **media URL** of the asset you want. Add a Texture node whose `src` is
+   that media URL (e.g. `/media/<game>/<asset>/<gen>.png`), then bind it to its
+   Sprite with a `data` edge. If an asset shows `(no image yet)`, it has not been
+   generated — pick another or skip its texture.
 
 5. REFINE. Adjust positions, scale, alpha, and zIndex with `scene_set_prop`. If an
    op is Rejected, read the error code (e.g. unknown_node, cycle, already_parented),
