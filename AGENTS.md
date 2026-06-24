@@ -97,6 +97,9 @@ gh pr merge --squash --delete-branch   # 0 approvals required; self-merge is OK
 ```
 
 - Branch names use the same semantic prefixes as commits (`feat/`, `fix/`, `docs/`, ...).
+- For parallel sessions on different branches, use **git worktrees** so they don't
+  collide over one checkout — see [`docs/worktrees.md`](docs/worktrees.md)
+  (`just wt-new <name>`).
 - PRs require no approvals, so a solo author can self-merge once checks pass.
 - Force pushes and branch deletions on `main` are disabled.
 - **When finishing a development branch, don't present a merge/PR options menu —
