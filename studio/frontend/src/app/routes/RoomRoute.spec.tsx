@@ -12,7 +12,7 @@ const closeGameDocs = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
-vi.mock('../../plugins/assets/actions', () => ({
+vi.mock('../../plugins/game/actions', () => ({
   openGame: (id: string) => openGame(id),
   closeGame: () => closeGame(),
 }));

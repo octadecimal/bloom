@@ -3,8 +3,8 @@ import { useParams, Navigate } from 'react-router-dom';
 import { getRooms } from '../../plugins/llm-chat/restClient';
 import type { IRoom } from '../../plugins/llm-chat/state';
 import { openRoom, closeRoom } from '../../plugins/llm-chat/actions';
-import { openGame, closeGame } from '../../plugins/assets/actions';
 import { openGameDocs, closeGameDocs } from '../../plugins/gdd/actions';
+import { openGame, closeGame } from '../../plugins/game/actions';
 import { notify } from '../../lib/notify';
 import { ActiveRoomProvider } from './activeRoom';
 import { Workbench } from '../Workbench';
@@ -27,8 +27,8 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
         if (found) {
           setRoom(found);
           void openRoom(roomId!);
-          if (found.gameId) void openGame(found.gameId);
           if (found.gameId) void openGameDocs(found.gameId);
+          if (found.gameId) openGame(found.gameId);
           setState('valid');
         } else {
           setState('invalid');
@@ -44,8 +44,8 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
   useEffect(
     () => () => {
       closeRoom();
-      closeGame();
       closeGameDocs();
+      closeGame();
     },
     [],
   );
