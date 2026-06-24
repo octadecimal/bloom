@@ -1,0 +1,16 @@
+{
+  "name": "client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "runtime/client/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "runtime/client",
+        "command": "npx vitest run"
+      }
+    }
+  }
+}

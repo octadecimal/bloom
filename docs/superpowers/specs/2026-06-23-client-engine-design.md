@@ -15,8 +15,8 @@ document into a live Pixi scene, and mutates that scene **incrementally** via a
 message protocol — **no page refresh, and never a full document regenerate**.
 
 The single load-bearing idea: **the serialized document and the live mutation
-stream are the same vocabulary.** A document file is a *snapshot* of operations; a
-live edit is *one more* operation. There is exactly one interpreter and one set of
+stream are the same vocabulary.** A document file is a _snapshot_ of operations; a
+live edit is _one more_ operation. There is exactly one interpreter and one set of
 operations; cold-load and live-edit run the identical pipeline. This is what makes
 the top-priority requirement hold — **the AI never regenerates the whole document
 to change one thing.**
@@ -32,21 +32,21 @@ already names). Consequences of that placement, which the design honors:
 - The **same bundle** runs embedded in the studio (driven by the authoring protocol)
   and standalone from a document file. "One engine, two drivers."
 - The future **server-driven player mode** (send a bet, animate the server's
-  authoritative outcome) is a *second driver* on this same core — **labeled, not
+  authoritative outcome) is a _second driver_ on this same core — **labeled, not
   built** this iteration.
 
 ---
 
 ## 2. Components
 
-| Unit | Responsibility | Touches Pixi? |
-|---|---|---|
-| **GraphModel** (pure) | Holds `nodes` + `edges`; applies and validates ops; emits change records. Source of truth inside the engine. | No |
-| **Reconciler** | Consumes change records → drives the renderer seam. Owns one-hop reactive push. | No |
-| **`IRenderer`** (seam) | The **only** Pixi boundary: `mount`, `createObject(type)`, `setProp`, `setParent`, `destroy`, `loadTexture`. | interface |
-| **PixiRenderer** | The single `IRenderer` implementation (Approach 3). | Yes |
-| **Materializers** (per node type) | Map a node's props/edges → renderer calls. One small unit each: Root, Container, Sprite, Texture. | via seam |
-| **ProtocolHost** | postMessage envelope: handshake, op/batch intake, ack/error/event out, origin validation. | No |
+| Unit                              | Responsibility                                                                                               | Touches Pixi? |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------- |
+| **GraphModel** (pure)             | Holds `nodes` + `edges`; applies and validates ops; emits change records. Source of truth inside the engine. | No            |
+| **Reconciler**                    | Consumes change records → drives the renderer seam. Owns one-hop reactive push.                              | No            |
+| **`IRenderer`** (seam)            | The **only** Pixi boundary: `mount`, `createObject(type)`, `setProp`, `setParent`, `destroy`, `loadTexture`. | interface     |
+| **PixiRenderer**                  | The single `IRenderer` implementation (Approach 3).                                                          | Yes           |
+| **Materializers** (per node type) | Map a node's props/edges → renderer calls. One small unit each: Root, Container, Sprite, Texture.            | via seam      |
+| **ProtocolHost**                  | postMessage envelope: handshake, op/batch intake, ack/error/event out, origin validation.                    | No            |
 
 Everything from GraphModel → Reconciler → `IRenderer` is **unit-testable with a
 mock renderer** — no WebGL context required. `PixiRenderer` is the lone unit that
@@ -79,16 +79,16 @@ address any node on any later turn without a lookup.
 {
   "version": 1,
   "nodes": {
-    "tex.oak":  { "type": "Texture",   "props": { "src": "asset:abc123" } },
-    "root":     { "type": "Root",      "props": { "width": 1280, "height": 720 } },
-    "reels":    { "type": "Container", "props": { "position": { "x": 100, "y": 80 } } },
-    "sym.r2c1": { "type": "Sprite",    "props": { "anchor": { "x": 0.5, "y": 0.5 }, "zIndex": 1 } }
+    "tex.oak": { "type": "Texture", "props": { "src": "asset:abc123" } },
+    "root": { "type": "Root", "props": { "width": 1280, "height": 720 } },
+    "reels": { "type": "Container", "props": { "position": { "x": 100, "y": 80 } } },
+    "sym.r2c1": { "type": "Sprite", "props": { "anchor": { "x": 0.5, "y": 0.5 }, "zIndex": 1 } },
   },
   "edges": [
-    { "id": "e1", "type": "child", "from": { "node": "root",  "port": "children" }, "to": { "node": "reels",   "port": "parent" } },
+    { "id": "e1", "type": "child", "from": { "node": "root", "port": "children" }, "to": { "node": "reels", "port": "parent" } },
     { "id": "e2", "type": "child", "from": { "node": "reels", "port": "children" }, "to": { "node": "sym.r2c1", "port": "parent" } },
-    { "id": "e3", "type": "data",  "from": { "node": "tex.oak", "port": "data" },   "to": { "node": "sym.r2c1", "port": "texture" } }
-  ]
+    { "id": "e3", "type": "data", "from": { "node": "tex.oak", "port": "data" }, "to": { "node": "sym.r2c1", "port": "texture" } },
+  ],
 }
 ```
 
@@ -237,6 +237,7 @@ browser e2e runs locally, not in CI.
 ## 11. Scope boundary
 
 **In this iteration:**
+
 - Node types: **Root, Container, Sprite, Texture**.
 - The **6 operations** and the **postMessage protocol + handshake**.
 - The engine: **GraphModel → Reconciler → `IRenderer`/PixiRenderer**, with
@@ -247,6 +248,7 @@ browser e2e runs locally, not in CI.
 - **Unit + e2e** coverage.
 
 **Labeled, not built (named so a second case is purely additive):**
+
 - Node types: Sound, Text, Animation/Tween, Spine/animated symbols, particles,
   value/expression nodes, layout nodes, slot-mechanic nodes.
 - Per-frame coalescing & a general dataflow evaluation pass.
