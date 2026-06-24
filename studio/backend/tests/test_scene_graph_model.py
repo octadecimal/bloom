@@ -67,3 +67,87 @@ def test_to_document_shape():
         "nodes": {"x": {"id": "x", "type": "Sprite", "props": {}}},
         "edges": [],
     }
+
+
+def _with_nodes() -> GraphModel:
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "root", "type": "Root"})
+    m.apply({"kind": "addNode", "id": "box", "type": "Container"})
+    m.apply({"kind": "addNode", "id": "s", "type": "Sprite"})
+    m.apply({"kind": "addNode", "id": "tex", "type": "Texture", "props": {"src": "asset:1"}})
+    return m
+
+
+def _child(eid, parent, kid):
+    return {"kind": "connect", "edgeId": eid, "type": "child",
+            "from": {"node": parent, "port": "children"},
+            "to": {"node": kid, "port": "parent"}}
+
+
+def _data(eid, src, dst):
+    return {"kind": "connect", "edgeId": eid, "type": "data",
+            "from": {"node": src, "port": "data"},
+            "to": {"node": dst, "port": "texture"}}
+
+
+def test_child_connect_and_disconnect():
+    m = _with_nodes()
+    m.apply(_child("e1", "root", "box"))
+    assert m.get_edge("e1")["type"] == "child"
+    m.apply({"kind": "disconnect", "edgeId": "e1"})
+    assert m.get_edge("e1") is None
+
+
+def test_data_connect_read_helpers():
+    m = _with_nodes()
+    m.apply(_data("e2", "tex", "s"))
+    assert [e["id"] for e in m.edges_by_source("tex", "data")] == ["e2"]
+    assert [e["id"] for e in m.edges_by_target("s", "texture")] == ["e2"]
+
+
+def test_edge_to_unknown_node_rejected():
+    m = _with_nodes()
+    with pytest.raises(OpError) as e:
+        m.apply(_child("e1", "root", "ghost"))
+    assert e.value.code == "unknown_node"
+
+
+def test_duplicate_edge_id_rejected():
+    m = _with_nodes()
+    m.apply(_child("e1", "root", "box"))
+    with pytest.raises(OpError) as e:
+        m.apply(_child("e1", "box", "s"))
+    assert e.value.code == "duplicate_edge"
+
+
+def test_two_parents_rejected():
+    m = _with_nodes()
+    m.apply(_child("e1", "root", "s"))
+    with pytest.raises(OpError) as e:
+        m.apply(_child("e2", "box", "s"))
+    assert e.value.code == "already_parented"
+
+
+def test_cycle_rejected():
+    m = _with_nodes()
+    m.apply(_child("e1", "root", "box"))
+    with pytest.raises(OpError) as e:
+        m.apply(_child("e2", "box", "root"))
+    assert e.value.code == "cycle"
+
+
+def test_disconnect_unknown_rejected():
+    m = _with_nodes()
+    with pytest.raises(OpError) as e:
+        m.apply({"kind": "disconnect", "edgeId": "nope"})
+    assert e.value.code == "unknown_edge"
+
+
+def test_remove_node_cascades_incident_edges():
+    m = _with_nodes()
+    m.apply(_child("e1", "root", "box"))
+    m.apply(_data("e2", "tex", "s"))
+    m.apply(_child("e3", "box", "s"))
+    m.apply({"kind": "removeNode", "id": "s"})
+    assert m.get_edge("e2") is None and m.get_edge("e3") is None
+    assert m.get_edge("e1") is not None  # untouched (not incident to s)
