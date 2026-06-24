@@ -15,7 +15,7 @@ interface IRestDeps {
 let rest: IRestDeps = realRest;
 let socket: Pick<
   SocketClient,
-  'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill' | 'resolveApproval'
+  'connect' | 'disconnect' | 'reconnectWith' | 'joinRoom' | 'leaveRoom' | 'sendPrompt' | 'setTyping' | 'runSkill' | 'resolveApproval' | 'resolveQuestion'
 > | null = null;
 let savePrefs = realSavePrefs;
 let started = false;
@@ -137,6 +137,14 @@ export function runSkill(skillName: string, args: Record<string, unknown>, text 
 export function resolveApproval(runId: string, decision: 'approve' | 'deny'): void {
   const roomId = chatSlice().activeRoomId.get();
   if (roomId) sock().resolveApproval(roomId, runId, decision);
+}
+
+export function resolveQuestion(
+  runId: string,
+  answer: { type: 'suggestion' | 'freetext' | 'delegate'; value?: string },
+): void {
+  const roomId = chatSlice().activeRoomId.get();
+  if (roomId) sock().resolveQuestion(roomId, runId, answer);
 }
 
 export function setTyping(isTyping: boolean): void {

@@ -46,10 +46,36 @@ export interface ISkillFull extends ISkill {
 
 export interface IRunStep {
   index: number;
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval';
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'final' | 'approval' | 'question';
   toolName: string | null;
   content: string;
   status: 'running' | 'complete' | 'error';
+}
+
+export interface IQuestion {
+  question: string;
+  suggestions: string[];
+  allowFreeText: boolean;
+  allowDelegate: boolean;
+  aspect: string | null;
+  answer?: { type: string; value?: string };
+}
+
+export function parseQuestion(step: IRunStep): IQuestion | null {
+  try {
+    const p = JSON.parse(step.content) as Partial<IQuestion> & { kind?: string };
+    if (p.kind !== 'question') return null;
+    return {
+      question: p.question ?? '',
+      suggestions: p.suggestions ?? [],
+      allowFreeText: p.allowFreeText ?? true,
+      allowDelegate: p.allowDelegate ?? true,
+      aspect: p.aspect ?? null,
+      answer: p.answer,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export interface IApprovalAction {
