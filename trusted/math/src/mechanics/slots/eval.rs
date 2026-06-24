@@ -407,6 +407,8 @@ mod tests {
     #[test]
     fn evaluate_total_and_features_are_consistent() {
         let m = full_model();
+        let mut any_pay = false;
+        let mut any_trigger = false;
         for seed in 0..3000u64 {
             let o = evaluate(&m, seed);
             assert_eq!(o.total_payout, o.base_payout + o.feature_payout);
@@ -414,7 +416,11 @@ mod tests {
             let summed: u64 = o.features.iter().map(|f| f.payout).sum();
             assert_eq!(o.feature_payout, summed);
             assert_eq!(o.any_triggered(), o.features.iter().any(|f| f.triggered));
+            any_pay |= o.total_payout > 0;
+            any_trigger |= o.any_triggered();
         }
+        assert!(any_pay, "no seed paid out in 3000 trials — an always-zero evaluate would pass");
+        assert!(any_trigger, "no seed triggered the feature in 3000 trials");
     }
 
     #[test]
@@ -422,15 +428,27 @@ mod tests {
         // Pin exact outputs so any future drift fails loudly. Changing these is a
         // re-certification event (a new mechanic version), never an edit.
         let m = full_model();
-        let o = evaluate(&m, 12345);
-        assert_eq!(o.base_payout, GOLDEN_BASE);
-        assert_eq!(o.feature_payout, GOLDEN_FEATURE);
-        assert_eq!(o.features[0].spins_played, GOLDEN_SPINS);
+
+        // Losing case: seed 12345 → no payline hit, <3 scatters, feature does not trigger.
+        let lose = evaluate(&m, 12345);
+        assert_eq!(lose.base_payout, 0);
+        assert_eq!(lose.feature_payout, 0);
+
+        // Triggering case: seed GOLDEN_TRIGGER_SEED → scatter×3, 3 free spins at ×2,
+        // feature_payout is non-zero. All values verified by running the real engine.
+        let trig = evaluate(&m, GOLDEN_TRIGGER_SEED);
+        assert_eq!(trig.base_payout, GOLDEN_BASE);
+        assert_eq!(trig.feature_payout, GOLDEN_FEATURE);
+        assert_eq!(trig.total_payout, GOLDEN_TOTAL);
+        assert_eq!(trig.features[0].spins_played, GOLDEN_SPINS);
     }
 
-    // Verified from first run: seed 12345 lands a grid with no payline hit and
-    // fewer than 3 scatters — feature does not trigger, all payouts are 0.
-    const GOLDEN_BASE: u64 = 0;
-    const GOLDEN_FEATURE: u64 = 0;
-    const GOLDEN_SPINS: u32 = 0;
+    // Discovered empirically by scanning seeds 0.. with the real engine (SplitMix64).
+    // Seed 53 is the first seed where the FreeSpins feature triggers AND yields
+    // a non-zero feature_payout. These values are stable forever for slots@1.
+    const GOLDEN_TRIGGER_SEED: u64 = 53;
+    const GOLDEN_BASE: u64 = 8;   // scatter×3 pays 8 on base grid
+    const GOLDEN_FEATURE: u64 = 20; // 3 free spins ×2 multiplier
+    const GOLDEN_TOTAL: u64 = 28;  // GOLDEN_BASE + GOLDEN_FEATURE
+    const GOLDEN_SPINS: u32 = 3;   // retrigger=false → exactly spins_awarded=3
 }
