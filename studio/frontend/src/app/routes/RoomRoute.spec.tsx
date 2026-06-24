@@ -5,6 +5,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 const getRooms = vi.fn();
 const openRoom = vi.fn();
 const closeRoom = vi.fn();
+const openAssetsGame = vi.fn();
+const closeAssetsGame = vi.fn();
 const openGame = vi.fn();
 const closeGame = vi.fn();
 const openGameDocs = vi.fn();
@@ -12,6 +14,10 @@ const closeGameDocs = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
+vi.mock('../../plugins/assets/actions', () => ({
+  openGame: (id: string) => openAssetsGame(id),
+  closeGame: () => closeAssetsGame(),
+}));
 vi.mock('../../plugins/game/actions', () => ({
   openGame: (id: string) => openGame(id),
   closeGame: () => closeGame(),
@@ -32,6 +38,8 @@ beforeEach(() => {
   getRooms.mockReset();
   openRoom.mockReset();
   closeRoom.mockReset();
+  openAssetsGame.mockReset();
+  closeAssetsGame.mockReset();
   openGame.mockReset();
   closeGame.mockReset();
   openGameDocs.mockReset();
