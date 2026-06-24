@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 import path from 'node:path';
-import { resolvePorts, readRepoEnv } from '../../tools/ports';
+import { resolvePorts, readRepoEnv } from '../../tools/ports.mts';
 
 export default defineConfig(() => {
   const { backend, frontend } = resolvePorts(readRepoEnv());

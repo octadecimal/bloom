@@ -7,8 +7,9 @@
     "lib": ["es2023"],
     "types": ["node"],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "rootDir": ".",
     "skipLibCheck": true
   },
-  "include": ["ports.ts", "ports.spec.ts"]
+  "include": ["ports.mts", "ports.spec.mts"]
 }
