@@ -39,25 +39,49 @@ async def test_upsert_doc_replaces_body_in_place(mongo_db):
 
 
 @pytest.mark.asyncio
-async def test_edit_doc_replaces_unique_block(mongo_db):
+async def test_set_fields_normalizes_renders_and_derives_status(mongo_db):
     store = GddStore(mongo_db)
     await store.seed_taxonomy("g1")
-    await store.upsert_doc("g1", "math-model", body="RTP: TBD\nVolatility: high")
-    doc = await store.edit_doc("g1", "math-model", "RTP: TBD", "RTP: 96%")
-    assert doc.body == "RTP: 96%\nVolatility: high"
+    doc, warnings = await store.set_fields(
+        "g1", "math-model",
+        {"rtp": "96%", "volatility": "High", "bonus_hit_rate": "1 in 200"},
+    )
+    assert warnings == []
+    assert doc.data["rtp"] == 0.96
+    assert doc.data["volatility"] == "high"
+    assert doc.data["bonus_hit_rate"] == "1:200"
+    assert doc.status == "drafted"          # all required present
+    assert "**RTP:** 96%" in doc.body       # body is rendered from data
 
 
 @pytest.mark.asyncio
-async def test_edit_doc_raises_when_missing_or_ambiguous(mongo_db):
+async def test_set_fields_is_surgical_and_keeps_untouched_fields(mongo_db):
     store = GddStore(mongo_db)
     await store.seed_taxonomy("g1")
-    await store.upsert_doc("g1", "paytable", body="row\nrow")
+    await store.set_fields("g1", "math-model", {"rtp": "96%"})
+    doc, _ = await store.set_fields("g1", "math-model", {"volatility": "low"})
+    assert doc.data["rtp"] == 0.96          # earlier field untouched
+    assert doc.data["volatility"] == "low"
+    assert doc.status == "needs_input"      # bonus_hit_rate still missing
+
+
+@pytest.mark.asyncio
+async def test_set_fields_warns_on_unknown_field_without_blocking(mongo_db):
+    store = GddStore(mongo_db)
+    await store.seed_taxonomy("g1")
+    doc, warnings = await store.set_fields(
+        "g1", "math-model", {"rtp": "96%", "made_up": "x"},
+    )
+    assert doc.data["rtp"] == 0.96          # valid field still applied
+    assert any("made_up" in w for w in warnings)
+    assert "made_up" not in doc.data
+
+
+@pytest.mark.asyncio
+async def test_set_fields_raises_when_aspect_unseeded(mongo_db):
+    store = GddStore(mongo_db)
     with pytest.raises(GddEditError):
-        await store.edit_doc("g1", "paytable", "missing", "x")
-    with pytest.raises(GddEditError):
-        await store.edit_doc("g1", "paytable", "row", "x")  # 2 matches, no replace_all
-    doc = await store.edit_doc("g1", "paytable", "row", "x", replace_all=True)
-    assert doc.body == "x\nx"
+        await store.set_fields("g1", "math-model", {"rtp": "96%"})
 
 
 @pytest.mark.asyncio

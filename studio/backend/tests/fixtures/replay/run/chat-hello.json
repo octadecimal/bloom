@@ -1,0 +1,29 @@
+{
+  "prompt": "hello",
+  "tool_calls": [],
+  "final": [
+    "Hi! ",
+    "Tell ",
+    "me ",
+    "about ",
+    "the ",
+    "slot ",
+    "you ",
+    "want ",
+    "to ",
+    "design. ",
+    "What ",
+    "theme ",
+    "are ",
+    "you ",
+    "thinking? ",
+    "How ",
+    "many ",
+    "reels? ",
+    "Any ",
+    "special ",
+    "features ",
+    "in ",
+    "mind?"
+  ]
+}

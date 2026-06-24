@@ -1,3 +1,4 @@
+# studio/backend/tests/test_gdd_tools.py
 import pytest
 from app.agent_tools import ToolContext, ToolFactory
 from app.gdd.hub import GddHub
@@ -26,45 +27,49 @@ async def _clean_gdd_docs(mongo_db):
 
 
 @pytest.mark.asyncio
-async def test_write_then_list_then_edit(mongo_db):
+async def test_set_gdd_fields_then_read_reports_gaps(mongo_db):
     store = GddStore(mongo_db)
     hub = GddHub(_SilentSio(), store)
     await store.seed_taxonomy("g1")
     factory = _factory(store, hub)
     ctx = _ctx(store, hub)
 
-    write = factory.build(["write_gdd_doc"], ctx)[0]
-    await write.ainvoke({"aspect": "math-model", "title": "Math Model",
-                         "body": "RTP: TBD", "status": "drafted"})
+    setter = factory.build(["set_gdd_fields"], ctx)[0]
+    msg = await setter.ainvoke(
+        {"aspect": "math-model", "fields": {"rtp": "96%", "volatility": "high"}}
+    )
+    assert "math-model" in msg
+    assert (await store.get_doc("g1", "math-model")).data["rtp"] == 0.96
 
-    list_tool = factory.build(["list_gdd_docs"], ctx)[0]
-    listing = await list_tool.ainvoke({})
-    assert "math-model" in listing and "drafted" in listing
-
-    edit = factory.build(["edit_gdd_doc"], ctx)[0]
-    await edit.ainvoke({"aspect": "math-model", "old_string": "RTP: TBD",
-                        "new_string": "RTP: 96%"})
-    assert (await store.get_doc("g1", "math-model")).body == "RTP: 96%"
+    reader = factory.build(["read_gdd_doc"], ctx)[0]
+    view = await reader.ainvoke({"aspect": "math-model"})
+    # bonus_hit_rate is required and still empty -> surfaced as a gap
+    assert "bonus_hit_rate" in view
+    assert "missing required" in view.lower()
 
 
 @pytest.mark.asyncio
-async def test_edit_returns_error_string_when_unmatched(mongo_db):
+async def test_set_gdd_fields_writes_a_table(mongo_db):
     store = GddStore(mongo_db)
     hub = GddHub(_SilentSio(), store)
     await store.seed_taxonomy("g1")
     ctx = _ctx(store, hub)
-    edit = _factory(store, hub).build(["edit_gdd_doc"], ctx)[0]
-    result = await edit.ainvoke({"aspect": "theme", "old_string": "nope",
-                                 "new_string": "x"})
-    assert "not found" in result.lower()  # surfaced to the agent, not raised
+    setter = _factory(store, hub).build(["set_gdd_fields"], ctx)[0]
+    await setter.ainvoke({"aspect": "paytable", "fields": {"payouts": [
+        {"symbol": "Wild", "3oak": 10, "4oak": 50, "5oak": 500},
+    ]}})
+    body = (await store.get_doc("g1", "paytable")).body
+    assert "| Wild | 10 | 50 | 500 |" in body
 
 
 @pytest.mark.asyncio
-async def test_set_doc_status(mongo_db):
+async def test_set_gdd_fields_reports_warnings(mongo_db):
     store = GddStore(mongo_db)
     hub = GddHub(_SilentSio(), store)
     await store.seed_taxonomy("g1")
     ctx = _ctx(store, hub)
-    tool = _factory(store, hub).build(["set_doc_status"], ctx)[0]
-    await tool.ainvoke({"aspect": "audio", "status": "complete"})
-    assert (await store.get_doc("g1", "audio")).status == "complete"
+    setter = _factory(store, hub).build(["set_gdd_fields"], ctx)[0]
+    msg = await setter.ainvoke(
+        {"aspect": "math-model", "fields": {"made_up": "x"}}
+    )
+    assert "warning" in msg.lower() and "made_up" in msg

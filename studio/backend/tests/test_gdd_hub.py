@@ -26,16 +26,19 @@ class FakeSio:
 
 
 @pytest.mark.asyncio
-async def test_write_doc_persists_and_emits_update(mongo_db):
+async def test_set_fields_persists_and_emits_update(mongo_db):
     sio, store = FakeSio(), GddStore(mongo_db)
     hub = GddHub(sio, store)
     await hub.seed_taxonomy("g1")
-    doc = await hub.write_doc("g1", "theme", "Theme & Narrative", "Egypt", "drafted")
-    assert doc.body == "Egypt"
+    doc, warnings = await hub.set_fields(
+        "g1", "math-model",
+        {"rtp": "96%", "volatility": "high", "bonus_hit_rate": "1:200"},
+    )
+    assert warnings == [] and doc.status == "drafted"
     events = [e for e in sio.emitted if e[0] == "gdd_doc_updated"]
     last = events[-1]
     assert last[1]["gameId"] == "g1"
-    assert last[1]["doc"]["aspect"] == "theme"
+    assert last[1]["doc"]["aspect"] == "math-model"
     assert last[2] == "g1"  # room
 
 

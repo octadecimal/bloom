@@ -110,47 +110,50 @@ def build_list_gdd_docs_tool(ctx: ToolContext) -> BaseTool:
 
 def build_read_gdd_doc_tool(ctx: ToolContext) -> BaseTool:
     async def read_gdd_doc(aspect: str) -> str:
+        from app.gdd.schemas import schema_for
         doc = await ctx.gdd_store.get_doc(ctx.game_id, aspect)
         if doc is None:
             return f"No GDD doc for aspect '{aspect}'."
-        return f"status={doc.status}\n\n{doc.body or '(empty)'}"
+        schema = schema_for(aspect)
+        lines = [f"aspect={aspect} status={doc.status}", "fields:"]
+        for f in schema:
+            filled = doc.data.get(f.key) not in (None, "", [], {})
+            req = " required" if f.required else ""
+            lines.append(f"- {f.key} [{f.type}{req}]: {'set' if filled else 'EMPTY'}")
+        missing = [
+            f.key for f in schema
+            if f.required and doc.data.get(f.key) in (None, "", [], {})
+        ]
+        if missing:
+            lines.append("missing required: " + ", ".join(missing))
+        return "\n".join(lines)
 
     return StructuredTool.from_function(
         coroutine=read_gdd_doc, name="read_gdd_doc",
-        description="Read one GDD doc's exact current markdown by aspect. "
-                    "Always read before editing so old_string matches real text.",
+        description="Read one GDD aspect's structured fields and status. Shows each "
+                    "field key, type, whether it is set, and which required fields are "
+                    "still empty. Call before set_gdd_fields to learn the field keys.",
     )
 
 
-def build_write_gdd_doc_tool(ctx: ToolContext) -> BaseTool:
-    async def write_gdd_doc(aspect: str, title: str, body: str,
-                            status: str = "drafted") -> str:
-        await ctx.gdd_hub.write_doc(ctx.game_id, aspect, title, body, status)
-        return f"Wrote '{title}' (aspect {aspect}, status {status})."
-
-    return StructuredTool.from_function(
-        coroutine=write_gdd_doc, name="write_gdd_doc",
-        description="Create or fully overwrite a GDD doc's markdown body. Use for "
-                    "the initial draft of each aspect. status is one of "
-                    "empty|drafted|needs_input|complete.",
-    )
-
-
-def build_edit_gdd_doc_tool(ctx: ToolContext) -> BaseTool:
-    async def edit_gdd_doc(aspect: str, old_string: str, new_string: str,
-                           replace_all: bool = False) -> str:
+def build_set_gdd_fields_tool(ctx: ToolContext) -> BaseTool:
+    async def set_gdd_fields(aspect: str, fields: dict) -> str:
         try:
-            await ctx.gdd_hub.edit_doc(ctx.game_id, aspect, old_string,
-                                       new_string, replace_all)
+            doc, warnings = await ctx.gdd_hub.set_fields(ctx.game_id, aspect, fields)
         except GddEditError as e:
-            return f"Edit failed: {e} Read the doc again and retry."
-        return f"Edited '{aspect}'."
+            return f"Could not update '{aspect}': {e}"
+        msg = (f"Updated '{aspect}' ({', '.join(fields.keys())}); "
+               f"status now {doc.status}.")
+        if warnings:
+            msg += " Warnings: " + "; ".join(warnings)
+        return msg
 
     return StructuredTool.from_function(
-        coroutine=edit_gdd_doc, name="edit_gdd_doc",
-        description="Surgically replace a unique block of a GDD doc. old_string "
-                    "must match the current body exactly and uniquely (or set "
-                    "replace_all=true). Prefer this over rewriting a whole doc.",
+        coroutine=set_gdd_fields, name="set_gdd_fields",
+        description="Set one or more typed fields on a GDD aspect. 'fields' maps field "
+                    "keys to values: numbers, percents ('96%'), ratios ('1:200'), enums, "
+                    "lists, or table fields as a list of row objects (one key per column). "
+                    "Only the keys you pass change. Read the doc first for the field keys.",
     )
 
 
@@ -322,8 +325,7 @@ class ToolFactory:
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
         "read_gdd_doc": build_read_gdd_doc_tool,
-        "write_gdd_doc": build_write_gdd_doc_tool,
-        "edit_gdd_doc": build_edit_gdd_doc_tool,
+        "set_gdd_fields": build_set_gdd_fields_tool,
         "set_doc_status": build_set_doc_status_tool,
         "ask_user_question": build_ask_user_question_tool,
         "scene_add_node": build_scene_add_node_tool,

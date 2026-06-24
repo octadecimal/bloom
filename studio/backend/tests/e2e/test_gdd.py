@@ -66,4 +66,25 @@ async def test_design_game_seeds_docs_and_asks_a_question(live_server):
     payload = json.loads(seen["question_steps"][0]["step"]["content"])
     assert payload["kind"] == "question", f"unexpected step payload: {payload}"
 
+    # 3. Concreteness: once drafted, the paytable doc must contain a real markdown
+    #    table (numeric payout rows), not hollow "to be determined" prose.
+    #    The paytable may not be drafted yet at question-interrupt time, so poll
+    #    until its status is no longer "empty" (deadline ~10 s).
+    async with httpx.AsyncClient(base_url=live_server) as http:
+        paytable_deadline = asyncio.get_event_loop().time() + 10
+        while asyncio.get_event_loop().time() < paytable_deadline:
+            docs = (await http.get(f"/games/{game_id}/gdd/docs")).json()
+            paytable = next((d for d in docs if d["aspect"] == "paytable"), None)
+            if paytable is not None and paytable.get("status") != "empty":
+                break
+            await asyncio.sleep(0.25)
+
+    assert paytable is not None, "paytable doc not found"
+    body = paytable["body"]
+    lowered = body.lower()
+    assert "to be determined" not in lowered
+    assert "will outline" not in lowered
+    # A rendered table has header pipes and at least one data row.
+    assert body.count("|") >= 8, f"paytable has no table rows:\n{body}"
+
     await client.disconnect()

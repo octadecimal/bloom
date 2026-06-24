@@ -654,3 +654,73 @@ async def test_pending_approval_future_not_leaked_on_runner_failure(mongo_db):
     assert hub._pending_approvals == {}, (
         f"Expected no pending approvals after error, got: {hub._pending_approvals}"
     )
+
+
+# --- design-router routing (Problem A) ---
+class RoutingFakeGddHub:
+    def __init__(self):
+        self.seeded: list[str] = []
+
+    async def seed_taxonomy(self, game_id):
+        self.seeded.append(game_id)
+        return []
+
+
+class RouterStubRunner:
+    """Captures the spec it ran and emits a minimal final run."""
+
+    def __init__(self):
+        self.skill = None
+
+    async def run(self, *, messages, model, skill, args, ctx, run_id=None, on_approval=None):
+        self.skill = skill
+        yield StepStarted(0, "final")
+        yield StepToken(0, "Set Math Model → bonus hit rate = 1:200.")
+        yield StepCompleted(0, "complete", "Set Math Model → bonus hit rate = 1:200.")
+        yield RunFinished("completed")
+
+
+@pytest.mark.asyncio
+async def test_game_room_plain_chat_routes_through_design_router(mongo_db):
+    from app.runs import RunStore
+    from app.gdd.router import DESIGN_ROUTER_NAME
+
+    sio = FakeSio()
+    store = SkillFakeStore()          # get_room sets game_id="g1"
+    runner = RouterStubRunner()
+    gdd_hub = RoutingFakeGddHub()
+    hub = RoomHub(
+        sio, store, GatedChatService(), run_store=RunStore(mongo_db),
+        turn_runner=runner, skills=FakeSkills(), gdd_hub=gdd_hub,
+    )
+
+    await hub.handle_prompt("r1", "Alice", "set the bonus hit rate to 1:200")
+    await asyncio.wait_for(_wait_event(sio, "run_completed"), timeout=2)
+
+    names = sio.names()
+    assert "run_started" in names and "run_completed" in names
+    assert "message_completed" not in names            # not the legacy plain path
+    assert runner.skill is not None
+    assert runner.skill.name == DESIGN_ROUTER_NAME
+    assert "set_gdd_fields" in runner.skill.tools
+    assert "g1" in gdd_hub.seeded                       # taxonomy seeded for the game
+
+
+@pytest.mark.asyncio
+async def test_plain_chat_without_game_uses_no_tool_path(mongo_db):
+    from app.runs import RunStore
+
+    sio = FakeSio()
+    store = FakeStore()               # get_room → game_id=None
+    runner = RouterStubRunner()
+    gdd_hub = RoutingFakeGddHub()
+    hub = RoomHub(
+        sio, store, GatedChatService(), run_store=RunStore(mongo_db),
+        turn_runner=runner, skills=FakeSkills(), gdd_hub=gdd_hub,
+    )
+
+    await hub.handle_prompt("r1", "Alice", "hello")
+    await asyncio.wait_for(_wait_event(sio, "message_completed"), timeout=2)
+
+    assert "run_started" not in sio.names()             # legacy plain path
+    assert gdd_hub.seeded == []                          # router never engaged
