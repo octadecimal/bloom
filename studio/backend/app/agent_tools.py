@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
 
+from app.gdd.store import GddEditError
+
 
 @dataclass
 class ToolContext:
@@ -10,6 +12,8 @@ class ToolContext:
     game_id: str
     asset_store: object
     asset_hub: object
+    gdd_store: object = None
+    gdd_hub: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -82,16 +86,100 @@ def build_delete_asset_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_list_gdd_docs_tool(ctx: ToolContext) -> BaseTool:
+    async def list_gdd_docs() -> str:
+        docs = await ctx.gdd_store.list_docs(ctx.game_id)
+        if not docs:
+            return "No GDD docs yet."
+        lines = []
+        for d in docs:
+            lines.append(f"## {d.title} (aspect={d.aspect}, status={d.status})")
+            lines.append(d.body or "(empty)")
+        return "\n\n".join(lines)
+
+    return StructuredTool.from_function(
+        coroutine=list_gdd_docs, name="list_gdd_docs",
+        description="List every GDD doc for the current game with its aspect, "
+                    "status, and full markdown body.",
+    )
+
+
+def build_read_gdd_doc_tool(ctx: ToolContext) -> BaseTool:
+    async def read_gdd_doc(aspect: str) -> str:
+        doc = await ctx.gdd_store.get_doc(ctx.game_id, aspect)
+        if doc is None:
+            return f"No GDD doc for aspect '{aspect}'."
+        return f"status={doc.status}\n\n{doc.body or '(empty)'}"
+
+    return StructuredTool.from_function(
+        coroutine=read_gdd_doc, name="read_gdd_doc",
+        description="Read one GDD doc's exact current markdown by aspect. "
+                    "Always read before editing so old_string matches real text.",
+    )
+
+
+def build_write_gdd_doc_tool(ctx: ToolContext) -> BaseTool:
+    async def write_gdd_doc(aspect: str, title: str, body: str,
+                            status: str = "drafted") -> str:
+        await ctx.gdd_hub.write_doc(ctx.game_id, aspect, title, body, status)
+        return f"Wrote '{title}' (aspect {aspect}, status {status})."
+
+    return StructuredTool.from_function(
+        coroutine=write_gdd_doc, name="write_gdd_doc",
+        description="Create or fully overwrite a GDD doc's markdown body. Use for "
+                    "the initial draft of each aspect. status is one of "
+                    "empty|drafted|needs_input|complete.",
+    )
+
+
+def build_edit_gdd_doc_tool(ctx: ToolContext) -> BaseTool:
+    async def edit_gdd_doc(aspect: str, old_string: str, new_string: str,
+                           replace_all: bool = False) -> str:
+        try:
+            await ctx.gdd_hub.edit_doc(ctx.game_id, aspect, old_string,
+                                       new_string, replace_all)
+        except GddEditError as e:
+            return f"Edit failed: {e} Read the doc again and retry."
+        return f"Edited '{aspect}'."
+
+    return StructuredTool.from_function(
+        coroutine=edit_gdd_doc, name="edit_gdd_doc",
+        description="Surgically replace a unique block of a GDD doc. old_string "
+                    "must match the current body exactly and uniquely (or set "
+                    "replace_all=true). Prefer this over rewriting a whole doc.",
+    )
+
+
+def build_set_doc_status_tool(ctx: ToolContext) -> BaseTool:
+    async def set_doc_status(aspect: str, status: str) -> str:
+        await ctx.gdd_hub.set_status(ctx.game_id, aspect, status)
+        return f"Set '{aspect}' status to {status}."
+
+    return StructuredTool.from_function(
+        coroutine=set_doc_status, name="set_doc_status",
+        description="Set a GDD doc's status (empty|drafted|needs_input|complete) "
+                    "without changing its body.",
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
         "list_assets": build_list_assets_tool,
         "delete_asset": build_delete_asset_tool,
+        "list_gdd_docs": build_list_gdd_docs_tool,
+        "read_gdd_doc": build_read_gdd_doc_tool,
+        "write_gdd_doc": build_write_gdd_doc_tool,
+        "edit_gdd_doc": build_edit_gdd_doc_tool,
+        "set_doc_status": build_set_doc_status_tool,
+        # ask_user_question added in Task 5
     }
 
-    def __init__(self, asset_store, asset_hub):
+    def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None):
         self._asset_store = asset_store
         self._asset_hub = asset_hub
+        self._gdd_store = gdd_store
+        self._gdd_hub = gdd_hub
 
     def known_tool_names(self) -> set[str]:
         return set(self._BUILDERS)

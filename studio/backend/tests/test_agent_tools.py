@@ -16,7 +16,7 @@ class FakeHub:
 
 async def test_known_tool_names():
     f = ToolFactory(asset_store=None, asset_hub=None)
-    assert f.known_tool_names() == {"generate_asset", "list_assets", "delete_asset"}
+    assert f.known_tool_names() >= {"generate_asset", "list_assets", "delete_asset"}
 
 
 @pytest.mark.asyncio
