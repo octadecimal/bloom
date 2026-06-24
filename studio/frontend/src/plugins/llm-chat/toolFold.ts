@@ -1,8 +1,6 @@
 import type { IRunStep } from './state';
 
-export type IRenderStep =
-  | { kind: 'passthrough'; step: IRunStep }
-  | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status'] };
+export type IRenderStep = { kind: 'passthrough'; step: IRunStep } | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status'] };
 
 type IToolEntry = Extract<IRenderStep, { kind: 'tool' }>;
 
@@ -13,7 +11,7 @@ type IToolEntry = Extract<IRenderStep, { kind: 'tool' }>;
  * earliest still-unmatched tool_call with the same name (in this sequential
  * runner there is only ever one open call, so ordering is unambiguous).
  */
-export function foldToolSteps(steps: IRunStep[]): IRenderStep[] {
+export function foldToolSteps(steps: readonly IRunStep[]): IRenderStep[] {
   const out: IRenderStep[] = [];
   const openCalls: IToolEntry[] = []; // unmatched tool_call entries already pushed to `out`
 
