@@ -17,3 +17,27 @@ pub struct Metrics {
     /// RTP contributed by all features.
     pub feature_rtp: f64,
 }
+
+/// An acceptable inclusive range for one feature's hit-rate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HitRateBand {
+    pub min: f64,
+    pub max: f64,
+}
+
+/// Desired characteristics + curation parameters for a curation run.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TargetSpec {
+    pub rtp_target: f64,
+    pub rtp_tolerance: f64,
+    pub volatility_min: f64,
+    pub volatility_max: f64,
+    /// One band per feature in `model.bonuses`, in order.
+    pub bonus_hit_rate_bands: Vec<HitRateBand>,
+    /// Number of seeds frozen into the pool.
+    pub pool_size: usize,
+    /// Number of rounds simulated to measure + draw the pool from.
+    pub candidate_count: usize,
+    /// Max distance curation may move realized RTP from the measured model RTP.
+    pub realized_correction_band: f64,
+}
