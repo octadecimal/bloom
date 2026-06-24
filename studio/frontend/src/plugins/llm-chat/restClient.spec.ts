@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getModels, getRooms, createRoom, getMessages, getSkills } from './restClient';
+import { getModels, getRooms, createRoom, getMessages, getSkills, getRuns } from './restClient';
 import { BACKEND_URL } from './config';
 
 function mockFetch(json: unknown, status = 200) {
@@ -48,6 +48,13 @@ describe('restClient', () => {
   it('throws on non-ok response', async () => {
     vi.stubGlobal('fetch', mockFetch({ detail: 'nope' }, 500));
     await expect(getRooms()).rejects.toThrow();
+  });
+
+  it('getRuns GETs /rooms/:id/runs', async () => {
+    const fetchMock = mockFetch([]);
+    vi.stubGlobal('fetch', fetchMock);
+    await getRuns('r1');
+    expect(fetchMock).toHaveBeenCalledWith(`${BACKEND_URL}/rooms/r1/runs`);
   });
 
   it('getSkills GETs /skills', async () => {
