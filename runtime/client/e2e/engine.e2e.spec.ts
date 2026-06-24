@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { resolvePorts, readRepoEnv } from '../../../tools/ports.mts';
+
+const RUNTIME_URL = `http://localhost:${resolvePorts(readRepoEnv()).runtime}`;
 
 const HARNESS = `
-  <iframe id="engine" src="http://localhost:4300/" width="640" height="480" style="border:0"></iframe>
+  <iframe id="engine" src="${RUNTIME_URL}/" width="640" height="480" style="border:0"></iframe>
   <script>
     window.__inbound = [];
     const frame = document.getElementById('engine');
@@ -11,7 +14,7 @@ const HARNESS = `
   </script>`;
 
 test('engine handshakes, accepts live ops, and reflects them in the model', async ({ page }) => {
-  await page.goto('http://localhost:4300/');
+  await page.goto('/');
   await page.setContent(HARNESS);
 
   // Handshake: the iframe posts `ready` to the parent.
@@ -44,6 +47,6 @@ test('standalone mode builds a scene from ?doc=', async ({ page }) => {
       edges: [{ id: 'e1', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 's1', port: 'parent' } }],
     }),
   );
-  await page.goto(`http://localhost:4300/?doc=data:application/json,${doc}`);
+  await page.goto(`/?doc=data:application/json,${doc}`);
   await expect.poll(() => page.evaluate(() => (window as any).__engineModel?.toDocument().nodes.s1 != null)).toBe(true);
 });

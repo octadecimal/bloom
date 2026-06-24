@@ -12,6 +12,16 @@ describe('resolvePorts', () => {
     });
   });
 
+  it("treats explicit '0' identically to unset", () => {
+    expect(resolvePorts({ BLOOM_PORT_OFFSET: '0' })).toEqual({
+      offset: 0,
+      backend: 8000,
+      frontend: 4200,
+      runtime: 4300,
+      backendUrl: 'http://localhost:8000',
+    });
+  });
+
   it('derives every port from a single offset', () => {
     expect(resolvePorts({ BLOOM_PORT_OFFSET: '1' })).toEqual({
       offset: 1,

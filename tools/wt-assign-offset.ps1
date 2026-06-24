@@ -10,7 +10,7 @@ $envOut = Join-Path $Target '.env'
 if (Test-Path $envOut) {
     (Get-Content $envOut) |
         Where-Object { $_ -notmatch '^\s*BLOOM_PORT_OFFSET\s*=' } |
-        Set-Content $envOut
+        Set-Content $envOut -Encoding utf8
 }
 
 # Collect offsets already in use across every registered worktree (primary = 0).
@@ -22,7 +22,7 @@ foreach ($p in $paths) {
     $f = Join-Path $p '.env'
     if (Test-Path $f) {
         $m = Select-String -Path $f -Pattern '^\s*BLOOM_PORT_OFFSET\s*=\s*(\d+)' | Select-Object -First 1
-        if ($m) { $used += [int]$m.Matches[0].Groups[1].Value }
+        if ($m -and $m.Matches.Count -gt 0) { $used += [int]$m.Matches[0].Groups[1].Value }
     }
 }
 
