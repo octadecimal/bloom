@@ -24,6 +24,8 @@ export function applyOpToDocument(doc: IGameDocument, op: ISceneOp): IGameDocume
     case 'setProp': {
       const existing = doc.nodes[op.id];
       if (!existing) return doc; // trusting: ignore unknown (backend wouldn't have sent it)
+      // Guard: drop ops that could pollute Object.prototype (mirrors TS engine + Python guard)
+      if (op.path.split('.').some((k) => k === '__proto__' || k === 'constructor' || k === 'prototype')) return doc;
       const props = setNested(existing.props, op.path, op.value);
       return { ...doc, nodes: { ...doc.nodes, [op.id]: { ...existing, props } } };
     }

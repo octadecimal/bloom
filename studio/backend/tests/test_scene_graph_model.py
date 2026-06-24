@@ -173,6 +173,18 @@ def test_apply_batch_success():
     assert m.get_node("s") is not None and m.get_edge("e1") is not None
 
 
+def test_set_prop_rejects_prototype_pollution_paths():
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "s", "type": "Sprite"})
+    for bad in ("__proto__", "constructor", "prototype", "a.__proto__.x"):
+        with pytest.raises(OpError) as e:
+            m.apply({"kind": "setProp", "id": "s", "path": bad, "value": 1})
+        assert e.value.code == "invalid_path"
+    # a normal nested path still works
+    m.apply({"kind": "setProp", "id": "s", "path": "position.x", "value": 5})
+    assert m.get_node("s")["props"]["position"]["x"] == 5
+
+
 def test_load_round_trips_document():
     doc = {
         "version": 1,

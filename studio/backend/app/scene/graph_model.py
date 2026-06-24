@@ -70,11 +70,16 @@ class GraphModel:
             del self._edges[e["id"]]
         del self._nodes[node_id]
 
+    _DISALLOWED_PATH_SEGMENTS = frozenset({"__proto__", "constructor", "prototype"})
+
     def _set_prop(self, node_id: str, path: str, value) -> None:
         node = self._nodes.get(node_id)
         if node is None:
             raise OpError("unknown_node", f"no such node: {node_id}")
         keys = path.split(".")
+        for k in keys:
+            if k in self._DISALLOWED_PATH_SEGMENTS:
+                raise OpError("invalid_path", f"disallowed path segment: {k}")
         cursor = node["props"]
         for k in keys[:-1]:
             if not isinstance(cursor.get(k), dict):

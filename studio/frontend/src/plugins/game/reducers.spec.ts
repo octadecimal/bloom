@@ -47,6 +47,22 @@ describe('applyOpToDocument', () => {
     expect(d.edges).toHaveLength(0);
   });
 
+  it('ignores prototype-pollution setProp paths (no Object.prototype mutation)', () => {
+    let d = applyOpToDocument(emptyDocument(), { kind: 'addNode', id: 's', type: 'Sprite' });
+    d = applyOpToDocument(d, { kind: 'setProp', id: 's', path: '__proto__', value: { polluted: true } });
+    // Object.prototype must not be polluted:
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    // document returned unchanged (node still has empty props):
+    expect(d.nodes.s.props).toEqual({});
+  });
+
+  it('ignores nested prototype-pollution setProp paths', () => {
+    let d = applyOpToDocument(emptyDocument(), { kind: 'addNode', id: 's', type: 'Sprite' });
+    d = applyOpToDocument(d, { kind: 'setProp', id: 's', path: 'a.__proto__.x', value: 1 });
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+    expect(d.nodes.s.props).toEqual({});
+  });
+
   it('removeNode cascades incident edges', () => {
     let d = emptyDocument();
     for (const id of ['root', 's', 'tex'])
