@@ -14,8 +14,12 @@ export interface ICurationParams {
 }
 
 export interface IMetrics {
-  rtp: number; volatility: number; hitFrequency: number;
-  baseRtp: number; featureRtp: number; bonusHitRates: number[];
+  rtp: number;
+  volatility: number;
+  hitFrequency: number;
+  baseRtp: number;
+  featureRtp: number;
+  bonusHitRates: number[];
 }
 
 export interface ICurationResult {
@@ -28,8 +32,11 @@ export interface ICurationResult {
 }
 
 export interface ISlotModelDoc {
-  id: string; gameId: string; model: unknown;
-  params: ICurationParams; result: ICurationResult | null;
+  id: string;
+  gameId: string;
+  model: unknown;
+  params: ICurationParams;
+  result: ICurationResult | null;
 }
 
 export interface ISimulatorState {
@@ -45,8 +52,14 @@ export interface ISimulatorState {
 
 export function makeInitialState(): ISimulatorState {
   return {
-    connection: 'disconnected', activeGameId: null, modelText: '',
-    params: null, status: 'idle', progress: null, result: null, loadStatus: 'idle',
+    connection: 'disconnected',
+    activeGameId: null,
+    modelText: '',
+    params: null,
+    status: 'idle',
+    progress: null,
+    result: null,
+    loadStatus: 'idle',
   };
 }
 

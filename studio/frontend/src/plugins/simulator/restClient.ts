@@ -10,10 +10,7 @@ export async function getSlotModel(gameId: string): Promise<ISlotModelDoc> {
   return okJson<ISlotModelDoc>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model`));
 }
 
-export async function putSlotModel(
-  gameId: string,
-  patch: { model?: unknown; params?: ICurationParams },
-): Promise<ISlotModelDoc> {
+export async function putSlotModel(gameId: string, patch: { model?: unknown; params?: ICurationParams }): Promise<ISlotModelDoc> {
   return okJson<ISlotModelDoc>(
     await fetch(`${BACKEND_URL}/games/${gameId}/slot-model`, {
       method: 'PUT',
@@ -29,7 +26,5 @@ export async function curate(gameId: string): Promise<void> {
 }
 
 export async function getResult(gameId: string): Promise<ICurationResult | null> {
-  return okJson<ICurationResult | null>(
-    await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/result`),
-  );
+  return okJson<ICurationResult | null>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/result`));
 }
