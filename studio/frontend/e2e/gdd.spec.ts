@@ -34,9 +34,12 @@ async function openGddViewer(page: Page) {
   await expect(page.getByTestId('view-open-gdd/viewer')).toBeVisible();
   await page.getByTestId('view-open-gdd/viewer').click();
   // Pane may land in a non-active tab — just wait for attachment.
-  await page.getByTestId('gdd-no-game').waitFor({ state: 'attached', timeout: 5_000 }).catch(() => {
-    // If gdd-no-game isn't there it means the pane already has a game context — that's fine too.
-  });
+  await page
+    .getByTestId('gdd-no-game')
+    .waitFor({ state: 'attached', timeout: 5_000 })
+    .catch(() => {
+      // If gdd-no-game isn't there it means the pane already has a game context — that's fine too.
+    });
 }
 
 test('design-game seeds the GDD skeleton and asks a question in chat', async ({ page, request }) => {
