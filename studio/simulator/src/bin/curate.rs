@@ -41,14 +41,16 @@ struct TargetJson {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 6 {
-        eprintln!("usage: curate <model.json> <target.json> <package_id> <out.pkg> <out.report.txt>");
+        eprintln!(
+            "usage: curate <model.json> <target.json> <package_id> <out.pkg> <out.report.txt>"
+        );
         std::process::exit(2);
     }
 
-    let model: SlotModel =
-        serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model")).expect("parse model");
-    let tj: TargetJson =
-        serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target")).expect("parse target");
+    let model: SlotModel = serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model"))
+        .expect("parse model");
+    let tj: TargetJson = serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target"))
+        .expect("parse target");
 
     let target = TargetSpec {
         rtp_target: tj.rtp_target,
@@ -58,7 +60,10 @@ fn main() {
         bonus_hit_rate_bands: tj
             .bonus_hit_rate_bands
             .iter()
-            .map(|b| HitRateBand { min: b.min, max: b.max })
+            .map(|b| HitRateBand {
+                min: b.min,
+                max: b.max,
+            })
             .collect(),
         pool_size: tj.pool_size,
         candidate_count: tj.candidate_count,

@@ -1,8 +1,8 @@
 //! Simulate rounds through the math engine and measure aggregate characteristics.
 
+use crate::target::Metrics;
 use bloom_math::mechanics::slots::{evaluate, SlotModel};
 use rayon::prelude::*;
-use crate::target::Metrics;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoundSample {
@@ -70,16 +70,25 @@ pub fn measure(samples: &[RoundSample]) -> Metrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bloom_math::mechanics::slots::{Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole};
     use crate::target::Metrics;
+    use bloom_math::mechanics::slots::{Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole};
 
     fn toy() -> SlotModel {
         SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
             reels: vec![vec![0]],
             rows: 1,
             paylines: vec![vec![0]],
-            paytable: Paytable { entries: vec![PaytableEntry { symbol: 0, count: 1, payout: 1 }] },
+            paytable: Paytable {
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 1,
+                    payout: 1,
+                }],
+            },
             bonuses: vec![],
         }
     }
@@ -107,17 +116,34 @@ mod tests {
         // paytable: sym1 count1 -> 1 ; sym2 count1 -> 5. Closed-form RTP = 0.9.
         SlotModel {
             symbols: vec![
-                SymbolDef { id: 0, role: SymbolRole::Normal },
-                SymbolDef { id: 1, role: SymbolRole::Normal },
-                SymbolDef { id: 2, role: SymbolRole::Normal },
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 1,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 2,
+                    role: SymbolRole::Normal,
+                },
             ],
             reels: vec![vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
             rows: 1,
             paylines: vec![vec![0]],
             paytable: Paytable {
                 entries: vec![
-                    PaytableEntry { symbol: 1, count: 1, payout: 1 },
-                    PaytableEntry { symbol: 2, count: 1, payout: 5 },
+                    PaytableEntry {
+                        symbol: 1,
+                        count: 1,
+                        payout: 1,
+                    },
+                    PaytableEntry {
+                        symbol: 2,
+                        count: 1,
+                        payout: 5,
+                    },
                 ],
             },
             bonuses: vec![],

@@ -111,21 +111,45 @@ mod tests {
     pub fn sample_model() -> SlotModel {
         SlotModel {
             symbols: vec![
-                SymbolDef { id: 0, role: SymbolRole::Normal },
-                SymbolDef { id: 1, role: SymbolRole::Wild },
-                SymbolDef { id: 9, role: SymbolRole::Scatter },
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 1,
+                    role: SymbolRole::Wild,
+                },
+                SymbolDef {
+                    id: 9,
+                    role: SymbolRole::Scatter,
+                },
             ],
-            reels: vec![vec![0, 1, 9, 0, 0], vec![0, 0, 1, 9, 0], vec![9, 0, 1, 0, 0]],
+            reels: vec![
+                vec![0, 1, 9, 0, 0],
+                vec![0, 0, 1, 9, 0],
+                vec![9, 0, 1, 0, 0],
+            ],
             rows: 3,
             paylines: vec![vec![0, 0, 0], vec![1, 1, 1]],
             paytable: Paytable {
                 entries: vec![
-                    PaytableEntry { symbol: 0, count: 3, payout: 5 },
-                    PaytableEntry { symbol: 9, count: 3, payout: 2 },
+                    PaytableEntry {
+                        symbol: 0,
+                        count: 3,
+                        payout: 5,
+                    },
+                    PaytableEntry {
+                        symbol: 9,
+                        count: 3,
+                        payout: 2,
+                    },
                 ],
             },
             bonuses: vec![BonusFeature::FreeSpins {
-                trigger: TriggerSpec { symbol: 9, min_count: 3 },
+                trigger: TriggerSpec {
+                    symbol: 9,
+                    min_count: 3,
+                },
                 config: FreeSpinsConfig {
                     spins_awarded: 5,
                     retrigger: true,

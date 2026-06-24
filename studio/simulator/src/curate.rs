@@ -58,14 +58,24 @@ pub fn freeze_pool(
         // Pick the pool slot + reserve slot whose swap moves sum most in the
         // needed direction (deterministic: ties resolved by lowest index).
         let pool_pick = if raise {
-            pool.iter().enumerate().min_by_key(|&(_, &i)| samples[i].payout)
+            pool.iter()
+                .enumerate()
+                .min_by_key(|&(_, &i)| samples[i].payout)
         } else {
-            pool.iter().enumerate().max_by_key(|&(_, &i)| samples[i].payout)
+            pool.iter()
+                .enumerate()
+                .max_by_key(|&(_, &i)| samples[i].payout)
         };
         let res_pick = if raise {
-            reserve.iter().enumerate().max_by_key(|&(_, &i)| samples[i].payout)
+            reserve
+                .iter()
+                .enumerate()
+                .max_by_key(|&(_, &i)| samples[i].payout)
         } else {
-            reserve.iter().enumerate().min_by_key(|&(_, &i)| samples[i].payout)
+            reserve
+                .iter()
+                .enumerate()
+                .min_by_key(|&(_, &i)| samples[i].payout)
         };
 
         let (Some((pi, &pidx)), Some((ri, &ridx))) = (pool_pick, res_pick) else {
@@ -74,7 +84,11 @@ pub fn freeze_pool(
 
         let out_payout = samples[pidx].payout;
         let in_payout = samples[ridx].payout;
-        let helps = if raise { in_payout > out_payout } else { in_payout < out_payout };
+        let helps = if raise {
+            in_payout > out_payout
+        } else {
+            in_payout < out_payout
+        };
         if !helps {
             break;
         }
@@ -95,7 +109,13 @@ mod tests {
     use super::*;
 
     fn sample(seed: u64, payout: u64) -> RoundSample {
-        RoundSample { seed, payout, base_payout: payout, feature_payout: 0, feature_triggers: vec![] }
+        RoundSample {
+            seed,
+            payout,
+            base_payout: payout,
+            feature_payout: 0,
+            feature_triggers: vec![],
+        }
     }
 
     fn spec(pool_size: usize, rtp_target: f64) -> TargetSpec {
@@ -113,7 +133,9 @@ mod tests {
 
     #[test]
     fn faithful_sample_already_on_target_needs_no_swaps() {
-        let samples: Vec<_> = (0..10).map(|i| sample(i, if i % 2 == 0 { 0 } else { 2 })).collect();
+        let samples: Vec<_> = (0..10)
+            .map(|i| sample(i, if i % 2 == 0 { 0 } else { 2 }))
+            .collect();
         let pool = freeze_pool(&samples, &spec(10, 1.0), 1.0).unwrap();
         assert_eq!(pool.seeds.len(), 10);
         assert!((pool.realized_rtp - 1.0).abs() <= 0.001);
@@ -127,13 +149,19 @@ mod tests {
         // model_rtp ~ (0*4 + 2*8)/12 = 1.333; target 1.0 within band 0.05? |1.0-1.333|=0.333 > 0.05
         // so use a model_rtp close to target to allow correction:
         let pool = freeze_pool(&samples, &spec(4, 1.0), 1.0).unwrap();
-        assert!((pool.realized_rtp - 1.0).abs() <= 0.001, "got {}", pool.realized_rtp);
+        assert!(
+            (pool.realized_rtp - 1.0).abs() <= 0.001,
+            "got {}",
+            pool.realized_rtp
+        );
     }
 
     #[test]
     fn refuses_correction_beyond_band() {
         // model_rtp 0.0, target 1.0 -> needs to move 1.0 >> band 0.05.
-        let samples: Vec<_> = (0..8).map(|i| sample(i, if i < 4 { 0 } else { 2 })).collect();
+        let samples: Vec<_> = (0..8)
+            .map(|i| sample(i, if i < 4 { 0 } else { 2 }))
+            .collect();
         let err = freeze_pool(&samples, &spec(4, 1.0), 0.0).unwrap_err();
         assert!(matches!(err, CurateError::OutsideCorrectionBand { .. }));
     }

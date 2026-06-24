@@ -106,7 +106,12 @@ pub fn run_curation(
         bonus_rates,
     );
 
-    Ok(CurationOutput { package_bytes, metrics, pool, report })
+    Ok(CurationOutput {
+        package_bytes,
+        metrics,
+        pool,
+        report,
+    })
 }
 
 #[cfg(test)]
@@ -122,17 +127,34 @@ mod tests {
     fn measurable_model() -> SlotModel {
         SlotModel {
             symbols: vec![
-                SymbolDef { id: 0, role: SymbolRole::Normal },
-                SymbolDef { id: 1, role: SymbolRole::Normal },
-                SymbolDef { id: 2, role: SymbolRole::Normal },
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 1,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 2,
+                    role: SymbolRole::Normal,
+                },
             ],
             reels: vec![vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
             rows: 1,
             paylines: vec![vec![0]],
             paytable: Paytable {
                 entries: vec![
-                    PaytableEntry { symbol: 1, count: 1, payout: 1 },
-                    PaytableEntry { symbol: 2, count: 1, payout: 5 },
+                    PaytableEntry {
+                        symbol: 1,
+                        count: 1,
+                        payout: 1,
+                    },
+                    PaytableEntry {
+                        symbol: 2,
+                        count: 1,
+                        payout: 5,
+                    },
                 ],
             },
             bonuses: vec![],
@@ -158,7 +180,8 @@ mod tests {
 
     #[test]
     fn run_curation_builds_a_loadable_package() {
-        let out = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let out =
+            run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
         let content = verify_and_load(&out.package_bytes, &key().verifying_key()).expect("loads");
         assert_eq!(content.seeds.len(), 10_000);
         assert_eq!(content.envelope.mechanic, "slots@1");
@@ -174,10 +197,15 @@ mod tests {
 
     #[test]
     fn freeze_boundary_determinism_holds() {
-        let out = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let out =
+            run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
         let content = verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
         let model = from_payload(&content.math_payload).unwrap();
-        let sum: u64 = content.seeds.iter().map(|&s| evaluate(&model, s).total_payout).sum();
+        let sum: u64 = content
+            .seeds
+            .iter()
+            .map(|&s| evaluate(&model, s).total_payout)
+            .sum();
         let reexpanded_rtp = sum as f64 / content.seeds.len() as f64;
         assert!((reexpanded_rtp - out.pool.realized_rtp).abs() < 1e-9);
     }
@@ -204,12 +232,22 @@ mod tests {
     }
 
     fn metrics(rtp: f64, vol: f64, bonus: Vec<f64>) -> Metrics {
-        Metrics { rtp, volatility: vol, hit_frequency: 0.3, bonus_hit_rates: bonus, base_rtp: rtp, feature_rtp: 0.0 }
+        Metrics {
+            rtp,
+            volatility: vol,
+            hit_frequency: 0.3,
+            bonus_hit_rates: bonus,
+            base_rtp: rtp,
+            feature_rtp: 0.0,
+        }
     }
 
     #[test]
     fn within_all_bands_passes() {
-        let t = target(vec![HitRateBand { min: 0.0, max: 0.05 }]);
+        let t = target(vec![HitRateBand {
+            min: 0.0,
+            max: 0.05,
+        }]);
         assert!(verify(&metrics(0.955, 3.0, vec![0.02]), &t).is_ok());
     }
 
@@ -227,7 +265,10 @@ mod tests {
 
     #[test]
     fn feature_hit_rate_out_of_band_fails() {
-        let t = target(vec![HitRateBand { min: 0.0, max: 0.05 }]);
+        let t = target(vec![HitRateBand {
+            min: 0.0,
+            max: 0.05,
+        }]);
         assert!(verify(&metrics(0.955, 3.0, vec![0.20]), &t).is_err());
     }
 }
