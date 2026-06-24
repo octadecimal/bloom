@@ -42,7 +42,7 @@ export class GraphModel {
 
   toDocument(): IGameDocument {
     const nodes: Record<string, INode> = {};
-    for (const [id, n] of this.nodes) nodes[id] = { id: n.id, type: n.type, props: { ...n.props } };
+    for (const [id, n] of this.nodes) nodes[id] = { id: n.id, type: n.type, props: structuredClone(n.props) };
     return { version: 1, nodes, edges: [...this.edges.values()].map((e) => ({ ...e, from: { ...e.from }, to: { ...e.to } })) };
   }
 
@@ -150,7 +150,7 @@ export class GraphModel {
   private restore(doc: IGameDocument): void {
     this.nodes.clear();
     this.edges.clear();
-    for (const node of Object.values(doc.nodes)) this.nodes.set(node.id, { id: node.id, type: node.type, props: { ...node.props } });
+    for (const node of Object.values(doc.nodes)) this.nodes.set(node.id, { id: node.id, type: node.type, props: structuredClone(node.props) });
     for (const e of doc.edges) this.edges.set(e.id, { ...e });
   }
 }

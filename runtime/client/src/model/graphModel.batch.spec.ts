@@ -25,6 +25,18 @@ describe('GraphModel applyBatch', () => {
     ).toThrow(OpError);
     expect(m.getNode('a')).toBeUndefined(); // first op rolled back
   });
+
+  it('rolls back a nested prop mutation when a later op fails', () => {
+    const m = new GraphModel();
+    m.apply({ kind: 'addNode', id: 's', type: 'Sprite', props: { position: { x: 1, y: 2 } } });
+    expect(() =>
+      m.applyBatch([
+        { kind: 'setProp', id: 's', path: 'position.x', value: 999 },
+        { kind: 'removeNode', id: 'ghost' }, // throws -> whole batch rolls back
+      ]),
+    ).toThrow(OpError);
+    expect(m.getNode('s')!.props.position).toEqual({ x: 1, y: 2 }); // nested mutation undone
+  });
 });
 
 describe('GraphModel load', () => {
