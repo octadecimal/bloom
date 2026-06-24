@@ -7,12 +7,18 @@ const openRoom = vi.fn();
 const closeRoom = vi.fn();
 const openGame = vi.fn();
 const closeGame = vi.fn();
+const openGameDocs = vi.fn();
+const closeGameDocs = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
 vi.mock('../../plugins/assets/actions', () => ({
   openGame: (id: string) => openGame(id),
   closeGame: () => closeGame(),
+}));
+vi.mock('../../plugins/gdd/actions', () => ({
+  openGameDocs: (id: string) => openGameDocs(id),
+  closeGameDocs: () => closeGameDocs(),
 }));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
 vi.mock('../Workbench', () => ({
@@ -28,6 +34,8 @@ beforeEach(() => {
   closeRoom.mockReset();
   openGame.mockReset();
   closeGame.mockReset();
+  openGameDocs.mockReset();
+  closeGameDocs.mockReset();
   error.mockReset();
 });
 

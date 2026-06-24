@@ -6,6 +6,16 @@ export function initGdd(): void {
   gddSock().connect();
 }
 
+export function closeGameDocs(): void {
+  const s = gddSlice();
+  const prev = s.activeGameId.get();
+  if (prev) gddSock().leaveGdd(prev);
+  s.activeGameId.set(null);
+  s.docs.set([]);
+  s.docsStatus.set('idle');
+  s.selectedAspect.set(null);
+}
+
 export async function openGameDocs(gameId: string): Promise<void> {
   gddSlice().activeGameId.set(gameId);
   gddSlice().docsStatus.set('loading');

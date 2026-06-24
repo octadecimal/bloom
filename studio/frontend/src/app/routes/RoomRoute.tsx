@@ -4,6 +4,7 @@ import { getRooms } from '../../plugins/llm-chat/restClient';
 import type { IRoom } from '../../plugins/llm-chat/state';
 import { openRoom, closeRoom } from '../../plugins/llm-chat/actions';
 import { openGame, closeGame } from '../../plugins/assets/actions';
+import { openGameDocs, closeGameDocs } from '../../plugins/gdd/actions';
 import { notify } from '../../lib/notify';
 import { ActiveRoomProvider } from './activeRoom';
 import { Workbench } from '../Workbench';
@@ -27,6 +28,7 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
           setRoom(found);
           void openRoom(roomId!);
           if (found.gameId) void openGame(found.gameId);
+          if (found.gameId) void openGameDocs(found.gameId);
           setState('valid');
         } else {
           setState('invalid');
@@ -43,6 +45,7 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
     () => () => {
       closeRoom();
       closeGame();
+      closeGameDocs();
     },
     [],
   );
