@@ -99,12 +99,38 @@ server deserialize it identically.
 | **grid**          | reels × rows (e.g. 5×3): the visible window. A spin picks a stop per reel and shows `rows` cells.       |
 | **paylines**      | list of row-index-per-reel patterns. Left-aligned matching runs; wild substitutes.                     |
 | **paytable**      | `(symbol, count) → payout` in bet-multiples. Scatters pay by count, anywhere on the grid.              |
-| **free-spins**    | trigger (scatter count → spins awarded), retrigger rule, in-feature win multiplier, optional separate feature strips. |
+| **bonuses**       | a **list** of bonus features (`Vec<BonusFeature>`). `BonusFeature` is an enum with **one variant today** — `FreeSpins` — each carrying its **own trigger** (a symbol + min count, counted on the base grid) and config (spins awarded, retrigger, multiplier, optional feature strips). |
 
 Integer-only throughout the outcome path (no floats), per `trusted/AGENTS.md`.
 
+**Why a list (and what it is _not_).** Real slots eventually carry several distinct
+bonus features, and our targets were always plural ("various bonus feature hit
+_rates_"), so the model carries a list and the simulator reports a hit-rate **per
+feature**. The list is the durable, end-state shape. It is deliberately **not** a
+feature framework: there is no registry, loader, precedence, mutual-exclusion, or
+cross-feature arbitration. We hold that line (umbrella §7) until a second feature
+_type_ is real.
+
+### 3.1 The frozen `slots@1` composition rule
+
+Because mechanics are append-only, `slots@1` commits — forever — to **one trivial,
+documented composition rule**, and any game needing richer composition is authored
+against a future `slots@2` (never an edit to `slots@1`). The rule:
+
+- Each bonus feature checks **its own trigger** against the **base grid** only.
+- Triggered features run **in list order**; their payouts **sum**.
+- Within a feature, **retrigger** (if enabled) re-checks **that same feature's**
+  trigger against each feature-spin grid and awards more of **its own** spins.
+- **No nesting / cross-triggering:** a feature's spins can never trigger a
+  _different_ feature.
+
+This rule is a _safe_ forever-commitment precisely because versioning gives richer
+composition a clean home in `slots@2`; we never have to retrofit arbitration into
+`slots@1`.
+
 **Mechanic versioning:** this is the `slots@1` mechanic. Any future behavior change
-is a new mechanic _version_, never an edit (umbrella §7, `trusted/AGENTS.md`).
+— including richer feature composition — is a new mechanic _version_, never an edit
+(umbrella §7, `trusted/AGENTS.md`).
 
 ---
 
@@ -115,13 +141,18 @@ is a new mechanic _version_, never an edit (umbrella §7, `trusted/AGENTS.md`).
    strip cells per reel, wrapping).
 3. Evaluate **line wins** (left-aligned runs, wild substitution) **+ scatter pays**
    → base payout (integer bet-multiples).
-4. If the scatter trigger is met → **free-spins sub-loop**: each free spin draws
-   from the _same_ PRNG stream, applies the in-feature multiplier, and handles
-   retriggers → feature payout.
+4. **Bonus features** (per the §3.1 composition rule): for each feature in
+   `model.bonuses`, in list order, if its trigger is met on the base grid, run that
+   feature's sub-loop (each spin draws from the _same_ PRNG stream, applies the
+   feature's multiplier, handles that feature's own retrigger) → that feature's
+   payout. Feature payouts sum.
 5. Return `RoundOutcome`:
-   - the base grid and any feature spins (the **symbolic outcome** — "what happened"),
-   - **total payout** in integer bet-multiples ("what it paid"),
-   - feature flags: `triggered`, `free_spins_played`, base-vs-feature payout split.
+   - the base grid (the base **symbolic outcome** — "what happened"),
+   - a **per-feature breakdown** (`Vec<FeatureOutcome>`, one entry per
+     `model.bonuses` in order): `triggered`, `spins_played`, this feature's
+     `payout`, and its spin grids,
+   - **base payout**, **feature payout** (sum), **total payout** — all integer
+     bet-multiples ("what it paid").
 
 **Determinism contract (sacred):** one seed drives the _entire_ round, including a
 variable-length bonus — fine, because the PRNG stream is deterministic. The same
@@ -143,7 +174,7 @@ rule).
 TargetSpec {
   rtp_target, rtp_tolerance,
   volatility_band,            // e.g. an acceptable std-dev / volatility-index range
-  bonus_hit_rate_band,
+  bonus_hit_rate_bands,       // ONE band per feature in model.bonuses, in order
   pool_size P,                // a real design parameter (umbrella §4)
   candidate_count M,          // rounds simulated to measure + draw the pool from
   realized_correction_band,   // the ±0.5% honesty guardrail (§2.1)
@@ -162,10 +193,12 @@ targets + master seed → identical curated pool.
    - **RTP** = mean payout / bet
    - **Volatility** = std-dev of per-round payout (report as a volatility index)
    - **Hit frequency** = % of rounds paying > 0
-   - **Bonus hit rate** = % of rounds triggering free spins
+   - **Bonus hit rate — per feature**: % of rounds triggering each feature in
+     `model.bonuses` (a vector of rates, one per feature)
    - **Base-vs-feature RTP split**
 4. **Verify vs targets.** If the model's measured characteristics fall outside the
-   target bands, the run **FAILS with a report**. The simulator **never reshapes**
+   target bands (RTP, volatility, and **each** feature's hit-rate band), the run
+   **FAILS with a report**. The simulator **never reshapes**
    to force targets. A failed run is the signal to retune the model (layer 3, §8).
 5. **Freeze the pool** — select P seeds that are a **faithful sample** of the model:
    - **Default (A2):** minimal stratified selection / greedy swaps so _realized_
@@ -222,6 +255,10 @@ additive (umbrella §7 — _labels and placement, not machinery_):
 - **`RoundOutcome`** is the seam between "what happened" and "what it paid"
   (umbrella §10). Slot-specific fields are named and located so a future mechanic's
   outcome is a sibling, not a rewrite.
+- **`BonusFeature` (enum)** is the seam for new feature _types_: a second feature
+  (hold-and-spin, pick-bonus) is a new variant + one match arm + a `slots@2` bump —
+  additive, no framework. The §3.1 composition rule is the labeled place where
+  cross-feature arbitration would later live (and is explicitly empty today).
 - **The kernel entry point** (`evaluate(model, seed)`) is the single call both the
   simulator and the future server make — the shared-core seam.
 - **The model schema ↔ `math_payload`** boundary: the kernel owns
@@ -273,8 +310,10 @@ Proposed starting values (all are target-spec inputs, tunable per game; umbrella
 
 ## 10. Build order within this effort
 
-1. **Math engine enrichment** (`trusted/math`): model schema → grid → line/scatter
-   payout → free-spins round → `RoundOutcome`; bit-reproducibility + payout tests.
+1. **Math engine enrichment** (`trusted/math`): model schema (incl. `bonuses` list
+   + `BonusFeature::FreeSpins`) → grid → line/scatter payout → per-feature bonus
+   loop (§3.1 rule) → `RoundOutcome` with per-feature breakdown; bit-reproducibility
+   + payout tests.
 2. **Simulator crate** (`studio/simulator`): generate → simulate (parallel) →
    measure → verify → freeze (A2) → build+sign; convergence, faithfulness,
    reproducibility, freeze-boundary tests.

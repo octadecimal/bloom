@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Enrich the certified slot math engine so one seed resolves to a full round _with payout_ (grid, paylines, free-spins bonus), then build a studio simulator that measures a model's RTP/volatility/hit-rates, verifies them against targets, and freezes a faithful, signed seed pool.
+**Goal:** Enrich the certified slot math engine so one seed resolves to a full round _with payout_ (grid, paylines, a list of bonus features), then build a studio simulator that measures a model's RTP/volatility/per-feature hit-rates, verifies them against targets, and freezes a faithful, signed seed pool.
 
-**Architecture:** Approach A — the math model (reel strips + paytable + free-spins config) _defines_ the characteristics; the seed pool is a faithful, bit-reproducible sample with only finite-sample correction. The kernel `slots::evaluate(model, seed) → RoundOutcome` is the shared core; the simulator and the future server are thin shells around it.
+**Architecture:** Approach A — the math model (reel strips + paytable + bonus-feature list) _defines_ the characteristics; the seed pool is a faithful, bit-reproducible sample with only finite-sample correction. The kernel `slots::evaluate(model, seed) → RoundOutcome` is the shared core; the simulator and the future server are thin shells around it.
 
 **Tech Stack:** Rust (edition 2021), Cargo workspace, `serde` + `postcard` (model serialization), `serde_json` (model authoring), `rayon` (parallel simulation), `ed25519-dalek` (package signing, via `bloom-package`).
 
@@ -13,6 +13,7 @@
 - **Determinism is sacred.** Integer-only math in the outcome path: no floats, no clock/time, no I/O, no randomness beyond the injected seed. `slots::evaluate` MUST be bit-reproducible across platforms forever. (Floats are allowed only in the simulator's _measurement_ aggregation, never in the kernel outcome.)
 - **Payouts are integer bet-multiples (`u64`)** everywhere in the kernel.
 - **This is mechanic `slots@1`.** Append-only and immutable once shipped; any later behavior change is a new mechanic version, never an edit (`trusted/AGENTS.md`).
+- **Frozen `slots@1` bonus composition rule (spec §3.1):** each feature checks its own trigger against the **base grid**; triggered features run in **list order**; their payouts **sum**; within a feature, retrigger re-checks **that same feature's** trigger against each feature-spin grid; **no nesting / cross-triggering**. Build **no** arbitration, precedence, exclusivity, nesting, or feature registry/loader — those wait for a second feature _type_.
 - **Do NOT modify `trusted/package`'s format.** It is certified and already done. The simulator consumes its public `build` / `verify_and_load` API unchanged. Provenance is emitted as a _separate_ sim-report artifact, not stuffed into the signed package.
 - **Nothing may depend on `studio/`.** `studio/simulator` may depend on `trusted/math` and `trusted/package`.
 - **TDD mandatory:** failing test first, watch it fail, minimal code to pass, commit. Semantic (Conventional Commits) messages.
@@ -25,27 +26,27 @@
 
 **`trusted/math` (enrich):**
 - Modify `trusted/math/Cargo.toml` — add `serde`, `postcard`.
-- Modify `trusted/math/src/mechanics/slots.rs` — becomes module root: declares `model` + `eval`, re-exports them. (Old toy `SlotModel`/`expand` removed; `rng.rs` and `SplitMix64` are unchanged and reused.)
-- Create `trusted/math/src/mechanics/slots/model.rs` — the slot math-model schema + serde + `to_payload`/`from_payload`.
-- Create `trusted/math/src/mechanics/slots/eval.rs` — `RoundOutcome` + `evaluate` + payout/feature helpers.
+- Modify `trusted/math/src/mechanics/slots.rs` — module root: declares `model` + `eval`, re-exports them. (Old toy `SlotModel`/`expand` removed; `rng.rs`/`SplitMix64` unchanged and reused.)
+- Create `trusted/math/src/mechanics/slots/model.rs` — model schema (incl. `bonuses: Vec<BonusFeature>`) + serde + `to_payload`/`from_payload`.
+- Create `trusted/math/src/mechanics/slots/eval.rs` — `RoundOutcome` + `FeatureOutcome` + `evaluate` + payout/feature helpers.
 
 **`studio/simulator` (new crate):**
-- Modify `Cargo.toml` (workspace) — add `studio/simulator` member.
+- Modify root `Cargo.toml` — add `studio/simulator` member.
 - Create `studio/simulator/Cargo.toml`.
-- Create `studio/simulator/src/lib.rs` — module wiring + re-exports.
+- Create `studio/simulator/src/lib.rs` — module wiring.
 - Create `studio/simulator/src/seedgen.rs` — deterministic candidate-seed generation.
-- Create `studio/simulator/src/target.rs` — `TargetSpec`, `Metrics`.
+- Create `studio/simulator/src/target.rs` — `TargetSpec`, `HitRateBand`, `Metrics`.
 - Create `studio/simulator/src/measure.rs` — `RoundSample`, `simulate`, `measure`.
 - Create `studio/simulator/src/curate.rs` — `Pool`, `CurateError`, `freeze_pool` (A2).
 - Create `studio/simulator/src/run.rs` — `verify`, `run_curation`, `RunError`, `CurationOutput`.
-- Create `studio/simulator/src/bin/curate.rs` — tiny CLI: model JSON + target → package + report.
-- Modify `justfile` — add a `sim-curate` convenience recipe.
+- Create `studio/simulator/src/bin/curate.rs` — CLI: model JSON + target JSON → package + report.
+- Modify `justfile` — add a `sim-curate` recipe.
 
 ---
 
 ## PHASE A — `trusted/math` kernel
 
-### Task 1: Model schema + payload round-trip
+### Task 1: Model schema (with bonus-feature list) + payload round-trip
 
 **Files:**
 - Modify: `trusted/math/Cargo.toml`
@@ -53,20 +54,22 @@
 - Create: `trusted/math/src/mechanics/slots/model.rs`
 
 **Interfaces:**
-- Produces: `bloom_math::mechanics::slots::{Symbol, SymbolRole, SymbolDef, PaytableEntry, Paytable, FreeSpins, SlotModel, to_payload, from_payload}`
+- Produces: `bloom_math::mechanics::slots::{Symbol, SymbolRole, SymbolDef, PaytableEntry, Paytable, TriggerSpec, FreeSpinsConfig, BonusFeature, SlotModel, to_payload, from_payload}`
   - `type Symbol = u8;`
   - `enum SymbolRole { Normal, Wild, Scatter }`
   - `struct SymbolDef { id: Symbol, role: SymbolRole }`
   - `struct PaytableEntry { symbol: Symbol, count: u8, payout: u64 }`
-  - `struct Paytable { entries: Vec<PaytableEntry> }`
-  - `struct FreeSpins { trigger_scatter_count: u8, spins_awarded: u32, retrigger: bool, multiplier: u64, feature_reels: Option<Vec<Vec<Symbol>>> }`
-  - `struct SlotModel { symbols: Vec<SymbolDef>, reels: Vec<Vec<Symbol>>, rows: usize, paylines: Vec<Vec<usize>>, paytable: Paytable, free_spins: Option<FreeSpins> }`
+  - `struct Paytable { entries: Vec<PaytableEntry> }` with `fn lookup(&self, symbol: Symbol, count: u8) -> u64`
+  - `struct TriggerSpec { symbol: Symbol, min_count: u8 }`
+  - `struct FreeSpinsConfig { spins_awarded: u32, retrigger: bool, multiplier: u64, feature_reels: Option<Vec<Vec<Symbol>>> }`
+  - `enum BonusFeature { FreeSpins { trigger: TriggerSpec, config: FreeSpinsConfig } }`
+  - `struct SlotModel { symbols: Vec<SymbolDef>, reels: Vec<Vec<Symbol>>, rows: usize, paylines: Vec<Vec<usize>>, paytable: Paytable, bonuses: Vec<BonusFeature> }`
   - `fn to_payload(model: &SlotModel) -> Vec<u8>`
   - `fn from_payload(bytes: &[u8]) -> Result<SlotModel, postcard::Error>`
 
 - [ ] **Step 1: Add dependencies**
 
-Edit `trusted/math/Cargo.toml` so the `[dependencies]` section reads:
+Edit `trusted/math/Cargo.toml` so `[dependencies]` reads:
 
 ```toml
 [dependencies]
@@ -128,10 +131,16 @@ impl Paytable {
     }
 }
 
+/// What triggers (or retriggers) a bonus feature: `min_count` of `symbol`
+/// anywhere on the relevant grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerSpec {
+    pub symbol: Symbol,
+    pub min_count: u8,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FreeSpins {
-    /// Scatters needed on a grid to trigger / retrigger the feature.
-    pub trigger_scatter_count: u8,
+pub struct FreeSpinsConfig {
     /// Free spins granted per (re)trigger.
     pub spins_awarded: u32,
     /// Whether the trigger condition during the feature awards more spins.
@@ -140,6 +149,17 @@ pub struct FreeSpins {
     pub multiplier: u64,
     /// Optional separate strips used during the feature; falls back to base.
     pub feature_reels: Option<Vec<Vec<Symbol>>>,
+}
+
+/// A bonus feature. ONE variant today (`slots@1`); a second feature type is a
+/// new variant + one match arm + a `slots@2` bump — additive, no framework.
+/// Each feature carries its OWN trigger (spec §3.1 composition rule).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BonusFeature {
+    FreeSpins {
+        trigger: TriggerSpec,
+        config: FreeSpinsConfig,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,7 +172,10 @@ pub struct SlotModel {
     /// Paylines: row index per reel. Each line's length must equal reel count.
     pub paylines: Vec<Vec<usize>>,
     pub paytable: Paytable,
-    pub free_spins: Option<FreeSpins>,
+    /// The bonus features (the durable end-state shape). slots@1 composition is
+    /// the frozen rule in spec §3.1: independent triggers vs base grid, list
+    /// order, summed payouts, no nesting/arbitration.
+    pub bonuses: Vec<BonusFeature>,
 }
 
 /// Serialize a model into the package `math_payload` (postcard, deterministic).
@@ -174,24 +197,26 @@ mod tests {
             symbols: vec![
                 SymbolDef { id: 0, role: SymbolRole::Normal },
                 SymbolDef { id: 1, role: SymbolRole::Wild },
-                SymbolDef { id: 2, role: SymbolRole::Scatter },
+                SymbolDef { id: 9, role: SymbolRole::Scatter },
             ],
-            reels: vec![vec![0, 1, 2, 0, 0], vec![0, 0, 1, 2, 0], vec![0, 2, 0, 1, 0]],
+            reels: vec![vec![0, 1, 9, 0, 0], vec![0, 0, 1, 9, 0], vec![9, 0, 1, 0, 0]],
             rows: 3,
             paylines: vec![vec![0, 0, 0], vec![1, 1, 1]],
             paytable: Paytable {
                 entries: vec![
                     PaytableEntry { symbol: 0, count: 3, payout: 5 },
-                    PaytableEntry { symbol: 2, count: 3, payout: 2 },
+                    PaytableEntry { symbol: 9, count: 3, payout: 2 },
                 ],
             },
-            free_spins: Some(FreeSpins {
-                trigger_scatter_count: 3,
-                spins_awarded: 5,
-                retrigger: true,
-                multiplier: 2,
-                feature_reels: None,
-            }),
+            bonuses: vec![BonusFeature::FreeSpins {
+                trigger: TriggerSpec { symbol: 9, min_count: 3 },
+                config: FreeSpinsConfig {
+                    spins_awarded: 5,
+                    retrigger: true,
+                    multiplier: 2,
+                    feature_reels: None,
+                },
+            }],
         }
     }
 
@@ -208,6 +233,14 @@ mod tests {
         let model = sample_model();
         assert_eq!(to_payload(&model), to_payload(&model));
     }
+
+    #[test]
+    fn empty_bonuses_round_trips() {
+        let mut model = sample_model();
+        model.bonuses = vec![];
+        let back = from_payload(&to_payload(&model)).unwrap();
+        assert_eq!(back, model);
+    }
 }
 ```
 
@@ -222,21 +255,21 @@ Replace the entire contents of `trusted/math/src/mechanics/slots.rs` with:
 mod model;
 
 pub use model::{
-    from_payload, to_payload, FreeSpins, Paytable, PaytableEntry, SlotModel, Symbol, SymbolDef,
-    SymbolRole,
+    from_payload, to_payload, BonusFeature, FreeSpinsConfig, Paytable, PaytableEntry, SlotModel,
+    Symbol, SymbolDef, SymbolRole, TriggerSpec,
 };
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cargo test -p bloom-math slots::model`
-Expected: PASS (`payload_round_trips`, `payload_is_deterministic`). Old `expand` tests are gone.
+Expected: PASS (`payload_round_trips`, `payload_is_deterministic`, `empty_bonuses_round_trips`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add trusted/math/Cargo.toml trusted/math/src/mechanics/slots.rs trusted/math/src/mechanics/slots/model.rs
-git commit -m "feat(math): add slots@1 model schema and payload serialization"
+git commit -m "feat(math): add slots@1 model schema with bonus-feature list"
 ```
 
 ---
@@ -249,17 +282,17 @@ git commit -m "feat(math): add slots@1 model schema and payload serialization"
 
 **Interfaces:**
 - Consumes: `SlotModel`, `Symbol` (Task 1); `crate::rng::SplitMix64`.
-- Produces: `slots::spin(reels: &[Vec<Symbol>], rows: usize, rng: &mut SplitMix64) -> Vec<Vec<Symbol>>` returning `grid[reel][row]` (kept `pub(crate)` initially, exercised via tests in this module).
+- Produces (module-internal): `spin(reels: &[Vec<Symbol>], rows: usize, rng: &mut SplitMix64) -> Vec<Vec<Symbol>>` returning `grid[reel][row]`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `trusted/math/src/mechanics/slots/eval.rs`:
 
 ```rust
-//! `slots@1` round evaluation: grid → line/scatter payout → free-spins → outcome.
-//! Integer-only and deterministic.
+//! `slots@1` round evaluation: grid → line/scatter payout → bonus features →
+//! outcome. Integer-only and deterministic.
 
-use super::model::{FreeSpins, SlotModel, Symbol, SymbolRole};
+use super::model::*;
 use crate::rng::SplitMix64;
 
 /// Spin every reel: pick a stop, read `rows` consecutive cells (wrapping).
@@ -284,8 +317,8 @@ mod tests {
         let reels = vec![vec![0, 1, 2, 3, 4], vec![5, 6, 7], vec![8, 9]];
         let mut rng = SplitMix64::new(42);
         let grid = spin(&reels, 2, &mut rng);
-        assert_eq!(grid.len(), 3); // one column per reel
-        assert!(grid.iter().all(|col| col.len() == 2)); // rows per column
+        assert_eq!(grid.len(), 3);
+        assert!(grid.iter().all(|col| col.len() == 2));
         for (r, col) in grid.iter().enumerate() {
             for sym in col {
                 assert!(reels[r].contains(sym));
@@ -295,12 +328,9 @@ mod tests {
 
     #[test]
     fn spin_wraps_consecutive_cells() {
-        // Stop near the end must wrap to the start for the window.
         let reels = vec![vec![10, 20, 30]];
-        // Find a seed whose first reel stop is index 2, then assert wrap.
         let mut rng = SplitMix64::new(7);
         let grid = spin(&reels, 3, &mut rng);
-        // Whatever the stop, the 3-row window over a 3-cell reel is a rotation.
         let mut sorted = grid[0].clone();
         sorted.sort();
         assert_eq!(sorted, vec![10, 20, 30]);
@@ -328,7 +358,7 @@ mod model;
 - [ ] **Step 3: Run the test to verify it passes**
 
 Run: `cargo test -p bloom-math slots::eval`
-Expected: PASS (3 tests). `spin` is exercised; warnings about unused `FreeSpins`/`SymbolRole` imports are expected until Task 3–5.
+Expected: PASS (3 tests). An "unused import" warning on the `model::*` glob is expected until Task 3.
 
 - [ ] **Step 4: Commit**
 
@@ -345,15 +375,13 @@ git commit -m "feat(math): add deterministic reel spin and grid window"
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 
 **Interfaces:**
-- Produces (module-internal): `role_of(model, sym) -> SymbolRole`, `line_payout(model, grid, line) -> u64`.
+- Produces (module-internal): `role_of(model, sym) -> SymbolRole`, `is_wild(model, sym) -> bool`, `line_payout(model, grid, line) -> u64`.
 
 - [ ] **Step 1: Write the failing test**
 
-In `eval.rs`, add to the `tests` module:
+In `eval.rs` `tests` module, add:
 
 ```rust
-    use super::super::model::{Paytable, PaytableEntry, SlotModel, SymbolDef};
-
     fn lines_model() -> SlotModel {
         // 3 reels, 1 row, one payline across the single row.
         SlotModel {
@@ -371,7 +399,7 @@ In `eval.rs`, add to the `tests` module:
                     PaytableEntry { symbol: 0, count: 3, payout: 10 },
                 ],
             },
-            free_spins: None,
+            bonuses: vec![],
         }
     }
 
@@ -404,10 +432,10 @@ In `eval.rs`, add to the `tests` module:
     }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run to verify it fails**
 
 Run: `cargo test -p bloom-math slots::eval`
-Expected: FAIL — `line_payout` and `role_of` not found.
+Expected: FAIL — `line_payout`, `role_of` not found.
 
 - [ ] **Step 3: Implement the helpers**
 
@@ -458,10 +486,10 @@ fn line_payout(model: &SlotModel, grid: &[Vec<Symbol>], line: &[usize]) -> u64 {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Run to verify it passes**
 
 Run: `cargo test -p bloom-math slots::eval`
-Expected: PASS (line tests + earlier spin tests).
+Expected: PASS (line tests + spin tests).
 
 - [ ] **Step 5: Commit**
 
@@ -472,13 +500,13 @@ git commit -m "feat(math): add payline evaluation with wild substitution"
 
 ---
 
-### Task 4: Scatter payout and scatter count
+### Task 4: Symbol counting, scatter pays, per-grid payout
 
 **Files:**
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 
 **Interfaces:**
-- Produces (module-internal): `scatter_symbol(model) -> Option<Symbol>`, `scatter_count(model, grid) -> usize`, `scatter_payout(model, grid) -> u64`, `eval_grid(model, grid) -> u64` (lines + scatter for one grid).
+- Produces (module-internal): `count_symbol(grid, sym) -> usize`, `scatter_symbol(model) -> Option<Symbol>`, `scatter_payout(model, grid) -> u64`, `eval_grid(model, grid) -> u64`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -486,7 +514,6 @@ In `eval.rs` `tests` module, add:
 
 ```rust
     fn scatter_model() -> SlotModel {
-        // 3 reels x 1 row; scatter symbol 9 pays by total count anywhere.
         let mut m = lines_model();
         m.paytable.entries.push(PaytableEntry { symbol: 9, count: 2, payout: 4 });
         m.paytable.entries.push(PaytableEntry { symbol: 9, count: 3, payout: 20 });
@@ -494,35 +521,44 @@ In `eval.rs` `tests` module, add:
     }
 
     #[test]
+    fn counts_a_symbol_across_the_grid() {
+        let m = scatter_model();
+        let grid = vec![vec![9], vec![0], vec![9]];
+        assert_eq!(count_symbol(&grid, 9), 2);
+        assert_eq!(count_symbol(&grid, 0), 1);
+    }
+
+    #[test]
     fn scatter_pays_by_total_count() {
         let m = scatter_model();
-        let grid = vec![vec![9], vec![0], vec![9]]; // two scatters
+        let grid = vec![vec![9], vec![0], vec![9]];
         assert_eq!(scatter_payout(&m, &grid), 4);
-        assert_eq!(scatter_count(&m, &grid), 2);
     }
 
     #[test]
     fn eval_grid_sums_lines_and_scatter() {
         let m = scatter_model();
-        // line 0,0,0 -> 10 ; plus no scatters here
-        let grid = vec![vec![0], vec![0], vec![0]];
+        let grid = vec![vec![0], vec![0], vec![0]]; // line pays 10, no scatters
         assert_eq!(eval_grid(&m, &grid), 10);
-        // three scatters -> line pays 0, scatter pays 20
-        let grid2 = vec![vec![9], vec![9], vec![9]];
+        let grid2 = vec![vec![9], vec![9], vec![9]]; // line 0, scatter 20
         assert_eq!(eval_grid(&m, &grid2), 20);
     }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run to verify it fails**
 
 Run: `cargo test -p bloom-math slots::eval`
-Expected: FAIL — `scatter_payout`, `scatter_count`, `eval_grid` not found.
+Expected: FAIL — `count_symbol`, `scatter_payout`, `eval_grid` not found.
 
 - [ ] **Step 3: Implement**
 
 In `eval.rs`, above the `tests` module, add:
 
 ```rust
+fn count_symbol(grid: &[Vec<Symbol>], sym: Symbol) -> usize {
+    grid.iter().flatten().filter(|&&s| s == sym).count()
+}
+
 fn scatter_symbol(model: &SlotModel) -> Option<Symbol> {
     model
         .symbols
@@ -531,16 +567,9 @@ fn scatter_symbol(model: &SlotModel) -> Option<Symbol> {
         .map(|s| s.id)
 }
 
-fn scatter_count(model: &SlotModel, grid: &[Vec<Symbol>]) -> usize {
-    match scatter_symbol(model) {
-        Some(sc) => grid.iter().flatten().filter(|&&s| s == sc).count(),
-        None => 0,
-    }
-}
-
 fn scatter_payout(model: &SlotModel, grid: &[Vec<Symbol>]) -> u64 {
     match scatter_symbol(model) {
-        Some(sc) => model.paytable.lookup(sc, scatter_count(model, grid) as u8),
+        Some(sc) => model.paytable.lookup(sc, count_symbol(grid, sc) as u8),
         None => 0,
     }
 }
@@ -556,7 +585,7 @@ fn eval_grid(model: &SlotModel, grid: &[Vec<Symbol>]) -> u64 {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Run to verify it passes**
 
 Run: `cargo test -p bloom-math slots::eval`
 Expected: PASS.
@@ -570,160 +599,166 @@ git commit -m "feat(math): add scatter pays and per-grid payout"
 
 ---
 
-### Task 5: Free-spins feature (trigger, multiplier, retrigger)
+### Task 5: Bonus-feature evaluation (per-feature, frozen composition rule)
 
 **Files:**
 - Modify: `trusted/math/src/mechanics/slots/eval.rs`
 
 **Interfaces:**
-- Produces (module-internal): `run_feature(model, fs, rng) -> (u64, u32, Vec<Vec<Vec<Symbol>>>)` returning `(feature_payout, free_spins_played, feature_grids)`.
+- Produces:
+  - `slots::FeatureOutcome { triggered: bool, spins_played: u32, payout: u64, spins: Vec<Vec<Vec<Symbol>>> }` (exported in Task 6)
+  - module-internal: `run_bonus(model, bonus, base_grid, rng) -> FeatureOutcome`, `run_free_spins(model, trigger, config, rng) -> FeatureOutcome`.
 
 - [ ] **Step 1: Write the failing test**
 
 In `eval.rs` `tests` module, add:
 
 ```rust
-    use super::super::model::FreeSpins;
+    #[test]
+    fn untriggered_feature_does_nothing() {
+        // Trigger needs 3 of symbol 9, base grid has none.
+        let m = lines_model();
+        let bonus = BonusFeature::FreeSpins {
+            trigger: TriggerSpec { symbol: 9, min_count: 3 },
+            config: FreeSpinsConfig { spins_awarded: 5, retrigger: false, multiplier: 2, feature_reels: None },
+        };
+        let base = vec![vec![0], vec![0], vec![0]];
+        let mut rng = SplitMix64::new(1);
+        let out = run_bonus(&m, &bonus, &base, &mut rng);
+        assert!(!out.triggered);
+        assert_eq!(out.spins_played, 0);
+        assert_eq!(out.payout, 0);
+    }
 
     #[test]
-    fn feature_runs_awarded_spins_with_multiplier() {
-        // Single reel that ALWAYS lands symbol 0 (three-in-a-... here count 1
-        // line). Use a model where each free spin pays a fixed amount.
+    fn triggered_feature_runs_spins_with_multiplier() {
+        // A model where every spin pays a fixed 2; feature multiplier 3 over 4 spins.
         let m = SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }, SymbolDef { id: 9, role: SymbolRole::Scatter }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 1,
             paylines: vec![vec![0, 0, 0]],
             paytable: Paytable { entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }] },
-            free_spins: Some(FreeSpins {
-                trigger_scatter_count: 1, // irrelevant: no scatter symbol present
-                spins_awarded: 4,
-                retrigger: false,
-                multiplier: 3,
-                feature_reels: None,
-            }),
+            bonuses: vec![],
         };
-        let fs = m.free_spins.clone().unwrap();
+        let trigger = TriggerSpec { symbol: 9, min_count: 1 };
+        let config = FreeSpinsConfig { spins_awarded: 4, retrigger: false, multiplier: 3, feature_reels: None };
         let mut rng = SplitMix64::new(1);
-        let (payout, played, grids) = run_feature(&m, &fs, &mut rng);
-        // 4 spins, each grid pays 2, x3 multiplier = 4 * 6 = 24.
-        assert_eq!(played, 4);
-        assert_eq!(payout, 24);
-        assert_eq!(grids.len(), 4);
+        let out = run_free_spins(&m, &trigger, &config, &mut rng);
+        assert!(out.triggered);
+        assert_eq!(out.spins_played, 4);
+        assert_eq!(out.payout, 4 * 2 * 3); // 24
+        assert_eq!(out.spins.len(), 4);
     }
 
     #[test]
-    fn feature_retriggers_when_enabled() {
-        // A reel set that always shows 3 scatters → every feature spin retriggers.
-        // Cap the test by disabling retrigger after we prove one retrigger using
-        // a small awarded count and asserting played > spins_awarded.
+    fn retrigger_adds_spins_and_terminates() {
+        // Feature reel [9,0,0,0]: scatter sometimes appears, retriggering.
         let m = SlotModel {
-            symbols: vec![SymbolDef { id: 7, role: SymbolRole::Scatter }],
-            reels: vec![vec![7], vec![7], vec![7]],
-            rows: 1,
-            paylines: vec![],
-            paytable: Paytable { entries: vec![] },
-            free_spins: Some(FreeSpins {
-                trigger_scatter_count: 3,
-                spins_awarded: 1,
-                retrigger: true,
-                multiplier: 1,
-                feature_reels: Some(vec![vec![7], vec![7], vec![7]]),
-            }),
-        };
-        let fs = m.free_spins.clone().unwrap();
-        let mut rng = SplitMix64::new(1);
-        // This retriggers forever by construction, so this test instead asserts
-        // the FIRST spin retriggers by running a bounded variant: see Step 3 note.
-        let _ = (&m, &fs, &mut rng);
-    }
-```
-
-> Note: the second test as written would loop forever (a pathological always-retrigger model). Replace its body in Step 3's test with the bounded assertion shown there. Keep only the first test for now; delete the second test's stub before running.
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Delete the `feature_retriggers_when_enabled` stub for now (it is replaced in Step 4). Run: `cargo test -p bloom-math slots::eval::tests::feature_runs_awarded_spins_with_multiplier`
-Expected: FAIL — `run_feature` not found.
-
-- [ ] **Step 3: Implement `run_feature`**
-
-In `eval.rs`, above the `tests` module, add:
-
-```rust
-/// Run the free-spins feature. Returns (feature payout in bet-multiples,
-/// spins played, per-spin grids). Uses the feature strips if present, else base.
-fn run_feature(
-    model: &SlotModel,
-    fs: &FreeSpins,
-    rng: &mut SplitMix64,
-) -> (u64, u32, Vec<Vec<Vec<Symbol>>>) {
-    let reels = fs.feature_reels.as_ref().unwrap_or(&model.reels);
-    let mut remaining = fs.spins_awarded;
-    let mut played: u32 = 0;
-    let mut payout: u64 = 0;
-    let mut grids = Vec::new();
-
-    while remaining > 0 {
-        remaining -= 1;
-        played += 1;
-        let grid = spin(reels, model.rows, rng);
-        payout += eval_grid(model, &grid) * fs.multiplier;
-        if fs.retrigger && scatter_count(model, &grid) >= fs.trigger_scatter_count as usize {
-            remaining += fs.spins_awarded;
-        }
-        grids.push(grid);
-    }
-    (payout, played, grids)
-}
-```
-
-- [ ] **Step 4: Replace the retrigger test with a bounded version**
-
-In the `tests` module, add this test (it bounds the loop by asserting on a model that retriggers exactly once then stops, achieved with feature strips that show scatters only on the first spin via a 2-cell reel and a known seed). Use the simpler deterministic check below:
-
-```rust
-    #[test]
-    fn retrigger_adds_spins() {
-        // Base awarded = 2; a feature reel of [scatter, normal] means roughly
-        // half of spins retrigger. We assert that across a fixed seed the feature
-        // played strictly more than the 2 awarded (a retrigger happened), and
-        // terminates (no infinite loop) within a sane bound.
-        let m = SlotModel {
-            symbols: vec![
-                SymbolDef { id: 7, role: SymbolRole::Scatter },
-                SymbolDef { id: 0, role: SymbolRole::Normal },
-            ],
+            symbols: vec![SymbolDef { id: 9, role: SymbolRole::Scatter }, SymbolDef { id: 0, role: SymbolRole::Normal }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 1,
             paylines: vec![],
             paytable: Paytable { entries: vec![] },
-            free_spins: Some(FreeSpins {
-                trigger_scatter_count: 3,
-                spins_awarded: 2,
-                retrigger: true,
-                multiplier: 1,
-                feature_reels: Some(vec![vec![7, 0, 0, 0], vec![7, 0, 0, 0], vec![7, 0, 0, 0]]),
-            }),
+            bonuses: vec![],
         };
-        let fs = m.free_spins.clone().unwrap();
+        let trigger = TriggerSpec { symbol: 9, min_count: 3 };
+        let config = FreeSpinsConfig {
+            spins_awarded: 2,
+            retrigger: true,
+            multiplier: 1,
+            feature_reels: Some(vec![vec![9, 0, 0, 0], vec![9, 0, 0, 0], vec![9, 0, 0, 0]]),
+        };
         let mut rng = SplitMix64::new(99);
-        let (_payout, played, grids) = run_feature(&m, &fs, &mut rng);
-        assert!(played >= 2);
-        assert_eq!(grids.len() as u32, played);
+        let out = run_free_spins(&m, &trigger, &config, &mut rng);
+        assert!(out.spins_played >= 2);
+        assert_eq!(out.spins.len() as u32, out.spins_played);
     }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `cargo test -p bloom-math slots::eval`
+Expected: FAIL — `run_bonus`, `run_free_spins`, `FeatureOutcome` not found.
+
+- [ ] **Step 3: Implement (define `FeatureOutcome` + the feature runners)**
+
+In `eval.rs`, above the `tests` module, add:
+
+```rust
+/// One bonus feature's result within a round.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeatureOutcome {
+    pub triggered: bool,
+    pub spins_played: u32,
+    pub payout: u64,
+    pub spins: Vec<Vec<Vec<Symbol>>>,
+}
+
+impl FeatureOutcome {
+    fn untriggered() -> Self {
+        FeatureOutcome { triggered: false, spins_played: 0, payout: 0, spins: Vec::new() }
+    }
+}
+
+/// Evaluate ONE bonus feature against the base grid (spec §3.1: each feature
+/// checks its own trigger against the base grid only).
+fn run_bonus(
+    model: &SlotModel,
+    bonus: &BonusFeature,
+    base_grid: &[Vec<Symbol>],
+    rng: &mut SplitMix64,
+) -> FeatureOutcome {
+    match bonus {
+        BonusFeature::FreeSpins { trigger, config } => {
+            if count_symbol(base_grid, trigger.symbol) >= trigger.min_count as usize {
+                run_free_spins(model, trigger, config, rng)
+            } else {
+                FeatureOutcome::untriggered()
+            }
+        }
+    }
+}
+
+/// Run a free-spins feature. Retrigger re-checks THIS feature's own trigger
+/// against each feature-spin grid (spec §3.1 — no nesting/cross-triggering).
+fn run_free_spins(
+    model: &SlotModel,
+    trigger: &TriggerSpec,
+    config: &FreeSpinsConfig,
+    rng: &mut SplitMix64,
+) -> FeatureOutcome {
+    let reels = config.feature_reels.as_ref().unwrap_or(&model.reels);
+    let mut remaining = config.spins_awarded;
+    let mut spins_played: u32 = 0;
+    let mut payout: u64 = 0;
+    let mut spins = Vec::new();
+
+    while remaining > 0 {
+        remaining -= 1;
+        spins_played += 1;
+        let grid = spin(reels, model.rows, rng);
+        payout += eval_grid(model, &grid) * config.multiplier;
+        if config.retrigger && count_symbol(&grid, trigger.symbol) >= trigger.min_count as usize {
+            remaining += config.spins_awarded;
+        }
+        spins.push(grid);
+    }
+
+    FeatureOutcome { triggered: true, spins_played, payout, spins }
+}
+```
+
+- [ ] **Step 4: Run to verify it passes**
 
 Run: `cargo test -p bloom-math slots::eval`
 Expected: PASS (feature tests + earlier tests).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add trusted/math/src/mechanics/slots/eval.rs
-git commit -m "feat(math): add free-spins feature with multiplier and retrigger"
+git commit -m "feat(math): add per-feature bonus evaluation (free spins, retrigger)"
 ```
 
 ---
@@ -735,7 +770,10 @@ git commit -m "feat(math): add free-spins feature with multiplier and retrigger"
 - Modify: `trusted/math/src/mechanics/slots.rs`
 
 **Interfaces:**
-- Produces: `slots::RoundOutcome { base_grid: Vec<Vec<Symbol>>, feature_spins: Vec<Vec<Vec<Symbol>>>, base_payout: u64, feature_payout: u64, total_payout: u64, triggered: bool, free_spins_played: u32 }` and `slots::evaluate(model: &SlotModel, seed: u64) -> RoundOutcome`.
+- Produces:
+  - `slots::RoundOutcome { base_grid: Vec<Vec<Symbol>>, base_payout: u64, features: Vec<FeatureOutcome>, feature_payout: u64, total_payout: u64 }` with `fn any_triggered(&self) -> bool`
+  - `slots::evaluate(model: &SlotModel, seed: u64) -> RoundOutcome`
+  - `slots::FeatureOutcome` (from Task 5)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -759,13 +797,10 @@ In `eval.rs` `tests` module, add:
                     PaytableEntry { symbol: 9, count: 3, payout: 8 },
                 ],
             },
-            free_spins: Some(FreeSpins {
-                trigger_scatter_count: 3,
-                spins_awarded: 3,
-                retrigger: false,
-                multiplier: 2,
-                feature_reels: None,
-            }),
+            bonuses: vec![BonusFeature::FreeSpins {
+                trigger: TriggerSpec { symbol: 9, min_count: 3 },
+                config: FreeSpinsConfig { spins_awarded: 3, retrigger: false, multiplier: 2, feature_reels: None },
+            }],
         }
     }
 
@@ -779,25 +814,27 @@ In `eval.rs` `tests` module, add:
     }
 
     #[test]
-    fn evaluate_total_is_base_plus_feature() {
+    fn evaluate_total_and_features_are_consistent() {
         let m = full_model();
-        for seed in 0..2000u64 {
+        for seed in 0..3000u64 {
             let o = evaluate(&m, seed);
             assert_eq!(o.total_payout, o.base_payout + o.feature_payout);
-            assert_eq!(o.triggered, o.free_spins_played > 0);
+            assert_eq!(o.features.len(), 1); // one per model bonus
+            let summed: u64 = o.features.iter().map(|f| f.payout).sum();
+            assert_eq!(o.feature_payout, summed);
+            assert_eq!(o.any_triggered(), o.features.iter().any(|f| f.triggered));
         }
     }
 
     #[test]
     fn evaluate_golden_vector() {
-        // Pin exact outputs so any future drift fails loudly. If this changes,
-        // it is a re-certification event (a new mechanic version), not an edit.
+        // Pin exact outputs so any future drift fails loudly. Changing these is a
+        // re-certification event (a new mechanic version), never an edit.
         let m = full_model();
         let o = evaluate(&m, 12345);
-        // Fill these in from the FIRST green run, then keep them frozen forever:
         assert_eq!(o.base_payout, GOLDEN_BASE);
         assert_eq!(o.feature_payout, GOLDEN_FEATURE);
-        assert_eq!(o.free_spins_played, GOLDEN_SPINS);
+        assert_eq!(o.features[0].spins_played, GOLDEN_SPINS);
     }
 
     const GOLDEN_BASE: u64 = 0; // placeholder — set from first run (Step 4)
@@ -808,7 +845,7 @@ In `eval.rs` `tests` module, add:
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cargo test -p bloom-math slots::eval`
-Expected: FAIL — `evaluate` and `RoundOutcome` not found.
+Expected: FAIL — `evaluate`, `RoundOutcome` not found.
 
 - [ ] **Step 3: Implement `evaluate` + `RoundOutcome`**
 
@@ -817,47 +854,45 @@ In `eval.rs`, above the `tests` module, add:
 ```rust
 /// One round's full result: the symbolic outcome ("what happened") and the
 /// payout in bet-multiples ("what it paid"). Both facts, never fused (umbrella §10).
+/// `features` has one entry per `model.bonuses`, in order (spec §3.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoundOutcome {
     pub base_grid: Vec<Vec<Symbol>>,
-    pub feature_spins: Vec<Vec<Vec<Symbol>>>,
     pub base_payout: u64,
+    pub features: Vec<FeatureOutcome>,
     pub feature_payout: u64,
     pub total_payout: u64,
-    pub triggered: bool,
-    pub free_spins_played: u32,
+}
+
+impl RoundOutcome {
+    /// True if any bonus feature triggered this round.
+    pub fn any_triggered(&self) -> bool {
+        self.features.iter().any(|f| f.triggered)
+    }
 }
 
 /// Expand one seed into one round. Deterministic: same `(model, seed)` always
-/// yields the same `RoundOutcome`, bit-for-bit, forever.
+/// yields the same `RoundOutcome`, bit-for-bit, forever. Bonus features run in
+/// `model.bonuses` list order, each off the SAME PRNG stream (spec §3.1).
 pub fn evaluate(model: &SlotModel, seed: u64) -> RoundOutcome {
     let mut rng = SplitMix64::new(seed);
     let base_grid = spin(&model.reels, model.rows, &mut rng);
     let base_payout = eval_grid(model, &base_grid);
 
+    let mut features = Vec::with_capacity(model.bonuses.len());
     let mut feature_payout = 0;
-    let mut feature_spins = Vec::new();
-    let mut triggered = false;
-    let mut free_spins_played = 0;
-
-    if let Some(fs) = &model.free_spins {
-        if scatter_count(model, &base_grid) >= fs.trigger_scatter_count as usize {
-            triggered = true;
-            let (p, played, grids) = run_feature(model, fs, &mut rng);
-            feature_payout = p;
-            free_spins_played = played;
-            feature_spins = grids;
-        }
+    for bonus in &model.bonuses {
+        let outcome = run_bonus(model, bonus, &base_grid, &mut rng);
+        feature_payout += outcome.payout;
+        features.push(outcome);
     }
 
     RoundOutcome {
         base_grid,
-        feature_spins,
         base_payout,
+        features,
         feature_payout,
         total_payout: base_payout + feature_payout,
-        triggered,
-        free_spins_played,
     }
 }
 ```
@@ -865,27 +900,27 @@ pub fn evaluate(model: &SlotModel, seed: u64) -> RoundOutcome {
 - [ ] **Step 4: Set the golden constants, then re-run**
 
 Run: `cargo test -p bloom-math slots::eval::tests::evaluate_golden_vector -- --nocapture`
-It will FAIL on the placeholder zeros. Read the actual `base_payout` / `feature_payout` / `free_spins_played` from a quick `dbg!` or from the assertion's left/right values, then replace `GOLDEN_BASE`, `GOLDEN_FEATURE`, `GOLDEN_SPINS` with those exact numbers. Re-run:
+It FAILS on the placeholder zeros. Read the actual values from the assertion's left/right output, then replace `GOLDEN_BASE`, `GOLDEN_FEATURE`, `GOLDEN_SPINS` with those exact numbers. Re-run:
 
 Run: `cargo test -p bloom-math slots::eval`
-Expected: PASS (all eval tests, including the now-pinned golden vector).
+Expected: PASS (all eval tests, including the pinned golden vector).
 
-- [ ] **Step 5: Export `evaluate` + `RoundOutcome`**
+- [ ] **Step 5: Export `evaluate`, `RoundOutcome`, `FeatureOutcome`**
 
-In `trusted/math/src/mechanics/slots.rs`, extend the re-export:
+In `trusted/math/src/mechanics/slots.rs`, extend the re-exports:
 
 ```rust
-pub use eval::{evaluate, RoundOutcome};
+pub use eval::{evaluate, FeatureOutcome, RoundOutcome};
 pub use model::{
-    from_payload, to_payload, FreeSpins, Paytable, PaytableEntry, SlotModel, Symbol, SymbolDef,
-    SymbolRole,
+    from_payload, to_payload, BonusFeature, FreeSpinsConfig, Paytable, PaytableEntry, SlotModel,
+    Symbol, SymbolDef, SymbolRole, TriggerSpec,
 };
 ```
 
 - [ ] **Step 6: Run the whole math suite + commit**
 
 Run: `cargo test -p bloom-math`
-Expected: PASS (model + eval).
+Expected: PASS.
 
 ```bash
 git add trusted/math/src/mechanics/slots/eval.rs trusted/math/src/mechanics/slots.rs
@@ -1004,9 +1039,9 @@ git commit -m "feat(sim): scaffold simulator crate with deterministic seed gener
 - Modify: `studio/simulator/src/lib.rs`
 
 **Interfaces:**
-- Produces: `bloom_simulator::measure::{RoundSample, simulate}`
-  - `struct RoundSample { seed: u64, payout: u64, base_payout: u64, feature_payout: u64, triggered: bool }`
-  - `fn simulate(model: &SlotModel, seeds: &[u64]) -> Vec<RoundSample>`
+- Produces:
+  - `bloom_simulator::measure::RoundSample { seed: u64, payout: u64, base_payout: u64, feature_payout: u64, feature_triggers: Vec<bool> }` (derives `Clone, PartialEq` — NOT `Copy`, it holds a `Vec`)
+  - `bloom_simulator::measure::simulate(model: &SlotModel, seeds: &[u64]) -> Vec<RoundSample>`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1018,17 +1053,18 @@ Create `studio/simulator/src/measure.rs`:
 use bloom_math::mechanics::slots::{evaluate, SlotModel};
 use rayon::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RoundSample {
     pub seed: u64,
     pub payout: u64,
     pub base_payout: u64,
     pub feature_payout: u64,
-    pub triggered: bool,
+    /// Whether each model bonus (in order) triggered this round.
+    pub feature_triggers: Vec<bool>,
 }
 
-/// Evaluate every seed through the math engine, in parallel. Order of the
-/// output matches the order of `seeds` (rayon's `map` preserves order).
+/// Evaluate every seed through the math engine, in parallel. Output order
+/// matches `seeds` (rayon `map` preserves order).
 pub fn simulate(model: &SlotModel, seeds: &[u64]) -> Vec<RoundSample> {
     seeds
         .par_iter()
@@ -1039,7 +1075,7 @@ pub fn simulate(model: &SlotModel, seeds: &[u64]) -> Vec<RoundSample> {
                 payout: o.total_payout,
                 base_payout: o.base_payout,
                 feature_payout: o.feature_payout,
-                triggered: o.triggered,
+                feature_triggers: o.features.iter().map(|f| f.triggered).collect(),
             }
         })
         .collect()
@@ -1057,7 +1093,7 @@ mod tests {
             rows: 1,
             paylines: vec![vec![0]],
             paytable: Paytable { entries: vec![PaytableEntry { symbol: 0, count: 1, payout: 1 }] },
-            free_spins: None,
+            bonuses: vec![],
         }
     }
 
@@ -1072,10 +1108,11 @@ mod tests {
     }
 
     #[test]
-    fn simulate_reports_payout() {
-        let m = toy(); // single reel, single symbol, count 1 -> always pays 1
+    fn simulate_reports_payout_and_no_features() {
+        let m = toy();
         let out = simulate(&m, &[10, 20, 30]);
         assert!(out.iter().all(|s| s.payout == 1));
+        assert!(out.iter().all(|s| s.feature_triggers.is_empty()));
     }
 }
 ```
@@ -1100,7 +1137,7 @@ git commit -m "feat(sim): simulate seeds through the math engine in parallel"
 
 ---
 
-### Task 9: Measure → Metrics (RTP convergence)
+### Task 9: Measure → Metrics (per-feature hit-rates, RTP convergence)
 
 **Files:**
 - Create: `studio/simulator/src/target.rs`
@@ -1109,7 +1146,7 @@ git commit -m "feat(sim): simulate seeds through the math engine in parallel"
 
 **Interfaces:**
 - Produces:
-  - `bloom_simulator::target::Metrics { rtp: f64, volatility: f64, hit_frequency: f64, bonus_hit_rate: f64, base_rtp: f64, feature_rtp: f64 }`
+  - `bloom_simulator::target::Metrics { rtp: f64, volatility: f64, hit_frequency: f64, bonus_hit_rates: Vec<f64>, base_rtp: f64, feature_rtp: f64 }` (derives `Clone, PartialEq` — NOT `Copy`)
   - `bloom_simulator::measure::measure(samples: &[RoundSample]) -> Metrics`
 
 - [ ] **Step 1: Create the metrics type**
@@ -1119,9 +1156,9 @@ Create `studio/simulator/src/target.rs`:
 ```rust
 //! Target spec (desired characteristics) and measured metrics.
 
-/// Measured characteristics of a model over a simulated population. Floats are
-/// fine here — this is studio measurement, never the certified outcome path.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Measured characteristics over a simulated population. Floats are fine here —
+/// this is studio measurement, never the certified outcome path.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Metrics {
     /// Return to player: mean payout (bet-multiples) per spin.
     pub rtp: f64,
@@ -1129,11 +1166,11 @@ pub struct Metrics {
     pub volatility: f64,
     /// Fraction of spins that pay > 0.
     pub hit_frequency: f64,
-    /// Fraction of spins that trigger the bonus.
-    pub bonus_hit_rate: f64,
+    /// Fraction of spins that trigger each bonus feature (one per model bonus).
+    pub bonus_hit_rates: Vec<f64>,
     /// RTP contributed by the base game.
     pub base_rtp: f64,
-    /// RTP contributed by the feature.
+    /// RTP contributed by all features.
     pub feature_rtp: f64,
 }
 ```
@@ -1153,8 +1190,7 @@ In `measure.rs` `tests` module, add:
 
     fn measurable() -> SlotModel {
         // 1 reel, 1 row, 1 line. strip = 5x sym0, 4x sym1, 1x sym2 (10 cells).
-        // paytable: sym1 count1 -> 1 ; sym2 count1 -> 5. sym0 pays nothing.
-        // Closed-form RTP = 0.4*1 + 0.1*5 = 0.9.
+        // paytable: sym1 count1 -> 1 ; sym2 count1 -> 5. Closed-form RTP = 0.9.
         SlotModel {
             symbols: vec![
                 SymbolDef { id: 0, role: SymbolRole::Normal },
@@ -1170,7 +1206,7 @@ In `measure.rs` `tests` module, add:
                     PaytableEntry { symbol: 2, count: 1, payout: 5 },
                 ],
             },
-            free_spins: None,
+            bonuses: vec![],
         }
     }
 
@@ -1181,7 +1217,7 @@ In `measure.rs` `tests` module, add:
         let metrics: Metrics = measure(&simulate(&m, &seeds));
         assert!((metrics.rtp - 0.9).abs() < 0.02, "rtp = {}", metrics.rtp);
         assert!(metrics.hit_frequency > 0.0 && metrics.hit_frequency < 1.0);
-        assert_eq!(metrics.bonus_hit_rate, 0.0); // no free_spins
+        assert!(metrics.bonus_hit_rates.is_empty()); // no bonuses
         assert!((metrics.base_rtp - metrics.rtp).abs() < 1e-9);
     }
 ```
@@ -1193,7 +1229,7 @@ Expected: FAIL — `measure` not found.
 
 - [ ] **Step 4: Implement `measure`**
 
-In `measure.rs`, add (top-level, importing the metrics type):
+In `measure.rs`, add at the top level (below the existing imports add a metrics import, then the function):
 
 ```rust
 use crate::target::Metrics;
@@ -1203,11 +1239,11 @@ pub fn measure(samples: &[RoundSample]) -> Metrics {
     let n = samples.len() as f64;
     assert!(n > 0.0, "cannot measure an empty population");
 
-    let sum = |f: fn(&RoundSample) -> u64| samples.iter().map(|s| f(s) as f64).sum::<f64>();
+    let mean = |f: fn(&RoundSample) -> u64| samples.iter().map(|s| f(s) as f64).sum::<f64>() / n;
 
-    let rtp = sum(|s| s.payout) / n;
-    let base_rtp = sum(|s| s.base_payout) / n;
-    let feature_rtp = sum(|s| s.feature_payout) / n;
+    let rtp = mean(|s| s.payout);
+    let base_rtp = mean(|s| s.base_payout);
+    let feature_rtp = mean(|s| s.feature_payout);
 
     let variance = samples
         .iter()
@@ -1218,29 +1254,32 @@ pub fn measure(samples: &[RoundSample]) -> Metrics {
         .sum::<f64>()
         / n;
 
+    let feature_count = samples[0].feature_triggers.len();
+    let bonus_hit_rates = (0..feature_count)
+        .map(|i| samples.iter().filter(|s| s.feature_triggers[i]).count() as f64 / n)
+        .collect();
+
     Metrics {
         rtp,
         volatility: variance.sqrt(),
         hit_frequency: samples.iter().filter(|s| s.payout > 0).count() as f64 / n,
-        bonus_hit_rate: samples.iter().filter(|s| s.triggered).count() as f64 / n,
+        bonus_hit_rates,
         base_rtp,
         feature_rtp,
     }
 }
 ```
 
-> Note: there is already a `use crate::target::Metrics;` added inside the test module; the top-level `use` is the one consumed by `measure`. If the compiler warns about a duplicate import in tests, remove the one inside `tests`.
-
 - [ ] **Step 5: Run to verify it passes**
 
 Run: `cargo test -p bloom-simulator measure`
-Expected: PASS (the 1M-sim convergence test runs in a couple seconds in release-ish debug; if slow, it still passes).
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add studio/simulator/src/target.rs studio/simulator/src/measure.rs studio/simulator/src/lib.rs
-git commit -m "feat(sim): measure RTP, volatility, hit-rate, base/feature split"
+git commit -m "feat(sim): measure RTP, volatility, per-feature hit-rate, RTP split"
 ```
 
 ---
@@ -1254,23 +1293,31 @@ git commit -m "feat(sim): measure RTP, volatility, hit-rate, base/feature split"
 
 **Interfaces:**
 - Produces:
-  - `bloom_simulator::target::TargetSpec { rtp_target: f64, rtp_tolerance: f64, volatility_min: f64, volatility_max: f64, bonus_hit_rate_min: f64, bonus_hit_rate_max: f64, pool_size: usize, candidate_count: usize, realized_correction_band: f64 }`
-  - `bloom_simulator::run::verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics>` (Err carries the failing metrics)
+  - `bloom_simulator::target::HitRateBand { min: f64, max: f64 }`
+  - `bloom_simulator::target::TargetSpec { rtp_target: f64, rtp_tolerance: f64, volatility_min: f64, volatility_max: f64, bonus_hit_rate_bands: Vec<HitRateBand>, pool_size: usize, candidate_count: usize, realized_correction_band: f64 }` (derives `Clone` — NOT `Copy`)
+  - `bloom_simulator::run::verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics>` (Err carries the failing metrics; asserts band/feature count match)
 
-- [ ] **Step 1: Add `TargetSpec`**
+- [ ] **Step 1: Add `HitRateBand` + `TargetSpec`**
 
 In `studio/simulator/src/target.rs`, add:
 
 ```rust
-/// Desired characteristics + curation parameters for a curation run.
+/// An acceptable inclusive range for one feature's hit-rate.
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HitRateBand {
+    pub min: f64,
+    pub max: f64,
+}
+
+/// Desired characteristics + curation parameters for a curation run.
+#[derive(Debug, Clone, PartialEq)]
 pub struct TargetSpec {
     pub rtp_target: f64,
     pub rtp_tolerance: f64,
     pub volatility_min: f64,
     pub volatility_max: f64,
-    pub bonus_hit_rate_min: f64,
-    pub bonus_hit_rate_max: f64,
+    /// One band per feature in `model.bonuses`, in order.
+    pub bonus_hit_rate_bands: Vec<HitRateBand>,
     /// Number of seeds frozen into the pool.
     pub pool_size: usize,
     /// Number of rounds simulated to measure + draw the pool from.
@@ -1289,21 +1336,31 @@ Create `studio/simulator/src/run.rs`:
 //! → build+sign. Approach A: a model that misses targets FAILS; the simulator
 //! never reshapes the pool to force a target.
 
-use crate::target::{Metrics, TargetSpec};
+use crate::target::{HitRateBand, Metrics, TargetSpec};
 
-/// Check measured metrics against the target bands. Err carries the metrics so
-/// the caller (human / future tuner) can see what missed.
+/// Check measured metrics against the target bands (RTP, volatility, and EACH
+/// feature's hit-rate). Err carries the metrics so the caller (human / future
+/// tuner) can see what missed. The band count must equal the feature count.
 pub fn verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics> {
-    let rtp_ok = (metrics.rtp - target.rtp_target).abs() <= target.rtp_tolerance;
-    let vol_ok = metrics.volatility >= target.volatility_min
-        && metrics.volatility <= target.volatility_max;
-    let bonus_ok = metrics.bonus_hit_rate >= target.bonus_hit_rate_min
-        && metrics.bonus_hit_rate <= target.bonus_hit_rate_max;
+    assert_eq!(
+        target.bonus_hit_rate_bands.len(),
+        metrics.bonus_hit_rates.len(),
+        "target must provide one hit-rate band per model bonus"
+    );
 
-    if rtp_ok && vol_ok && bonus_ok {
+    let rtp_ok = (metrics.rtp - target.rtp_target).abs() <= target.rtp_tolerance;
+    let vol_ok =
+        metrics.volatility >= target.volatility_min && metrics.volatility <= target.volatility_max;
+    let bonuses_ok = target
+        .bonus_hit_rate_bands
+        .iter()
+        .zip(&metrics.bonus_hit_rates)
+        .all(|(band, &rate)| rate >= band.min && rate <= band.max);
+
+    if rtp_ok && vol_ok && bonuses_ok {
         Ok(())
     } else {
-        Err(*metrics)
+        Err(metrics.clone())
     }
 }
 
@@ -1311,42 +1368,45 @@ pub fn verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics> {
 mod tests {
     use super::*;
 
-    fn target() -> TargetSpec {
+    fn target(bands: Vec<HitRateBand>) -> TargetSpec {
         TargetSpec {
             rtp_target: 0.96,
             rtp_tolerance: 0.01,
             volatility_min: 1.0,
             volatility_max: 10.0,
-            bonus_hit_rate_min: 0.0,
-            bonus_hit_rate_max: 0.05,
+            bonus_hit_rate_bands: bands,
             pool_size: 100,
             candidate_count: 1000,
             realized_correction_band: 0.05,
         }
     }
 
-    fn metrics(rtp: f64, vol: f64, bonus: f64) -> Metrics {
-        Metrics { rtp, volatility: vol, hit_frequency: 0.3, bonus_hit_rate: bonus, base_rtp: rtp, feature_rtp: 0.0 }
+    fn metrics(rtp: f64, vol: f64, bonus: Vec<f64>) -> Metrics {
+        Metrics { rtp, volatility: vol, hit_frequency: 0.3, bonus_hit_rates: bonus, base_rtp: rtp, feature_rtp: 0.0 }
     }
 
     #[test]
     fn within_all_bands_passes() {
-        assert!(verify(&metrics(0.955, 3.0, 0.02), &target()).is_ok());
+        let t = target(vec![HitRateBand { min: 0.0, max: 0.05 }]);
+        assert!(verify(&metrics(0.955, 3.0, vec![0.02]), &t).is_ok());
     }
 
     #[test]
     fn rtp_out_of_band_fails() {
-        assert!(verify(&metrics(0.80, 3.0, 0.02), &target()).is_err());
+        let t = target(vec![]);
+        assert!(verify(&metrics(0.80, 3.0, vec![]), &t).is_err());
     }
 
     #[test]
     fn volatility_out_of_band_fails() {
-        assert!(verify(&metrics(0.955, 0.5, 0.02), &target()).is_err());
+        let t = target(vec![]);
+        assert!(verify(&metrics(0.955, 0.5, vec![]), &t).is_err());
     }
 
     #[test]
-    fn bonus_out_of_band_fails() {
-        assert!(verify(&metrics(0.955, 3.0, 0.20), &target()).is_err());
+    fn feature_hit_rate_out_of_band_fails() {
+        let t = target(vec![HitRateBand { min: 0.0, max: 0.05 }]);
+        assert!(verify(&metrics(0.955, 3.0, vec![0.20]), &t).is_err());
     }
 }
 ```
@@ -1366,7 +1426,7 @@ Expected: PASS (4 tests).
 
 ```bash
 git add studio/simulator/src/target.rs studio/simulator/src/run.rs studio/simulator/src/lib.rs
-git commit -m "feat(sim): verify measured metrics against target bands"
+git commit -m "feat(sim): verify metrics against RTP, volatility, per-feature bands"
 ```
 
 ---
@@ -1388,10 +1448,9 @@ git commit -m "feat(sim): verify measured metrics against target bands"
 Create `studio/simulator/src/curate.rs`:
 
 ```rust
-//! Freeze a faithful seed pool (Approach A2). Start from a faithful sample
-//! (the first `pool_size` candidates) and apply only minimal, bounded swaps to
-//! land realized RTP within tolerance — never reshaping beyond the correction
-//! band. The pool stays a faithful sample of the model.
+//! Freeze a faithful seed pool (Approach A2). Start from a faithful sample (the
+//! first `pool_size` candidates) and apply only minimal, bounded swaps to land
+//! realized RTP within tolerance — never reshaping beyond the correction band.
 
 use crate::measure::RoundSample;
 use crate::target::TargetSpec;
@@ -1414,7 +1473,7 @@ mod tests {
     use super::*;
 
     fn sample(seed: u64, payout: u64) -> RoundSample {
-        RoundSample { seed, payout, base_payout: payout, feature_payout: 0, triggered: false }
+        RoundSample { seed, payout, base_payout: payout, feature_payout: 0, feature_triggers: vec![] }
     }
 
     fn spec(pool_size: usize, rtp_target: f64) -> TargetSpec {
@@ -1423,8 +1482,7 @@ mod tests {
             rtp_tolerance: 0.001,
             volatility_min: 0.0,
             volatility_max: 1e9,
-            bonus_hit_rate_min: 0.0,
-            bonus_hit_rate_max: 1.0,
+            bonus_hit_rate_bands: vec![],
             pool_size,
             candidate_count: 0,
             realized_correction_band: 0.05,
@@ -1433,7 +1491,6 @@ mod tests {
 
     #[test]
     fn faithful_sample_already_on_target_needs_no_swaps() {
-        // 10 samples alternating payout 0/2 -> mean 1.0. pool_size 10, target 1.0.
         let samples: Vec<_> = (0..10).map(|i| sample(i, if i % 2 == 0 { 0 } else { 2 })).collect();
         let pool = freeze_pool(&samples, &spec(10, 1.0), 1.0).unwrap();
         assert_eq!(pool.seeds.len(), 10);
@@ -1443,22 +1500,20 @@ mod tests {
     #[test]
     fn swaps_nudge_realized_toward_target() {
         // pool of first 4 = payouts [0,0,0,0] -> realized 0.0; reserve has 2s.
-        // target 1.0 reachable by swapping in high-payout reserve seeds.
         let mut samples: Vec<_> = (0..4).map(|i| sample(i, 0)).collect();
         samples.extend((4..12).map(|i| sample(i, 2)));
-        // model_rtp ~ mean of all = (0*4 + 2*8)/12 = 1.333; target 1.0 within band.
-        let pool = freeze_pool(&samples, &spec(4, 1.0), 1.3333).unwrap();
+        // model_rtp ~ (0*4 + 2*8)/12 = 1.333; target 1.0 within band 0.05? |1.0-1.333|=0.333 > 0.05
+        // so use a model_rtp close to target to allow correction:
+        let pool = freeze_pool(&samples, &spec(4, 1.0), 1.0).unwrap();
         assert!((pool.realized_rtp - 1.0).abs() <= 0.001, "got {}", pool.realized_rtp);
     }
 
     #[test]
     fn refuses_correction_beyond_band() {
-        // model_rtp 0.0 (all-zero), target 1.0 -> needs to move 1.0 >> band 0.05.
-        let samples: Vec<_> = (0..8)
-            .map(|i| sample(i, if i < 4 { 0 } else { 2 }))
-            .collect();
+        // model_rtp 0.0, target 1.0 -> needs to move 1.0 >> band 0.05.
+        let samples: Vec<_> = (0..8).map(|i| sample(i, if i < 4 { 0 } else { 2 })).collect();
         let err = freeze_pool(&samples, &spec(4, 1.0), 0.0).unwrap_err();
-        matches!(err, CurateError::OutsideCorrectionBand { .. });
+        assert!(matches!(err, CurateError::OutsideCorrectionBand { .. }));
     }
 }
 ```
@@ -1492,7 +1547,6 @@ pub fn freeze_pool(
     let p = target.pool_size;
     assert!(samples.len() >= p, "need at least pool_size candidates");
 
-    // Working pool = first p indices; reserve = the rest.
     let mut pool: Vec<usize> = (0..p).collect();
     let mut reserve: Vec<usize> = (p..samples.len()).collect();
     let mut sum: u64 = pool.iter().map(|&i| samples[i].payout).sum();
@@ -1511,38 +1565,31 @@ pub fn freeze_pool(
             });
         }
 
-        // Need to raise realized (r < target) or lower it (r > target).
         let raise = r < target.rtp_target;
         // Pick the pool slot + reserve slot whose swap moves sum most in the
         // needed direction (deterministic: ties resolved by lowest index).
         let pool_pick = if raise {
-            // remove a low pool payout
             pool.iter().enumerate().min_by_key(|&(_, &i)| samples[i].payout)
         } else {
-            // remove a high pool payout
             pool.iter().enumerate().max_by_key(|&(_, &i)| samples[i].payout)
         };
         let res_pick = if raise {
-            // bring in a high reserve payout
             reserve.iter().enumerate().max_by_key(|&(_, &i)| samples[i].payout)
         } else {
-            // bring in a low reserve payout
             reserve.iter().enumerate().min_by_key(|&(_, &i)| samples[i].payout)
         };
 
         let (Some((pi, &pidx)), Some((ri, &ridx))) = (pool_pick, res_pick) else {
-            break; // nothing to swap with
+            break;
         };
 
         let out_payout = samples[pidx].payout;
         let in_payout = samples[ridx].payout;
-        // Stop if the best available swap does not move us toward the target.
         let helps = if raise { in_payout > out_payout } else { in_payout < out_payout };
         if !helps {
             break;
         }
 
-        // Apply the swap.
         pool[pi] = ridx;
         reserve[ri] = pidx;
         sum = sum - out_payout + in_payout;
@@ -1580,27 +1627,30 @@ git commit -m "feat(sim): freeze a faithful pool with bounded correction (A2)"
   - `bloom_simulator::run::CurationOutput { package_bytes: Vec<u8>, metrics: Metrics, pool: Pool, report: String }`
   - `bloom_simulator::run::run_curation(model: &SlotModel, target: &TargetSpec, master_seed: u64, package_id: &str, signing_key: &SigningKey) -> Result<CurationOutput, RunError>`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Extend imports + write the failing test**
 
-In `run.rs`, extend the imports at the top:
+At the top of `run.rs`, replace the import line with:
 
 ```rust
 use crate::curate::{freeze_pool, CurateError, Pool};
 use crate::measure::{measure, simulate};
 use crate::seedgen::generate_seeds;
-use bloom_math::mechanics::slots::{evaluate, from_payload, to_payload, SlotModel};
-use bloom_package::{build, verify_and_load, Envelope, PackageContent};
+use crate::target::{HitRateBand, Metrics, TargetSpec};
+use bloom_math::mechanics::slots::{to_payload, SlotModel};
+use bloom_package::{build, Envelope, PackageContent};
 use ed25519_dalek::SigningKey;
 ```
 
 In `run.rs` `tests` module, add:
 
 ```rust
-    use bloom_math::mechanics::slots::{Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole};
+    use bloom_math::mechanics::slots::{
+        evaluate, from_payload, Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
+    };
+    use bloom_package::verify_and_load;
     use ed25519_dalek::SigningKey;
 
     fn measurable_model() -> SlotModel {
-        // Same 0.9-RTP model as the measure test.
         SlotModel {
             symbols: vec![
                 SymbolDef { id: 0, role: SymbolRole::Normal },
@@ -1616,7 +1666,7 @@ In `run.rs` `tests` module, add:
                     PaytableEntry { symbol: 2, count: 1, payout: 5 },
                 ],
             },
-            free_spins: None,
+            bonuses: vec![],
         }
     }
 
@@ -1626,8 +1676,7 @@ In `run.rs` `tests` module, add:
             rtp_tolerance: 0.02,
             volatility_min: 0.0,
             volatility_max: 1e9,
-            bonus_hit_rate_min: 0.0,
-            bonus_hit_rate_max: 0.01,
+            bonus_hit_rate_bands: vec![], // no bonuses in this model
             pool_size: 10_000,
             candidate_count: 200_000,
             realized_correction_band: 0.05,
@@ -1641,8 +1690,7 @@ In `run.rs` `tests` module, add:
     #[test]
     fn run_curation_builds_a_loadable_package() {
         let out = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
-        let vk = key().verifying_key();
-        let content = verify_and_load(&out.package_bytes, &vk).expect("package loads");
+        let content = verify_and_load(&out.package_bytes, &key().verifying_key()).expect("loads");
         assert_eq!(content.seeds.len(), 10_000);
         assert_eq!(content.envelope.mechanic, "slots@1");
     }
@@ -1657,12 +1705,8 @@ In `run.rs` `tests` module, add:
 
     #[test]
     fn freeze_boundary_determinism_holds() {
-        // Re-expand the pooled seeds server-style from the package and confirm
-        // the realized RTP matches what curation recorded — proving the
-        // determinism contract survives the freeze.
         let out = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
-        let vk = key().verifying_key();
-        let content = verify_and_load(&out.package_bytes, &vk).unwrap();
+        let content = verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
         let model = from_payload(&content.math_payload).unwrap();
         let sum: u64 = content.seeds.iter().map(|&s| evaluate(&model, s).total_payout).sum();
         let reexpanded_rtp = sum as f64 / content.seeds.len() as f64;
@@ -1674,9 +1718,11 @@ In `run.rs` `tests` module, add:
         let mut t = target_09();
         t.rtp_target = 0.50; // model is ~0.9, far outside tolerance
         let err = run_curation(&measurable_model(), &t, 2026, "pkg-test", &key()).unwrap_err();
-        matches!(err, RunError::VerifyFailed(_));
+        assert!(matches!(err, RunError::VerifyFailed(_)));
     }
 ```
+
+> Note: the `HitRateBand` import in the top-level `use` is consumed by callers/tests that build bands; if the compiler flags it unused in `run.rs` itself, drop it from the top-level `use` (it remains available via `crate::target`).
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1733,20 +1779,28 @@ pub fn run_curation(
     };
     let package_bytes = build(&content, signing_key);
 
+    let bonus_rates = metrics
+        .bonus_hit_rates
+        .iter()
+        .enumerate()
+        .map(|(i, r)| format!("bonus_hit_rate[{i}]={r:.5}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
     let report = format!(
         "package_id={package_id}\nmechanic=slots@1\nmaster_seed={master_seed}\n\
          candidate_count={}\npool_size={}\n\
          measured_rtp={:.5}\nrealized_rtp={:.5}\nvolatility={:.5}\n\
-         hit_frequency={:.5}\nbonus_hit_rate={:.5}\nbase_rtp={:.5}\nfeature_rtp={:.5}\n",
+         hit_frequency={:.5}\nbase_rtp={:.5}\nfeature_rtp={:.5}\n{}\n",
         target.candidate_count,
         target.pool_size,
         metrics.rtp,
         pool.realized_rtp,
         metrics.volatility,
         metrics.hit_frequency,
-        metrics.bonus_hit_rate,
         metrics.base_rtp,
         metrics.feature_rtp,
+        bonus_rates,
     );
 
     Ok(CurationOutput { package_bytes, metrics, pool, report })
@@ -1774,7 +1828,7 @@ git commit -m "feat(sim): run_curation builds a signed package with provenance r
 - Modify: `justfile`
 
 **Interfaces:**
-- Consumes: `bloom_simulator::run::run_curation`, `serde_json` to read a model file.
+- Consumes: `bloom_simulator::run::run_curation`, `bloom_simulator::target::{TargetSpec, HitRateBand}`, `serde_json`.
 
 - [ ] **Step 1: Write the binary**
 
@@ -1786,26 +1840,35 @@ Create `studio/simulator/src/bin/curate.rs`:
 //!
 //! Usage: curate <model.json> <target.json> <package_id> <out.pkg> <out.report.txt>
 //!
+//! The model JSON matches `SlotModel` (serde). Bonus features use serde's
+//! external tagging, e.g.:
+//!   "bonuses": [ { "FreeSpins": { "trigger": {"symbol":9,"min_count":3},
+//!                                 "config": {"spins_awarded":10,"retrigger":true,
+//!                                            "multiplier":2,"feature_reels":null} } } ]
+//!
 //! NOTE: the demo signing key is fixed and for development only. Real signing
 //! keys are a sign-off-gate concern (umbrella §9), out of scope here.
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::run::run_curation;
-use bloom_simulator::target::TargetSpec;
+use bloom_simulator::target::{HitRateBand, TargetSpec};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use std::fs;
 
-// TargetSpec is not serde-derived in the library (it is a plain config struct);
-// mirror it here for JSON input to avoid adding serde to the core type.
+#[derive(Deserialize)]
+struct BandJson {
+    min: f64,
+    max: f64,
+}
+
 #[derive(Deserialize)]
 struct TargetJson {
     rtp_target: f64,
     rtp_tolerance: f64,
     volatility_min: f64,
     volatility_max: f64,
-    bonus_hit_rate_min: f64,
-    bonus_hit_rate_max: f64,
+    bonus_hit_rate_bands: Vec<BandJson>,
     pool_size: usize,
     candidate_count: usize,
     realized_correction_band: f64,
@@ -1823,13 +1886,17 @@ fn main() {
         serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model")).expect("parse model");
     let tj: TargetJson =
         serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target")).expect("parse target");
+
     let target = TargetSpec {
         rtp_target: tj.rtp_target,
         rtp_tolerance: tj.rtp_tolerance,
         volatility_min: tj.volatility_min,
         volatility_max: tj.volatility_max,
-        bonus_hit_rate_min: tj.bonus_hit_rate_min,
-        bonus_hit_rate_max: tj.bonus_hit_rate_max,
+        bonus_hit_rate_bands: tj
+            .bonus_hit_rate_bands
+            .iter()
+            .map(|b| HitRateBand { min: b.min, max: b.max })
+            .collect(),
         pool_size: tj.pool_size,
         candidate_count: tj.candidate_count,
         realized_correction_band: tj.realized_correction_band,
@@ -1869,7 +1936,7 @@ sim-curate model target id pkg report:
 
 - [ ] **Step 4: Smoke-test end to end**
 
-Create a throwaway `scratch-model.json` and `scratch-target.json` matching the `measurable_model` / `target_09` shapes (RTP ~0.9), then:
+Create a throwaway `scratch-model.json` (the `measurable_model` shape: `"bonuses": []`, RTP ~0.9) and `scratch-target.json` (the `target_09` shape with `"bonus_hit_rate_bands": []` and a `"master_seed"`), then:
 
 Run: `just sim-curate scratch-model.json scratch-target.json smoke smoke.pkg smoke.report.txt`
 Expected: prints a report with `realized_rtp` near 0.9 and writes both files. Delete the scratch files afterward (do not commit them).
@@ -1898,18 +1965,18 @@ git commit -m "feat(sim): add curate CLI and just recipe"
 ## Self-review (plan author)
 
 **Spec coverage:**
-- Math model schema (spec §3) → Task 1. ✓
-- Enriched kernel `evaluate` with grid/lines/scatter/free-spins (spec §4) → Tasks 2–6. ✓
-- Integer-only outcome / determinism (spec §2.2, Global Constraints) → enforced throughout; bit-reproducibility + golden vector Task 6. ✓
-- Simulator generate → simulate (parallel) → measure → verify → freeze → build+sign (spec §5) → Tasks 7–12. ✓
+- Model schema incl. `bonuses: Vec<BonusFeature>` + per-feature trigger (spec §3) → Task 1. ✓
+- Frozen §3.1 composition rule (independent triggers, list order, sum, retrigger-same-feature, no nesting) → Tasks 5–6 + Global Constraints. ✓
+- Enriched kernel `evaluate` with grid/lines/scatter/per-feature bonuses + per-feature breakdown (spec §4) → Tasks 2–6. ✓
+- Integer-only / determinism + bit-reproducibility golden vector (spec §2.2, §6) → Task 6. ✓
+- Simulator generate → simulate (parallel) → measure (per-feature hit-rates) → verify (per-feature bands) → freeze → build+sign (spec §5) → Tasks 7–12. ✓
 - Approach A faithfulness + honesty guardrail (spec §2.1) → Task 11. ✓
 - Verify-fails-loudly, no silent reshaping (spec §5 step 4, §6) → Tasks 10, 12. ✓
-- Provenance report as separate artifact, package format untouched (spec §5 step 6 + Global Constraints reconciliation) → Task 12. ✓
-- Freeze-boundary determinism (spec §6) → Task 12. ✓
-- Reproducible curation (spec §6) → Task 12. ✓
-- Mechanic-agnostic seams / `Tuner` deferred (spec §7, §8) → no code (labels only); `RoundOutcome` + `evaluate` are the named seams; GA/tuning explicitly absent. ✓
-- First-cut defaults (spec §9) → expressed as `TargetSpec` inputs + CLI JSON, not hardcoded. ✓
+- Provenance report as separate artifact, package untouched (spec §5 step 6 + Global Constraints) → Task 12. ✓
+- Freeze-boundary + reproducible curation (spec §6) → Task 12. ✓
+- `BonusFeature` enum seam / no arbitration machinery (spec §7, §8) → labels only; one variant, one match arm; arbitration explicitly absent. ✓
+- First-cut defaults (spec §9) → `TargetSpec` inputs + CLI JSON, not hardcoded. ✓
 
-**Placeholder scan:** The only intentional placeholders are the golden-vector constants in Task 6, which the engineer fills from the first green run (explicit step). No "TBD"/"add error handling"/"similar to Task N" placeholders elsewhere.
+**Placeholder scan:** The only intentional placeholders are the golden-vector constants in Task 6, filled from the first green run (explicit step). No other "TBD"/"add error handling"/"similar to Task N" placeholders.
 
-**Type consistency:** `RoundSample`, `Metrics`, `TargetSpec`, `Pool`, `CurateError`, `RunError`, `CurationOutput`, and `run_curation`'s signature are defined once and referenced consistently across Tasks 8–13. `evaluate`/`RoundOutcome`/`to_payload`/`from_payload` names match between `trusted/math` (Tasks 1, 6) and the simulator's consumption (Tasks 8, 12).
+**Type consistency:** `RoundSample` (with `feature_triggers: Vec<bool>`), `Metrics` (with `bonus_hit_rates: Vec<f64>`), `TargetSpec` (with `bonus_hit_rate_bands: Vec<HitRateBand>`), `HitRateBand`, `Pool`, `CurateError`, `RunError`, `CurationOutput`, `FeatureOutcome`, `RoundOutcome` are each defined once and referenced consistently. `Copy` is intentionally dropped from `RoundSample`/`Metrics`/`TargetSpec` (they hold `Vec`s); `verify` clones `Metrics` on the error path. Kernel names (`evaluate`, `RoundOutcome.features`, `to_payload`, `from_payload`) match between `trusted/math` (Tasks 1, 5, 6) and simulator consumption (Tasks 8, 9, 12).
