@@ -7,6 +7,7 @@ interface IRestDeps {
   getRooms: typeof realRest.getRooms;
   createRoom: typeof realRest.createRoom;
   getMessages: typeof realRest.getMessages;
+  getRuns: typeof realRest.getRuns;
   getSkills: typeof realRest.getSkills;
 }
 
@@ -83,6 +84,8 @@ export async function openRoom(roomId: string): Promise<void> {
 
   s.activeRoomId.set(roomId);
   s.messages.set([]);
+  s.runs.set([]);
+  s.activeRunId.set(null);
   s.members.set([]);
   s.typing.set([]);
   s.aiStatus.set({ state: 'idle', queueDepth: 0 });
@@ -90,9 +93,10 @@ export async function openRoom(roomId: string): Promise<void> {
   persist();
 
   try {
-    const history = await rest.getMessages(roomId);
+    const [history, runs] = await Promise.all([rest.getMessages(roomId), rest.getRuns(roomId)]);
     if (chatSlice().activeRoomId.get() !== roomId) return; // a newer openRoom won
     s.messages.set(history);
+    s.runs.set(runs);
     s.roomLoadStatus.set('idle');
   } catch {
     if (chatSlice().activeRoomId.get() !== roomId) return;
@@ -107,6 +111,8 @@ export function closeRoom(): void {
   if (prev) sock().leaveRoom(prev);
   s.activeRoomId.set(null);
   s.messages.set([]);
+  s.runs.set([]);
+  s.activeRunId.set(null);
   s.members.set([]);
   s.typing.set([]);
   persist();

@@ -1,4 +1,4 @@
-import type { IRoom, IMessage, ISkill, ISkillFull } from './state';
+import type { IRoom, IMessage, IRun, ISkill, ISkillFull } from './state';
 import { BACKEND_URL } from './config';
 
 export interface IModelOption {
@@ -35,6 +35,10 @@ export async function createRoom(name: string, model?: string): Promise<IRoom> {
 
 export async function getMessages(roomId: string): Promise<IMessage[]> {
   return okJson<IMessage[]>(await fetch(`${BACKEND_URL}/rooms/${roomId}/messages`));
+}
+
+export async function getRuns(roomId: string): Promise<IRun[]> {
+  return okJson<IRun[]>(await fetch(`${BACKEND_URL}/rooms/${roomId}/runs`));
 }
 
 export async function getSkill(name: string): Promise<ISkillFull> {

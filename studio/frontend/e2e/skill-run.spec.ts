@@ -38,12 +38,12 @@ test.describe('generate-sprite skill run', () => {
     await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
     await page.getByTestId('chat-composer').press('Enter');
 
-    // --- Must-pass: run timeline becomes visible ---
-    const timeline = page.getByTestId('run-timeline');
+    // --- Must-pass: run steps appear in the unified chat feed ---
+    const timeline = page.getByTestId('chat-messages');
     await expect(timeline).toBeVisible({ timeout: 10_000 });
 
     // --- Must-pass: the tool call step shows the tool name "generate_asset" ---
-    // RunTimeline renders step cards; tool_call/tool_result cards display step.toolName as text.
+    // RunTurnBlock renders step cards; tool_call/tool_result cards display step.toolName as text.
     await expect(timeline).toContainText('generate_asset', { timeout: 15_000 });
 
     // --- Must-pass: the final step contains the cassette's confirming text ---
@@ -76,8 +76,8 @@ test.describe('generate-sprite skill run', () => {
     await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
     await page.getByTestId('chat-composer').press('Enter');
 
-    // Wait for the run to complete (final confirming text in the timeline).
-    await expect(page.getByTestId('run-timeline')).toContainText('Asset Board', { timeout: 30_000 });
+    // Wait for the run to complete (final confirming text in the feed).
+    await expect(page.getByTestId('chat-messages')).toContainText('Asset Board', { timeout: 30_000 });
 
     // An asset card should appear on the board — the skill called asset_store.create_asset
     // and asset_hub.generate_and_wait which emits asset_completed, causing the frontend
@@ -105,13 +105,54 @@ test.describe('generate-sprite skill run', () => {
     await a.getByTestId('chat-composer').fill('/generate-sprite a knight');
     await a.getByTestId('chat-composer').press('Enter');
 
-    // both clients see the run timeline with the tool name
-    const timelineA = a.getByTestId('run-timeline');
-    const timelineB = b.getByTestId('run-timeline');
+    // both clients see the run steps in the unified chat feed with the tool name
+    const timelineA = a.getByTestId('chat-messages');
+    const timelineB = b.getByTestId('chat-messages');
     await expect(timelineA).toContainText('generate_asset', { timeout: 20_000 });
     await expect(timelineB).toContainText('generate_asset', { timeout: 20_000 });
 
     await a.close();
     await b.close();
+  });
+
+  test('a run block appears between chat bubbles in chronological order', async ({ page }) => {
+    const roomName = `Interleave ${Date.now()}`;
+    await openApp(page, 'alice');
+    await createRoom(page, roomName);
+
+    await page.getByTestId('chat-composer').fill('first plain message');
+    await page.getByTestId('chat-composer').press('Enter');
+    await expect(page.getByTestId('chat-messages')).toContainText('first plain message');
+
+    await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
+    await page.getByTestId('chat-composer').press('Enter');
+    await expect(page.getByTestId('chat-messages')).toContainText('generate_asset', { timeout: 20_000 });
+
+    await page.getByTestId('chat-composer').fill('third plain message');
+    await page.getByTestId('chat-composer').press('Enter');
+    await expect(page.getByTestId('chat-messages')).toContainText('third plain message');
+
+    // DOM order: the run-turn block sits before the last plain message.
+    const order = await page.getByTestId('chat-messages').evaluate((ul) => Array.from(ul.children).map((c) => c.getAttribute('data-testid') ?? ''));
+    const runIdx = order.findIndex((t) => t.startsWith('run-turn-'));
+    const lastMsgIdx = order.length - 1;
+    expect(runIdx).toBeGreaterThan(0);
+    expect(runIdx).toBeLessThan(lastMsgIdx);
+  });
+
+  test('run steps persist in the feed after a page reload', async ({ page }) => {
+    const roomName = `Reload ${Date.now()}`;
+    await openApp(page, 'alice');
+    await createRoom(page, roomName);
+
+    await page.getByTestId('chat-composer').fill('/generate-sprite a knight');
+    await page.getByTestId('chat-composer').press('Enter');
+    await expect(page.getByTestId('chat-messages')).toContainText('Asset Board', { timeout: 30_000 });
+
+    await page.reload();
+    await expect(page.getByTestId('chat-room-pane')).toBeVisible();
+    // After reload, openRoom re-fetches runs and the feed re-renders the run block.
+    await expect(page.getByTestId('chat-messages')).toContainText('generate_asset', { timeout: 15_000 });
+    await expect(page.getByTestId('chat-messages')).toContainText('Asset Board', { timeout: 15_000 });
   });
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,8 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { llmChatHooks, type ISkill } from './state';
 import { sendPrompt, setTyping, runSkill } from './actions';
 import { bumpRenderCount } from '../../app/renderCount';
-import { RunTimeline } from './RunTimeline';
+import { RunTurnBlock } from './RunTurnBlock';
+import { buildFeed } from './feed';
 import { SkillForm } from './SkillForm';
 import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './slashParse';
 import { fuzzyMatchSkills, type ISkillMatch } from './fuzzySkills';
@@ -16,8 +17,10 @@ import { fuzzyMatchSkills, type ISkillMatch } from './fuzzySkills';
 // ---------------------------------------------------------------------------
 
 // Each bubble subscribes to ITS OWN message node, so a token append re-renders
-// only the streaming bubble — not the list container, not the pane shell.
-function ChatMessageBubble({ index }: { index: number }) {
+// only the streaming bubble. Wrapped in memo so a parent (MessageList) re-render —
+// which fires when the whole messages/runs array is replaced on an append — does
+// NOT cascade into every bubble; only the bubble whose own leaf changed re-renders.
+const ChatMessageBubble = memo(function ChatMessageBubble({ index }: { index: number }) {
   const s = llmChatHooks.usePluginState();
   const m = s.messages[index];
   bumpRenderCount('ChatMessageBubble');
@@ -56,18 +59,29 @@ function ChatMessageBubble({ index }: { index: number }) {
       </div>
     </li>
   );
-}
+});
 
 function MessageList() {
   const s = llmChatHooks.usePluginState();
-  // Subscribe only to the LENGTH so appends (length change) re-render the list,
-  // but content edits (token) do not touch this component.
-  const count = s.messages.length;
+  // Subscribe to additions (lengths) and the immutable id/createdAt leaves used
+  // for ordering. Content/steps leaves are read by the child entries, NOT here,
+  // so a streaming token never re-renders the list shell.
+  const msgCount = s.messages.length;
+  const runCount = s.runs.length;
+  // `stealth: true` reads the immutable ordering leaves WITHOUT subscribing, so a
+  // streaming token (which replaces a message/run object's identity in place) never
+  // re-renders the list shell — only a length change (an append) does.
+  const msgs = Array.from({ length: msgCount }, (_, i) => ({
+    id: s.messages[i].id.get({ stealth: true }),
+    createdAt: s.messages[i].createdAt.get({ stealth: true }),
+  }));
+  const runs = Array.from({ length: runCount }, (_, i) => ({ id: s.runs[i].id.get({ stealth: true }), createdAt: s.runs[i].createdAt.get({ stealth: true }) }));
+  const feed = buildFeed(msgs, runs);
   return (
     <ul data-testid="chat-messages" className="m-0 flex flex-1 list-none flex-col gap-1.5 overflow-auto p-0">
-      {Array.from({ length: count }, (_, i) => (
-        <ChatMessageBubble key={i} index={i} />
-      ))}
+      {feed.map((entry) =>
+        entry.kind === 'message' ? <ChatMessageBubble key={`m:${entry.id}`} index={entry.index} /> : <RunTurnBlock key={`r:${entry.id}`} index={entry.index} />,
+      )}
     </ul>
   );
 }
@@ -282,7 +296,6 @@ export function ChatRoomPane() {
       <ErrorBanner />
       <MessageList />
       <TypingLine />
-      <RunTimeline />
       {formSkill ? (
         <SkillForm
           skill={formSkill}

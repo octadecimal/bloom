@@ -8,6 +8,7 @@ const rest = {
   getRooms: vi.fn(),
   createRoom: vi.fn(),
   getMessages: vi.fn(),
+  getRuns: vi.fn(),
   getSkills: vi.fn(),
 };
 const socket = {
@@ -48,6 +49,7 @@ describe('actions', () => {
   it('openRoom leaves previous, clears, fetches history, joins, and persists', async () => {
     chatSlice().activeRoomId.set('old');
     rest.getMessages.mockResolvedValue([{ id: 'm1', roomId: 'r1', author: 'a', role: 'user', content: 'h', status: 'complete', createdAt: 't' }]);
+    rest.getRuns.mockResolvedValue([]);
     await actions.openRoom('r1');
     expect(socket.leaveRoom).toHaveBeenCalledWith('old');
     expect(chatSlice().activeRoomId.get()).toBe('r1');
@@ -65,6 +67,7 @@ describe('actions', () => {
   it('createRoom posts then opens the new room', async () => {
     rest.createRoom.mockResolvedValue({ id: 'r9', name: 'New', model: 'm', gameId: null, createdAt: 't' });
     rest.getMessages.mockResolvedValue([]);
+    rest.getRuns.mockResolvedValue([]);
     await actions.createRoom('New');
     expect(rest.createRoom).toHaveBeenCalledWith('New', undefined);
     expect(chatSlice().activeRoomId.get()).toBe('r9');
@@ -90,6 +93,33 @@ describe('actions', () => {
     chatSlice().activeRoomId.set('r1');
     actions.resolveApproval('run1', 'approve');
     expect(socket.resolveApproval).toHaveBeenCalledWith('r1', 'run1', 'approve');
+  });
+
+  it('openRoom fetches runs and stores them in the feed', async () => {
+    rest.getMessages.mockResolvedValue([]);
+    rest.getRuns.mockResolvedValue([{ id: 'run1', roomId: 'r1', skillName: 's', status: 'completed', steps: [], createdAt: 't' }]);
+    await actions.openRoom('r1');
+    expect(rest.getRuns).toHaveBeenCalledWith('r1');
+    expect(chatSlice().runs.get()).toHaveLength(1);
+  });
+
+  it('openRoom clears the previous room runs before loading', async () => {
+    chatSlice().runs.set([{ id: 'stale', roomId: 'old', skillName: 's', status: 'completed', steps: [], createdAt: 't' }]);
+    chatSlice().activeRunId.set('stale');
+    rest.getMessages.mockResolvedValue([]);
+    rest.getRuns.mockResolvedValue([]);
+    await actions.openRoom('r1');
+    expect(chatSlice().runs.get()).toHaveLength(0);
+    expect(chatSlice().activeRunId.get()).toBeNull();
+  });
+
+  it('closeRoom clears runs and activeRunId', () => {
+    chatSlice().activeRoomId.set('r1');
+    chatSlice().runs.set([{ id: 'run1', roomId: 'r1', skillName: 's', status: 'completed', steps: [], createdAt: 't' }]);
+    chatSlice().activeRunId.set('run1');
+    actions.closeRoom();
+    expect(chatSlice().runs.get()).toHaveLength(0);
+    expect(chatSlice().activeRunId.get()).toBeNull();
   });
 
   describe('closeRoom', () => {
@@ -235,6 +265,7 @@ describe('actions', () => {
     });
 
     rest.getMessages.mockImplementation((id: string) => (id === 'A' ? promiseA : promiseB));
+    rest.getRuns.mockResolvedValue([]);
 
     // Start openRoom('A') — history fetch is pending
     const openA = actions.openRoom('A');

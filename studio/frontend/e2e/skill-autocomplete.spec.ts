@@ -46,7 +46,7 @@ test.describe('skill autocomplete keyboard navigation', () => {
     await composer.press('Tab');
     await composer.type('a knight');
     await composer.press('Enter');
-    await expect(page.getByTestId('run-timeline')).toContainText('generate_asset', { timeout: 20_000 });
+    await expect(page.getByTestId('chat-messages')).toContainText('generate_asset', { timeout: 20_000 });
   });
 
   test('Tab-complete then bare Enter opens the form', async ({ page }) => {

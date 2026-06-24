@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { rootStore } from '../../state/rootStore';
-import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID, type IMessage } from './state';
-import { appendToken } from './reducers';
+import { makeInitialState, chatSlice, LLM_CHAT_PLUGIN_ID, type IMessage, type IRun } from './state';
+import { appendToken, appendStepToken } from './reducers';
 import * as actions from './actions';
 import { ChatRoomPane } from './ChatRoomPane';
 
@@ -215,5 +215,43 @@ describe('ChatRoomPane skill autocomplete (keyboard)', () => {
       .join('')
       .toLowerCase();
     expect(strongText).toContain('sprite');
+  });
+});
+
+describe('ChatRoomPane unified feed', () => {
+  const run = (over: Partial<IRun>): IRun => ({
+    id: 'run1',
+    roomId: 'r1',
+    skillName: 's',
+    status: 'running',
+    steps: [],
+    createdAt: '2026-06-23T00:00:02Z',
+    ...over,
+  });
+
+  it('interleaves a run block between chat bubbles by timestamp', () => {
+    chatSlice().messages.set([
+      msg({ id: 'u1', role: 'user', author: 'alice', content: 'before', status: 'complete', createdAt: '2026-06-23T00:00:00Z' }),
+      msg({ id: 'u2', role: 'user', author: 'alice', content: 'after', status: 'complete', createdAt: '2026-06-23T00:00:05Z' }),
+    ]);
+    chatSlice().runs.set([run({ steps: [{ index: 0, type: 'final', toolName: null, content: 'mid', status: 'complete' }] })]);
+    render(<ChatRoomPane />);
+    const ids = Array.from(screen.getByTestId('chat-messages').children).map((el) => el.getAttribute('data-testid'));
+    expect(ids).toEqual(['chat-msg-u1', 'run-turn-run1', 'chat-msg-u2']);
+  });
+
+  it('a run-step token re-renders only the run block, not sibling bubbles', () => {
+    chatSlice().messages.set([msg({ id: 'u1', role: 'user', content: 'hi', status: 'complete', createdAt: '2026-06-23T00:00:00Z' })]);
+    chatSlice().runs.set([run({ steps: [{ index: 0, type: 'final', toolName: null, content: 'He', status: 'running' }] })]);
+    render(<ChatRoomPane />);
+    window.__renderCounts = {};
+    act(() => {
+      const cur = chatSlice().runs.get({ noproxy: true }) as IRun[];
+      chatSlice().runs.set(appendStepToken(cur, 'run1', 0, 'llo'));
+    });
+    expect(screen.getByTestId('run-turn-run1').textContent).toContain('Hello');
+    expect(window.__renderCounts['RunTurnBlock'] ?? 0).toBeGreaterThanOrEqual(1);
+    expect(window.__renderCounts['ChatMessageBubble'] ?? 0).toBe(0);
+    expect(window.__renderCounts['ChatRoomPane'] ?? 0).toBe(0);
   });
 });
