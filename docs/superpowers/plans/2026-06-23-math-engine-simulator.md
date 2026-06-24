@@ -842,6 +842,16 @@ In `eval.rs` `tests` module, add:
     const GOLDEN_SPINS: u32 = 0; // placeholder — set from first run
 ```
 
+> **As-built note (drift-detection gap):** seed `12345` on `full_model()` is a
+> *losing* spin, so the placeholders above stay `0` after Step 4 — an all-zero
+> golden vector that an always-zero `evaluate` would also satisfy, leaving the
+> winning/triggering path unasserted. The shipped test was strengthened to keep
+> the losing-seed zeros as a negative control **and** pin a winning+triggering
+> seed (`53` → base `8`, feature `20`, total `28`, spins `3`), plus
+> `any_pay`/`any_trigger` population guards over the 3000-seed consistency loop.
+> A future re-derivation should pick a *triggering* golden seed, not rely on
+> `12345`.
+
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cargo test -p bloom-math slots::eval`
@@ -1553,16 +1563,24 @@ pub fn freeze_pool(
 
     let realized = |sum: u64| sum as f64 / p as f64;
 
+    // Honesty guardrail (Approach A2): curation may only correct toward a target
+    // that is itself within `realized_correction_band` of the model's measured RTP.
+    // Checked against the TARGET (not the moving realized `r`) so a faithful sample
+    // whose starting RTP is far from model_rtp can still be corrected *toward*
+    // honesty. (An earlier draft checked `(r - model_rtp)` inside the loop, which
+    // spuriously failed before any corrective swap when the faithful sample started
+    // far from model_rtp.)
+    if (target.rtp_target - model_rtp).abs() > target.realized_correction_band {
+        return Err(CurateError::OutsideCorrectionBand {
+            needed: (target.rtp_target - model_rtp).abs(),
+            band: target.realized_correction_band,
+        });
+    }
+
     loop {
         let r = realized(sum);
         if (r - target.rtp_target).abs() <= target.rtp_tolerance {
             break;
-        }
-        if (r - model_rtp).abs() > target.realized_correction_band {
-            return Err(CurateError::OutsideCorrectionBand {
-                needed: (r - model_rtp).abs(),
-                band: target.realized_correction_band,
-            });
         }
 
         let raise = r < target.rtp_target;
