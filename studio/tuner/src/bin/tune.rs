@@ -124,6 +124,11 @@ fn main() {
         },
     };
 
+    if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {
+        eprintln!("invalid input: {e}");
+        std::process::exit(2);
+    }
+
     let out = GeneticTuner.tune(&model, &target, &cfg);
     let report = render_report(&out);
     let model_json = serde_json::to_string_pretty(&out.model).expect("serialize tuned model");

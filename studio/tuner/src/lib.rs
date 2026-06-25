@@ -9,8 +9,10 @@ pub mod genetic;
 pub mod genome;
 pub mod outcome;
 pub mod report;
+pub mod validate;
 
 pub use genetic::GeneticTuner;
+pub use validate::validate;
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::TargetSpec;

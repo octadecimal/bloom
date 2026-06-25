@@ -151,6 +151,9 @@ pub fn repair(genome: &mut Genome, template: &SlotModel, bounds: &GeneBounds) {
     // Reel counts: rescale (deterministically) so each reel sums to its fixed
     // strip length, keeping at least the original number of distinct symbols.
     for (reel, counts) in template.reels.iter().zip(&mut genome.reel_counts) {
+        if counts.is_empty() {
+            continue;
+        }
         let target = reel.len() as u32;
         let sum: u32 = counts.iter().sum();
         if sum == 0 {
@@ -290,6 +293,21 @@ mod tests {
             let mut b = got.clone();
             b.sort();
             assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn repair_distributes_all_zero_counts_to_strip_length() {
+        let m = model();
+        let mut g = encode(&m);
+        for counts in &mut g.reel_counts {
+            for c in counts.iter_mut() {
+                *c = 0;
+            }
+        }
+        repair(&mut g, &m, &bounds());
+        for (reel, counts) in m.reels.iter().zip(&g.reel_counts) {
+            assert_eq!(counts.iter().sum::<u32>() as usize, reel.len());
         }
     }
 

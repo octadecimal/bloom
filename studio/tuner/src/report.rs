@@ -123,5 +123,6 @@ mod tests {
         assert!(r.contains("verdict=NEAR_MISS"));
         assert!(r.contains("rtp"));
         assert!(r.contains("0.8")); // the missed measured value
+        assert!(r.contains("-- missed bands --"));
     }
 }
