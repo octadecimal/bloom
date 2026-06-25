@@ -202,3 +202,32 @@ def _realize_paytable(
             "paytable empty or unresolved; seeded placeholder payouts for paying symbols"
         )
     return {"entries": entries}, errors, warnings
+
+
+def _realize_bonuses(
+    bonus_features: dict, symbol_defs: list[dict]
+) -> tuple[list[dict], list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    rows = bonus_features.get("free_spins") or []
+    if not rows:
+        return [], errors, warnings
+    trigger = next((d["id"] for d in symbol_defs if d["role"] == "scatter"), None)
+    if trigger is None:
+        warnings.append(
+            "bonus features defined but no scatter/bonus trigger symbol exists; "
+            "bonuses skipped"
+        )
+        return [], errors, warnings
+    bonuses: list[dict] = []
+    for row in rows:
+        bonuses.append({"FreeSpins": {
+            "trigger": {"symbol": trigger, "min_count": BONUS_MIN_COUNT},
+            "config": {
+                "spins_awarded": _to_int(row.get("count"), 0),
+                "retrigger": _to_bool(row.get("retrigger")),
+                "multiplier": _to_int(row.get("multiplier"), 1),
+                "feature_reels": None,
+            },
+        }})
+    return bonuses, errors, warnings

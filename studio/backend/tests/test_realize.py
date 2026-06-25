@@ -1,6 +1,7 @@
 from app.simulator.realize import (
     RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
     _realize_reels, _all_patterns, _realize_paylines, _realize_paytable,
+    _realize_bonuses,
 )
 
 _DEFS = [
@@ -188,3 +189,28 @@ def test_paylines_ways_over_cap_is_hard_error():
         {"payline_mode": "ways"}, reel_count=8, rows=4)  # 4**8 = 65536 > 4096
     assert lines == []
     assert any("MAX_PAYLINES" in e for e in errors)
+
+
+def test_bonuses_map_free_spins_to_external_tagged_freespins():
+    bf = {"free_spins": [
+        {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
+    out, errors, warnings = _realize_bonuses(bf, _DEFS)
+    assert errors == []
+    assert out == [{"FreeSpins": {
+        "trigger": {"symbol": 3, "min_count": 3},
+        "config": {"spins_awarded": 10, "retrigger": True,
+                   "multiplier": 2, "feature_reels": None},
+    }}]
+
+
+def test_bonuses_without_trigger_symbol_warns_and_skips():
+    defs_no_scatter = [{"id": 0, "role": "normal"}, {"id": 1, "role": "wild"}]
+    out, errors, warnings = _realize_bonuses(
+        {"free_spins": [{"count": "5"}]}, defs_no_scatter)
+    assert out == []
+    assert any("trigger symbol" in w for w in warnings)
+
+
+def test_bonuses_absent_is_empty_no_warning():
+    out, errors, warnings = _realize_bonuses({}, _DEFS)
+    assert out == [] and errors == [] and warnings == []
