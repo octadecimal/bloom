@@ -26,8 +26,9 @@ fn unit(rng: &mut SplitMix64) -> f64 {
 
 /// Deterministic per-generation seed set (common random numbers).
 fn generation_seeds(master_seed: u64, generation: usize, count: usize) -> Vec<u64> {
-    let mixed = SplitMix64::new(master_seed ^ (generation as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15))
-        .next_u64();
+    let mixed =
+        SplitMix64::new(master_seed ^ (generation as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15))
+            .next_u64();
     generate_seeds(mixed, count)
 }
 
@@ -53,10 +54,12 @@ fn mutate(g: &mut Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut Spl
     }
     for bonus in &mut g.bonuses {
         if unit(rng) < cfg.mutation_rate {
-            bonus.spins_awarded = b.spins_min + (rng.next_u64() as u32 % (b.spins_max - b.spins_min + 1));
+            bonus.spins_awarded =
+                b.spins_min + (rng.next_u64() as u32 % (b.spins_max - b.spins_min + 1));
         }
         if unit(rng) < cfg.mutation_rate {
-            bonus.multiplier = b.multiplier_min + (rng.next_u64() % (b.multiplier_max - b.multiplier_min + 1));
+            bonus.multiplier =
+                b.multiplier_min + (rng.next_u64() % (b.multiplier_max - b.multiplier_min + 1));
         }
         if unit(rng) < cfg.mutation_rate {
             bonus.min_count = b.min_count_min.max(1)
@@ -67,19 +70,31 @@ fn mutate(g: &mut Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut Spl
 }
 
 /// Uniform crossover of two parents (gene-wise coin flip), then repair.
-fn crossover(p1: &Genome, p2: &Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut SplitMix64) -> Genome {
+fn crossover(
+    p1: &Genome,
+    p2: &Genome,
+    template: &SlotModel,
+    cfg: &TunerConfig,
+    rng: &mut SplitMix64,
+) -> Genome {
     if unit(rng) >= cfg.crossover_rate {
         return p1.clone();
     }
     let mut child = p1.clone();
     for (r, src) in child.reel_counts.iter_mut().zip(&p2.reel_counts) {
-        if unit(rng) < 0.5 { *r = src.clone(); }
+        if unit(rng) < 0.5 {
+            *r = src.clone();
+        }
     }
     for (i, c) in child.payouts.iter_mut().enumerate() {
-        if unit(rng) < 0.5 { *c = p2.payouts[i]; }
+        if unit(rng) < 0.5 {
+            *c = p2.payouts[i];
+        }
     }
     for (i, c) in child.bonuses.iter_mut().enumerate() {
-        if unit(rng) < 0.5 { *c = p2.bonuses[i].clone(); }
+        if unit(rng) < 0.5 {
+            *c = p2.bonuses[i].clone();
+        }
     }
     repair(&mut child, template, &cfg.bounds);
     child
@@ -89,7 +104,11 @@ fn crossover(p1: &Genome, p2: &Genome, template: &SlotModel, cfg: &TunerConfig, 
 fn tournament<'a>(scored: &'a [(Genome, f64)], rng: &mut SplitMix64) -> &'a Genome {
     let i = (rng.next_u64() as usize) % scored.len();
     let j = (rng.next_u64() as usize) % scored.len();
-    if scored[i].1 >= scored[j].1 { &scored[i].0 } else { &scored[j].0 }
+    if scored[i].1 >= scored[j].1 {
+        &scored[i].0
+    } else {
+        &scored[j].0
+    }
 }
 
 impl Tuner for GeneticTuner {
@@ -114,8 +133,10 @@ impl Tuner for GeneticTuner {
         let mut best: Option<(Genome, f64)> = None;
         let mut stagnation = 0usize;
         let mut generations_run = 0usize;
+        // at least one generation must run so `best` is populated
+        let max_generations = cfg.max_generations.max(1);
 
-        for g in 0..cfg.max_generations {
+        for g in 0..max_generations {
             generations_run = g + 1;
             let seeds = generation_seeds(cfg.master_seed, g, cfg.search_candidate_count);
 
@@ -128,7 +149,7 @@ impl Tuner for GeneticTuner {
                     (genome.clone(), f)
                 })
                 .collect();
-            scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
             // Snapshot the generation's best (re-derive its metrics for the trace).
             let best_model = decode(&scored[0].0, seed_model);
@@ -152,13 +173,22 @@ impl Tuner for GeneticTuner {
                 stagnation += 1;
             }
 
-            if scored[0].1 >= 0.0 { break; }              // feasible in the search tier
-            if stagnation >= cfg.stagnation_window { break; }
-            if g + 1 == cfg.max_generations { break; }
+            if scored[0].1 >= 0.0 {
+                break;
+            } // feasible in the search tier
+            if stagnation >= cfg.stagnation_window {
+                break;
+            }
+            if g + 1 == max_generations {
+                break;
+            }
 
             // Next generation: elitism + tournament selection + crossover + mutation.
-            let mut next: Vec<Genome> =
-                scored.iter().take(cfg.elitism).map(|s| s.0.clone()).collect();
+            let mut next: Vec<Genome> = scored
+                .iter()
+                .take(cfg.elitism)
+                .map(|s| s.0.clone())
+                .collect();
             while next.len() < cfg.population {
                 let p1 = tournament(&scored, &mut rng).clone();
                 let p2 = tournament(&scored, &mut rng).clone();
@@ -176,7 +206,9 @@ impl Tuner for GeneticTuner {
         let metrics = measure(&simulate(&model, &final_seeds));
         let verdict = match verify(&metrics, target) {
             Ok(()) => Verdict::Pass,
-            Err(_) => Verdict::NearMiss { missed: band_misses(&metrics, target) },
+            Err(_) => Verdict::NearMiss {
+                missed: band_misses(&metrics, target),
+            },
         };
 
         TuneOutcome {
@@ -209,17 +241,34 @@ mod tests {
     fn toy(payout_sym2: u64) -> SlotModel {
         SlotModel {
             symbols: vec![
-                SymbolDef { id: 0, role: SymbolRole::Normal },
-                SymbolDef { id: 1, role: SymbolRole::Normal },
-                SymbolDef { id: 2, role: SymbolRole::Normal },
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 1,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 2,
+                    role: SymbolRole::Normal,
+                },
             ],
             reels: vec![vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
             rows: 1,
             paylines: vec![vec![0]],
             paytable: Paytable {
                 entries: vec![
-                    PaytableEntry { symbol: 1, count: 1, payout: 1 },
-                    PaytableEntry { symbol: 2, count: 1, payout: payout_sym2 },
+                    PaytableEntry {
+                        symbol: 1,
+                        count: 1,
+                        payout: 1,
+                    },
+                    PaytableEntry {
+                        symbol: 2,
+                        count: 1,
+                        payout: payout_sym2,
+                    },
                 ],
             },
             bonuses: vec![],
@@ -251,12 +300,20 @@ mod tests {
             search_candidate_count: 20_000,
             final_candidate_count: 200_000,
             bounds: GeneBounds {
-                payout_min: 0, payout_max: 20,
-                spins_min: 1, spins_max: 50,
-                multiplier_min: 1, multiplier_max: 10,
-                min_count_min: 1, min_count_max: 5,
+                payout_min: 0,
+                payout_max: 20,
+                spins_min: 1,
+                spins_max: 50,
+                multiplier_min: 1,
+                multiplier_max: 10,
+                min_count_min: 1,
+                min_count_max: 5,
             },
-            weights: Weights { rtp: 1.0, volatility: 1.0, hit_rate: 1.0 },
+            weights: Weights {
+                rtp: 1.0,
+                volatility: 1.0,
+                hit_rate: 1.0,
+            },
         }
     }
 
@@ -268,14 +325,23 @@ mod tests {
         assert_eq!(a.model, b.model);
         assert_eq!(a.metrics.rtp, b.metrics.rtp);
         assert_eq!(a.trace.generations_run, b.trace.generations_run);
+        assert_eq!(a.verdict, b.verdict);
     }
 
     #[test]
     fn converges_a_detuned_model_back_into_band() {
         // start far from target (sym2 pays 1 -> RTP ~0.5); tuner must reach 0.9 ± 0.02.
         let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
-        assert!(matches!(out.verdict, Verdict::Pass), "verdict was {:?}", out.verdict);
-        assert!((out.metrics.rtp - 0.9).abs() <= 0.02, "rtp = {}", out.metrics.rtp);
+        assert!(
+            matches!(out.verdict, Verdict::Pass),
+            "verdict was {:?}",
+            out.verdict
+        );
+        assert!(
+            (out.metrics.rtp - 0.9).abs() <= 0.02,
+            "rtp = {}",
+            out.metrics.rtp
+        );
     }
 
     #[test]
