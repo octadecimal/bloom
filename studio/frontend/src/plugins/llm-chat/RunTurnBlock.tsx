@@ -6,6 +6,7 @@ import { ApprovalCard } from './ApprovalCard';
 import { QuestionCard } from './QuestionCard';
 import { bumpRenderCount } from '../../app/renderCount';
 import { foldToolSteps, type IRenderStep } from './toolFold';
+import { Markdown } from '@/components/ui/Markdown';
 
 type IReadonlyRunStep = Readonly<IRunStep>;
 
@@ -41,7 +42,7 @@ function RunStepCard({ step, index, runId }: { step: IReadonlyRunStep; index: nu
   // thinking | final — render as streamed text (assistant-bubble typography)
   return (
     <div data-testid={`run-step-${index}`} className="text-[13px] leading-snug text-foreground">
-      {step.content}
+      <Markdown source={step.content} />
       {isRunning && (
         <span data-testid={`run-step-caret-${index}`} className="ml-0.5 inline-block h-3 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />
       )}

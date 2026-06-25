@@ -251,3 +251,121 @@ body {
 .dockview-theme-bloom .dv-sash:hover {
   background: var(--hairline-strong);
 }
+
+/* === Markdown content (chat + GDD) — token-only; pairs with the swappable
+   seam in components/ui/Markdown.tsx. Tuned tight to the 13px chat density. === */
+.bloom-md {
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.bloom-md > :first-child {
+  margin-top: 0;
+}
+.bloom-md > :last-child {
+  margin-bottom: 0;
+}
+.bloom-md p {
+  margin: 0.5em 0;
+}
+.bloom-md h1,
+.bloom-md h2,
+.bloom-md h3,
+.bloom-md h4 {
+  color: var(--text-1);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0.8em 0 0.4em;
+}
+.bloom-md h1 {
+  font-size: 1.3em;
+}
+.bloom-md h2 {
+  font-size: 1.15em;
+}
+.bloom-md h3 {
+  font-size: 1.05em;
+}
+.bloom-md h4 {
+  font-size: 1em;
+}
+.bloom-md ul,
+.bloom-md ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.bloom-md li {
+  margin: 0.15em 0;
+}
+.bloom-md li > ul,
+.bloom-md li > ol {
+  margin: 0.15em 0;
+}
+.bloom-md a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bloom-md a:hover {
+  color: var(--accent-hover);
+}
+.bloom-md code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+.bloom-md pre {
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 0.6em 0.8em;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.bloom-md pre code {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--text-1);
+}
+.bloom-md blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--hairline-strong);
+  color: var(--text-2);
+}
+.bloom-md table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.95em;
+}
+.bloom-md th,
+.bloom-md td {
+  border: 1px solid var(--hairline);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.bloom-md th {
+  background: var(--raised);
+  color: var(--text-1);
+  font-weight: 600;
+}
+.bloom-md hr {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  margin: 0.8em 0;
+}
+.bloom-md strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.bloom-md em {
+  font-style: italic;
+}
+.bloom-md img {
+  max-width: 100%;
+}

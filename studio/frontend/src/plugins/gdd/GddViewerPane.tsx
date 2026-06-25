@@ -1,5 +1,6 @@
 import type { IDockviewPanelProps } from 'dockview-react';
 import { gddHooks } from './state';
+import { Markdown } from '@/components/ui/Markdown';
 
 const STATUS_LABEL: Record<string, string> = {
   empty: 'empty',
@@ -43,7 +44,7 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
         ))}
       </ul>
       <div className="flex-1 overflow-auto p-3">
-        <pre className="whitespace-pre-wrap text-sm text-text-1">{current?.body || ''}</pre>
+        <Markdown source={current?.body || ''} />
       </div>
     </div>
   );
