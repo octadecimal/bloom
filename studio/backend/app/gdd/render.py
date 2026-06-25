@@ -59,6 +59,11 @@ def _fmt(field: Field, val) -> str:
             return f"{float(val):g}"
         except (ValueError, TypeError):
             return str(val)
+    if field.type == "range":
+        try:
+            return f"{float(val['min']):g}–{float(val['max']):g}"
+        except (KeyError, TypeError, ValueError):
+            return str(val)
     return str(val)
 
 
