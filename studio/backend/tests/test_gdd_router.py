@@ -5,7 +5,9 @@ from app.gdd.models import GDD_TOOL_NAMES
 def test_router_spec_binds_gdd_tools():
     spec = build_design_router_spec()
     assert spec.name == DESIGN_ROUTER_NAME
-    assert set(spec.tools) == GDD_TOOL_NAMES
+    # GDD tools are all present; realize_symbol is also bound for symbol reshapes
+    assert GDD_TOOL_NAMES <= set(spec.tools)
+    assert "realize_symbol" in spec.tools
     assert spec.args == []
 
 
