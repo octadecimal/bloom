@@ -5,6 +5,7 @@ import { useApplyTheme } from './useApplyTheme';
 import { bloomTheme } from './bloomTheme';
 import { AppMenubar } from './Menubar';
 import { CommandPalette } from './CommandPalette';
+import { useFocusChatShortcut } from './focusChat';
 import { SwitchUser } from './SwitchUser';
 import { ModeBadge } from './ModeBadge';
 import { BrandMark } from './BrandMark';
@@ -13,6 +14,7 @@ import { ToolbarDivider } from './ToolbarDivider';
 export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
   const app = useApp();
   useApplyTheme();
+  useFocusChatShortcut();
 
   return (
     <div data-testid="workbench" className="flex h-screen flex-col bg-canvas font-sans text-foreground">

@@ -55,6 +55,21 @@ describe('SkillForm', () => {
     expect(typeof (onSubmit.mock.calls[0][0] as Record<string, unknown>).count).toBe('number');
   });
 
+  it('submits when Enter is pressed in a text field', () => {
+    const onSubmit = vi.fn();
+    render(<SkillForm skill={skill} onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('skill-form-field-description'), { target: { value: 'a forest' } });
+    fireEvent.keyDown(screen.getByTestId('skill-form-field-description'), { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledWith({ description: 'a forest', mood: 'neutral' });
+  });
+
+  it('does not submit on Enter while a required field is empty', () => {
+    const onSubmit = vi.fn();
+    render(<SkillForm skill={skill} onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.keyDown(screen.getByTestId('skill-form-field-description'), { key: 'Enter' });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('renders boolean as unchecked checkbox; click toggles and submits true', () => {
     const onSubmit = vi.fn();
     render(<SkillForm skill={booleanSkill} onSubmit={onSubmit} onCancel={vi.fn()} />);

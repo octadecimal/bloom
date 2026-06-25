@@ -33,6 +33,21 @@ describe('ApprovalCard', () => {
     expect(spy).toHaveBeenCalledWith('run1', 'deny');
   });
 
+  it('approves when Enter is pressed on the card', () => {
+    const spy = vi.spyOn(actions, 'resolveApproval').mockReturnValue(undefined);
+    render(<ApprovalCard runId="run1" step={pending} />);
+    fireEvent.keyDown(screen.getByTestId('approval-card'), { key: 'Enter' });
+    expect(spy).toHaveBeenCalledWith('run1', 'approve');
+  });
+
+  it('does not act on Enter once resolved', () => {
+    const spy = vi.spyOn(actions, 'resolveApproval').mockReturnValue(undefined);
+    const resolved = { ...pending, status: 'complete' as const, content: JSON.stringify({ decision: 'approve' }) };
+    render(<ApprovalCard runId="run1" step={resolved} />);
+    fireEvent.keyDown(screen.getByTestId('approval-card'), { key: 'Enter' });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('disables buttons after resolution', () => {
     const resolved = {
       ...pending,
