@@ -105,11 +105,12 @@ def test_repo_skills_dir_loads_background():
     from app.config import get_settings
     from app.gdd.models import GDD_TOOL_NAMES
     from app.scene.document import SCENE_TOOL_NAMES
+    from app.tuner.models import TUNER_TOOL_NAMES
 
     reg = SkillRegistry(
         Path(get_settings().skills_dir),
         known_tools=({"generate_asset", "list_assets", "delete_asset"}
-                     | GDD_TOOL_NAMES | SCENE_TOOL_NAMES),
+                     | GDD_TOOL_NAMES | SCENE_TOOL_NAMES | TUNER_TOOL_NAMES),
     )
     reg.load()
     names = {s["name"] for s in reg.list_skills()}
@@ -214,11 +215,12 @@ def test_manage_assets_skill_loads_with_asset_tools():
     from app.config import get_settings
     from app.gdd.models import GDD_TOOL_NAMES
     from app.scene.document import SCENE_TOOL_NAMES
+    from app.tuner.models import TUNER_TOOL_NAMES
 
     reg = SkillRegistry(
         Path(get_settings().skills_dir),
         known_tools=({"generate_asset", "list_assets", "delete_asset"}
-                     | GDD_TOOL_NAMES | SCENE_TOOL_NAMES),
+                     | GDD_TOOL_NAMES | SCENE_TOOL_NAMES | TUNER_TOOL_NAMES),
     )
     reg.load()
     spec = reg.get("manage-assets")
