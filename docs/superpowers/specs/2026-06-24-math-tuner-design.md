@@ -54,10 +54,10 @@ re-running. This effort builds the optimizer that closes that loop automatically
   `just sim-curate` freezes the faithful pool and signs the package
   (single responsibility — see §7).
 - **Mutating game identity.** Symbol set + roles, reel count, rows, and paylines
-  stay exactly as authored. The tuner tunes math, not what the game *is*.
+  stay exactly as authored. The tuner tunes math, not what the game _is_.
 - **Strip-order / near-miss (adjacency) tuning** and **separate feature strips.**
   Reels are tuned by composition (per-symbol counts), laid out canonically; tuning
-  the *arrangement* within a strip is a later concern (§3).
+  the _arrangement_ within a strip is a later concern (§3).
 - **Other tuner strategies** (hill-climb, simulated annealing, CMA-ES, AI
   math-designer agent) and **other mechanics.** The seam makes each additive.
 
@@ -65,7 +65,7 @@ re-running. This effort builds the optimizer that closes that loop automatically
 
 ## 2. The anchoring decisions
 
-### 2.1 The tuner optimizes model *parameters*, never seed selection
+### 2.1 The tuner optimizes model _parameters_, never seed selection
 
 This is the load-bearing invariant from math-spec §8. The tuner mutates a
 `SlotModel` (strips / paytable / feature config) and scores each candidate by
@@ -109,20 +109,20 @@ makes the tuned RTP a true promise about live play.
 The genome encodes **only the tunable levers**; game identity stays fixed. It
 decodes losslessly to a `SlotModel` that is otherwise identical to the seed model.
 
-| Lever | Encoding | Moves |
-| --- | --- | --- |
+| Lever                | Encoding                                                                                                                                           | Moves                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | **Reel composition** | per reel, a **per-symbol count vector** over a **fixed strip length** (taken from the seed model), laid out in a deterministic **canonical order** | base RTP, volatility, hit-frequency; scatter density → bonus hit-rate |
-| **Paytable payouts** | the integer `payout` for each existing `(symbol, count)` entry | base RTP, volatility |
-| **Bonus config** | per `FreeSpins` feature: `spins_awarded`, `multiplier`, and the trigger `min_count` | feature RTP, bonus hit-rate |
+| **Paytable payouts** | the integer `payout` for each existing `(symbol, count)` entry                                                                                     | base RTP, volatility                                                  |
+| **Bonus config**     | per `FreeSpins` feature: `spins_awarded`, `multiplier`, and the trigger `min_count`                                                                | feature RTP, bonus hit-rate                                           |
 
 **Fixed (not genes):** symbol ids/roles, reel count, `rows`, `paylines`,
-`paytable` entry *keys* (which `(symbol, count)` rows exist — only their payouts
+`paytable` entry _keys_ (which `(symbol, count)` rows exist — only their payouts
 move), `retrigger`, and `feature_reels` (stays `None`/as-authored).
 
-**Canonical strip layout.** A reel is tuned as a multiset of symbols (how *many* of
+**Canonical strip layout.** A reel is tuned as a multiset of symbols (how _many_ of
 each), then laid out in a fixed deterministic order to reconstruct the
 `Vec<Symbol>`. This keeps the genome a clean, fixed-length integer vector and makes
-the decoded strip deterministic. The *arrangement* within a strip — adjacency,
+the decoded strip deterministic. The _arrangement_ within a strip — adjacency,
 near-miss design — is **deferred**: for `rows == 1` arrangement is irrelevant, and
 for `rows > 1` a canonical layout is a faithful, certifiable starting point that a
 later slice can refine into order-aware tuning.
@@ -187,7 +187,7 @@ the search does not overfit one fixed sample.
 
 **Termination.** The GA stops at the first of: a candidate reaching `fitness == 0`
 in the search tier (then confirmed at full fidelity), `max_generations` reached, or
-a stagnation window (no best-fitness improvement for *k* generations). All three
+a stagnation window (no best-fitness improvement for _k_ generations). All three
 bounds come from `TunerConfig`.
 
 ---
@@ -209,8 +209,8 @@ guarantee and is a headline test (§8).
   fitness and best metrics, the final measured metrics vs. each target band, the
   final verdict (**PASS** / **near-miss** + which band missed), and the full
   provenance (`master_seed`, GA hyperparameters, gene bounds, search vs. final
-  candidate counts, seed_model identity). This proves the model was *searched
-  toward a stated intent*, not hand-fixed — the "AI-designed, never AI-decided"
+  candidate counts, `seed_model` identity). This proves the model was _searched
+  toward a stated intent_, not hand-fixed — the "AI-designed, never AI-decided"
   evidence trail.
 
 ---
@@ -237,7 +237,7 @@ pub struct TuneOutcome {
 AI-designer is a new `impl Tuner` with no change to callers.
 
 **Library choice (behind the seam).** Per "proven libraries behind thin seams," the
-GA *implementation* will use a mature Rust GA crate — **`genevo` is the lead
+GA _implementation_ will use a mature Rust GA crate — **`genevo` is the lead
 candidate** (it supports custom genotypes + custom fitness, which fits our
 constrained integer genome) — **if** it integrates cleanly with the
 repair-after-operator requirement (§3). If the constrained/repaired genome proves
@@ -288,7 +288,7 @@ first, then minimal code. Run via `cargo test --workspace`.
 
 - `Cargo.toml` — deps `bloom-math`, `bloom-simulator`, an RNG (e.g. `rand` +
   `SplitMix64`/`StdRng` seeded from `master_seed`), and the chosen GA crate
-  (`genevo`) *or* none if the custom loop is used. Added to the workspace
+  (`genevo`) _or_ none if the custom loop is used. Added to the workspace
   `members`.
 - `src/lib.rs` — module wiring + the `Tuner` trait, `TuneOutcome`, `Verdict`.
 - `src/config.rs` — `TunerConfig` (gene bounds, GA hyperparams: population,

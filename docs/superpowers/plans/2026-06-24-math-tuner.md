@@ -27,6 +27,7 @@
 Creates the crate, wires it into the workspace, and defines the public seam (`Tuner` trait) and every shared type later tasks consume. No algorithm yet — this task locks the interfaces.
 
 **Files:**
+
 - Create: `studio/tuner/Cargo.toml`
 - Create: `studio/tuner/src/lib.rs`
 - Create: `studio/tuner/src/config.rs`
@@ -34,6 +35,7 @@ Creates the crate, wires it into the workspace, and defines the public seam (`Tu
 - Modify: `Cargo.toml` (workspace `members`)
 
 **Interfaces:**
+
 - Consumes: `bloom_math::mechanics::slots::SlotModel`; `bloom_simulator::target::{Metrics, TargetSpec}`.
 - Produces (every later task relies on these exact names/types):
   - `trait Tuner { fn tune(&self, seed_model: &SlotModel, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome; }`
@@ -227,10 +229,12 @@ git commit -m "feat(tuner): scaffold bloom-tuner crate + Tuner seam and types"
 The bounded-integer genome and its lossless mapping to/from a `SlotModel`. `decode` overlays genes onto the seed model (the template) for everything fixed; `repair` guarantees every genome decodes to a valid model.
 
 **Files:**
+
 - Create: `studio/tuner/src/genome.rs`
 - Modify: `studio/tuner/src/lib.rs` (add `pub mod genome;`)
 
 **Interfaces:**
+
 - Consumes: `SlotModel`, `BonusFeature`, `TriggerSpec`, `FreeSpinsConfig`, `PaytableEntry` from `bloom_math::mechanics::slots`; `GeneBounds` from `config`.
 - Produces:
   - `struct Genome { reel_counts: Vec<Vec<u32>>, payouts: Vec<u64>, bonuses: Vec<BonusGenes> }`
@@ -552,10 +556,12 @@ git commit -m "feat(tuner): bounded-integer genome with encode/decode/repair"
 A pure function over `Metrics` + `TargetSpec` bands. Its defining property: `fitness == 0.0` exactly when `verify` passes.
 
 **Files:**
+
 - Create: `studio/tuner/src/fitness.rs`
 - Modify: `studio/tuner/src/lib.rs` (add `pub mod fitness;`)
 
 **Interfaces:**
+
 - Consumes: `Metrics`, `TargetSpec` from `bloom_simulator::target`; `Weights` from `config`.
 - Produces:
   - `fn fitness(m: &Metrics, t: &TargetSpec, w: &Weights) -> f64` (≤ 0; 0 is best).
@@ -732,10 +738,12 @@ git commit -m "feat(tuner): weighted distance-to-band fitness (0 iff verify pass
 The custom deterministic GA: initialize from the seed model, evolve at low fidelity with common random numbers, then re-measure the winner at full fidelity and run the real `verify`.
 
 **Files:**
+
 - Create: `studio/tuner/src/genetic.rs`
 - Modify: `studio/tuner/src/lib.rs` (add `pub mod genetic;` and re-export `GeneticTuner`)
 
 **Interfaces:**
+
 - Consumes: `Tuner` (lib), `TunerConfig`/`GeneBounds` (config), `TuneOutcome`/`Verdict`/`GenSnapshot`/`TuningTrace` (outcome), `Genome`/`encode`/`decode`/`repair` (genome), `fitness`/`band_misses` (fitness); `bloom_simulator::measure::{simulate, measure}`, `bloom_simulator::run::verify`, `bloom_simulator::seedgen::generate_seeds`; `bloom_math::rng::SplitMix64`.
 - Produces: `struct GeneticTuner;` implementing `Tuner`.
 
@@ -1084,12 +1092,14 @@ git commit -m "feat(tuner): GeneticTuner evolve loop (two-tier eval, common rand
 Render the trace into the human-readable audit report, expose a `tune` CLI mirroring `curate`, and wire `just` recipes.
 
 **Files:**
+
 - Create: `studio/tuner/src/report.rs`
 - Create: `studio/tuner/src/bin/tune.rs`
 - Modify: `studio/tuner/src/lib.rs` (add `pub mod report;`)
 - Modify: `justfile` (add `tune` + `tuner-build` recipes)
 
 **Interfaces:**
+
 - Consumes: `TuneOutcome`, `Verdict`, `TuningTrace` (outcome); `SlotModel` (math); `TargetSpec`, `HitRateBand` (simulator target); `TunerConfig`, `GeneBounds`, `Weights` (config).
 - Produces: `fn render_report(out: &TuneOutcome) -> String`.
 
