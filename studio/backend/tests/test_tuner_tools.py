@@ -1,6 +1,8 @@
 import pytest
 
+import app.agent_tools as agent_tools
 from app.agent_tools import ToolContext, build_read_tuner_setup_tool, build_tune_slot_model_tool
+from app.agent_tools import build_apply_tuned_model_tool
 from app.simulator.store import SlotModelStore
 from app.simulator.models import MetricsWire
 from app.tuner.store import TunerStore
@@ -140,3 +142,51 @@ async def test_tune_slot_model_reports_gap_without_running(mongo_db):
     assert "missing required intent" in out.lower() or "incomplete" in out.lower()
     saved = await ctx.tuner_store.get("g1")
     assert saved is None or saved.result is None        # never ran
+
+
+async def _seed_result_with_model(tuner_store, model):
+    await tuner_store.get_or_seed("g1")
+    await tuner_store.save_result("g1", TuneResult(
+        status="pass", verdict="pass", tuned_model=model, metrics=_metrics(0.94),
+        missed=[], trace=[], ran_at="t1"))
+
+
+def _apply_ctx(mongo_db):
+    return ToolContext("r1", "g1", None, None,
+                       sim_store=SlotModelStore(mongo_db), tuner_store=TunerStore(mongo_db))
+
+
+@pytest.mark.asyncio
+async def test_apply_tuned_model_approve_writes_back(mongo_db, monkeypatch):
+    monkeypatch.setattr(agent_tools, "interrupt", lambda payload: "approve")
+    ctx = _apply_ctx(mongo_db)
+    await ctx.sim_store.get_or_seed("g1")
+    await _seed_result_with_model(ctx.tuner_store, {"reels": [["A"]]})
+    tool = build_apply_tuned_model_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "applied" in out.lower()
+    doc = await ctx.sim_store.get("g1")
+    assert doc.model == {"reels": [["A"]]}
+
+
+@pytest.mark.asyncio
+async def test_apply_tuned_model_deny_leaves_model_unchanged(mongo_db, monkeypatch):
+    monkeypatch.setattr(agent_tools, "interrupt", lambda payload: "deny")
+    ctx = _apply_ctx(mongo_db)
+    await ctx.sim_store.get_or_seed("g1")               # model == {}
+    await _seed_result_with_model(ctx.tuner_store, {"reels": [["A"]]})
+    tool = build_apply_tuned_model_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "declined" in out.lower()
+    doc = await ctx.sim_store.get("g1")
+    assert doc.model == {}
+
+
+@pytest.mark.asyncio
+async def test_apply_tuned_model_no_result_returns_friendly(mongo_db, monkeypatch):
+    def _boom(payload): raise AssertionError("interrupt must not be called")
+    monkeypatch.setattr(agent_tools, "interrupt", _boom)
+    ctx = _apply_ctx(mongo_db)
+    tool = build_apply_tuned_model_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "run a tune first" in out.lower()

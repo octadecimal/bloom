@@ -580,6 +580,33 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_apply_tuned_model_tool(ctx: ToolContext) -> BaseTool:
+    async def apply_tuned_model() -> str:
+        doc = await ctx.tuner_store.get(ctx.game_id)
+        tuned = doc.result.tuned_model if (doc and doc.result) else None
+        if not tuned:
+            return "No tuned model to apply yet — run a tune first."
+        label = ("Apply the tuned model to the slot model? This overwrites the "
+                 "current realization.")
+        decision = interrupt(
+            {"tool": "apply_tuned_model", "args": {}, "label": label})
+        if decision != "approve":
+            return "Apply declined by the user; the slot model is unchanged."
+        await ctx.sim_store.put(ctx.game_id, model=tuned)
+        return ("Applied the tuned model to the slot model. Re-curate (in the "
+                "Simulator) to confirm it still passes.")
+
+    return StructuredTool.from_function(
+        coroutine=apply_tuned_model,
+        name="apply_tuned_model",
+        description=(
+            "Apply the most recent tuned slot model into the game's slot model, "
+            "overwriting the current realization. Destructive; the studio asks the "
+            "human to approve before it runs. Call only after a tune produced a model."
+        ),
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -600,6 +627,7 @@ class ToolFactory:
         "read_tuner_setup": build_read_tuner_setup_tool,
         "set_tuner_params": build_set_tuner_params_tool,
         "tune_slot_model": build_tune_slot_model_tool,
+        "apply_tuned_model": build_apply_tuned_model_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,
