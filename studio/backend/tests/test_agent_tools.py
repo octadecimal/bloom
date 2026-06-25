@@ -25,6 +25,7 @@ async def test_known_tool_names():
         "realize_symbol",
         "read_tuner_setup",
         "set_tuner_params",
+        "tune_slot_model",
     }
 
 

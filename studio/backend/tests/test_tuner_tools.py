@@ -1,8 +1,12 @@
 import pytest
 
-from app.agent_tools import ToolContext, build_read_tuner_setup_tool
+from app.agent_tools import ToolContext, build_read_tuner_setup_tool, build_tune_slot_model_tool
 from app.simulator.store import SlotModelStore
+from app.simulator.models import MetricsWire
 from app.tuner.store import TunerStore
+from app.tuner.hub import TunerHub
+from app.tuner.runner import FakeTunerRunner, TuneProgress
+from app.tuner.models import TuneResult, BandMissWire
 
 
 class _StubGddDoc:
@@ -74,3 +78,65 @@ async def test_set_tuner_params_rejects_nonpositive_without_writing(mongo_db):
     assert "must be positive" in out.lower()
     doc = await ctx.tuner_store.get("g1")
     assert doc.params.population != 0       # no write happened
+
+
+class _FakeSio:
+    def __init__(self): self.events = []
+    async def enter_room(self, sid, room): pass
+    async def emit(self, event, data, **kw): self.events.append((event, data))
+
+
+def _metrics(rtp): return MetricsWire(rtp=rtp, volatility=8.0, hit_frequency=0.3,
+                                      base_rtp=rtp, feature_rtp=0.0, bonus_hit_rates=[])
+
+
+def _tune_ctx(mongo_db, *, result):
+    sim = SlotModelStore(mongo_db)
+    tuner = TunerStore(mongo_db)
+    gdd = _StubGddStore({"rtp": "0.94", "volatility": "high"})   # no bonuses needed
+    runner = FakeTunerRunner(
+        progress=[TuneProgress(1, 40, 0.5, 0.90, 8.0)], result=result)
+    hub = TunerHub(_FakeSio(), tuner, sim, runner, gdd)
+    return ToolContext("r1", "g1", None, None, gdd_store=gdd,
+                       sim_store=sim, tuner_store=tuner, tuner_hub=hub)
+
+
+@pytest.mark.asyncio
+async def test_tune_slot_model_reports_pass(mongo_db):
+    passing = TuneResult(status="pass", verdict="pass", tuned_model={"reels": []},
+                         metrics=_metrics(0.94), missed=[], trace=[], ran_at="t1")
+    ctx = _tune_ctx(mongo_db, result=passing)
+    await ctx.sim_store.get_or_seed("g1")
+    tool = build_tune_slot_model_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "pass" in out.lower()
+    assert "0.94" in out
+    saved = await ctx.tuner_store.get("g1")
+    assert saved.result.tuned_model == {"reels": []}    # request_tune persisted it
+
+
+@pytest.mark.asyncio
+async def test_tune_slot_model_reports_near_miss_with_missed_bands(mongo_db):
+    near = TuneResult(status="near_miss", verdict="near_miss", tuned_model={"reels": []},
+                      metrics=_metrics(0.91),
+                      missed=[BandMissWire(metric="rtp", measured=0.91,
+                                           band_lo=0.93, band_hi=0.95)],
+                      trace=[], ran_at="t1")
+    ctx = _tune_ctx(mongo_db, result=near)
+    await ctx.sim_store.get_or_seed("g1")
+    tool = build_tune_slot_model_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "near" in out.lower()
+    assert "rtp" in out.lower() and "0.91" in out
+
+
+@pytest.mark.asyncio
+async def test_tune_slot_model_reports_gap_without_running(mongo_db):
+    ctx = _tune_ctx(mongo_db, result=None)              # runner result unused
+    ctx.gdd_store = _StubGddStore({})                   # missing intent -> TargetGap
+    await ctx.sim_store.get_or_seed("g1")
+    tool = build_tune_slot_model_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "missing required intent" in out.lower() or "incomplete" in out.lower()
+    saved = await ctx.tuner_store.get("g1")
+    assert saved is None or saved.result is None        # never ran

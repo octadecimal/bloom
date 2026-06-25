@@ -16,19 +16,19 @@ def ctx(settings):
     return build(settings)
 
 
+_COLLECTIONS = [
+    "rooms", "messages", "games", "assets", "runs",
+    "slot_models", "tuner_jobs",
+]
+
+
 @pytest_asyncio.fixture
 async def mongo_db(settings):
     client = AsyncIOMotorClient(settings.mongo_url)
     db = client[settings.mongo_db]
-    await db["rooms"].delete_many({})
-    await db["messages"].delete_many({})
-    await db["games"].delete_many({})
-    await db["assets"].delete_many({})
-    await db["runs"].delete_many({})
+    for coll in _COLLECTIONS:
+        await db[coll].delete_many({})
     yield db
-    await db["rooms"].delete_many({})
-    await db["messages"].delete_many({})
-    await db["games"].delete_many({})
-    await db["assets"].delete_many({})
-    await db["runs"].delete_many({})
+    for coll in _COLLECTIONS:
+        await db[coll].delete_many({})
     client.close()

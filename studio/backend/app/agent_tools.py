@@ -529,6 +529,57 @@ def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
+    async def tune_slot_model() -> str:
+        sim_doc = await ctx.sim_store.get_or_seed(ctx.game_id)
+        model = sim_doc.model or {}
+        num_bonuses = len(model.get("bonuses", []) or [])
+        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
+        math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        try:
+            derive_target(math_model, sim_doc.params, num_bonuses)   # gap pre-check
+        except TargetGap as gap:
+            return (f"Cannot tune: {gap.message}. Complete the GDD math-model intent "
+                    f"(RTP, volatility, bonus rate) first, then tune again.")
+
+        before = await ctx.tuner_store.get(ctx.game_id)
+        before_ran = before.result.ran_at if (before and before.result) else None
+
+        await ctx.tuner_hub.request_tune(ctx.game_id)   # runs GA, streams to the pane
+
+        after = await ctx.tuner_store.get(ctx.game_id)
+        result = after.result if after else None
+        if result is None or result.ran_at == before_ran:
+            return ("The tune did not produce a result — check the Tuner pane or the "
+                    "backend logs for a failure.")
+
+        m = result.metrics
+        head = (f"measured RTP {m.rtp}, volatility {m.volatility}, "
+                f"hit-frequency {m.hit_frequency}") if m else "no metrics"
+        if result.status == "pass":
+            return (f"Tuned to PASS — {head}. A tuned model is ready; say 'apply it' "
+                    f"to write it into the slot model (a human confirms).")
+        if result.status == "near_miss":
+            misses = "; ".join(
+                f"{x.metric} measured {x.measured}, needs {x.band_lo}–{x.band_hi}"
+                for x in result.missed) or "see the Tuner pane"
+            return (f"Tuned to NEAR-MISS — {head}. Missed: {misses}. Try raising "
+                    f"candidate counts / generations, re-weighting, or relaxing the "
+                    f"GDD intent, then tune again.")
+        return f"Tuning failed: {result.failure or 'unknown error'}."
+
+    return StructuredTool.from_function(
+        coroutine=tune_slot_model,
+        name="tune_slot_model",
+        description=(
+            "Run the genetic tuner on the current slot model toward the GDD design "
+            "intent, to completion, and report the verdict (PASS / NEAR-MISS) with "
+            "measured RTP, volatility, and hit-rates. Live convergence shows in the "
+            "Tuner pane. Does NOT apply the result — use apply_tuned_model for that."
+        ),
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -548,6 +599,7 @@ class ToolFactory:
         "realize_symbol": build_realize_symbol_tool,
         "read_tuner_setup": build_read_tuner_setup_tool,
         "set_tuner_params": build_set_tuner_params_tool,
+        "tune_slot_model": build_tune_slot_model_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,
