@@ -28,7 +28,14 @@ Work in this order:
 
    **Symbol slot ids.** In the symbols-reels doc, give every symbol a stable `slot`
    id (`high1`, `high2`, `low1`, `wild`, `scatter`) in its row — this is the durable
-   handle later chat edits use to reshape that symbol.
+   handle later chat edits use to reshape that symbol. Set each row's `kind` to one
+   of: high, low, wild, scatter, bonus.
+
+   **Reel structure.** In math-model set `payline_mode` (`lines` or `ways`) and
+   `payline_count` (e.g. 20 lines, or 243 ways). In symbols-reels set `strip_length`
+   as a min/max range, e.g. `{"min": 30, "max": 40}` — this is the guardrail the math
+   tuner optimizes the exact reel length within; do not hand-author the per-symbol
+   reel composition.
 
 2. RANK GAPS. Call `list_gdd_docs` and review which decisions are still assumed
    defaults rather than user choices. Order them by how much they materially shape

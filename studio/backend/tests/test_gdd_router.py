@@ -26,3 +26,15 @@ def test_router_tools_are_a_subset_of_the_real_tool_universe():
     from app.agent_tools import ToolFactory
     known = ToolFactory(None, None).known_tool_names()
     assert set(build_design_router_spec().tools) <= known
+
+
+def test_router_catalog_shows_new_structural_enums():
+    from app.gdd.router import build_design_router_spec
+    body = build_design_router_spec().body
+    # the new payline_mode enum renders via the field-enum path
+    assert "payline_mode" in body
+    assert "lines, ways" in body
+    # the strip_length range field is addressable
+    assert "strip_length" in body
+    # the symbols table's kind column exposes its enum values
+    assert "high, low, wild, scatter, bonus" in body

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyPixiProp } from './pixiRenderer';
+import { applyPixiProp, PixiRenderer } from './pixiRenderer';
 
 function fakeObj() {
   return {
@@ -65,5 +65,20 @@ describe('applyPixiProp', () => {
     applyPixiProp(o as never, 'position', { x: 10 });
     expect(o.position.x).toBe(10);
     expect(o.position.y).toBe(0);
+  });
+});
+
+describe('PixiRenderer.createObject', () => {
+  it('defaults a new Sprite to a centered anchor (0.5, 0.5)', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    r.createObject('s', 'Sprite');
+    expect(r.anchorOf('s')).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('lets an explicit anchor prop override the default', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    r.createObject('s', 'Sprite');
+    r.setProp('s', 'anchor', { x: 0, y: 0 });
+    expect(r.anchorOf('s')).toEqual({ x: 0, y: 0 });
   });
 });

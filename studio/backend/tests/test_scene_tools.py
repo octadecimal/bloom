@@ -54,6 +54,24 @@ async def test_invalid_op_returns_error_string_not_raise(mongo_db):
 
 
 @pytest.mark.asyncio
+async def test_orphan_sprite_warns_until_parented(mongo_db):
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    f, ctx = _factory(store, hub), _ctx(store, hub)
+    add = f.build(["scene_add_node"], ctx)[0]
+    conn = f.build(["scene_connect"], ctx)[0]
+
+    await add.ainvoke({"node_id": "root", "type": "Root"})
+    out = await add.ainvoke({"node_id": "s", "type": "Sprite"})
+    assert "not parented" in out.lower() and "s" in out  # orphan warning
+
+    out2 = await conn.ainvoke({"edge_id": "e", "type": "child",
+                               "from_node": "root", "from_port": "children",
+                               "to_node": "s", "to_port": "parent"})
+    assert "not parented" not in out2.lower()  # cleared once parented
+
+
+@pytest.mark.asyncio
 async def test_connect_and_apply_batch(mongo_db):
     store = GameSceneStore(mongo_db)
     hub = GameSceneHub(_SilentSio(), store)

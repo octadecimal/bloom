@@ -14,6 +14,12 @@ def _render_catalog(catalog: dict[str, list[dict]]) -> str:
             if f["enum"]:
                 extra += f", one of: {', '.join(str(e) for e in f['enum'])}"
             lines.append(f"    - {f['key']} ({f['type']}{extra}) — {f['label']}")
+            for c in (f.get("columns") or []):
+                if c["enum"]:
+                    lines.append(
+                        f"        - column {c['key']} one of: "
+                        f"{', '.join(c['enum'])}"
+                    )
     return "\n".join(lines)
 
 
