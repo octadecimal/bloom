@@ -25,6 +25,16 @@ sim-curate model target id pkg report:
 sim-build:
     cargo build --release -p bloom-simulator
 
+# Tune a slot model toward a target: seed model + target + tuner config ->
+# tuned model JSON + audit report. Exits non-zero on a near-miss.
+# Usage: just tune game/model.json game/target.json game/tuner.json out.model.json out.report.txt
+tune model target config out_model out_report:
+    cargo run -p bloom-tuner --bin tune -- {{model}} {{target}} {{config}} {{out_model}} {{out_report}}
+
+# Build the release tuning binary (for later studio-backend shelling out).
+tuner-build:
+    cargo build --release -p bloom-tuner
+
 # TypeScript / frontend
 ts-test:
     npx nx run-many -t test

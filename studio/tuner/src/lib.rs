@@ -4,10 +4,11 @@
 //! model a human reviews and signs. See the design spec.
 
 pub mod config;
-pub mod outcome;
-pub mod genome;
 pub mod fitness;
 pub mod genetic;
+pub mod genome;
+pub mod outcome;
+pub mod report;
 
 pub use genetic::GeneticTuner;
 
@@ -20,10 +21,5 @@ use outcome::TuneOutcome;
 /// A future hill-climb / CMA-ES / AI-designer is a new `impl Tuner` with no
 /// change to callers.
 pub trait Tuner {
-    fn tune(
-        &self,
-        seed_model: &SlotModel,
-        target: &TargetSpec,
-        cfg: &TunerConfig,
-    ) -> TuneOutcome;
+    fn tune(&self, seed_model: &SlotModel, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome;
 }
