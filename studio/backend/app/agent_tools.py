@@ -5,7 +5,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
 
 from app.gdd.store import GddEditError
-from app.scene.document import OpError
+from app.scene.document import OpError, unreachable_nodes
 from app.simulator.targets import derive_target, TargetGap
 from app.tuner.models import TuningParams
 
@@ -230,6 +230,13 @@ def build_ask_user_question_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def _orphan_suffix(doc: dict) -> str:
+    orphans = unreachable_nodes(doc)
+    if not orphans:
+        return ""
+    return " ⚠ not parented to root (won't render): " + ", ".join(orphans)
+
+
 def build_scene_add_node_tool(ctx: ToolContext) -> BaseTool:
     async def scene_add_node(node_id: str, type: str, props_json: str = "") -> str:
         try:
@@ -238,10 +245,10 @@ def build_scene_add_node_tool(ctx: ToolContext) -> BaseTool:
             return f"Invalid props_json: {e}"
         op = {"kind": "addNode", "id": node_id, "type": type, "props": props}
         try:
-            await ctx.scene_hub.apply_op(ctx.game_id, op)
+            doc = await ctx.scene_hub.apply_op(ctx.game_id, op)
         except OpError as e:
             return f"Rejected ({e.code}): {e}"
-        return f"Added {type} node '{node_id}'."
+        return f"Added {type} node '{node_id}'." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=scene_add_node, name="scene_add_node",
@@ -260,10 +267,10 @@ def build_scene_set_prop_tool(ctx: ToolContext) -> BaseTool:
             return f"Invalid value_json: {e}"
         op = {"kind": "setProp", "id": node_id, "path": path, "value": value}
         try:
-            await ctx.scene_hub.apply_op(ctx.game_id, op)
+            doc = await ctx.scene_hub.apply_op(ctx.game_id, op)
         except OpError as e:
             return f"Rejected ({e.code}): {e}"
-        return f"Set {node_id}.{path}."
+        return f"Set {node_id}.{path}." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=scene_set_prop, name="scene_set_prop",
@@ -280,10 +287,10 @@ def build_scene_connect_tool(ctx: ToolContext) -> BaseTool:
               "from": {"node": from_node, "port": from_port},
               "to": {"node": to_node, "port": to_port}}
         try:
-            await ctx.scene_hub.apply_op(ctx.game_id, op)
+            doc = await ctx.scene_hub.apply_op(ctx.game_id, op)
         except OpError as e:
             return f"Rejected ({e.code}): {e}"
-        return f"Connected {edge_id} ({type})."
+        return f"Connected {edge_id} ({type})." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=scene_connect, name="scene_connect",
@@ -296,10 +303,10 @@ def build_scene_connect_tool(ctx: ToolContext) -> BaseTool:
 def build_scene_disconnect_tool(ctx: ToolContext) -> BaseTool:
     async def scene_disconnect(edge_id: str) -> str:
         try:
-            await ctx.scene_hub.apply_op(ctx.game_id, {"kind": "disconnect", "edgeId": edge_id})
+            doc = await ctx.scene_hub.apply_op(ctx.game_id, {"kind": "disconnect", "edgeId": edge_id})
         except OpError as e:
             return f"Rejected ({e.code}): {e}"
-        return f"Disconnected {edge_id}."
+        return f"Disconnected {edge_id}." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=scene_disconnect, name="scene_disconnect",
@@ -310,10 +317,10 @@ def build_scene_disconnect_tool(ctx: ToolContext) -> BaseTool:
 def build_scene_remove_node_tool(ctx: ToolContext) -> BaseTool:
     async def scene_remove_node(node_id: str) -> str:
         try:
-            await ctx.scene_hub.apply_op(ctx.game_id, {"kind": "removeNode", "id": node_id})
+            doc = await ctx.scene_hub.apply_op(ctx.game_id, {"kind": "removeNode", "id": node_id})
         except OpError as e:
             return f"Rejected ({e.code}): {e}"
-        return f"Removed node '{node_id}' (and its edges)."
+        return f"Removed node '{node_id}' (and its edges)." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=scene_remove_node, name="scene_remove_node",
@@ -330,10 +337,10 @@ def build_scene_apply_batch_tool(ctx: ToolContext) -> BaseTool:
         if not isinstance(ops, list):
             return "ops_json must be a JSON array of op objects."
         try:
-            await ctx.scene_hub.apply_batch(ctx.game_id, ops)
+            doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
         except OpError as e:
             return f"Rejected ({e.code}): {e}"
-        return f"Applied {len(ops)} ops atomically."
+        return f"Applied {len(ops)} ops atomically." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=scene_apply_batch, name="scene_apply_batch",
