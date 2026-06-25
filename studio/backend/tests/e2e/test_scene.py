@@ -28,8 +28,8 @@ async def test_join_scene_delivers_empty_snapshot(live_server):
     await client.connect(live_server, auth={"displayName": "SceneViewer"})
     await client.emit("join_scene", {"gameId": game_id})
 
-    deadline = asyncio.get_event_loop().time() + 10
-    while not seen["snapshots"] and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 10
+    while not seen["snapshots"] and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     assert seen["snapshots"], "expected a scene_snapshot on join"
@@ -63,10 +63,10 @@ async def test_design_scene_agent_builds_root_and_nodes(live_server):
     })
 
     # Poll until a Root node op is broadcast (deadline ~15 s).
-    deadline = asyncio.get_event_loop().time() + 15
+    deadline = asyncio.get_running_loop().time() + 15
     def _has_root():
         return any(o["op"].get("type") == "Root" for o in seen["ops"] if o["op"]["kind"] == "addNode")
-    while not _has_root() and asyncio.get_event_loop().time() < deadline:
+    while not _has_root() and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     # 1. scene_op broadcasts were observed, including the Root.
@@ -77,8 +77,8 @@ async def test_design_scene_agent_builds_root_and_nodes(live_server):
     # 2. The persisted document reflects the build: re-join for a fresh snapshot.
     seen["snapshots"].clear()
     await client.emit("join_scene", {"gameId": game_id})
-    deadline = asyncio.get_event_loop().time() + 5
-    while not seen["snapshots"] and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 5
+    while not seen["snapshots"] and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     doc = seen["snapshots"][-1]["document"]
     assert any(n["type"] == "Root" for n in doc["nodes"].values()), doc

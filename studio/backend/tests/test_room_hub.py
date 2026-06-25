@@ -533,9 +533,9 @@ class FakeSkillsWithManageAssets(FakeSkills):
 async def _wait(pred, timeout=2):
     """Poll pred() every 10 ms until it returns truthy or timeout is reached."""
     import asyncio as _asyncio
-    deadline = _asyncio.get_event_loop().time() + timeout
+    deadline = _asyncio.get_running_loop().time() + timeout
     while not pred():
-        if _asyncio.get_event_loop().time() >= deadline:
+        if _asyncio.get_running_loop().time() >= deadline:
             raise TimeoutError("_wait timed out")
         await _asyncio.sleep(0.01)
 

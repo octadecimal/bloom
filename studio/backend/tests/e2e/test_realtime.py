@@ -41,8 +41,8 @@ async def test_both_clients_receive_streamed_run_tokens(live_server):
 
     await alice.emit("send_prompt", {"roomId": room_id, "text": "hello"})
 
-    deadline = asyncio.get_event_loop().time() + 8
-    while (not ra.completed or not rb.completed) and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 8
+    while (not ra.completed or not rb.completed) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     assert ra.completed and rb.completed, "both clients must see the run complete"
@@ -77,8 +77,8 @@ async def test_concurrent_prompts_serialize_into_two_runs(live_server):
     await alice.emit("send_prompt", {"roomId": room_id, "text": "first"})
     await bob.emit("send_prompt", {"roomId": room_id, "text": "second"})
 
-    deadline = asyncio.get_event_loop().time() + 10
-    while len(ra.completed) < 2 and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 10
+    while len(ra.completed) < 2 and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     assert len(ra.completed) == 2, "both prompts answered by exactly one run each"
@@ -113,8 +113,8 @@ async def test_late_joiner_resumes_in_flight_run(live_server):
     await alice.emit("send_prompt", {"roomId": room_id, "text": "hello"})
 
     # Wait until the run is genuinely mid-flight: >=1 token, not completed.
-    deadline = asyncio.get_event_loop().time() + 5
-    while (len(ra.tokens) < 1 or ra.completed) and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 5
+    while (len(ra.tokens) < 1 or ra.completed) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.02)
     assert ra.tokens and not ra.completed, "need an in-flight run to resume"
     run_id = ra.tokens[-1]["runId"]
@@ -127,8 +127,8 @@ async def test_late_joiner_resumes_in_flight_run(live_server):
     await carol.connect(live_server, auth={"displayName": "Carol"})
     await carol.emit("join_room", {"roomId": room_id})
 
-    deadline = asyncio.get_event_loop().time() + 5
-    while (not ra.completed or not rc.completed) and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 5
+    while (not ra.completed or not rc.completed) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     assert rc.completed, "late joiner must see the run complete"
 

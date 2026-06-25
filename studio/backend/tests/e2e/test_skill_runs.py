@@ -77,8 +77,8 @@ async def test_two_clients_watch_skill_run_and_asset_attached(live_server):
     )
 
     # Wait for both clients to see run_completed
-    deadline = asyncio.get_event_loop().time() + 20
-    while (not ra.run_completed or not rb.run_completed) and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 20
+    while (not ra.run_completed or not rb.run_completed) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     assert ra.run_completed, "Alice must receive run_completed"
@@ -139,8 +139,8 @@ async def test_concurrent_skill_runs_serialize(live_server):
     )
 
     # Wait for both completions (generous timeout: two sequential skill runs)
-    deadline = asyncio.get_event_loop().time() + 40
-    while len(ra.run_completed) < 2 and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 40
+    while len(ra.run_completed) < 2 and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     assert len(ra.run_completed) == 2, (

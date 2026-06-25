@@ -52,8 +52,8 @@ async def test_design_game_seeds_docs_and_asks_a_question(live_server):
     })
 
     # Poll until a question step arrives (deadline ~15 s)
-    deadline = asyncio.get_event_loop().time() + 15
-    while not seen["question_steps"] and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 15
+    while not seen["question_steps"] and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     # 1. Seeding is independent of the LLM: 7 docs must exist.
@@ -71,8 +71,8 @@ async def test_design_game_seeds_docs_and_asks_a_question(live_server):
     #    The paytable may not be drafted yet at question-interrupt time, so poll
     #    until its status is no longer "empty" (deadline ~10 s).
     async with httpx.AsyncClient(base_url=live_server) as http:
-        paytable_deadline = asyncio.get_event_loop().time() + 10
-        while asyncio.get_event_loop().time() < paytable_deadline:
+        paytable_deadline = asyncio.get_running_loop().time() + 10
+        while asyncio.get_running_loop().time() < paytable_deadline:
             docs = (await http.get(f"/games/{game_id}/gdd/docs")).json()
             paytable = next((d for d in docs if d["aspect"] == "paytable"), None)
             if paytable is not None and paytable.get("status") != "empty":

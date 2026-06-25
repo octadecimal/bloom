@@ -108,8 +108,8 @@ async def test_chat_reshapes_high_symbol(live_server):
             "text": "generate sprite for high1 slot",
         },
     )
-    deadline = asyncio.get_event_loop().time() + 25
-    while not run_completions and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 25
+    while not run_completions and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     assert run_completions, "generate-sprite run_completed not received"
     assert run_completions[0]["status"] == "completed", (
@@ -143,8 +143,8 @@ async def test_chat_reshapes_high_symbol(live_server):
             "text": "seed scene with high1 sprite and texture",
         },
     )
-    deadline = asyncio.get_event_loop().time() + 20
-    while not run_completions and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 20
+    while not run_completions and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     assert run_completions, "design-scene (seed) run_completed not received"
     assert run_completions[0]["status"] == "completed", (
@@ -154,8 +154,8 @@ async def test_chat_reshapes_high_symbol(live_server):
     # Confirm the scene now has a Texture node
     scene_snapshots.clear()
     await client.emit("join_scene", {"gameId": game_id})
-    deadline = asyncio.get_event_loop().time() + 5
-    while not scene_snapshots and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 5
+    while not scene_snapshots and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     assert scene_snapshots, "scene_snapshot not received after seeding scene"
     snap = scene_snapshots[-1]
@@ -178,8 +178,8 @@ async def test_chat_reshapes_high_symbol(live_server):
     await client.emit("send_prompt", {"roomId": room_id, "text": "make the high symbol a dragon"})
 
     # Wait for run_completed (the design-router runs as a skill run)
-    deadline = asyncio.get_event_loop().time() + 30
-    while not run_completions and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 30
+    while not run_completions and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     assert run_completions, "run_completed not received after reshape prompt"
     assert run_completions[0]["status"] == "completed", (
@@ -225,8 +225,8 @@ async def test_chat_reshapes_high_symbol(live_server):
     # -----------------------------------------------------------------------
     scene_snapshots.clear()
     await client.emit("join_scene", {"gameId": game_id})
-    deadline = asyncio.get_event_loop().time() + 5
-    while not scene_snapshots and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 5
+    while not scene_snapshots and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
     assert scene_snapshots, "scene_snapshot not received after reshape"
     new_snap = scene_snapshots[-1]["document"]
