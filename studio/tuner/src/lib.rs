@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod outcome;
+pub mod genome;
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::TargetSpec;
