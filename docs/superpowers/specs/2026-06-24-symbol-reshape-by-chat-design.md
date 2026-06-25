@@ -14,8 +14,8 @@
 
 ## 1. Essence — the magic moment, end to end
 
-Bloom's north-star magic moment (§3 steps 2–3, §7 Milestone 1) is *"a game appears
-from a conversation and then bends to it."* Live verification (2026-06-24) found the
+Bloom's north-star magic moment (§3 steps 2–3, §7 Milestone 1) is _"a game appears
+from a conversation and then bends to it."_ Live verification (2026-06-24) found the
 loop half-built:
 
 - ✅ **The GDD bends to chat.** Plain prose in a game room → the design-router edits the
@@ -34,7 +34,7 @@ loop half-built:
 
 This slice closes the loop for **one concrete, differentiated interaction**:
 
-> Say *"make the high symbol a dragon"* → that symbol's GDD entry updates, its art
+> Say _"make the high symbol a dragon"_ → that symbol's GDD entry updates, its art
 > regenerates via ComfyUI, and **the rendered game re-paints the new art live** — no
 > reload.
 
@@ -53,9 +53,9 @@ Settled during brainstorming:
 3. **Orchestration:** the conversational agent does the **design** (edit the GDD symbol),
    then calls **one deterministic tool, `realize_symbol(slot)`**, that does the
    **realization** (regenerate the asset + atomically rewrite the scene Texture's `src`).
-   Honors §6 *"AI-designed, never AI-decided"* and dodges #69 by construction (one atomic
+   Honors §6 _"AI-designed, never AI-decided"_ and dodges #69 by construction (one atomic
    write, no multi-op dance on the reshape).
-4. **Scope:** the **full loop** — thread the identity contract through the *initial*
+4. **Scope:** the **full loop** — thread the identity contract through the _initial_
    authoring (`/design-game`, asset generation, `/design-scene`), so the reshape has real
    targets and future reshapes (theme, layout) build on the same contract.
 
@@ -64,11 +64,11 @@ Settled during brainstorming:
 A stable `slot` string (e.g. `high1`, `low1`, `wild`) threads through all three planes,
 making every layer resolvable by a pure lookup:
 
-| Plane | Where the slot lives | Change |
-|---|---|---|
-| **GDD** | `symbols-reels.symbols` table gains a `slot` column beside `name/kind/art_desc` | `gdd/schemas.py` |
-| **Asset** | `Asset` gains a `slot: Optional[str]`; the store can look up an asset by `(game_id, slot)` | `assets/models.py` + `assets` store |
-| **Scene** | the symbol **Sprite** carries `props.slot`, bound (data edge) to a **Texture** whose `src` is that slot's selected media | scene-authoring convention |
+| Plane     | Where the slot lives                                                                                                     | Change                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| **GDD**   | `symbols-reels.symbols` table gains a `slot` column beside `name/kind/art_desc`                                          | `gdd/schemas.py`                    |
+| **Asset** | `Asset` gains a `slot: Optional[str]`; the store can look up an asset by `(game_id, slot)`                               | `assets/models.py` + `assets` store |
+| **Scene** | the symbol **Sprite** carries `props.slot`, bound (data edge) to a **Texture** whose `src` is that slot's selected media | scene-authoring convention          |
 
 Resolution becomes: `slot → GDD symbol row`, `slot → Asset`, `slot → Sprite node → its
 Texture node`.
@@ -79,14 +79,14 @@ unambiguous join key, cheap to add, and is the contract every later reshape lean
 
 ## 4. Initial authoring threads the contract
 
-So the reshape has real targets, the describe→generate flow must *create* the wiring:
+So the reshape has real targets, the describe→generate flow must _create_ the wiring:
 
 - **`/design-game` (GDD):** filling `symbols-reels`, each symbol row gets a stable `slot`.
   Schema + skill-prose change; the agent already fills this table. `field_catalog()` (the
   router's addressable-surface prompt) includes `slot`.
 - **Asset generation per slot:** `generate_asset` gains an optional `slot` (or a thin
   `generate_symbol_asset(slot, description)` wrapper) that tags the created asset with the
-  slot — binding *slot → Asset*. `list_assets` surfaces the slot so the scene agent can
+  slot — binding _slot → Asset_. `list_assets` surfaces the slot so the scene agent can
   match.
 - **`/design-scene`:** when laying out symbol sprites, each symbol Sprite is created with
   `props.slot = "<slot>"` and bound (data edge) to a Texture whose `src` is that slot's
@@ -101,8 +101,8 @@ Sprite→Texture — the join is real, not inferred.
 Plain chat in a game room stays on the **design-router**, extended with **one** new tool,
 `realize_symbol`:
 
-1. User: *"make the high symbol a dragon."*
-2. Router (LLM — the *design* decision): resolves "high symbol" → `slot=high1`, calls
+1. User: _"make the high symbol a dragon."_
+2. Router (LLM — the _design_ decision): resolves "high symbol" → `slot=high1`, calls
    `set_gdd_fields('symbols-reels', …)` to update that row's `name`/`art_desc` to the
    dragon. **The GDD bends** (works today).
 3. Router calls **`realize_symbol('high1')`** — deterministic, no LLM:
@@ -116,8 +116,8 @@ Plain chat in a game room stays on the **design-router**, extended with **one** 
    on a Texture's `src` re-runs `bindTexture`) → **the sprite re-paints as the dragon**,
    no reload.
 
-The LLM only ever *designs* (edits the GDD, picks the slot); a deterministic op
-*realizes* it. The racy multi-op authoring dance never happens on the reshape — it is one
+The LLM only ever _designs_ (edits the GDD, picks the slot); a deterministic op
+_realizes_ it. The racy multi-op authoring dance never happens on the reshape — it is one
 atomic write.
 
 **`realize_symbol(slot)` algorithm (deterministic):**
@@ -186,8 +186,8 @@ shared `run/default.json` union, filtered by the router's bound tools), not
 `record-fixtures`.
 
 **Browser e2e (Playwright, local — authoritative):** the whole loop — author a game with
-slots → assert symbol sprites are labeled and their textures bound → send *"make the high
-symbol a dragon"* → assert the high-symbol Sprite's Texture `src` changed to a **new
+slots → assert symbol sprites are labeled and their textures bound → send _"make the high
+symbol a dragon"_ → assert the high-symbol Sprite's Texture `src` changed to a **new
 generation** and the **rendered pixels changed** in the real engine iframe (non-`EMPTY`
 texture, new dimensions/hash). Without the pixel assertion we cannot honestly claim "the
 game re-paints".

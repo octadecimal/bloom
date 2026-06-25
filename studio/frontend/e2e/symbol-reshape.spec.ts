@@ -62,9 +62,7 @@ async function seedGddHigh1(page: Page, gameId: string): Promise<void> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fields: {
-            symbols: [
-              { slot: 'high1', name: 'Phoenix', kind: 'high', art_desc: 'a phoenix bird with red and gold feathers' },
-            ],
+            symbols: [{ slot: 'high1', name: 'Phoenix', kind: 'high', art_desc: 'a phoenix bird with red and gold feathers' }],
           },
         }),
       });
@@ -106,9 +104,7 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
 
   // The game ID is set on window.__gameActiveId by game/actions.ts in dev mode.
   // Poll briefly — the game socket connects asynchronously after the room loads.
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__gameActiveId ?? null), { timeout: 10_000 })
-    .not.toBeNull();
+  await expect.poll(() => page.evaluate(() => (window as any).__gameActiveId ?? null), { timeout: 10_000 }).not.toBeNull();
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   // Explicit null-guard mirroring game-scene.spec.ts:51 pattern.
   expect(gameId).toBeTruthy();
@@ -208,12 +204,7 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
   await expect(page.getByTestId('view-open-game/preview')).toBeVisible();
   await page.getByTestId('view-open-game/preview').click();
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
-  await expect
-    .poll(
-      () => page.evaluate(() => (window as any).__engineMsgs?.some((m: any) => m.kind === 'ready')),
-      { timeout: 25_000 },
-    )
-    .toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs?.some((m: any) => m.kind === 'ready')), { timeout: 25_000 }).toBe(true);
 
   // -----------------------------------------------------------------------
   // 9. Assert (c): persisted scene texture src matches the new generation.
@@ -227,27 +218,26 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
   await page.evaluate(() => {
     (window as any).__gameSceneSnapshot = undefined;
   });
-  await page.evaluate(({ gid }: { gid: string }) => {
-    const joinFn = (window as any).__gameJoinScene as ((gameId: string) => void) | undefined;
-    joinFn?.(gid);
-  }, { gid });
+  await page.evaluate(
+    ({ gid }: { gid: string }) => {
+      const joinFn = (window as any).__gameJoinScene as ((gameId: string) => void) | undefined;
+      joinFn?.(gid);
+    },
+    { gid },
+  );
   // Poll until the snapshot arrives with the tex.high1 node populated.
   await expect
     .poll(
       () =>
         page.evaluate(() => {
-          const snap = (window as any).__gameSceneSnapshot as
-            | { document: { nodes: Record<string, { props: Record<string, string> }> } }
-            | undefined;
+          const snap = (window as any).__gameSceneSnapshot as { document: { nodes: Record<string, { props: Record<string, string> }> } } | undefined;
           return snap?.document?.nodes?.['tex.high1']?.props?.src ?? null;
         }),
       { timeout: 15_000 },
     )
     .not.toBeNull();
   const persistedTextureSrc = await page.evaluate(() => {
-    const snap = (window as any).__gameSceneSnapshot as
-      | { document: { nodes: Record<string, { props: Record<string, string> }> } }
-      | undefined;
+    const snap = (window as any).__gameSceneSnapshot as { document: { nodes: Record<string, { props: Record<string, string> }> } } | undefined;
     return snap?.document?.nodes?.['tex.high1']?.props?.src ?? null;
   });
   expect(persistedTextureSrc).toEqual(newImageRef);
@@ -264,16 +254,11 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
   expect(frame).not.toBeNull();
 
   await expect
-    .poll(
-      async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym.high1')?.width ?? 0),
-      { timeout: 25_000 },
-    )
+    .poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym.high1')?.width ?? 0), { timeout: 25_000 })
     .toBeGreaterThan(64);
 
   // -----------------------------------------------------------------------
   // 11. No engine errors during the session.
   // -----------------------------------------------------------------------
-  expect(
-    await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length),
-  ).toBe(0);
+  expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
 });

@@ -48,8 +48,7 @@ export function createGameSocket() {
     sock.on('scene_op', (p) => applyInbound('scene_op', p));
     if (!import.meta.env.PROD) {
       (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
-      (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) =>
-        sock?.emit('join_scene', { gameId });
+      (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) => sock?.emit('join_scene', { gameId });
     }
   }
   function disconnect(): void {

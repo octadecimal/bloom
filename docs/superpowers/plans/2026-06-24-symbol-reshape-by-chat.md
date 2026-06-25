@@ -24,10 +24,12 @@
 Serialize every scene write per game so concurrent `scene_*` ops can't clobber via the store's read-modify-write.
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/hub.py`
 - Test: `studio/backend/tests/test_scene_hub_concurrency.py` (create)
 
 **Interfaces:**
+
 - Consumes: `GameSceneStore.apply_op(game_id, op) -> dict`, `.apply_batch(game_id, ops) -> dict`.
 - Produces: `GameSceneHub.apply_op` / `.apply_batch` unchanged signatures, now serialized per `game_id`.
 
@@ -145,10 +147,12 @@ git commit -m "fix(scene): serialize per-game scene writes to close the apply_op
 Make the runtime client engine launchable without a manual `npx vite`.
 
 **Files:**
+
 - Modify: `justfile`
 - Modify: `runtime/client/project.json`
 
 **Interfaces:**
+
 - Produces: `just engine-serve` runs Vite on `4300 + BLOOM_PORT_OFFSET`, host `0.0.0.0`.
 
 - [ ] **Step 1: Add the nx serve target**
@@ -194,10 +198,12 @@ git commit -m "build(engine): add engine-serve recipe + nx serve target for the 
 Each symbol row carries a stable slot id so the symbol is addressable across planes.
 
 **Files:**
+
 - Modify: `studio/backend/app/gdd/schemas.py:58-61` (the `symbols` field's `columns`)
 - Test: `studio/backend/tests/test_gdd_schemas.py` (create or extend)
 
 **Interfaces:**
+
 - Produces: the `symbols` table column set is `("slot","name","kind","art_desc")`.
 
 - [ ] **Step 1: Write the failing test**
@@ -246,11 +252,13 @@ git commit -m "feat(gdd): add a stable slot column to the symbols table"
 Tag assets with their slot and resolve an asset by slot.
 
 **Files:**
+
 - Modify: `studio/backend/app/assets/models.py:22-35` (add field)
 - Modify: `studio/backend/app/assets/store.py` (`_AUTHORING_FIELDS`, `create_asset`, new `get_by_slot`)
 - Test: `studio/backend/tests/test_asset_store_slot.py` (create)
 
 **Interfaces:**
+
 - Consumes: `AssetStore(db)`.
 - Produces: `Asset.slot: Optional[str]`; `AssetStore.create_asset(..., slot=None)`; `AssetStore.get_by_slot(game_id, slot) -> Optional[Asset]`.
 
@@ -325,10 +333,12 @@ git commit -m "feat(assets): add Asset.slot and get_by_slot lookup"
 So initial authoring can tag a generated symbol asset with its slot.
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py:23-47` (`build_generate_asset_tool`)
 - Test: `studio/backend/tests/test_agent_tools.py` (extend)
 
 **Interfaces:**
+
 - Consumes: `ToolContext.asset_store.create_asset(..., slot=)`, `ToolContext.asset_hub.generate_and_wait`.
 - Produces: `generate_asset(description, style="", size="512x512", transparent=True, slot="")` — passes `slot` (when non-empty) to `create_asset`.
 
@@ -413,10 +423,12 @@ git commit -m "feat(assets): let generate_asset tag a generated asset with its s
 So the scene agent can match a slot to an asset's media URL.
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py:60-78` (`build_list_assets_tool`)
 - Test: `studio/backend/tests/test_agent_tools.py` (extend)
 
 **Interfaces:**
+
 - Produces: each `list_assets` line includes `[slot=<slot>]` when set.
 
 - [ ] **Step 1: Write the failing test**
@@ -485,10 +497,12 @@ git commit -m "feat(assets): surface the slot in list_assets output"
 Given a slot: regenerate its asset and atomically rewrite the bound Texture's `src`.
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (new builder + register in `ToolFactory._BUILDERS`)
 - Test: `studio/backend/tests/test_realize_symbol.py` (create)
 
 **Interfaces:**
+
 - Consumes: `ToolContext` with `asset_store` (`get_by_slot`, `get_asset`, `update_asset`, `select_generation`), `asset_hub.generate_and_wait`, `gdd_store.get_doc`, `scene_store.get_document`, `scene_hub.apply_op`.
 - Produces: tool `realize_symbol(slot)` registered under name `"realize_symbol"`. Helper `_find_symbol_sprite(document, slot) -> tuple[str, str] | None` returning `(sprite_id, texture_node_id)`.
 
@@ -687,10 +701,12 @@ git commit -m "feat(scene): add realize_symbol — regenerate a symbol's art and
 Bind the tool to the game-room conversational turn and teach the router to call it after a symbol edit.
 
 **Files:**
+
 - Modify: `studio/backend/app/gdd/router.py`
 - Test: `studio/backend/tests/test_design_router.py` (create or extend)
 
 **Interfaces:**
+
 - Consumes: `build_design_router_spec() -> SkillSpec`.
 - Produces: the router spec's `tools` include `realize_symbol`; body prose instructs calling it after a symbol change.
 
@@ -756,11 +772,13 @@ git commit -m "feat(gdd): bind realize_symbol to the design-router for chat-driv
 Teach `/design-game` and `/design-scene` to establish the slot contract.
 
 **Files:**
+
 - Modify: `skills/design-game.md`
 - Modify: `skills/design-scene.md`
 - Test: `studio/backend/tests/test_skills_slot_guidance.py` (create) — a light guard that the prose mentions the contract (skills are prose; the behavioral proof is the e2e in Tasks 11–12).
 
 **Interfaces:**
+
 - Produces: `design-game` instructs giving each symbol a stable `slot`; `design-scene` instructs labeling each symbol Sprite with `props.slot` and binding a Texture per slot.
 
 - [ ] **Step 1: Write the failing test**
@@ -790,9 +808,9 @@ Expected: FAIL — no slot guidance yet.
 
 - [ ] **Step 3: Edit the skills**
 
-In `skills/design-game.md`, in the symbols-reels guidance, add: *"Give every symbol a stable `slot` id (`high1`, `high2`, `low1`, `wild`, `scatter`) in its row — this is the durable handle later chat edits use to reshape that symbol."*
+In `skills/design-game.md`, in the symbols-reels guidance, add: _"Give every symbol a stable `slot` id (`high1`, `high2`, `low1`, `wild`, `scatter`) in its row — this is the durable handle later chat edits use to reshape that symbol."_
 
-In `skills/design-scene.md`, in the symbol-sprite step, add: *"For each symbol sprite, set `props.slot` to that symbol's GDD `slot`, and bind it (data edge) to a Texture whose `src` is that slot's asset media URL (match by `[slot=…]` in `list_assets`). Prefer one `scene_apply_batch` per reel/group."*
+In `skills/design-scene.md`, in the symbol-sprite step, add: _"For each symbol sprite, set `props.slot` to that symbol's GDD `slot`, and bind it (data edge) to a Texture whose `src` is that slot's asset media URL (match by `[slot=…]` in `list_assets`). Prefer one `scene_apply_batch` per reel/group."_
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -813,9 +831,11 @@ git commit -m "docs(skills): thread the symbol slot contract through design-game
 Lock in the reconciler behavior `realize_symbol` depends on (no engine code change).
 
 **Files:**
+
 - Test: `runtime/client/src/render/reconciler.spec.ts` (create or extend)
 
 **Interfaces:**
+
 - Consumes: `Reconciler`, `GraphModel`, a fake `IRenderer` recording `loadTexture`/`assignTexture`.
 
 - [ ] **Step 1: Write the failing/again-passing test**
@@ -837,9 +857,16 @@ class FakeRenderer implements IRenderer {
   destroyObject() {}
   setParent() {}
   setProp() {}
-  async loadTexture(src: string): Promise<ITextureHandle> { this.loaded.push(src); return { src } as unknown as ITextureHandle; }
-  assignTexture(id: string, t: ITextureHandle | null) { this.assigned.push([id, t]); }
-  textureSizeOf() { return null; }
+  async loadTexture(src: string): Promise<ITextureHandle> {
+    this.loaded.push(src);
+    return { src } as unknown as ITextureHandle;
+  }
+  assignTexture(id: string, t: ITextureHandle | null) {
+    this.assigned.push([id, t]);
+  }
+  textureSizeOf() {
+    return null;
+  }
 }
 
 describe('reconciler texture rebind', () => {
@@ -849,8 +876,11 @@ describe('reconciler texture rebind', () => {
     const rec = new Reconciler(r, model);
     await rec.applyChanges(model.apply({ kind: 'addNode', id: 'spr', type: 'Sprite', props: {} }));
     await rec.applyChanges(model.apply({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: '/old.png' } }));
-    await rec.applyChanges(model.apply({ kind: 'connect', edgeId: 'd', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'spr', port: 'texture' } }));
-    r.loaded.length = 0; r.assigned.length = 0;
+    await rec.applyChanges(
+      model.apply({ kind: 'connect', edgeId: 'd', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'spr', port: 'texture' } }),
+    );
+    r.loaded.length = 0;
+    r.assigned.length = 0;
     await rec.applyChanges(model.apply({ kind: 'setProp', id: 'tex', path: 'src', value: '/new.png' }));
     expect(r.loaded).toContain('/new.png');
     expect(r.assigned.map(([id]) => id)).toContain('spr');
@@ -877,10 +907,12 @@ git commit -m "test(engine): lock in texture rebind on Texture src change"
 Prove the conversational reshape end-to-end on the backend under replay.
 
 **Files:**
+
 - Modify: `studio/backend/tests/fixtures/replay/run/default.json` (append the design-router tool sequence)
 - Test: `studio/backend/tests/e2e/test_symbol_reshape.py` (create) — mirror `tests/e2e/test_scene.py`'s boot + `run_skill` harness.
 
 **Interfaces:**
+
 - Consumes: the replay backend, a socket.io client, the design-router turn.
 
 - [ ] **Step 1: Curate the cassette**
@@ -925,9 +957,11 @@ git commit -m "test(e2e): reshape the high symbol through the agent loop under r
 The behavioral contract: chat → the rendered game changes pixels.
 
 **Files:**
+
 - Test: `studio/frontend/e2e/symbol-reshape.spec.ts` (create) — mirror `studio/frontend/e2e/game-scene.spec.ts` for engine-iframe assertions.
 
 **Interfaces:**
+
 - Consumes: the replay backend on `:8000+offset`, the studio on `:4200+offset`, the engine on `:4300+offset`.
 
 - [ ] **Step 1: Write the spec**
@@ -939,7 +973,7 @@ Seed (or author) a game with a `high1` symbol: GDD row, asset tagged `high1` wit
 import { test, expect } from '@playwright/test';
 
 test('chat reshapes the high symbol and the game re-paints', async ({ page }) => {
-  const room = await seedSlotGame(page, { slot: 'high1' });   // helper per game-scene.spec.ts
+  const room = await seedSlotGame(page, { slot: 'high1' }); // helper per game-scene.spec.ts
   await openGameScene(page);
   const before = await readSpriteTextureSrc(page, 'high1');
   await sendChat(page, 'make the high symbol a dragon');
@@ -968,12 +1002,13 @@ git commit -m "test(e2e): browser proof the high-symbol reshape re-paints the re
 ## Self-Review
 
 **Spec coverage:**
+
 - §3 contract (slot across GDD/Asset/Scene) → Tasks 3, 4, plus the scene convention asserted in 9/11/12. ✓
 - §4 authoring threads the contract → Tasks 5 (asset slot), 6 (list_assets), 9 (skill prose). ✓
 - §5 reshape path + `realize_symbol` algorithm → Task 7; router wiring → Task 8. ✓
 - §6 #69 per-game lock → Task 1; `engine-serve` recipe → Task 2. ✓
 - §8 testing (unit / non-browser e2e / browser e2e) → Tasks 1,3,4,5,6,7,8,10 (unit) + 11 (non-browser e2e) + 12 (browser e2e). ✓
 
-**Placeholder scan:** Tasks 11 and 12 carry e2e *skeletons* with explicit instructions to fill boot/seed helpers from the named existing specs (`tests/e2e/test_scene.py`, `studio/frontend/e2e/game-scene.spec.ts`) — these are integration harnesses whose fixtures are repo-specific; the asserted behavior and exact assertions are concrete. All unit tasks (1,3–8,10) carry complete, runnable code.
+**Placeholder scan:** Tasks 11 and 12 carry e2e _skeletons_ with explicit instructions to fill boot/seed helpers from the named existing specs (`tests/e2e/test_scene.py`, `studio/frontend/e2e/game-scene.spec.ts`) — these are integration harnesses whose fixtures are repo-specific; the asserted behavior and exact assertions are concrete. All unit tasks (1,3–8,10) carry complete, runnable code.
 
 **Type consistency:** `realize_symbol` resolution helper `_find_symbol_sprite(document, slot) -> (sprite_id, texture_id) | None` is defined and used in Task 7; `create_asset(..., slot=None)` / `get_by_slot` from Task 4 are consumed in Tasks 5 and 7; `slot` column from Task 3 is read in Task 7; router `tools` set from Task 8 binds the Task 7 tool name `"realize_symbol"`. Consistent.
