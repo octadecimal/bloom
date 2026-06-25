@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     mongo_db: str = "bloom_studio"
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    default_model: str = "openai/gpt-4o-mini"
-    available_models: str = "openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
+    default_model: str = "openai/gpt-5.5"
+    available_models: str = "openai/gpt-5.5,openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
     provider_mode: Literal["live", "replay"] = "live"
     replay_token_delay: float = 0.0
     comfyui_url: str = "http://127.0.0.1:8188"
