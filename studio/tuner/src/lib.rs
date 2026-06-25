@@ -7,6 +7,9 @@ pub mod config;
 pub mod outcome;
 pub mod genome;
 pub mod fitness;
+pub mod genetic;
+
+pub use genetic::GeneticTuner;
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::TargetSpec;
