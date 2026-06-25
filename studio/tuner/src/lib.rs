@@ -1,0 +1,24 @@
+//! Bloom layer-3 math tuner: a genetic algorithm behind a swappable `Tuner`
+//! seam that adjusts a `SlotModel`'s parameters until it satisfies a
+//! `TargetSpec`. AI-designed, never AI-decided — the output is an interpretable
+//! model a human reviews and signs. See the design spec.
+
+pub mod config;
+pub mod outcome;
+
+use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::target::TargetSpec;
+use config::TunerConfig;
+use outcome::TuneOutcome;
+
+/// The layer-3 seam (math-spec §8). One implementor this slice: `GeneticTuner`.
+/// A future hill-climb / CMA-ES / AI-designer is a new `impl Tuner` with no
+/// change to callers.
+pub trait Tuner {
+    fn tune(
+        &self,
+        seed_model: &SlotModel,
+        target: &TargetSpec,
+        cfg: &TunerConfig,
+    ) -> TuneOutcome;
+}
