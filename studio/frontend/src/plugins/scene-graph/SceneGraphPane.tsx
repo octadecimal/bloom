@@ -44,7 +44,9 @@ export function SceneGraphPane(_props: IDockviewPanelProps) {
 
 function Row(props: { row: ITreeRow; selected: boolean; collapsed: boolean; onSelect: (id: string) => void; onToggle: (id: string) => void }) {
   const { row, selected, collapsed, onSelect, onToggle } = props;
-  const Icon = ICON[row.type];
+  // Fallback guards against a node arriving (mid-stream) with a type outside the
+  // closed NodeType union; the icon map is exhaustive for known types.
+  const Icon = ICON[row.type] ?? Box;
   return (
     <div
       data-testid={`scene-row-${row.id}`}

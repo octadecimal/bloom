@@ -78,9 +78,11 @@ import** of the `game` plugin's `gameSlice()` accessor and wire types
 
 - **`state.ts`** — the plugin's state slice, using the `makePluginHooks` /
   slice-accessor pattern from the sibling plugins:
-  `{ selectedId: string | null; expanded: Record<string, boolean> }`.
+  `{ selectedId: string | null; collapsed: Record<string, boolean> }`.
   `selectedId` **is the selection seam** the future inspector reads.
-  `expanded` tracks per-node collapse state (ephemeral; `persist: false` in v1).
+  `collapsed` tracks per-node collapse state — `collapsed[id] === true` hides
+  a node's descendants, matching `buildTree`'s parameter (ephemeral;
+  `persist: false` in v1).
 
 - **`SceneGraphPane.tsx`** — the React pane. Subscribes to
   `gameSlice().document` (re-renders on each `scene_op`) and to its own slice.
