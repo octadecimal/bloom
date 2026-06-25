@@ -75,7 +75,9 @@ export class PixiRenderer implements IRenderer {
 
   createObject(id: string, type: NodeType): void {
     if (type === 'Sprite') {
-      this.objects.set(id, new Sprite());
+      const s = new Sprite();
+      s.anchor.set(0.5); // position denotes the sprite's center by default
+      this.objects.set(id, s);
     } else if (type === 'Container') {
       const c = new Container();
       c.sortableChildren = true;
@@ -120,5 +122,21 @@ export class PixiRenderer implements IRenderer {
     const tex = obj.texture;
     if (!tex) return null;
     return { width: tex.width, height: tex.height };
+  }
+
+  anchorOf(id: string): { x: number; y: number } | null {
+    const obj = this.objects.get(id);
+    return obj instanceof Sprite ? { x: obj.anchor.x, y: obj.anchor.y } : null;
+  }
+
+  onStage(id: string): boolean {
+    const stage = this.app?.stage as unknown as Container | undefined;
+    let cur = this.objects.get(id) as Container | null | undefined;
+    if (!stage || !cur) return false;
+    while (cur) {
+      if ((cur as unknown) === (stage as unknown)) return true;
+      cur = cur.parent as Container | null;
+    }
+    return false;
   }
 }
