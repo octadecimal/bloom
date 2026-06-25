@@ -12,6 +12,7 @@ import { MessageScroller } from './MessageScroller';
 import { SkillForm } from './SkillForm';
 import { splitSlashDraft, moveHighlight, clampHighlight, decideEnter } from './slashParse';
 import { fuzzyMatchSkills, type ISkillMatch } from './fuzzySkills';
+import { Markdown } from '@/components/ui/Markdown';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -52,7 +53,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({ index }: { index: nu
       <div className="min-w-0">
         <div className={`text-[10.5px] font-semibold leading-tight ${isAssistant ? 'text-accent-text/90' : 'text-muted-foreground'}`}>{author}</div>
         <div className="text-[13px] leading-snug text-foreground">
-          {content}
+          <Markdown source={content} />
           {status === 'streaming' && (
             <span data-testid="chat-caret" className="ml-0.5 inline-block h-3 w-1.5 translate-y-0.5 rounded-sm bg-primary align-baseline" />
           )}
