@@ -97,3 +97,68 @@ def _realize_reels(
         warnings.append(f"strip_length absent; defaulted strip length to {length}")
     reel = [pos % distinct_count for pos in range(length)]
     return [list(reel) for _ in range(reel_count)], errors, warnings
+
+
+def _all_patterns(rows: int, reel_count: int) -> list[list[int]]:
+    """Every row-combination across reels: straight horizontals first, then the
+    remainder in lexicographic order. Deterministic."""
+    combos = list(product(range(rows), repeat=reel_count))
+    constants = [list(c) for c in combos if len(set(c)) == 1]
+    others = [list(c) for c in combos if len(set(c)) > 1]
+    return constants + others
+
+
+def _realize_paylines(
+    math_model: dict, reel_count: int, rows: int
+) -> tuple[list[list[int]], list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    overrides = math_model.get("payline_overrides") or []
+    if overrides:
+        lines: list[list[int]] = []
+        for i, pat in enumerate(overrides):
+            parts = [p.strip() for p in str(pat).split(",") if p.strip() != ""]
+            try:
+                idxs = [int(p) for p in parts]
+            except ValueError:
+                errors.append(f"payline override {i} '{pat}' is not a comma list of integers")
+                continue
+            if len(idxs) != reel_count:
+                errors.append(
+                    f"payline override {i} has {len(idxs)} positions but reel count is {reel_count}"
+                )
+                continue
+            bad = [x for x in idxs if x < 0 or x >= rows]
+            if bad:
+                errors.append(f"payline override {i} has row index {bad} outside [0,{rows})")
+                continue
+            lines.append(idxs)
+        if errors:
+            return [], errors, warnings
+        return lines, errors, warnings
+
+    total = rows ** reel_count
+    mode = str(math_model.get("payline_mode") or "lines").strip().lower()
+    if mode == "ways":
+        if total > MAX_PAYLINES:
+            errors.append(
+                f"ways mode needs {total} paylines ({rows}^{reel_count}) which exceeds "
+                f"MAX_PAYLINES {MAX_PAYLINES}; use payline_overrides or fewer rows/reels"
+            )
+            return [], errors, warnings
+        declared = math_model.get("payline_count")
+        if declared not in (None, "") and _to_int(declared, total) != total:
+            warnings.append(
+                f"payline_count {declared} != generated ways count {total}; using {total}"
+            )
+        return _all_patterns(rows, reel_count), errors, warnings
+
+    n = _to_int(math_model.get("payline_count"), 1)
+    if n > total:
+        errors.append(
+            f"payline_count {n} exceeds the {total} distinct paylines possible "
+            f"({rows}^{reel_count})"
+        )
+        return [], errors, warnings
+    return _all_patterns(rows, reel_count)[:n], errors, warnings

@@ -1,6 +1,6 @@
 from app.simulator.realize import (
     RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
-    _realize_reels,
+    _realize_reels, _all_patterns, _realize_paylines,
 )
 
 
@@ -88,3 +88,63 @@ def test_realize_reels_max_below_distinct_is_hard_error():
         {"strip_length": {"min": 2, "max": 3}}, distinct_count=6, reel_count=2)
     assert reels == []
     assert any("distinct symbol count" in e for e in errors)
+
+
+def test_all_patterns_horizontals_first_then_lexicographic():
+    pats = _all_patterns(rows=3, reel_count=5)
+    assert len(pats) == 243  # 3 ** 5
+    assert pats[0] == [0, 0, 0, 0, 0]
+    assert pats[1] == [1, 1, 1, 1, 1]
+    assert pats[2] == [2, 2, 2, 2, 2]
+    assert pats[3] == [0, 0, 0, 0, 1]  # first non-constant, lexicographic
+    assert pats[4] == [0, 0, 0, 0, 2]
+
+
+def test_paylines_lines_mode_takes_first_n():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_mode": "lines", "payline_count": 5}, reel_count=5, rows=3)
+    assert errors == []
+    assert lines == [[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 2, 2, 2],
+                     [0, 0, 0, 0, 1], [0, 0, 0, 0, 2]]
+
+
+def test_paylines_ways_mode_takes_all():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_mode": "ways", "payline_count": 243}, reel_count=5, rows=3)
+    assert errors == []
+    assert len(lines) == 243
+
+
+def test_paylines_overrides_bypass_generator():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_overrides": ["0,1,2,1,0", "2,2,2,2,2"]}, reel_count=5, rows=3)
+    assert errors == []
+    assert lines == [[0, 1, 2, 1, 0], [2, 2, 2, 2, 2]]
+
+
+def test_paylines_override_wrong_length_is_hard_error():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_overrides": ["0,1,2,1"]}, reel_count=5, rows=3)
+    assert lines == []
+    assert any("positions but reel count" in e for e in errors)
+
+
+def test_paylines_override_row_out_of_range_is_hard_error():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_overrides": ["0,1,2,1,9"]}, reel_count=5, rows=3)
+    assert lines == []
+    assert any("outside" in e for e in errors)
+
+
+def test_paylines_lines_count_exceeds_possible_is_hard_error():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_mode": "lines", "payline_count": 999}, reel_count=2, rows=3)
+    assert lines == []  # only 9 possible
+    assert any("exceeds" in e for e in errors)
+
+
+def test_paylines_ways_over_cap_is_hard_error():
+    lines, errors, warnings = _realize_paylines(
+        {"payline_mode": "ways"}, reel_count=8, rows=4)  # 4**8 = 65536 > 4096
+    assert lines == []
+    assert any("MAX_PAYLINES" in e for e in errors)
