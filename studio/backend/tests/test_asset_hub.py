@@ -26,8 +26,8 @@ class FakeSio:
 
 
 async def _wait_for(sio, event, timeout=2.0):
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
         if any(e[0] == event for e in sio.events):
             return
         await asyncio.sleep(0.01)
@@ -35,8 +35,8 @@ async def _wait_for(sio, event, timeout=2.0):
 
 
 async def _wait_until(predicate, timeout=2.0):
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
         if predicate():
             return
         await asyncio.sleep(0.005)

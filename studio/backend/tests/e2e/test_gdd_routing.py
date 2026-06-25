@@ -39,8 +39,8 @@ async def test_plain_chat_sets_a_field_without_design_game(live_server):
     # Poll the math-model doc until the routed set_gdd_fields lands.
     math = None
     async with httpx.AsyncClient(base_url=live_server) as http:
-        deadline = asyncio.get_event_loop().time() + 15
-        while asyncio.get_event_loop().time() < deadline:
+        deadline = asyncio.get_running_loop().time() + 15
+        while asyncio.get_running_loop().time() < deadline:
             docs = (await http.get(f"/games/{game_id}/gdd/docs")).json()
             math = next((d for d in docs if d["aspect"] == "math-model"), None)
             if math and math.get("data", {}).get("bonus_hit_rate"):
@@ -81,8 +81,8 @@ async def test_ambiguous_hit_rate_triggers_disambiguation(live_server):
     await client.emit("send_prompt",
                       {"roomId": room_id, "text": "set the hit rate to 1:200"})
 
-    deadline = asyncio.get_event_loop().time() + 15
-    while not question_steps and asyncio.get_event_loop().time() < deadline:
+    deadline = asyncio.get_running_loop().time() + 15
+    while not question_steps and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.05)
 
     assert question_steps, "ambiguous edit must trigger a disambiguation question"
