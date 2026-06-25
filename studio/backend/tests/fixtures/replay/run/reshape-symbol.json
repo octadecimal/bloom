@@ -1,0 +1,14 @@
+{
+  "prompt": "make the high symbol a dragon",
+  "tool_calls": [
+    { "name": "set_gdd_fields", "args": {
+        "aspect": "symbols-reels",
+        "fields": {
+          "symbols": [
+            { "slot": "high1", "name": "Dragon", "kind": "high", "art_desc": "a majestic dragon breathing golden fire, pixel art style" }
+          ]
+        } } },
+    { "name": "realize_symbol", "args": { "slot": "high1" } }
+  ],
+  "final": ["Reshaped the high symbol → dragon."]
+}
