@@ -1,6 +1,6 @@
 import { tunerSock } from './socketClient';
 import { tunerSlice } from './state';
-import { getTuner, getTunerTarget } from './restClient';
+import { getTuner, getTunerSeed, getTunerTarget } from './restClient';
 
 export function initTuner(): void {
   tunerSock().connect();
@@ -27,7 +27,6 @@ export async function openGameTuner(gameId: string): Promise<void> {
 
 export async function refreshSeedAndTarget(gameId: string): Promise<void> {
   const s = tunerSlice();
-  const { getTunerSeed } = await import('./restClient');
   const seed = await getTunerSeed(gameId);
   s.seedModelText.set(JSON.stringify(seed.model ?? {}, null, 2));
   const target = await getTunerTarget(gameId);

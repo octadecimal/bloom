@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { tunerHooks, tunerSlice } from './state';
-import { tune, applyTuner } from './restClient';
-import { putTuner } from './restClient';
+import { tune, applyTuner, putTuner } from './restClient';
 import { refreshSeedAndTarget } from './actions';
 
 export function TunerPane(_props: IDockviewPanelProps) {

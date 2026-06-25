@@ -51,7 +51,7 @@ class TunerRunner(Protocol):
                   on_progress: Callable[[TuneProgress], None]) -> TuneResult: ...
 
 
-# Repo root = .../app/tuner/runner.py -> parents[4]. Verify on first run.
+# Repo root = .../app/tuner/runner.py -> parents[4].
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
