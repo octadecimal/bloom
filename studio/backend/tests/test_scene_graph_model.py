@@ -248,3 +248,23 @@ def test_child_edge_into_texture_rejected():
         m.apply({"kind": "connect", "edgeId": "bad", "type": "child",
                  "from": {"node": "root", "port": "children"}, "to": {"node": "tex", "port": "parent"}})
     assert ei.value.code == "invalid_edge"
+
+
+def test_remove_root_rejected():
+    from app.scene.graph_model import GraphModel
+    from app.scene.document import OpError
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "root", "type": "Root"})
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "removeNode", "id": "root"})
+    assert ei.value.code == "cannot_remove_root"
+
+
+def test_second_root_rejected():
+    from app.scene.graph_model import GraphModel
+    from app.scene.document import OpError
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "root", "type": "Root"})
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "addNode", "id": "root2", "type": "Root"})
+    assert ei.value.code == "root_exists"

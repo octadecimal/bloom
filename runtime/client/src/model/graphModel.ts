@@ -51,6 +51,8 @@ export class GraphModel {
   private addNode(id: string, type: INode['type'], props?: INode['props']): IChange[] {
     if (this.nodes.has(id)) throw new OpError('duplicate_id', `node already exists: ${id}`);
     if (!NODE_TYPES.includes(type)) throw new OpError('bad_type', `unknown node type: ${type}`);
+    if (type === 'Root' && [...this.nodes.values()].some((n) => n.type === 'Root'))
+      throw new OpError('root_exists', `a Root node already exists`);
     const node: INode = { id, type, props: { ...(props ?? {}) } };
     this.nodes.set(id, node);
     return [{ kind: 'nodeCreated', node: { id, type, props: { ...node.props } } }];
@@ -58,6 +60,7 @@ export class GraphModel {
 
   private removeNode(id: string): IChange[] {
     if (!this.nodes.has(id)) throw new OpError('unknown_node', `no such node: ${id}`);
+    if (this.nodes.get(id)!.type === 'Root') throw new OpError('cannot_remove_root', `the Root node cannot be removed`);
     const incident = [...this.edges.values()].filter((e) => e.from.node === id || e.to.node === id);
     const changes: IChange[] = [];
     for (const e of incident) {

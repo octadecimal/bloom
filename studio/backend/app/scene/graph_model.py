@@ -57,11 +57,15 @@ class GraphModel:
             raise OpError("duplicate_id", f"node already exists: {node_id}")
         if type_ not in NODE_TYPES:
             raise OpError("bad_type", f"unknown node type: {type_}")
+        if type_ == "Root" and any(n["type"] == "Root" for n in self._nodes.values()):
+            raise OpError("root_exists", "a Root node already exists")
         self._nodes[node_id] = {"id": node_id, "type": type_, "props": dict(props or {})}
 
     def _remove_node(self, node_id: str) -> None:
         if node_id not in self._nodes:
             raise OpError("unknown_node", f"no such node: {node_id}")
+        if self._nodes[node_id]["type"] == "Root":
+            raise OpError("cannot_remove_root", "the Root node cannot be removed")
         incident = [
             e for e in self._edges.values()
             if e["from"]["node"] == node_id or e["to"]["node"] == node_id
