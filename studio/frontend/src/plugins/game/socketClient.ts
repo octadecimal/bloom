@@ -38,9 +38,19 @@ export function createGameSocket() {
       if (active) sock?.emit('join_scene', { gameId: active });
     });
     sock.on('disconnect', () => gameSlice().connection.set('reconnecting'));
-    sock.on('scene_snapshot', (p) => applyInbound('scene_snapshot', p));
+    sock.on('scene_snapshot', (p) => {
+      applyInbound('scene_snapshot', p);
+      if (!import.meta.env.PROD) {
+        // Expose the raw scene document for e2e inspection (dev only).
+        (window as unknown as { __gameSceneSnapshot?: unknown }).__gameSceneSnapshot = p;
+      }
+    });
     sock.on('scene_op', (p) => applyInbound('scene_op', p));
-    if (!import.meta.env.PROD) (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
+    if (!import.meta.env.PROD) {
+      (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
+      (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) =>
+        sock?.emit('join_scene', { gameId });
+    }
   }
   function disconnect(): void {
     sock?.disconnect();
