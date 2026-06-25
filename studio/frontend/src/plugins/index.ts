@@ -7,5 +7,6 @@ import { gdd } from './gdd';
 import { game } from './game';
 import { simulator } from './simulator';
 import { tuner } from './tuner';
+import { sceneGraph } from './scene-graph';
 
-export const PLUGINS: IPlugin[] = [demoCounter, demoScratch, llmChat, assets, gdd, game, simulator, tuner];
+export const PLUGINS: IPlugin[] = [demoCounter, demoScratch, llmChat, assets, gdd, game, simulator, tuner, sceneGraph];
