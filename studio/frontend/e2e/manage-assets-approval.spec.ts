@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { seedLocalStorage, BACKEND_URL as BACKEND } from './helpers';
 import { seedAsset, removeSeed } from './seed';
 
 // Drives the real UI against a running backend (:8000, replay mode) + frontend (:4200).
@@ -10,7 +10,6 @@ import { seedAsset, removeSeed } from './seed';
 // generate_asset and a delete_asset call. Because the replay model filters cassette
 // tool-calls by the BOUND tools (Task 5), the `manage-assets` skill (binds list_assets +
 // delete_asset) replays ONLY the delete_asset call, which targets the fixed id below.
-const BACKEND = process.env.VITE_BLOOM_BACKEND_URL ?? 'http://localhost:8000';
 const DOOMED_ID = 'e2e-doomed-asset';
 
 // Create a room via the API (to learn its gameId), seed the doomed asset onto that game,

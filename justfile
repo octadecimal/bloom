@@ -1,4 +1,6 @@
 # Cross-cutting commands. Only Rust is populated this round; TS/Python join later.
+set dotenv-load := true
+
 default:
     @just --list
 
@@ -45,7 +47,7 @@ backend-install:
     cd studio/backend && uv sync
 
 backend-serve:
-    cd studio/backend && uv run uvicorn app.main:app --reload --port 8000
+    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --reload --port $((8000 + off))
 
 backend-test:
     cd studio/backend && uv run pytest -m "not e2e"
@@ -54,12 +56,14 @@ backend-e2e:
     cd studio/backend && uv run pytest -m e2e
 
 # Serve the backend in replay mode (recorded-real fixtures; offline, no API key/GPU).
+# Backend port + Mongo DB + media dir all follow BLOOM_PORT_OFFSET so parallel
+# worktrees never share data. Offset 0 keeps the defaults (8000 / bloom_studio / var/media).
 backend-serve-replay:
-    cd studio/backend && PROVIDER_MODE=replay uv run uvicorn app.main:app --port 8000
+    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; PROVIDER_MODE=replay MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --port $((8000 + off))
 
 # Preflight: refuse to "serve to a human" if the backend is in replay mode.
 preflight:
-    powershell -NoProfile -Command "$h = Invoke-RestMethod http://localhost:8000/health; Write-Host ('Provider mode: ' + $h.providerMode.ToUpper()); if ($h.providerMode -ne 'live') { Write-Error 'Backend is in REPLAY mode — not safe to hand to a user. Start it with PROVIDER_MODE=live.'; exit 1 }"
+    powershell -NoProfile -Command "$off = [int]($env:BLOOM_PORT_OFFSET); $port = 8000 + $off; $h = Invoke-RestMethod ('http://localhost:{0}/health' -f $port); Write-Host ('Provider mode: ' + $h.providerMode.ToUpper() + ' (port ' + $port + ')'); if ($h.providerMode -ne 'live') { Write-Error 'Backend is in REPLAY mode — not safe to hand to a user. Start it with PROVIDER_MODE=live.'; exit 1 }"
 
 # Deterministic e2e against a replay backend (start `just backend-serve-replay` first).
 e2e:
@@ -83,12 +87,13 @@ record-fixtures:
 wt-ls:
     git worktree list
 
-# Create a sibling worktree on a new branch and copy local .env into it.
+# Create a sibling worktree on a new branch, copy local .env, and auto-assign the
+# lowest free BLOOM_PORT_OFFSET so its dev stack never collides with another worktree.
 # Usage:  just wt-new gdd-viewer            -> ..\bloom.wt\gdd-viewer  on feat/gdd-viewer
 #         just wt-new audit-store fix       -> ..\bloom.wt\audit-store on fix/audit-store
 wt-new name type='feat':
     git worktree add ../bloom.wt/{{name}} -b {{type}}/{{name}}
-    powershell -NoProfile -Command "if (Test-Path .env) { Copy-Item .env '../bloom.wt/{{name}}/.env' -Force }"
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/wt-assign-offset.ps1 ../bloom.wt/{{name}}
     @echo "Worktree ..\bloom.wt\{{name}} on {{type}}/{{name}} is ready. Inside it run: just bootstrap"
     @echo "── active worktrees (who else is working where) ──"
     git worktree list

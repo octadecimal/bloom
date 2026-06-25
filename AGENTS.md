@@ -130,10 +130,20 @@ directory and branch — so the protocol is short:
 - **`git worktree list` (or `just wt-ls`) is the registry.** Run it first to see
   every active worktree and the branch it's on — that's how you know who else is
   working where before you touch anything.
-- **One live stack at a time.** The dev stack is singletons — ports
-  `:4200` / `:8000` / `:8188` and one Mongo service / one GPU. Parallel edits and
-  unit tests are safe; before `serve` / `e2e` / asset generation, confirm no other
-  session already has the stack running.
+- **Per-worktree port offset.** Each worktree gets a `BLOOM_PORT_OFFSET` (the
+  primary checkout is `0`); every dev-stack port derives as `base + offset` —
+  backend `8000+N`, studio frontend `4200+N`, runtime client `4300+N` — and the
+  replay backend isolates its data as `bloom_studio_wt{N}` / `var/media_wt{N}` on
+  the one shared `mongod`. `just wt-new` auto-assigns the lowest free offset into
+  the new worktree's `.env`. This lets parallel worktrees run `just
+backend-serve-replay` + `just e2e` at the same time without colliding. Each config
+  derives its port inline from `BLOOM_PORT_OFFSET` (the Vite/Playwright configs and
+  e2e helpers read it; the `justfile` does the same in `sh` for the backend) — the
+  base values (`8000` / `4200` / `4300`) are repeated in a few spots, so keep them in
+  sync. See [`docs/worktrees.md`](docs/worktrees.md).
+- **Live mode is still a singleton.** The offset shifts ports + data, not the one
+  GPU/ComfyUI (`:8188`) or a live OpenRouter session — only one session runs the
+  **live** stack at a time.
 
 ## Session hygiene
 

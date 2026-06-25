@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { seedLocalStorage, BACKEND_URL as BACKEND } from './helpers';
 
 // Drives the real UI against a running backend (:8000, replay mode) + frontend (:4200).
 // Local-only; never in CI (see AGENTS.md). Exercises the design-game skill end-to-end:
@@ -10,8 +10,6 @@ import { seedLocalStorage } from './helpers';
 //
 // Replay cassette (studio/backend/tests/fixtures/replay/run/default.json) was extended in
 // Task 8 to include the ask_user_question call bound to the design-game skill.
-
-const BACKEND = process.env.VITE_BLOOM_BACKEND_URL ?? 'http://localhost:8000';
 
 // Create a room via the API (to learn its gameId), then open it through the picker so the
 // app routes to RoomRoute → openGameDocs(gameId), which subscribes the GDD viewer to the game.

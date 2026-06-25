@@ -44,19 +44,26 @@ just bootstrap                 # npm install + uv sync for this worktree
 and unit tests (`cargo test`, `just ts-test`, `just backend-test`) all run in parallel
 across worktrees safely.
 
-**Shared — single-tenant — across the whole machine:**
+**Offset-addressable per worktree (replay stacks run in parallel):** every dev-stack
+port derives from the worktree's `BLOOM_PORT_OFFSET` (primary = `0`), which
+`wt-new` auto-assigns:
 
-| Resource          | Port / form                      | Rule                |
-| ----------------- | -------------------------------- | ------------------- |
-| Vite frontend     | `:4200`                          | one at a time       |
-| Backend (uvicorn) | `:8000`                          | one at a time       |
-| MongoDB           | native Windows Service, `:27017` | one shared instance |
-| ComfyUI           | `:8188`, one GPU                 | one at a time       |
+| Resource          | Base / form                   | Per worktree         |
+| ----------------- | ----------------------------- | -------------------- |
+| Vite frontend     | `:4200`                       | `4200 + offset`      |
+| Backend (uvicorn) | `:8000`                       | `8000 + offset`      |
+| Runtime client    | `:4300`                       | `4300 + offset`      |
+| Mongo database    | `bloom_studio` (one `mongod`) | `bloom_studio_wt{N}` |
+| Media dir         | `var/media`                   | `var/media_wt{N}`    |
 
-**The rule: only one session runs the live app stack at a time.** Whoever needs the
-running app (`just serve-frontend` + `just backend-serve`, `just e2e`, asset
-generation) takes it solo. Everyone else does code + unit-test work, which is freely
-parallel.
+So two worktrees can each run `just backend-serve-replay` + `just e2e` at once
+without colliding on a port or on Mongo data.
+
+**Still single-tenant:** MongoDB itself (one native service on `:27017`, many logical
+DBs) and ComfyUI / the GPU (`:8188`). **Only one session runs the _live_ app stack
+at a time** — the offset shifts ports + data, never the GPU. Need the live app
+(`just serve-frontend` + `just backend-serve`, `just e2e-live`, asset generation)?
+Take it solo.
 
 ## Cleanup
 
@@ -66,15 +73,24 @@ git branch -d <type>/<name>    # delete its branch once merged
 git worktree prune             # tidy stale metadata if a dir was deleted by hand
 ```
 
-## Upgrade path (only if "one stack at a time" starts to hurt)
+## The offset is the only knob
 
-Designed to be a small change, not a rewrite:
+`BLOOM_PORT_OFFSET` is the one value you set (and `wt-new` sets it for you); every
+dev-stack port derives as `base + offset`. There are no per-service port overrides —
+if you need a worktree on different ports, change its offset. The one remaining
+escape hatch is `VITE_BLOOM_BACKEND_URL` (a full backend base URL, e.g. for a
+LAN/remote backend), which the frontend and the e2e health check honor as-is.
 
-- **Two live stacks at once:** give each worktree a port offset (`:8001`/`:4201`) and
-  its own **Mongo database name** via env — one Mongo instance hosts many databases,
-  so no second server is needed. The GPU/ComfyUI stays single regardless.
+To set an offset by hand (e.g. a worktree created with raw `git worktree add`),
+add a line to that worktree's `.env`:
+
+```
+BLOOM_PORT_OFFSET=1
+```
+
+## Still shared regardless of offset
+
 - **Cut Rust disk/recompile cost:** point all worktrees at one shared
   `CARGO_TARGET_DIR`. Saves disk and recompiles, but concurrent `cargo` builds will
-  serialize on a shared lock — so it's a deliberate trade, not the default.
-
-Neither is built yet (YAGNI); the env layout above leaves room for both.
+  serialize on a shared lock — so it's a deliberate trade, not the default. (Not
+  built yet — YAGNI.)

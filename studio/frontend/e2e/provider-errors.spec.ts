@@ -1,8 +1,6 @@
 // studio/frontend/e2e/provider-errors.spec.ts
 import { test, expect } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
-
-const BACKEND_URL = process.env.VITE_BLOOM_BACKEND_URL ?? 'http://localhost:8000';
+import { seedLocalStorage, BACKEND_URL } from './helpers';
 
 // A provider failure must surface a VISIBLE error, not a frozen "generating" state.
 // The room is created with the sentinel model id, which both the replay provider

@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { seedLocalStorage, BACKEND_URL as BACKEND } from './helpers';
 
 // Drives the real Simulator UI against a running backend (:8000) + frontend (:4200).
 // Local-only; never in CI (see AGENTS.md). DETERMINISTIC + OFFLINE — no replay
@@ -17,8 +17,6 @@ import { seedLocalStorage } from './helpers';
 // of ~1.45 (the "low" volatility band is [0, 3]). So:
 //   • intent rtp 90% + volatility low  → measured 0.9 / 1.45 within bands → PASS
 //   • intent rtp 50%                   → measured 0.9 far outside ±tol     → FAIL
-
-const BACKEND = process.env.VITE_BLOOM_BACKEND_URL ?? 'http://localhost:8000';
 
 // 1 reel, 1 row, 1 payline. strip = 5×sym0, 4×sym1, 1×sym2 (10 cells).
 // paytable: sym1@1 → 1, sym2@1 → 5. Closed-form RTP = 0.4·1 + 0.1·5 = 0.9.
