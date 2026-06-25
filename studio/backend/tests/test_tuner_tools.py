@@ -1,8 +1,13 @@
 import pytest
 
 import app.agent_tools as agent_tools
-from app.agent_tools import ToolContext, build_read_tuner_setup_tool, build_tune_slot_model_tool
-from app.agent_tools import build_apply_tuned_model_tool
+from app.agent_tools import (
+    ToolContext,
+    build_read_tuner_setup_tool,
+    build_tune_slot_model_tool,
+    build_apply_tuned_model_tool,
+    build_set_tuner_params_tool,
+)
 from app.simulator.store import SlotModelStore
 from app.simulator.models import MetricsWire
 from app.tuner.store import TunerStore
@@ -46,15 +51,11 @@ async def test_read_tuner_setup_reports_gap_when_intent_missing(mongo_db):
     await ctx.sim_store.get_or_seed("g1")
     tool = build_read_tuner_setup_tool(ctx)
     out = await tool.ainvoke({})
-    assert "missing required intent" in out.lower() or "incomplete" in out.lower()
-
-
-from app.agent_tools import build_set_tuner_params_tool
-from app.tuner.store import TunerStore as _TS
+    assert "missing required intent" in out.lower()
 
 
 def _params_ctx(mongo_db):
-    return ToolContext("r1", "g1", None, None, tuner_store=_TS(mongo_db))
+    return ToolContext("r1", "g1", None, None, tuner_store=TunerStore(mongo_db))
 
 
 @pytest.mark.asyncio
@@ -80,6 +81,69 @@ async def test_set_tuner_params_rejects_nonpositive_without_writing(mongo_db):
     assert "must be positive" in out.lower()
     doc = await ctx.tuner_store.get("g1")
     assert doc.params.population != 0       # no write happened
+
+
+# --- Finding 1: new guard tests for rate/weight knobs ---
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_rejects_crossover_rate_below_zero(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    seeded = await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"crossover_rate": -0.5})
+    assert "no change made" in out.lower()
+    assert "crossover_rate" in out
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.crossover_rate == seeded.params.crossover_rate   # no write
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_rejects_mutation_rate_above_one(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    seeded = await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"mutation_rate": 1.5})
+    assert "no change made" in out.lower()
+    assert "mutation_rate" in out
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.mutation_rate == seeded.params.mutation_rate   # no write
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_rejects_negative_weight_rtp(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    seeded = await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"weight_rtp": -1.0})
+    assert "no change made" in out.lower()
+    assert "weight_rtp" in out
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.weights.rtp == seeded.params.weights.rtp   # no write
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_accepts_in_range_mutation_rate(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"mutation_rate": 0.3})
+    assert "no change made" not in out.lower()
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.mutation_rate == 0.3
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_accepts_zero_weight(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"weight_rtp": 0.0})
+    assert "no change made" not in out.lower()
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.weights.rtp == 0.0
+
+
+# --- end Finding 1 new tests ---
 
 
 class _FakeSio:
@@ -139,7 +203,7 @@ async def test_tune_slot_model_reports_gap_without_running(mongo_db):
     await ctx.sim_store.get_or_seed("g1")
     tool = build_tune_slot_model_tool(ctx)
     out = await tool.ainvoke({})
-    assert "missing required intent" in out.lower() or "incomplete" in out.lower()
+    assert "missing required intent" in out.lower()
     saved = await ctx.tuner_store.get("g1")
     assert saved is None or saved.result is None        # never ran
 

@@ -492,6 +492,13 @@ def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
                 return f"'{key}' must be positive (got {v}); no change made."
         if elitism is not None and elitism < 0:
             return f"'elitism' must be >= 0 (got {elitism}); no change made."
+        for rate_key, rate_val in (("mutation_rate", mutation_rate), ("crossover_rate", crossover_rate)):
+            if rate_val is not None and not (0.0 <= rate_val <= 1.0):
+                return f"'{rate_key}' must be between 0 and 1 (got {rate_val}); no change made."
+        for w_key, w_val in (("weight_rtp", weight_rtp), ("weight_volatility", weight_volatility),
+                              ("weight_hit_rate", weight_hit_rate)):
+            if w_val is not None and w_val < 0:
+                return f"'{w_key}' must be >= 0 (got {w_val}); no change made."
 
         doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
         data = doc.params.model_dump()
