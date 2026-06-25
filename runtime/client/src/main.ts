@@ -25,9 +25,15 @@ const { host, model } = createEngine({ renderer, post });
 (window as unknown as { __engineModel: typeof model }).__engineModel = model;
 (window as unknown as { __engineRenderer: typeof renderer }).__engineRenderer = renderer;
 
+// Serialize message handling: each handle() must complete before the next starts.
+// Without this, concurrent handles race on async operations like renderer.mount()
+// (which awaits Pixi's app.init()), causing setParent to silently no-op because
+// the root object is not yet in the renderer's object map.
+let handleChain = Promise.resolve();
 window.addEventListener('message', (event: MessageEvent) => {
   if (!originAllowed(expectedOrigin, event.origin)) return;
-  void host.handle(event.data as InboundMessage);
+  const msg = event.data as InboundMessage;
+  handleChain = handleChain.then(() => host.handle(msg));
 });
 
 host.start();
