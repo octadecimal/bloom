@@ -207,3 +207,23 @@ async def test_generate_asset_passes_slot():
     tool = build_generate_asset_tool(ctx)
     await tool.ainvoke({"description": "a raven", "transparent": True, "slot": "high1"})
     assert store.created["slot"] == "high1"
+
+
+class _SlotListStore:
+    async def list_assets(self, game_id):
+        from app.assets.models import Asset, Generation
+        from datetime import datetime, timezone
+        a = Asset(id="a1", game_id=game_id, name="High", prompt="raven",
+                  width=512, height=512, workflow="schnell-transparent", slot="high1",
+                  selected_generation_id="gen1",
+                  generations=[Generation(id="gen1", seed=1, image_ref="/media/g/a1/gen1.png",
+                                          created_at=datetime.now(timezone.utc))])
+        return [a]
+
+
+@pytest.mark.asyncio
+async def test_list_assets_includes_slot():
+    ctx = ToolContext("r1", "g1", _SlotListStore(), None)
+    out = await build_list_assets_tool(ctx).ainvoke({})
+    assert "slot=high1" in out
+    assert "/media/g/a1/gen1.png" in out

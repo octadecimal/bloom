@@ -67,7 +67,12 @@ def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
             return "The Asset Board is empty."
         lines = []
         for a in assets:
-            head = f"- {a.id}: {a.name}" + (f" ({a.category})" if getattr(a, "category", None) else "")
+            slot = getattr(a, "slot", None)
+            head = f"- {a.id}: {a.name}"
+            if slot:
+                head += f" [slot={slot}]"
+            elif getattr(a, "category", None):
+                head += f" ({a.category})"
             ref = _selected_media_ref(a)
             lines.append(f"{head} — {ref}" if ref else f"{head} — (no image yet)")
         return "Assets on the board:\n" + "\n".join(lines)
