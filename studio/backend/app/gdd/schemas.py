@@ -52,7 +52,8 @@ ASPECT_SCHEMAS: dict[str, list[Field]] = {
     ],
     "symbols-reels": [
         Field("symbols", "Symbols", "table", "param", required=True,
-              columns=_t(("name", "Name"), ("kind", "Kind"), ("art_desc", "Art description"))),
+              columns=_t(("slot", "Slot"), ("name", "Name"), ("kind", "Kind"),
+                         ("art_desc", "Art description"))),
         Field("reel_strips", "Reel strips", "table", "param",
               columns=_t(("reel", "Reel"), ("composition", "Composition"))),
         Field("wild_behavior", "Wild behavior", "text", "narrative"),
