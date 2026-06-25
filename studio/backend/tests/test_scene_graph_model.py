@@ -268,3 +268,21 @@ def test_second_root_rejected():
     with pytest.raises(OpError) as ei:
         m.apply({"kind": "addNode", "id": "root2", "type": "Root"})
     assert ei.value.code == "root_exists"
+
+
+def test_unreachable_nodes_flags_orphan_then_clears():
+    from app.scene.document import unreachable_nodes
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {}},
+            "s": {"id": "s", "type": "Sprite", "props": {}},
+            "tex": {"id": "tex", "type": "Texture", "props": {"src": "a"}},
+        },
+        "edges": [],
+    }
+    assert unreachable_nodes(doc) == ["s"]
+    doc["edges"].append({"id": "e", "type": "child",
+                         "from": {"node": "root", "port": "children"},
+                         "to": {"node": "s", "port": "parent"}})
+    assert unreachable_nodes(doc) == []
