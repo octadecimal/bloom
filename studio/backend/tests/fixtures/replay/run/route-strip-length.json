@@ -1,0 +1,13 @@
+{
+  "prompt": "set the reel strip length between 30 and 40",
+  "tool_calls": [
+    {
+      "name": "set_gdd_fields",
+      "args": {
+        "aspect": "symbols-reels",
+        "fields": { "strip_length": { "min": 30, "max": 40 } }
+      }
+    }
+  ],
+  "final": ["Set Symbols & Reels → strip length = 30–40."]
+}
