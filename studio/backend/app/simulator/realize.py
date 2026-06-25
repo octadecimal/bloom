@@ -231,3 +231,55 @@ def _realize_bonuses(
             },
         }})
     return bonuses, errors, warnings
+
+
+def realize_slot_model(
+    math_model: dict,
+    symbols_reels: dict,
+    paytable: dict,
+    bonus_features: dict,
+) -> RealizeResult:
+    """Compile the structured GDD math aspects into a SlotModel dict. Fail-loud:
+    model is None iff a hard structural contradiction was found."""
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    symbol_defs, name_to_id, e, w = _realize_symbols(symbols_reels)
+    errors += e
+    warnings += w
+    if not symbol_defs:
+        return RealizeResult(None, errors, warnings)
+    distinct = len(symbol_defs)
+
+    if math_model.get("reels") in (None, ""):
+        warnings.append(f"reels absent; defaulted to {DEFAULT_REELS}")
+    reel_count = _to_int(math_model.get("reels"), DEFAULT_REELS)
+    if math_model.get("rows") in (None, ""):
+        warnings.append(f"rows absent; defaulted to {DEFAULT_ROWS}")
+    rows = _to_int(math_model.get("rows"), DEFAULT_ROWS)
+
+    reels, e, w = _realize_reels(symbols_reels, distinct, reel_count)
+    errors += e
+    warnings += w
+    paylines, e, w = _realize_paylines(math_model, reel_count, rows)
+    errors += e
+    warnings += w
+    paytable_out, e, w = _realize_paytable(paytable, name_to_id, symbol_defs)
+    errors += e
+    warnings += w
+    bonuses, e, w = _realize_bonuses(bonus_features, symbol_defs)
+    errors += e
+    warnings += w
+
+    if errors:
+        return RealizeResult(None, errors, warnings)
+
+    model = {
+        "symbols": symbol_defs,
+        "reels": reels,
+        "rows": rows,
+        "paylines": paylines,
+        "paytable": paytable_out,
+        "bonuses": bonuses,
+    }
+    return RealizeResult(model, errors, warnings)

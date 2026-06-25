@@ -1,8 +1,68 @@
 from app.simulator.realize import (
     RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
     _realize_reels, _all_patterns, _realize_paylines, _realize_paytable,
-    _realize_bonuses,
+    _realize_bonuses, realize_slot_model,
 )
+
+_GDD_MATH = {"rtp": "0.96", "volatility": "high", "reels": 5, "rows": 3,
+             "payline_mode": "lines", "payline_count": 5, "bonus_hit_rate": "1:150"}
+_GDD_SYMBOLS = {"symbols": [
+    {"slot": "high1", "name": "Dragon", "kind": "high", "art_desc": "a dragon"},
+    {"slot": "low1", "name": "Ten", "kind": "low", "art_desc": "a ten"},
+    {"slot": "wild", "name": "Rune", "kind": "wild", "art_desc": "a rune"},
+    {"slot": "scatter", "name": "Coin", "kind": "scatter", "art_desc": "a coin"},
+], "strip_length": {"min": 30, "max": 40}}
+_GDD_PAYTABLE = {"payouts": [
+    {"symbol": "Dragon", "3oak": "5", "4oak": "20", "5oak": "100"},
+    {"symbol": "Ten", "3oak": "2", "4oak": "8", "5oak": "40"},
+]}
+_GDD_BONUS = {"free_spins": [
+    {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
+
+
+def test_realize_golden_vector():
+    res = realize_slot_model(_GDD_MATH, _GDD_SYMBOLS, _GDD_PAYTABLE, _GDD_BONUS)
+    assert res.errors == []
+    m = res.model
+    assert m["symbols"] == [
+        {"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
+        {"id": 2, "role": "wild"}, {"id": 3, "role": "scatter"}]
+    assert m["rows"] == 3
+    assert len(m["reels"]) == 5 and all(len(r) == 35 for r in m["reels"])
+    assert m["paylines"] == [[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 2, 2, 2],
+                             [0, 0, 0, 0, 1], [0, 0, 0, 0, 2]]
+    assert m["paytable"]["entries"][0] == {"symbol": 0, "count": 3, "payout": 5}
+    assert m["bonuses"] == [{"FreeSpins": {
+        "trigger": {"symbol": 3, "min_count": 3},
+        "config": {"spins_awarded": 10, "retrigger": True,
+                   "multiplier": 2, "feature_reels": None}}}]
+
+
+def test_realize_returns_none_on_hard_error():
+    res = realize_slot_model(_GDD_MATH, {"symbols": []}, _GDD_PAYTABLE, _GDD_BONUS)
+    assert res.model is None
+    assert any("no symbols" in e.lower() for e in res.errors)
+
+
+def test_realize_defaults_reels_and_rows_with_warnings():
+    res = realize_slot_model(
+        {"payline_mode": "lines", "payline_count": 1}, _GDD_SYMBOLS, _GDD_PAYTABLE, _GDD_BONUS)
+    assert res.model is not None
+    assert len(res.model["reels"]) == 5  # DEFAULT_REELS
+    assert res.model["rows"] == 3        # DEFAULT_ROWS
+    assert any("reels absent" in w for w in res.warnings)
+    assert any("rows absent" in w for w in res.warnings)
+
+
+def test_realize_aggregates_all_diagnostics_before_failing():
+    # symbols OK, but BOTH a bad override AND strip_length.max < distinct count.
+    # Both helpers run and both errors surface before the single None return.
+    sr = {"symbols": _GDD_SYMBOLS["symbols"], "strip_length": {"min": 1, "max": 2}}
+    res = realize_slot_model(
+        {"payline_overrides": ["0,1"]}, sr, _GDD_PAYTABLE, _GDD_BONUS)
+    assert res.model is None
+    assert any("reel count" in e for e in res.errors)             # override length
+    assert any("distinct symbol count" in e for e in res.errors)  # strip_length.max
 
 _DEFS = [
     {"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
