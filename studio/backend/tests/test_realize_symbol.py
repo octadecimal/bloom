@@ -71,6 +71,21 @@ class _SceneHub:
         return None
 
 
+class _AssetStoreDeletedAfterRegen(_AssetStore):
+    """get_asset returns None (asset deleted concurrently after generate_and_wait)."""
+    async def get_asset(self, asset_id):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_realize_symbol_returns_friendly_message_when_asset_deleted_concurrently():
+    astore, ahub = _AssetStoreDeletedAfterRegen(), _AssetHub()
+    ctx = ToolContext("r1", "g1", astore, ahub, gdd_store=_Gdd(),
+                      scene_store=_SceneStore(), scene_hub=_SceneHub())
+    out = await build_realize_symbol_tool(ctx).ainvoke({"slot": "high1"})
+    assert "produced no image" in out
+
+
 @pytest.mark.asyncio
 async def test_realize_symbol_regenerates_and_rebinds():
     astore, ahub, shub = _AssetStore(), _AssetHub(), _SceneHub()

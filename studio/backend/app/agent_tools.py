@@ -376,7 +376,7 @@ def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
         await ctx.asset_store.update_asset(asset.id, prompt=art_desc)
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
         refreshed = await ctx.asset_store.get_asset(asset.id)
-        if not refreshed.generations:
+        if refreshed is None or not refreshed.generations:
             return f"Regeneration for slot '{slot}' produced no image."
         newest = refreshed.generations[-1]
         await ctx.asset_store.select_generation(asset.id, newest.id)
