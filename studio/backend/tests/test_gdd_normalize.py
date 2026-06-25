@@ -58,3 +58,38 @@ def test_list_wraps_scalar_and_passes_list():
 
 def test_text_passthrough():
     assert normalize_value(TEXT, "Neon Nights") == ("Neon Nights", None)
+
+
+RANGE = Field("strip_length", "Strip length", "range", "param")
+KIND_TABLE = Field(
+    "symbols", "Symbols", "table", "param",
+    columns=(Column("slot", "Slot"),
+             Column("kind", "Kind", ("high", "low", "wild", "scatter", "bonus"))),
+)
+
+
+def test_range_parses_dict_and_strings():
+    assert normalize_value(RANGE, {"min": 8, "max": 20}) == ({"min": 8.0, "max": 20.0}, None)
+    assert normalize_value(RANGE, "8-20") == ({"min": 8.0, "max": 20.0}, None)
+    assert normalize_value(RANGE, "8 to 20") == ({"min": 8.0, "max": 20.0}, None)
+
+
+def test_range_swaps_reversed_bounds_with_warning():
+    value, warn = normalize_value(RANGE, {"min": 40, "max": 30})
+    assert value == {"min": 30.0, "max": 40.0}
+    assert warn is not None
+
+
+def test_range_bad_input_warns_not_raises():
+    value, warn = normalize_value(RANGE, "lots")
+    assert value == "lots" and warn is not None
+
+
+def test_table_enum_column_warns_on_out_of_enum():
+    ok, ok_warn = normalize_value(
+        KIND_TABLE, [{"slot": "high1", "kind": "high"}])
+    assert ok == [{"slot": "high1", "kind": "high"}] and ok_warn is None
+    bad, bad_warn = normalize_value(
+        KIND_TABLE, [{"slot": "x", "kind": "sparkly"}])
+    assert bad == [{"slot": "x", "kind": "sparkly"}]  # value preserved
+    assert bad_warn is not None  # advisory warning

@@ -16,6 +16,8 @@ def normalize_value(field: Field, raw) -> tuple[object, str | None]:
         return _table(field, raw)
     if field.type == "list":
         return _list(raw)
+    if field.type == "range":
+        return _range(raw)
     return (str(raw), None)
 
 
@@ -71,7 +73,8 @@ def _enum(field: Field, raw) -> tuple[object, str | None]:
 
 
 def _table(field: Field, raw) -> tuple[object, str | None]:
-    cols = [c.key for c in (field.columns or ())]
+    cols = field.columns or ()
+    col_keys = [c.key for c in cols]
     if not isinstance(raw, list):
         return (raw, f"{field.key} expects a list of row objects")
     warns: list[str] = []
@@ -80,11 +83,49 @@ def _table(field: Field, raw) -> tuple[object, str | None]:
         if not isinstance(row, dict):
             warns.append(f"{field.key} row {i} is not an object")
             continue
-        rows.append({c: row.get(c, "") for c in cols})
-        missing = [c for c in cols if c not in row]
+        rows.append({c: row.get(c, "") for c in col_keys})
+        missing = [c for c in col_keys if c not in row]
         if missing:
             warns.append(f"{field.key} row {i} missing {missing}")
+        for col in cols:
+            if col.enum and col.key in row:
+                cell = str(row[col.key]).strip().lower()
+                if cell not in col.enum:
+                    warns.append(
+                        f"{field.key} row {i} {col.key} '{row[col.key]}' "
+                        f"not one of {list(col.enum)}"
+                    )
     return (rows, "; ".join(warns) if warns else None)
+
+
+def _range(raw) -> tuple[object, str | None]:
+    if isinstance(raw, dict):
+        try:
+            lo, hi = float(raw["min"]), float(raw["max"])
+        except (KeyError, TypeError, ValueError):
+            return (raw, f"could not parse '{raw}' as a range (need numeric min/max)")
+    else:
+        s = str(raw)
+        # First try to split on common delimiters to avoid treating "-" as a sign
+        for delim in [" to ", "-", " "]:
+            if delim in s:
+                parts = s.split(delim)
+                nums = [re.search(r"-?\d+(?:\.\d+)?", p) for p in parts]
+                nums = [float(m.group()) for m in nums if m]
+                if len(nums) >= 2:
+                    lo, hi = nums[0], nums[1]
+                    break
+        else:
+            # Fallback to simple regex search
+            nums = re.findall(r"-?\d+(?:\.\d+)?", s)
+            if len(nums) < 2:
+                return (raw, f"could not parse '{raw}' as a range (use e.g. '8-20')")
+            lo, hi = float(nums[0]), float(nums[1])
+    warn = None
+    if lo > hi:
+        lo, hi = hi, lo
+        warn = f"range min > max; swapped to min {lo:g}, max {hi:g}"
+    return ({"min": lo, "max": hi}, warn)
 
 
 def _list(raw) -> tuple[object, str | None]:
