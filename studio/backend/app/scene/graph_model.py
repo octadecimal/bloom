@@ -94,12 +94,25 @@ class GraphModel:
             raise OpError("unknown_node", f"no such node: {frm['node']}")
         if to["node"] not in self._nodes:
             raise OpError("unknown_node", f"no such node: {to['node']}")
+        from_type = self._nodes[frm["node"]]["type"]
+        to_type = self._nodes[to["node"]]["type"]
         if type_ == "child":
+            if from_type not in ("Root", "Container") or frm["port"] != "children":
+                raise OpError("invalid_edge", "child edge must start at a Root/Container 'children' port")
+            if to_type not in ("Container", "Sprite") or to["port"] != "parent":
+                raise OpError("invalid_edge", "child edge must end at a Container/Sprite 'parent' port")
             child_id, parent_id = to["node"], frm["node"]
             if self._parent_of(child_id) is not None:
                 raise OpError("already_parented", f"node already has a parent: {child_id}")
             if child_id == parent_id or self._is_ancestor(child_id, parent_id):
                 raise OpError("cycle", "child edge would create a cycle")
+        elif type_ == "data":
+            if from_type != "Texture" or frm["port"] != "data":
+                raise OpError("invalid_edge", "data edge must start at a Texture 'data' port")
+            if to_type != "Sprite" or to["port"] != "texture":
+                raise OpError("invalid_edge", "data edge must end at a Sprite 'texture' port")
+        else:
+            raise OpError("bad_edge_type", f"unknown edge type: {type_}")
         self._edges[edge_id] = {
             "id": edge_id, "type": type_, "from": dict(frm), "to": dict(to),
         }

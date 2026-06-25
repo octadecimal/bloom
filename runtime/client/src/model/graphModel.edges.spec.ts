@@ -60,8 +60,37 @@ describe('GraphModel connect/disconnect', () => {
 
   it('rejects a child cycle', () => {
     const m = withNodes();
-    m.apply(child('e1', 'root', 'box'));
-    expect(() => m.apply(child('e2', 'box', 'root'))).toThrow(OpError);
+    m.apply({ kind: 'addNode', id: 'box2', type: 'Container' });
+    m.apply(child('e1', 'box', 'box2'));
+    expect(() => m.apply(child('e2', 'box2', 'box'))).toThrow(OpError);
+  });
+
+  it('rejects a reversed data edge (Sprite.data -> Texture.texture)', () => {
+    const m = withNodes();
+    expect(() =>
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 's', port: 'data' }, to: { node: 'tex', port: 'texture' } }),
+    ).toThrow(OpError);
+  });
+
+  it('rejects a data edge to a non-texture port', () => {
+    const m = withNodes();
+    expect(() =>
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 's', port: 'parent' } }),
+    ).toThrow(OpError);
+  });
+
+  it('rejects a child edge with swapped ports', () => {
+    const m = withNodes();
+    expect(() =>
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'child', from: { node: 'root', port: 'parent' }, to: { node: 'box', port: 'children' } }),
+    ).toThrow(OpError);
+  });
+
+  it('rejects a child edge into a Texture', () => {
+    const m = withNodes();
+    expect(() =>
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'tex', port: 'parent' } }),
+    ).toThrow(OpError);
   });
 
   it('removeNode cascades incident edges', () => {
