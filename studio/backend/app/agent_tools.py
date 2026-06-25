@@ -7,6 +7,7 @@ from langgraph.types import interrupt
 from app.gdd.store import GddEditError
 from app.scene.document import OpError
 from app.simulator.targets import derive_target, TargetGap
+from app.tuner.models import TuningParams
 
 
 @dataclass
@@ -459,6 +460,75 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
+    _POSITIVE = ("population", "max_generations", "search_candidate_count",
+                 "final_candidate_count", "stagnation_window")
+
+    async def set_tuner_params(
+        master_seed: int | None = None,
+        population: int | None = None,
+        max_generations: int | None = None,
+        search_candidate_count: int | None = None,
+        final_candidate_count: int | None = None,
+        elitism: int | None = None,
+        mutation_rate: float | None = None,
+        crossover_rate: float | None = None,
+        stagnation_window: int | None = None,
+        weight_rtp: float | None = None,
+        weight_volatility: float | None = None,
+        weight_hit_rate: float | None = None,
+    ) -> str:
+        scalars = {
+            "master_seed": master_seed, "population": population,
+            "max_generations": max_generations,
+            "search_candidate_count": search_candidate_count,
+            "final_candidate_count": final_candidate_count, "elitism": elitism,
+            "mutation_rate": mutation_rate, "crossover_rate": crossover_rate,
+            "stagnation_window": stagnation_window,
+        }
+        for key in _POSITIVE:
+            v = scalars[key]
+            if v is not None and v <= 0:
+                return f"'{key}' must be positive (got {v}); no change made."
+        if elitism is not None and elitism < 0:
+            return f"'elitism' must be >= 0 (got {elitism}); no change made."
+
+        doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
+        data = doc.params.model_dump()
+        for key, v in scalars.items():
+            if v is not None:
+                data[key] = v
+        weights = dict(data["weights"])
+        if weight_rtp is not None:
+            weights["rtp"] = weight_rtp
+        if weight_volatility is not None:
+            weights["volatility"] = weight_volatility
+        if weight_hit_rate is not None:
+            weights["hit_rate"] = weight_hit_rate
+        data["weights"] = weights
+
+        updated = TuningParams.model_validate(data)
+        await ctx.tuner_store.put(ctx.game_id, params=updated)
+        return (
+            f"Updated tuner GA params: population {updated.population}, "
+            f"generations {updated.max_generations}, seed {updated.master_seed}, "
+            f"weights rtp/vol/hit "
+            f"{updated.weights.rtp}/{updated.weights.volatility}/{updated.weights.hit_rate}."
+        )
+
+    return StructuredTool.from_function(
+        coroutine=set_tuner_params,
+        name="set_tuner_params",
+        description=(
+            "Adjust the genetic-algorithm tuning knobs (population, generations, "
+            "candidate counts, master seed, and the rtp/volatility/hit_rate fitness "
+            "weights). Only the fields you pass change. This does NOT set the design "
+            "target (RTP / volatility / bonus rate) — that lives in the GDD math-model; "
+            "edit it with set_gdd_fields instead."
+        ),
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -477,6 +547,7 @@ class ToolFactory:
         "scene_apply_batch": build_scene_apply_batch_tool,
         "realize_symbol": build_realize_symbol_tool,
         "read_tuner_setup": build_read_tuner_setup_tool,
+        "set_tuner_params": build_set_tuner_params_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,

@@ -41,3 +41,36 @@ async def test_read_tuner_setup_reports_gap_when_intent_missing(mongo_db):
     tool = build_read_tuner_setup_tool(ctx)
     out = await tool.ainvoke({})
     assert "missing required intent" in out.lower() or "incomplete" in out.lower()
+
+
+from app.agent_tools import build_set_tuner_params_tool
+from app.tuner.store import TunerStore as _TS
+
+
+def _params_ctx(mongo_db):
+    return ToolContext("r1", "g1", None, None, tuner_store=_TS(mongo_db))
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_patches_only_given_fields(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    seeded = await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"population": 48, "weight_rtp": 2.0})
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.population == 48
+    assert doc.params.weights.rtp == 2.0
+    assert doc.params.max_generations == seeded.params.max_generations   # untouched
+    assert doc.params.weights.volatility == seeded.params.weights.volatility
+    assert "48" in out
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_rejects_nonpositive_without_writing(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    await ctx.tuner_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"population": 0})
+    assert "must be positive" in out.lower()
+    doc = await ctx.tuner_store.get("g1")
+    assert doc.params.population != 0       # no write happened
