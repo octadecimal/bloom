@@ -51,8 +51,7 @@ export class GraphModel {
   private addNode(id: string, type: INode['type'], props?: INode['props']): IChange[] {
     if (this.nodes.has(id)) throw new OpError('duplicate_id', `node already exists: ${id}`);
     if (!NODE_TYPES.includes(type)) throw new OpError('bad_type', `unknown node type: ${type}`);
-    if (type === 'Root' && [...this.nodes.values()].some((n) => n.type === 'Root'))
-      throw new OpError('root_exists', `a Root node already exists`);
+    if (type === 'Root' && [...this.nodes.values()].some((n) => n.type === 'Root')) throw new OpError('root_exists', `a Root node already exists`);
     const node: INode = { id, type, props: { ...(props ?? {}) } };
     this.nodes.set(id, node);
     return [{ kind: 'nodeCreated', node: { id, type, props: { ...node.props } } }];
@@ -88,10 +87,8 @@ export class GraphModel {
       if (this.parentOf(childId) !== null) throw new OpError('already_parented', `node already has a parent: ${childId}`);
       if (childId === parentId || this.isAncestor(childId, parentId)) throw new OpError('cycle', `child edge would create a cycle`);
     } else if (type === 'data') {
-      if (fromType !== 'Texture' || from.port !== 'data')
-        throw new OpError('invalid_edge', `data edge must start at a Texture 'data' port`);
-      if (toType !== 'Sprite' || to.port !== 'texture')
-        throw new OpError('invalid_edge', `data edge must end at a Sprite 'texture' port`);
+      if (fromType !== 'Texture' || from.port !== 'data') throw new OpError('invalid_edge', `data edge must start at a Texture 'data' port`);
+      if (toType !== 'Sprite' || to.port !== 'texture') throw new OpError('invalid_edge', `data edge must end at a Sprite 'texture' port`);
     } else {
       throw new OpError('bad_edge_type', `unknown edge type: ${type as string}`);
     }

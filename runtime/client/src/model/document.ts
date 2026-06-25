@@ -39,7 +39,11 @@ export const EDGE_TYPES: readonly EdgeType[] = ['child', 'data'];
 export function unreachableNodes(doc: IGameDocument): string[] {
   const reached = new Set<string>();
   const frontier: string[] = [];
-  for (const n of Object.values(doc.nodes)) if (n.type === 'Root') { reached.add(n.id); frontier.push(n.id); }
+  for (const n of Object.values(doc.nodes))
+    if (n.type === 'Root') {
+      reached.add(n.id);
+      frontier.push(n.id);
+    }
   while (frontier.length) {
     const parent = frontier.pop()!;
     for (const e of doc.edges) {

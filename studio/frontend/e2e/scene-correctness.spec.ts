@@ -73,16 +73,21 @@ test('a correctly-wired sprite binds its texture, is centered, and is on the sta
   const gid = await openRoom(page);
   const ref = await generateAsset(page, gid);
   await openGamePane(page);
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
-    send({ kind: 'addNode', id: 'sym', type: 'Sprite', props: { position: { x: 640, y: 360 } } });
-    send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });
-    send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'sym', port: 'texture' } });
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
+      send({ kind: 'addNode', id: 'sym', type: 'Sprite', props: { position: { x: 640, y: 360 } } });
+      send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });
+      send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'sym', port: 'texture' } });
+    },
+    { gid, ref },
+  );
   const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
-  await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym')?.width ?? 0), { timeout: 20000 }).toBeGreaterThan(64);
+  await expect
+    .poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym')?.width ?? 0), { timeout: 20000 })
+    .toBeGreaterThan(64);
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.anchorOf('sym'))).toEqual({ x: 0.5, y: 0.5 });
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.onStage('sym'))).toBe(true);
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
@@ -93,13 +98,15 @@ test('a reversed data edge is rejected by the engine', async ({ page }) => {
   await openGamePane(page);
   const before = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length);
   await page.evaluate((gid) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
+    const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
     send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
     send({ kind: 'addNode', id: 'sym', type: 'Sprite' });
     send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: '/media/x.png' } });
     send({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'sym', port: 'data' }, to: { node: 'tex', port: 'texture' } });
   }, gid);
-  await expect.poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 }).toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 })
+    .toBeGreaterThanOrEqual(1);
 });
 
 test('removing the Root node is rejected by the engine', async ({ page }) => {
@@ -107,11 +114,13 @@ test('removing the Root node is rejected by the engine', async ({ page }) => {
   await openGamePane(page);
   const before = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length);
   await page.evaluate((gid) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
+    const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
     send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
     send({ kind: 'removeNode', id: 'root' });
   }, gid);
-  await expect.poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 }).toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 })
+    .toBeGreaterThanOrEqual(1);
 });
 
 test('adding a second sprite preserves the first (incremental, no rebuild)', async ({ page }) => {
@@ -119,24 +128,30 @@ test('adding a second sprite preserves the first (incremental, no rebuild)', asy
   const ref = await generateAsset(page, gid);
   await openGamePane(page);
   // First sprite.
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
-    send({ kind: 'addNode', id: 'a', type: 'Sprite', props: { position: { x: 400, y: 360 } } });
-    send({ kind: 'addNode', id: 'texa', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.a', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'a', port: 'parent' } });
-    send({ kind: 'connect', edgeId: 'e.ta', type: 'data', from: { node: 'texa', port: 'data' }, to: { node: 'a', port: 'texture' } });
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
+      send({ kind: 'addNode', id: 'a', type: 'Sprite', props: { position: { x: 400, y: 360 } } });
+      send({ kind: 'addNode', id: 'texa', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.a', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'a', port: 'parent' } });
+      send({ kind: 'connect', edgeId: 'e.ta', type: 'data', from: { node: 'texa', port: 'data' }, to: { node: 'a', port: 'texture' } });
+    },
+    { gid, ref },
+  );
   const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
   await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer.onStage('a')), { timeout: 20000 }).toBe(true);
   // Second sprite — do NOT touch root.
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'b', type: 'Sprite', props: { position: { x: 880, y: 360 } } });
-    send({ kind: 'addNode', id: 'texb', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.b', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'b', port: 'parent' } });
-    send({ kind: 'connect', edgeId: 'e.tb', type: 'data', from: { node: 'texb', port: 'data' }, to: { node: 'b', port: 'texture' } });
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'b', type: 'Sprite', props: { position: { x: 880, y: 360 } } });
+      send({ kind: 'addNode', id: 'texb', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.b', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'b', port: 'parent' } });
+      send({ kind: 'connect', edgeId: 'e.tb', type: 'data', from: { node: 'texb', port: 'data' }, to: { node: 'b', port: 'texture' } });
+    },
+    { gid, ref },
+  );
   await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer.onStage('b')), { timeout: 20000 }).toBe(true);
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.onStage('a'))).toBe(true); // A preserved
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
@@ -146,15 +161,20 @@ test('an unparented sprite binds its texture but is not on the stage', async ({ 
   const gid = await openRoom(page);
   const ref = await generateAsset(page, gid);
   await openGamePane(page);
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
-    send({ kind: 'addNode', id: 'orphan', type: 'Sprite' });
-    send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'orphan', port: 'texture' } });
-    // intentionally NO child edge
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
+      send({ kind: 'addNode', id: 'orphan', type: 'Sprite' });
+      send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'orphan', port: 'texture' } });
+      // intentionally NO child edge
+    },
+    { gid, ref },
+  );
   const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
-  await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('orphan')?.width ?? 0), { timeout: 20000 }).toBeGreaterThan(64);
+  await expect
+    .poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('orphan')?.width ?? 0), { timeout: 20000 })
+    .toBeGreaterThan(64);
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.onStage('orphan'))).toBe(false);
 });

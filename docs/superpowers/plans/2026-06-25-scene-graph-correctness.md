@@ -39,12 +39,14 @@
 Reject edges whose endpoints don't match the port contract: a `data` edge must run `Texture.data → Sprite.texture`; a `child` edge must run `Root|Container.children → Container|Sprite.parent`. New error code: `invalid_edge` (plus `bad_edge_type`).
 
 **Files:**
+
 - Modify: `runtime/client/src/model/graphModel.ts` (`connect`, ~lines 72–85)
 - Modify: `studio/backend/app/scene/graph_model.py` (`_connect`, ~lines 90–105)
 - Test: `runtime/client/src/model/graphModel.edges.spec.ts`
 - Test: `studio/backend/tests/test_scene_graph_model.py`
 
 **Interfaces:**
+
 - Produces: `OpError('invalid_edge', …)` and `OpError('bad_edge_type', …)` from `connect`/`_connect` when endpoints are mistyped. Existing `child` checks (`already_parented`, `cycle`) still run, AFTER endpoint typing passes.
 
 - [ ] **Step 1: Write the failing TS tests**
@@ -54,16 +56,16 @@ In `graphModel.edges.spec.ts`, the `withNodes()`/`child`/`data` helpers already 
 ```typescript
 it('rejects a reversed data edge (Sprite.data -> Texture.texture)', () => {
   const m = withNodes();
-  expect(() =>
-    m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 's', port: 'data' }, to: { node: 'tex', port: 'texture' } }),
-  ).toThrow(OpError);
+  expect(() => m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 's', port: 'data' }, to: { node: 'tex', port: 'texture' } })).toThrow(
+    OpError,
+  );
 });
 
 it('rejects a data edge to a non-texture port', () => {
   const m = withNodes();
-  expect(() =>
-    m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 's', port: 'parent' } }),
-  ).toThrow(OpError);
+  expect(() => m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 's', port: 'parent' } })).toThrow(
+    OpError,
+  );
 });
 
 it('rejects a child edge with swapped ports', () => {
@@ -102,25 +104,23 @@ Expected: the four new cases FAIL (edges currently accepted); the cycle case may
 In `graphModel.ts`, replace the `connect` method's type-specific block (currently the `if (type === 'child') { … }` section, lines ~76–81) with:
 
 ```typescript
-    const fromType = this.nodes.get(from.node)!.type;
-    const toType = this.nodes.get(to.node)!.type;
-    if (type === 'child') {
-      if (!(fromType === 'Root' || fromType === 'Container') || from.port !== 'children')
-        throw new OpError('invalid_edge', `child edge must start at a Root/Container 'children' port`);
-      if (!(toType === 'Container' || toType === 'Sprite') || to.port !== 'parent')
-        throw new OpError('invalid_edge', `child edge must end at a Container/Sprite 'parent' port`);
-      const childId = to.node;
-      const parentId = from.node;
-      if (this.parentOf(childId) !== null) throw new OpError('already_parented', `node already has a parent: ${childId}`);
-      if (childId === parentId || this.isAncestor(childId, parentId)) throw new OpError('cycle', `child edge would create a cycle`);
-    } else if (type === 'data') {
-      if (fromType !== 'Texture' || from.port !== 'data')
-        throw new OpError('invalid_edge', `data edge must start at a Texture 'data' port`);
-      if (toType !== 'Sprite' || to.port !== 'texture')
-        throw new OpError('invalid_edge', `data edge must end at a Sprite 'texture' port`);
-    } else {
-      throw new OpError('bad_edge_type', `unknown edge type: ${type as string}`);
-    }
+const fromType = this.nodes.get(from.node)!.type;
+const toType = this.nodes.get(to.node)!.type;
+if (type === 'child') {
+  if (!(fromType === 'Root' || fromType === 'Container') || from.port !== 'children')
+    throw new OpError('invalid_edge', `child edge must start at a Root/Container 'children' port`);
+  if (!(toType === 'Container' || toType === 'Sprite') || to.port !== 'parent')
+    throw new OpError('invalid_edge', `child edge must end at a Container/Sprite 'parent' port`);
+  const childId = to.node;
+  const parentId = from.node;
+  if (this.parentOf(childId) !== null) throw new OpError('already_parented', `node already has a parent: ${childId}`);
+  if (childId === parentId || this.isAncestor(childId, parentId)) throw new OpError('cycle', `child edge would create a cycle`);
+} else if (type === 'data') {
+  if (fromType !== 'Texture' || from.port !== 'data') throw new OpError('invalid_edge', `data edge must start at a Texture 'data' port`);
+  if (toType !== 'Sprite' || to.port !== 'texture') throw new OpError('invalid_edge', `data edge must end at a Sprite 'texture' port`);
+} else {
+  throw new OpError('bad_edge_type', `unknown edge type: ${type as string}`);
+}
 ```
 
 (The two `unknown_node` existence checks immediately above this block are unchanged — `fromType`/`toType` rely on them having passed.)
@@ -250,12 +250,14 @@ git commit -m "fix(scene): reject mistyped edges (typed ports, TS/Py lockstep)"
 A `Root` node is the stage and must persist; removing it cascade-deleted the whole tree. Reject `removeNode` of a Root (`cannot_remove_root`) and `addNode` of a second Root (`root_exists`).
 
 **Files:**
+
 - Modify: `runtime/client/src/model/graphModel.ts` (`addNode`, `removeNode`)
 - Modify: `studio/backend/app/scene/graph_model.py` (`_add_node`, `_remove_node`)
 - Test: `runtime/client/src/model/graphModel.nodes.spec.ts`
 - Test: `studio/backend/tests/test_scene_graph_model.py`
 
 **Interfaces:**
+
 - Produces: `OpError('cannot_remove_root', …)` from removeNode on a Root; `OpError('root_exists', …)` from addNode of a second Root.
 
 - [ ] **Step 1: Write the failing TS tests**
@@ -288,14 +290,13 @@ Expected: both new cases FAIL.
 In `graphModel.ts` `addNode`, after the `bad_type` check:
 
 ```typescript
-    if (type === 'Root' && [...this.nodes.values()].some((n) => n.type === 'Root'))
-      throw new OpError('root_exists', `a Root node already exists`);
+if (type === 'Root' && [...this.nodes.values()].some((n) => n.type === 'Root')) throw new OpError('root_exists', `a Root node already exists`);
 ```
 
 In `graphModel.ts` `removeNode`, after the `unknown_node` check:
 
 ```typescript
-    if (this.nodes.get(id)!.type === 'Root') throw new OpError('cannot_remove_root', `the Root node cannot be removed`);
+if (this.nodes.get(id)!.type === 'Root') throw new OpError('cannot_remove_root', `the Root node cannot be removed`);
 ```
 
 - [ ] **Step 4: Run, verify pass**
@@ -368,12 +369,14 @@ git commit -m "fix(scene): guard Root removal and duplicate Root (TS/Py lockstep
 A pure document helper that returns the `Sprite`/`Container` ids with no `child`-path to a `Root`. Texture nodes attach via `data` edges and have no display object, so they are never counted.
 
 **Files:**
+
 - Modify: `runtime/client/src/model/document.ts`
 - Modify: `studio/backend/app/scene/document.py`
 - Test: `runtime/client/src/model/document.spec.ts`
 - Test: `studio/backend/tests/test_scene_graph_model.py`
 
 **Interfaces:**
+
 - Produces (TS): `export function unreachableNodes(doc: IGameDocument): string[]` — sorted ids.
 - Produces (Py): `def unreachable_nodes(document: dict) -> list[str]` — sorted ids. `document` has `nodes` as a dict id→node and `edges` as a list (the shape returned by `GameSceneStore.get_document`/`apply_op`).
 
@@ -420,7 +423,11 @@ Append to `runtime/client/src/model/document.ts`:
 export function unreachableNodes(doc: IGameDocument): string[] {
   const reached = new Set<string>();
   const frontier: string[] = [];
-  for (const n of Object.values(doc.nodes)) if (n.type === 'Root') { reached.add(n.id); frontier.push(n.id); }
+  for (const n of Object.values(doc.nodes))
+    if (n.type === 'Root') {
+      reached.add(n.id);
+      frontier.push(n.id);
+    }
   while (frontier.length) {
     const parent = frontier.pop()!;
     for (const e of doc.edges) {
@@ -517,10 +524,12 @@ git commit -m "feat(scene): add unreachable-node (orphan) helper (TS/Py lockstep
 After a scene op/batch succeeds, append a non-blocking warning to the tool result listing any unreachable Sprite/Container so the agent self-corrects and the failure is visible in the run feed.
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (scene tool builders ~233–344)
 - Test: `studio/backend/tests/test_scene_tools.py`
 
 **Interfaces:**
+
 - Consumes: `unreachable_nodes` from `app.scene.document` (Task 3); `ctx.scene_hub.apply_op`/`apply_batch` return the updated document dict.
 
 - [ ] **Step 1: Write the failing test**
@@ -610,10 +619,12 @@ git commit -m "feat(scene): warn on orphan nodes in scene-tool results"
 New Sprites default to anchor (0.5, 0.5) so `position` is the sprite's center. Add `anchorOf`/`onStage` probes (test affordances, like the existing `textureSizeOf`) used by the unit test and the e2e.
 
 **Files:**
+
 - Modify: `runtime/client/src/render/pixiRenderer.ts`
 - Test: `runtime/client/src/render/pixiRenderer.spec.ts`
 
 **Interfaces:**
+
 - Produces: `PixiRenderer.createObject` sets Sprite anchor 0.5 (explicit `anchor` prop still overrides via the reconciler's prop loop). `anchorOf(id): { x: number; y: number } | null`; `onStage(id): boolean`.
 
 - [ ] **Step 1: Write the failing unit test**
@@ -702,6 +713,7 @@ git commit -m "feat(engine): default Sprite anchor to center + anchorOf/onStage 
 The prose edits are already drafted on the branch (edge-direction examples, the Texture-is-`from` rule, the parenting INVARIANT, no-root-removal/incremental rule, centering note). Confirm they're complete and that the skill still loads.
 
 **Files:**
+
 - Modify: `skills/design-scene.md`
 - Test: `studio/backend/tests/test_design_scene_skill.py`
 
@@ -728,9 +740,11 @@ git commit -m "docs(skill): make design-scene edge wiring + parenting unambiguou
 A new spec drives ops through the real engine path (`__gameApplyInbound`) against a replay backend and encodes the behavioral contract.
 
 **Files:**
+
 - Create: `studio/frontend/e2e/scene-correctness.spec.ts`
 
 **Interfaces:**
+
 - Consumes: engine probes `__engineRenderer.textureSizeOf/anchorOf/onStage` (Task 5); `__engineMsgs` error acks (engine `error` posts on rejected ops); `window.__gameApplyInbound`, `window.__gameActiveId` (existing dev hooks, see `game-scene.spec.ts`).
 
 - [ ] **Step 1: Write the spec**
@@ -785,22 +799,26 @@ async function generateAsset(page: Page, gid: string): Promise<string> {
   }, gid);
 }
 
-const op = (gid: string, o: unknown) =>
-  ((window as any).__gameApplyInbound as (e: string, p: unknown) => void)('scene_op', { gameId: gid, op: o });
+const op = (gid: string, o: unknown) => ((window as any).__gameApplyInbound as (e: string, p: unknown) => void)('scene_op', { gameId: gid, op: o });
 
 test('a correctly-wired sprite binds its texture, is centered, and is on the stage', async ({ page }) => {
   const gid = await openSceneRoom(page);
   const ref = await generateAsset(page, gid);
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
-    send({ kind: 'addNode', id: 'sym', type: 'Sprite', props: { position: { x: 640, y: 360 } } });
-    send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });
-    send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'sym', port: 'texture' } });
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
+      send({ kind: 'addNode', id: 'sym', type: 'Sprite', props: { position: { x: 640, y: 360 } } });
+      send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });
+      send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'sym', port: 'texture' } });
+    },
+    { gid, ref },
+  );
   const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
-  await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym')?.width ?? 0), { timeout: 20000 }).toBeGreaterThan(64);
+  await expect
+    .poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym')?.width ?? 0), { timeout: 20000 })
+    .toBeGreaterThan(64);
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.anchorOf('sym'))).toEqual({ x: 0.5, y: 0.5 });
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.onStage('sym'))).toBe(true);
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
@@ -810,48 +828,58 @@ test('a reversed data edge is rejected by the engine', async ({ page }) => {
   const gid = await openSceneRoom(page);
   const before = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length);
   await page.evaluate((gid) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
+    const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
     send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
     send({ kind: 'addNode', id: 'sym', type: 'Sprite' });
     send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: '/media/x.png' } });
     send({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'sym', port: 'data' }, to: { node: 'tex', port: 'texture' } });
   }, gid);
-  await expect.poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 }).toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 })
+    .toBeGreaterThanOrEqual(1);
 });
 
 test('removing the Root node is rejected by the engine', async ({ page }) => {
   const gid = await openSceneRoom(page);
   const before = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length);
   await page.evaluate((gid) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
+    const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
     send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
     send({ kind: 'removeNode', id: 'root' });
   }, gid);
-  await expect.poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 }).toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length - b, before), { timeout: 10000 })
+    .toBeGreaterThanOrEqual(1);
 });
 
 test('adding a second sprite preserves the first (incremental, no rebuild)', async ({ page }) => {
   const gid = await openSceneRoom(page);
   const ref = await generateAsset(page, gid);
   // First sprite.
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
-    send({ kind: 'addNode', id: 'a', type: 'Sprite', props: { position: { x: 400, y: 360 } } });
-    send({ kind: 'addNode', id: 'texa', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.a', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'a', port: 'parent' } });
-    send({ kind: 'connect', edgeId: 'e.ta', type: 'data', from: { node: 'texa', port: 'data' }, to: { node: 'a', port: 'texture' } });
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
+      send({ kind: 'addNode', id: 'a', type: 'Sprite', props: { position: { x: 400, y: 360 } } });
+      send({ kind: 'addNode', id: 'texa', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.a', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'a', port: 'parent' } });
+      send({ kind: 'connect', edgeId: 'e.ta', type: 'data', from: { node: 'texa', port: 'data' }, to: { node: 'a', port: 'texture' } });
+    },
+    { gid, ref },
+  );
   const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
   await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer.onStage('a')), { timeout: 20000 }).toBe(true);
   // Second sprite — do NOT touch root.
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'b', type: 'Sprite', props: { position: { x: 880, y: 360 } } });
-    send({ kind: 'addNode', id: 'texb', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.b', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'b', port: 'parent' } });
-    send({ kind: 'connect', edgeId: 'e.tb', type: 'data', from: { node: 'texb', port: 'data' }, to: { node: 'b', port: 'texture' } });
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'b', type: 'Sprite', props: { position: { x: 880, y: 360 } } });
+      send({ kind: 'addNode', id: 'texb', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.b', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'b', port: 'parent' } });
+      send({ kind: 'connect', edgeId: 'e.tb', type: 'data', from: { node: 'texb', port: 'data' }, to: { node: 'b', port: 'texture' } });
+    },
+    { gid, ref },
+  );
   await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer.onStage('b')), { timeout: 20000 }).toBe(true);
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.onStage('a'))).toBe(true); // A preserved
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
@@ -860,16 +888,21 @@ test('adding a second sprite preserves the first (incremental, no rebuild)', asy
 test('an unparented sprite binds its texture but is not on the stage', async ({ page }) => {
   const gid = await openSceneRoom(page);
   const ref = await generateAsset(page, gid);
-  await page.evaluate(({ gid, ref }) => {
-    const send = (o: unknown) => ((window as any).__gameApplyInbound)('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
-    send({ kind: 'addNode', id: 'orphan', type: 'Sprite' });
-    send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
-    send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'orphan', port: 'texture' } });
-    // intentionally NO child edge
-  }, { gid, ref });
+  await page.evaluate(
+    ({ gid, ref }) => {
+      const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
+      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
+      send({ kind: 'addNode', id: 'orphan', type: 'Sprite' });
+      send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
+      send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'orphan', port: 'texture' } });
+      // intentionally NO child edge
+    },
+    { gid, ref },
+  );
   const frame = await (await page.getByTestId('game-engine-frame').elementHandle())!.contentFrame();
-  await expect.poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('orphan')?.width ?? 0), { timeout: 20000 }).toBeGreaterThan(64);
+  await expect
+    .poll(async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('orphan')?.width ?? 0), { timeout: 20000 })
+    .toBeGreaterThan(64);
   expect(await frame!.evaluate(() => (window as any).__engineRenderer.onStage('orphan'))).toBe(false);
 });
 ```

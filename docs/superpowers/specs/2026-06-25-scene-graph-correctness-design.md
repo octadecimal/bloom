@@ -16,7 +16,7 @@ two real chat turns ("add the phoenix", then "add a leopard"):
 2. **Missing `child` edge.** Sprites were created but never parented to `root`.
    An unparented node is never added to the Pixi stage, so it renders nothing —
    a blank canvas.
-3. **Destructive rebuild.** Asked to *add* a second sprite, the agent tried to
+3. **Destructive rebuild.** Asked to _add_ a second sprite, the agent tried to
    re-add `root` (rejected `duplicate_id`), then called `removeNode(root)`, which
    **cascade-deleted every incident edge** (including the previously-correct
    parent edge), orphaning the existing sprite. Net: the first sprite vanished and
@@ -43,7 +43,7 @@ prose. Correctness is then validated by exhaustive, deterministic e2e.
 
 - Multi-reel auto-layout, animation, sound, asset auto-tagging.
 - Making LLM output deterministic. The skill prose improves behavior; the
-  *contract* (not the model) is what the e2e holds to account.
+  _contract_ (not the model) is what the e2e holds to account.
 
 ## Design
 
@@ -61,12 +61,12 @@ Every validation change below lands in **both**, with matching tests in both
 
 **A1. Port-typed edge validation (new).** Define a per-node-type port schema:
 
-| Node      | Inputs            | Outputs    |
-|-----------|-------------------|------------|
-| Root      | —                 | `children` |
-| Container | `parent`          | `children` |
-| Sprite    | `parent`, `texture` | —        |
-| Texture   | —                 | `data`     |
+| Node      | Inputs              | Outputs    |
+| --------- | ------------------- | ---------- |
+| Root      | —                   | `children` |
+| Container | `parent`            | `children` |
+| Sprite    | `parent`, `texture` | —          |
+| Texture   | —                   | `data`     |
 
 On `connect`, after the existing node-existence checks, validate endpoints by
 edge type:
@@ -111,7 +111,7 @@ scenes) are updated to the new default.
   via a Container that reaches `root`); add the parent `child` edge in the **same
   `scene_apply_batch`** as the node.
 - **Never remove or re-add `root`** — it persists across turns. To extend an
-  existing scene, add only the *new* nodes and their parent edges; do not rebuild
+  existing scene, add only the _new_ nodes and their parent edges; do not rebuild
   or recreate existing nodes.
 - Centering note updated for anchor-0.5 semantics (place at stage center
   `width/2, height/2`).
