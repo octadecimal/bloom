@@ -22,6 +22,11 @@ import { seedLocalStorage, BACKEND_URL } from './helpers';
 //     (hasSpace+prose → runSkill path; cassette replays scene_apply_batch with Sprite+Texture)
 //   - Reshape: chat composer plain prose → Send button (routes through design-router)
 //     (cassette: set_gdd_fields + realize_symbol → new generation + setProp scene_op)
+//
+// Scene node ids (from seed-scene-high1.json cassette):
+//   sym.high1  — Sprite node, props.slot=high1
+//   tex.high1  — Texture node, src=/media/g/seed/old.png (replaced by realize_symbol)
+//   e.tex.sym  — data edge: tex.high1 → sym.high1 (port: texture)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,11 +110,14 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
     .poll(() => page.evaluate(() => (window as any).__gameActiveId ?? null), { timeout: 10_000 })
     .not.toBeNull();
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
+  // Explicit null-guard mirroring game-scene.spec.ts:51 pattern.
+  expect(gameId).toBeTruthy();
+  const gid = gameId!;
 
   // -----------------------------------------------------------------------
   // 2. Seed GDD symbols-reels with a high1 row.
   // -----------------------------------------------------------------------
-  await seedGddHigh1(page, gameId as string);
+  await seedGddHigh1(page, gid);
 
   // -----------------------------------------------------------------------
   // 3. Generate an initial asset for slot=high1.
@@ -132,12 +140,14 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
       const sel = gens.find((g: any) => g.id === a.selectedGenerationId) ?? gens[gens.length - 1] ?? null;
       return { genCount: gens.length, imageRef: sel?.imageRef ?? null };
     },
-    { gid: gameId as string, backendUrl: BACKEND_URL },
+    { gid, backendUrl: BACKEND_URL },
   );
   expect(initialState).not.toBeNull();
   expect((initialState as any).genCount).toBeGreaterThanOrEqual(1);
   const origGenCount: number = (initialState as any).genCount;
   const origImageRef: string = (initialState as any).imageRef;
+  // Guard: cassette gap (null imageRef) would make the later not.toEqual vacuous.
+  expect(origImageRef).toMatch(/^\/media\//);
 
   // -----------------------------------------------------------------------
   // 4. Seed the scene: Root+Container+Sprite(slot=high1)+Texture+edges.
@@ -173,7 +183,7 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
       const sel = gens.find((g: any) => g.id === a.selectedGenerationId) ?? gens[gens.length - 1] ?? null;
       return { genCount: gens.length, imageRef: sel?.imageRef ?? null };
     },
-    { gid: gameId as string, backendUrl: BACKEND_URL },
+    { gid, backendUrl: BACKEND_URL },
   );
   expect(afterState).not.toBeNull();
   const newGenCount: number = (afterState as any).genCount;
@@ -206,11 +216,48 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
     .toBe(true);
 
   // -----------------------------------------------------------------------
-  // 9. Assert (c): rendered pixels show the new dragon sprite in the engine.
+  // 9. Assert (c): persisted scene texture src matches the new generation.
+  //    Re-join the scene via __gameJoinScene (dev-mode hook exposed by socketClient.ts)
+  //    to get a fresh scene_snapshot. __gameSceneSnapshot is updated by the socket
+  //    listener on every snapshot arrival. Poll until it reflects the new src.
+  //    This proves realize_symbol's setProp scene_op landed in the persisted scene —
+  //    not just in the in-memory asset list.
+  // -----------------------------------------------------------------------
+  // Clear any stale snapshot, then trigger a fresh join to get the current scene.
+  await page.evaluate(() => {
+    (window as any).__gameSceneSnapshot = undefined;
+  });
+  await page.evaluate(({ gid }: { gid: string }) => {
+    const joinFn = (window as any).__gameJoinScene as ((gameId: string) => void) | undefined;
+    joinFn?.(gid);
+  }, { gid });
+  // Poll until the snapshot arrives with the tex.high1 node populated.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const snap = (window as any).__gameSceneSnapshot as
+            | { document: { nodes: Record<string, { props: Record<string, string> }> } }
+            | undefined;
+          return snap?.document?.nodes?.['tex.high1']?.props?.src ?? null;
+        }),
+      { timeout: 15_000 },
+    )
+    .not.toBeNull();
+  const persistedTextureSrc = await page.evaluate(() => {
+    const snap = (window as any).__gameSceneSnapshot as
+      | { document: { nodes: Record<string, { props: Record<string, string> }> } }
+      | undefined;
+    return snap?.document?.nodes?.['tex.high1']?.props?.src ?? null;
+  });
+  expect(persistedTextureSrc).toEqual(newImageRef);
+
+  // -----------------------------------------------------------------------
+  // 10. Assert (d): rendered pixels show the new dragon sprite in the engine.
   //     After 'ready', the game socket client joins the scene and receives the
   //     current scene snapshot (with the new Texture src from realize_symbol).
   //     The engine initializes from that snapshot; the Sprite sym.high1 loads
-  //     the new PNG from /media/... and textureSizeOf returns >0.
+  //     the new PNG from /media/... and textureSizeOf returns >64 (a real image).
   // -----------------------------------------------------------------------
   const frameHandle = await page.getByTestId('game-engine-frame').elementHandle();
   const frame = await frameHandle!.contentFrame();
@@ -221,10 +268,10 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
       async () => frame!.evaluate(() => (window as any).__engineRenderer?.textureSizeOf('sym.high1')?.width ?? 0),
       { timeout: 25_000 },
     )
-    .toBeGreaterThan(0);
+    .toBeGreaterThan(64);
 
   // -----------------------------------------------------------------------
-  // 10. No engine errors during the session.
+  // 11. No engine errors during the session.
   // -----------------------------------------------------------------------
   expect(
     await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length),
