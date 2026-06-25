@@ -92,69 +92,76 @@ export function TunerPane(_props: IDockviewPanelProps) {
 
       {params && (
         <div className="border-b border-hairline p-2 text-xs text-text-2">
-          <label className="mr-3">
-            seed{' '}
-            <input
-              data-testid="param-master-seed"
-              type="number"
-              value={params.masterSeed}
-              onChange={(e) => tunerSlice().params.masterSeed.set(Number(e.target.value))}
-              className="w-20 bg-canvas px-1 text-text-1"
-            />
-          </label>
-          <label className="mr-3">
-            population{' '}
-            <input
-              type="number"
-              value={params.population}
-              onChange={(e) => tunerSlice().params.population.set(Number(e.target.value))}
-              className="w-16 bg-canvas px-1 text-text-1"
-            />
-          </label>
-          <label className="mr-3">
-            generations{' '}
-            <input
-              type="number"
-              value={params.maxGenerations}
-              onChange={(e) => tunerSlice().params.maxGenerations.set(Number(e.target.value))}
-              className="w-16 bg-canvas px-1 text-text-1"
-            />
-          </label>
-          <button data-testid="toggle-advanced" onClick={() => setShowAdvanced((v) => !v)} className="text-text-2 underline">
-            {showAdvanced ? 'hide advanced' : 'advanced'}
-          </button>
-          {showAdvanced && (
-            <div data-testid="advanced-params" className="mt-2 flex flex-wrap gap-3">
-              <label>
-                search{' '}
-                <input
-                  type="number"
-                  value={params.searchCandidateCount}
-                  onChange={(e) => tunerSlice().params.searchCandidateCount.set(Number(e.target.value))}
-                  className="w-24 bg-canvas px-1 text-text-1"
-                />
-              </label>
-              <label>
-                final{' '}
-                <input
-                  type="number"
-                  value={params.finalCandidateCount}
-                  onChange={(e) => tunerSlice().params.finalCandidateCount.set(Number(e.target.value))}
-                  className="w-24 bg-canvas px-1 text-text-1"
-                />
-              </label>
-              <label>
-                mutation{' '}
-                <input
-                  type="number"
-                  step="0.05"
-                  value={params.mutationRate}
-                  onChange={(e) => tunerSlice().params.mutationRate.set(Number(e.target.value))}
-                  className="w-16 bg-canvas px-1 text-text-1"
-                />
-              </label>
-            </div>
-          )}
+          {(() => {
+            const paramsState = tunerSlice().params.ornull;
+            return (
+              <>
+                <label className="mr-3">
+                  seed{' '}
+                  <input
+                    data-testid="param-master-seed"
+                    type="number"
+                    value={params.masterSeed}
+                    onChange={(e) => paramsState?.masterSeed.set(Number(e.target.value))}
+                    className="w-20 bg-canvas px-1 text-text-1"
+                  />
+                </label>
+                <label className="mr-3">
+                  population{' '}
+                  <input
+                    type="number"
+                    value={params.population}
+                    onChange={(e) => paramsState?.population.set(Number(e.target.value))}
+                    className="w-16 bg-canvas px-1 text-text-1"
+                  />
+                </label>
+                <label className="mr-3">
+                  generations{' '}
+                  <input
+                    type="number"
+                    value={params.maxGenerations}
+                    onChange={(e) => paramsState?.maxGenerations.set(Number(e.target.value))}
+                    className="w-16 bg-canvas px-1 text-text-1"
+                  />
+                </label>
+                <button data-testid="toggle-advanced" onClick={() => setShowAdvanced((v) => !v)} className="text-text-2 underline">
+                  {showAdvanced ? 'hide advanced' : 'advanced'}
+                </button>
+                {showAdvanced && (
+                  <div data-testid="advanced-params" className="mt-2 flex flex-wrap gap-3">
+                    <label>
+                      search{' '}
+                      <input
+                        type="number"
+                        value={params.searchCandidateCount}
+                        onChange={(e) => paramsState?.searchCandidateCount.set(Number(e.target.value))}
+                        className="w-24 bg-canvas px-1 text-text-1"
+                      />
+                    </label>
+                    <label>
+                      final{' '}
+                      <input
+                        type="number"
+                        value={params.finalCandidateCount}
+                        onChange={(e) => paramsState?.finalCandidateCount.set(Number(e.target.value))}
+                        className="w-24 bg-canvas px-1 text-text-1"
+                      />
+                    </label>
+                    <label>
+                      mutation{' '}
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={params.mutationRate}
+                        onChange={(e) => paramsState?.mutationRate.set(Number(e.target.value))}
+                        className="w-16 bg-canvas px-1 text-text-1"
+                      />
+                    </label>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
