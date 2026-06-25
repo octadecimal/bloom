@@ -22,11 +22,11 @@
 
 ## Source roots
 
-| Stack | Roots |
-| --- | --- |
-| Python | `studio/backend/app` |
-| TS/TSX | `studio/frontend/src`, `runtime/client` |
-| Rust | `trusted/math`, `trusted/package`, `studio/simulator`, `studio/tuner` |
+| Stack  | Roots                                                                 |
+| ------ | --------------------------------------------------------------------- |
+| Python | `studio/backend/app`                                                  |
+| TS/TSX | `studio/frontend/src`, `runtime/client`                               |
+| Rust   | `trusted/math`, `trusted/package`, `studio/simulator`, `studio/tuner` |
 
 ## File structure
 
@@ -38,9 +38,11 @@
 ### Task 1: jscpd tool baseline
 
 **Files:**
+
 - Create (transient): `$SCRATCH/jscpd/jscpd-report.json`
 
 **Interfaces:**
+
 - Produces: a jscpd JSON report at `$SCRATCH/jscpd/jscpd-report.json` containing a `duplicates[]` array (each with `firstFile`, `secondFile`, `start`/`end` lines, `fragment`, `lines`, `tokens`) and a `statistics` block (per-format and total clone counts / duplicated-line percentages). Also the recorded jscpd version + flags, for the report's method note.
 
 - [ ] **Step 1: Run jscpd across all source roots with JSON + console reporters**
@@ -82,9 +84,11 @@ This artifact is transient (lives in scratchpad, outside the repo). Nothing to c
 Dispatch three subagents **in parallel** (single message, three Agent calls), one per stack. Each agent is a reading/analysis agent (`Explore` or `general-purpose`) given: (a) its stack's source roots, (b) the path to `$SCRATCH/jscpd/jscpd-report.json` and instruction to filter it to files under its roots, and (c) the finding schema and rubrics below. No agent writes code.
 
 **Files:**
+
 - Read-only: source roots per stack; `$SCRATCH/jscpd/jscpd-report.json`.
 
 **Interfaces:**
+
 - Produces: each agent returns a JSON object `{ "stack": "...", "findings": [ ... ] }` where each finding has exactly these keys: `type` (`"clone"`|`"structural"`|`"boilerplate"`), `title` (string), `locations` (array of `"path:line"` or `"path:start-end"` strings), `description` (string), `severity` (`"High"`|`"Med"`|`"Low"`), `suggested_fix` (string), `effort` (`"S"`|`"M"`|`"L"`).
 
 - [ ] **Step 1: Dispatch the three agents in parallel**
@@ -99,6 +103,7 @@ Each agent prompt must include this shared contract verbatim:
 > 4. Return ONLY the JSON object `{ "stack": "<name>", "findings": [...] }`. No prose around it.
 
 Per-stack roots to substitute into each prompt:
+
 - **Python agent:** `studio/backend/app`
 - **TS agent:** `studio/frontend/src`, `runtime/client`
 - **Rust agent:** `trusted/math`, `trusted/package`, `studio/simulator`, `studio/tuner`
@@ -118,9 +123,11 @@ Write the three returned objects to `$SCRATCH/jscpd/findings-python.json`, `find
 ### Task 3: Synthesize, write, and commit the report
 
 **Files:**
+
 - Create: `docs/reports/2026-06-25-code-duplication.md`
 
 **Interfaces:**
+
 - Consumes: `findings-python.json`, `findings-ts.json`, `findings-rust.json` from Task 2; jscpd version/flags + `statistics` block from Task 1.
 
 - [ ] **Step 1: Merge, dedupe, and rank**
@@ -136,33 +143,37 @@ Create `docs/reports/2026-06-25-code-duplication.md` with exactly these sections
 
 **Commit:** a5fc012 (main)
 **Scope:** Python (studio/backend/app), TS (studio/frontend/src, runtime/client), Rust (trusted/math, trusted/package, studio/simulator, studio/tuner). Each stack analyzed independently.
-**Method:** jscpd <version> (flags: --min-tokens 50 --min-lines 5 --mode mild; ignored node_modules/target/.venv/dist/__pycache__) for exact/near-exact clones, plus per-stack agent reading for structural/semantic and boilerplate duplication.
+**Method:** jscpd <version> (flags: --min-tokens 50 --min-lines 5 --mode mild; ignored node_modules/target/.venv/dist/**pycache**) for exact/near-exact clones, plus per-stack agent reading for structural/semantic and boilerplate duplication.
 **Caveat:** Reflects committed `main` only. In-flight worktrees `symbol-reshape` and `tuner-studio` are excluded.
 
 ## Executive summary
 
-| Stack | High | Med | Low | Total |
-| --- | --- | --- | --- | --- |
-| Python | … | … | … | … |
-| TS | … | … | … | … |
-| Rust | … | … | … | … |
+| Stack  | High | Med | Low | Total |
+| ------ | ---- | --- | --- | ----- |
+| Python | …    | …   | …   | …     |
+| TS     | …    | …   | …   | …     |
+| Rust   | …    | …   | …   | …     |
 
 **Top findings (whole codebase):**
-1. …  (link to the per-stack detail)
+
+1. … (link to the per-stack detail)
 
 ## Python
 
-| # | Type | Title | Severity | Effort | Locations |
-| --- | --- | --- | --- | --- | --- |
-| P1 | … | … | … | … | … |
+| #   | Type | Title | Severity | Effort | Locations |
+| --- | ---- | ----- | -------- | ------ | --------- |
+| P1  | …    | …     | …        | …      | …         |
 
 ### P1 — <title>
+
 <description, suggested fix, effort rationale>
 
 ## TS
+
 <same shape, T-prefixed ids>
 
 ## Rust
+
 <same shape, R-prefixed ids>
 
 ## Appendix: raw jscpd metrics
@@ -195,5 +206,5 @@ git commit -m "docs: add code duplication report (Python/TS/Rust ranked backlog)
 ## Self-review
 
 - **Spec coverage:** Scope/source roots → Global Constraints + Source roots table (Task 1/2). Three duplication types → Task 1 (clones) + Task 2 contract (structural, boilerplate). Finding schema → Task 2 interface. Severity/effort rubrics → Global Constraints + Task 2 contract. Report structure (header/summary/per-stack/appendix) → Task 3 Step 2. Output path + commit → Task 3. Worktree caveat → Global Constraints + report header. All spec sections map to a task.
-- **Placeholders:** Plan contains no TBD/TODO; the `…` tokens appear only inside the report *template* and Task 3 Step 3 explicitly fails the build if any survive.
+- **Placeholders:** Plan contains no TBD/TODO; the `…` tokens appear only inside the report _template_ and Task 3 Step 3 explicitly fails the build if any survive.
 - **Type consistency:** Finding key set (`type`, `title`, `locations`, `description`, `severity`, `suggested_fix`, `effort`) is defined once in Task 2's interface and reused unchanged in the report table/detail in Task 3. Severity/effort enums identical across Global Constraints, Task 2, Task 3.
