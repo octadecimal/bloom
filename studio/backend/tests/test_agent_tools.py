@@ -22,6 +22,7 @@ async def test_known_tool_names():
         "set_doc_status", "ask_user_question",
         "scene_add_node", "scene_set_prop", "scene_connect",
         "scene_disconnect", "scene_remove_node", "scene_apply_batch",
+        "realize_symbol",
     }
 
 
