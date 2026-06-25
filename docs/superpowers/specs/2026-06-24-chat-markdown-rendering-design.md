@@ -39,10 +39,7 @@ import remarkGfm from 'remark-gfm';
 export function Markdown({ source }: { source: string }) {
   return (
     <div className="bloom-md">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>
         {source}
       </ReactMarkdown>
     </div>
@@ -80,11 +77,11 @@ density (no oversized default heading margins).
 
 ### 3. Wiring — three one-line swaps
 
-| Site | Before | After |
-|---|---|---|
-| `RunTurnBlock.tsx:44` | `{step.content}` | `<Markdown source={step.content} />` |
-| `ChatRoomPane.tsx:55` | `{content}` | `<Markdown source={content} />` |
-| `GddViewerPane.tsx:46` | `<pre…>{body}</pre>` | `<Markdown source={body} />` |
+| Site                   | Before               | After                                |
+| ---------------------- | -------------------- | ------------------------------------ |
+| `RunTurnBlock.tsx:44`  | `{step.content}`     | `<Markdown source={step.content} />` |
+| `ChatRoomPane.tsx:55`  | `{content}`          | `<Markdown source={content} />`      |
+| `GddViewerPane.tsx:46` | `<pre…>{body}</pre>` | `<Markdown source={body} />`         |
 
 The streaming caret in the two chat sites stays a sibling `<span>` rendered after
 `<Markdown>`. With block-level markdown the trailing block is a `<p>`, so the caret
@@ -93,7 +90,7 @@ sits just after it — acceptable for in-flight text.
 ### 4. Streaming safety
 
 Agent text streams token-by-token, so the seam is frequently handed half-formed
-markdown (unclosed ``` fences, dangling `**bold`). react-markdown is best-effort
+markdown (unclosed ```fences, dangling`\*\*bold`). react-markdown is best-effort
 and renders partial input without throwing; a unit test asserts this.
 
 ## Components / boundaries

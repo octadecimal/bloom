@@ -28,26 +28,31 @@
 ### Task 1: The `<Markdown>` seam + unit tests
 
 **Files:**
+
 - Modify: `package.json` (add the two deps)
 - Create: `studio/frontend/src/components/ui/Markdown.tsx`
 - Test: `studio/frontend/src/components/ui/Markdown.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: nothing (leaf component).
 - Produces: `export function Markdown({ source }: { source: string }): JSX.Element` — renders a `<div className="bloom-md">` wrapping `react-markdown` with `remark-gfm`; links get `target="_blank" rel="noopener noreferrer"`. Imported elsewhere as `@/components/ui/Markdown`.
 
 - [ ] **Step 1: Install the dependencies**
 
 Run:
+
 ```bash
 npm install react-markdown@^9 remark-gfm@^4
 ```
+
 Expected: both added to `package.json` `dependencies`, exit 0.
 
 - [ ] **Step 2: Write the failing test**
 
 Create `studio/frontend/src/components/ui/Markdown.spec.tsx`:
-```tsx
+
+````tsx
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { Markdown } from './Markdown';
@@ -107,7 +112,7 @@ describe('Markdown seam', () => {
     expect(container.querySelector('.bloom-md')).not.toBeNull();
   });
 });
-```
+````
 
 - [ ] **Step 3: Run the test to verify it fails**
 
@@ -117,6 +122,7 @@ Expected: FAIL — `Failed to resolve import "./Markdown"` (component not create
 - [ ] **Step 4: Write the minimal implementation**
 
 Create `studio/frontend/src/components/ui/Markdown.tsx`:
+
 ```tsx
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -160,7 +166,9 @@ Expected: PASS (Markdown.tsx carries no raw colors).
 git add package.json package-lock.json studio/frontend/src/components/ui/Markdown.tsx studio/frontend/src/components/ui/Markdown.spec.tsx
 git commit
 ```
+
 Commit message:
+
 ```
 feat(ui): markdown render seam (react-markdown + remark-gfm) [#73]
 
@@ -178,15 +186,18 @@ Claude-Session: https://claude.ai/code/session_01P53jankLaX8jfhYbyWvv6H
 ### Task 2: `.bloom-md` token-only styling
 
 **Files:**
+
 - Modify: `studio/frontend/src/styles.css` (append one additive block)
 
 **Interfaces:**
+
 - Consumes: the `.bloom-md` wrapper class emitted by Task 1's `Markdown`.
 - Produces: legible, token-only styling for every markdown element under `.bloom-md`. No JS interface.
 
 - [ ] **Step 1: Append the styling block to `styles.css`**
 
 Add at the end of `studio/frontend/src/styles.css`:
+
 ```css
 /* === Markdown content (chat + GDD) — token-only; pairs with the swappable
    seam in components/ui/Markdown.tsx. Tuned tight to the 13px chat density. === */
@@ -318,7 +329,9 @@ Expected: build succeeds (CSS is valid; no token typos break the bundle).
 git add studio/frontend/src/styles.css
 git commit
 ```
+
 Commit message:
+
 ```
 style(ui): token-only .bloom-md markdown styling [#73]
 
@@ -335,12 +348,14 @@ Claude-Session: https://claude.ai/code/session_01P53jankLaX8jfhYbyWvv6H
 ### Task 3: Wire the three render call sites
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/llm-chat/RunTurnBlock.tsx` (line 44 region + import)
 - Modify: `studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx` (line 55 region + import)
 - Modify: `studio/frontend/src/plugins/gdd/GddViewerPane.tsx` (line 46 region + import)
 - Test: existing `RunTurnBlock.spec.tsx`, `ChatRoomPane.spec.tsx`, `GddViewerPane.spec.tsx` must stay green.
 
 **Interfaces:**
+
 - Consumes: `import { Markdown } from '@/components/ui/Markdown';` (Task 1).
 - Produces: no new interface; three text expressions become `<Markdown source=… />`.
 
@@ -352,16 +367,21 @@ Expected: PASS (30 tests). This is the baseline these edits must preserve.
 - [ ] **Step 2: Wire `RunTurnBlock.tsx`**
 
 Add the import near the top (after the existing `./toolFold` import):
+
 ```tsx
 import { Markdown } from '@/components/ui/Markdown';
 ```
+
 Replace the `RunStepCard` text render. Change:
+
 ```tsx
     <div data-testid={`run-step-${index}`} className="text-[13px] leading-snug text-foreground">
       {step.content}
       {isRunning && (
 ```
+
 to:
+
 ```tsx
     <div data-testid={`run-step-${index}`} className="text-[13px] leading-snug text-foreground">
       <Markdown source={step.content} />
@@ -371,16 +391,21 @@ to:
 - [ ] **Step 3: Wire `ChatRoomPane.tsx`**
 
 Add the import near the top (after the `./fuzzySkills` import):
+
 ```tsx
 import { Markdown } from '@/components/ui/Markdown';
 ```
+
 Replace the message-bubble text render. Change:
+
 ```tsx
         <div className="text-[13px] leading-snug text-foreground">
           {content}
           {status === 'streaming' && (
 ```
+
 to:
+
 ```tsx
         <div className="text-[13px] leading-snug text-foreground">
           <Markdown source={content} />
@@ -390,16 +415,21 @@ to:
 - [ ] **Step 4: Wire `GddViewerPane.tsx`**
 
 Add the import near the top of the file (alongside its existing imports):
+
 ```tsx
 import { Markdown } from '@/components/ui/Markdown';
 ```
+
 Replace the body render. Change:
+
 ```tsx
-        <pre className="whitespace-pre-wrap text-sm text-text-1">{current?.body || ''}</pre>
+<pre className="whitespace-pre-wrap text-sm text-text-1">{current?.body || ''}</pre>
 ```
+
 to:
+
 ```tsx
-        <Markdown source={current?.body || ''} />
+<Markdown source={current?.body || ''} />
 ```
 
 - [ ] **Step 5: Run the affected specs**
@@ -410,9 +440,11 @@ Expected: PASS (30 tests). The existing assertions are `textContent`-based (`get
 - [ ] **Step 6: Run the full frontend suite + typecheck + guard**
 
 Run:
+
 ```bash
 npx nx test frontend -- --run
 ```
+
 Expected: entire suite PASS (new Markdown spec + all existing).
 
 - [ ] **Step 7: Commit**
@@ -421,7 +453,9 @@ Expected: entire suite PASS (new Markdown spec + all existing).
 git add studio/frontend/src/plugins/llm-chat/RunTurnBlock.tsx studio/frontend/src/plugins/llm-chat/ChatRoomPane.tsx studio/frontend/src/plugins/gdd/GddViewerPane.tsx
 git commit
 ```
+
 Commit message:
+
 ```
 feat(chat,gdd): render message + GDD body as markdown [#73]
 
@@ -462,17 +496,23 @@ Expected: all suites pass.
 - [ ] **Step 5: e2e against replay backend**
 
 This worktree was created with bare `git worktree add`, so it has no assigned `BLOOM_PORT_OFFSET`. Assign a free offset first (mirror `just wt-new`):
+
 ```bash
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/wt-assign-offset.ps1 .
 ```
+
 Then, in a backend shell:
+
 ```bash
 just backend-serve-replay   # honors BLOOM_PORT_OFFSET from this worktree's .env
 ```
+
 And run the deterministic e2e:
+
 ```bash
 just e2e
 ```
+
 Expected: e2e green. (If another session holds the default ports, the offset keeps this run isolated — see the `worktree-independent-ports` note.)
 
 - [ ] **Step 6: Manual eyeball (optional but recommended)**
@@ -484,6 +524,7 @@ Serve the frontend (`just serve-frontend`) against a live or replay backend and 
 ## Self-Review
 
 **Spec coverage:**
+
 - Seam (one file, library named once) → Task 1 ✓
 - Security (no rehype-raw / dangerouslySetInnerHTML / raw HTML) → Task 1 impl + Task 1 Step-2 injection test ✓
 - GFM (tables/lists/code/links) → Task 1 tests ✓
