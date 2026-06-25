@@ -35,3 +35,12 @@ def test_render_is_deterministic():
     schema = schema_for("math-model")
     data = {"rtp": 0.96, "volatility": "high", "bonus_hit_rate": "1:200"}
     assert render(schema, data) == render(schema, data)
+
+
+def test_range_renders_as_min_dash_max():
+    schema = schema_for("symbols-reels")
+    out = render(schema, {
+        "symbols": [{"slot": "high1", "name": "Dragon", "kind": "high", "art_desc": "a dragon"}],
+        "strip_length": {"min": 8, "max": 20},
+    })
+    assert "**Strip length:** 8–20" in out
