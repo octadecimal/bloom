@@ -26,6 +26,10 @@ Work in this order:
    sensible, industry-typical default rather than leaving it blank or vague. Status
    is derived automatically from the required fields you fill.
 
+   **Symbol slot ids.** In the symbols-reels doc, give every symbol a stable `slot`
+   id (`high1`, `high2`, `low1`, `wild`, `scatter`) in its row — this is the durable
+   handle later chat edits use to reshape that symbol.
+
 2. RANK GAPS. Call `list_gdd_docs` and review which decisions are still assumed
    defaults rather than user choices. Order them by how much they materially shape
    the game: RTP, volatility, bonus trigger / hit rate, and reel/payline structure

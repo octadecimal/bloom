@@ -13,6 +13,11 @@ export default defineConfig(() => {
   const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
   const frontend = 4200 + offset;
   const target = `http://localhost:${8000 + offset}`;
+  // Derive VITE_BLOOM_ENGINE_PORT and VITE_BLOOM_BACKEND_PORT from BLOOM_PORT_OFFSET
+  // when not explicitly set, so a fresh checkout with only BLOOM_PORT_OFFSET works
+  // without any .env lines. Explicit env overrides still win (backward compatible).
+  const enginePort = process.env.VITE_BLOOM_ENGINE_PORT ?? String(4300 + offset);
+  const backendPort = process.env.VITE_BLOOM_BACKEND_PORT ?? String(8000 + offset);
   return {
     root: import.meta.dirname,
     cacheDir: '../../node_modules/.vite/studio/frontend',
@@ -36,6 +41,12 @@ export default defineConfig(() => {
       },
     },
     preview: { port: frontend, host: '0.0.0.0' },
+    define: {
+      // Inject derived ports so import.meta.env.VITE_BLOOM_*_PORT resolve correctly
+      // without needing .env lines. Explicit env overrides are already folded in above.
+      'import.meta.env.VITE_BLOOM_ENGINE_PORT': JSON.stringify(enginePort),
+      'import.meta.env.VITE_BLOOM_BACKEND_PORT': JSON.stringify(backendPort),
+    },
     plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
     resolve: {
       alias: {

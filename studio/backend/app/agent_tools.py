@@ -26,15 +26,18 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         style: str = "",
         size: str = "512x512",
         transparent: bool = True,
+        slot: str = "",
     ) -> str:
         prompt = description if not style else f"{description}, {style} style"
         width, height = (int(x) for x in size.lower().split("x", 1))
         workflow = "schnell-transparent" if transparent else "schnell-opaque"
         asset = await ctx.asset_store.create_asset(
-            ctx.game_id, description[:40] or "asset", prompt, width, height, workflow
+            ctx.game_id, description[:40] or "asset", prompt, width, height, workflow,
+            slot=slot or None,
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
-        return f"Generated '{asset.name}' (asset {asset.id}) and added it to the Asset Board."
+        tag = f" (slot {slot})" if slot else ""
+        return f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the Asset Board."
 
     return StructuredTool.from_function(
         coroutine=generate_asset,
@@ -42,7 +45,7 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         description=(
             "Generate a game image from a text description and add it to the Asset Board. "
             "size is 'WIDTHxHEIGHT' (default 512x512); set transparent=false for an opaque "
-            "background/scene."
+            "background/scene. Pass slot='<id>' to tie a symbol's art to its design slot."
         ),
     )
 
@@ -64,7 +67,12 @@ def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
             return "The Asset Board is empty."
         lines = []
         for a in assets:
-            head = f"- {a.id}: {a.name}" + (f" ({a.category})" if getattr(a, "category", None) else "")
+            slot = getattr(a, "slot", None)
+            head = f"- {a.id}: {a.name}"
+            if slot:
+                head += f" [slot={slot}]"
+            elif getattr(a, "category", None):
+                head += f" ({a.category})"
             ref = _selected_media_ref(a)
             lines.append(f"{head} — {ref}" if ref else f"{head} — (no image yet)")
         return "Assets on the board:\n" + "\n".join(lines)
@@ -331,6 +339,72 @@ def build_scene_apply_batch_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
+    """Resolve (sprite_id, texture_node_id) for a slot, or None.
+
+    The symbol Sprite carries props.slot==slot; its bound Texture is the source
+    of the `data` edge into that sprite's `texture` port.
+    """
+    nodes = document.get("nodes", {})
+    sprite_id = next(
+        (nid for nid, n in nodes.items()
+         if n.get("type") == "Sprite" and (n.get("props") or {}).get("slot") == slot),
+        None,
+    )
+    if sprite_id is None:
+        return None
+    for e in document.get("edges", []):
+        if e.get("type") == "data" and e["to"]["node"] == sprite_id and e["to"]["port"] == "texture":
+            return sprite_id, e["from"]["node"]
+    return None
+
+
+def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
+    async def realize_symbol(slot: str) -> str:
+        # 1. read the (already-updated) symbol art description from the GDD
+        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "symbols-reels")
+        rows = (gdd.data.get("symbols") if gdd else None) or []
+        row = next((r for r in rows if r.get("slot") == slot), None)
+        if row is None:
+            return f"No symbol with slot '{slot}' in the GDD; nothing to realize."
+        art_desc = row.get("art_desc") or row.get("name") or slot
+
+        # 2. resolve the slot's asset, update its prompt, regenerate, select newest gen
+        asset = await ctx.asset_store.get_by_slot(ctx.game_id, slot)
+        if asset is None:
+            return f"No asset tagged slot '{slot}'; generate it first."
+        await ctx.asset_store.update_asset(asset.id, prompt=art_desc)
+        await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
+        refreshed = await ctx.asset_store.get_asset(asset.id)
+        if refreshed is None or not refreshed.generations:
+            return f"Regeneration for slot '{slot}' produced no image."
+        newest = refreshed.generations[-1]
+        await ctx.asset_store.select_generation(asset.id, newest.id)
+
+        # 3. rewrite the bound Texture's src — one atomic scene write
+        document = await ctx.scene_store.get_document(ctx.game_id)
+        found = _find_symbol_sprite(document or {}, slot) if document else None
+        if found is None:
+            return (f"Regenerated slot '{slot}', but no scene Sprite is labeled with it; "
+                    f"the rendered game was not updated.")
+        _, texture_id = found
+        await ctx.scene_hub.apply_op(
+            ctx.game_id,
+            {"kind": "setProp", "id": texture_id, "path": "src", "value": newest.image_ref},
+        )
+        return f"Reshaped symbol '{slot}': regenerated its art and re-rendered the game."
+
+    return StructuredTool.from_function(
+        coroutine=realize_symbol, name="realize_symbol",
+        description=(
+            "Realize a symbol design change on the rendered game. Given a symbol slot "
+            "id (e.g. 'high1'), regenerate that symbol's art from its current GDD "
+            "art_desc and rebind it in the scene so the game re-renders. Call AFTER "
+            "editing the symbol's GDD row with set_gdd_fields."
+        ),
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -347,6 +421,7 @@ class ToolFactory:
         "scene_disconnect": build_scene_disconnect_tool,
         "scene_remove_node": build_scene_remove_node_tool,
         "scene_apply_batch": build_scene_apply_batch_tool,
+        "realize_symbol": build_realize_symbol_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,

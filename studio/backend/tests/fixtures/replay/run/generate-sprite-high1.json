@@ -1,0 +1,7 @@
+{
+  "prompt": "generate sprite for high1 slot",
+  "tool_calls": [
+    { "name": "generate_asset", "args": { "description": "a phoenix bird", "style": "pixel", "slot": "high1" } }
+  ],
+  "final": ["Generated a phoenix sprite for the high1 slot."]
+}

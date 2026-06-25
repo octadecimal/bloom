@@ -47,3 +47,9 @@ def test_field_catalog_covers_all_aspects_with_field_metadata():
     for fields in cat.values():
         for f in fields:
             assert {"key", "label", "type", "role", "required", "enum"} <= set(f)
+
+
+def test_symbols_table_has_slot_column():
+    symbols = next(f for f in schema_for("symbols-reels") if f.key == "symbols")
+    cols = [c.key for c in symbols.columns]
+    assert cols == ["slot", "name", "kind", "art_desc"]

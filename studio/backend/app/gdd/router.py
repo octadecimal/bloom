@@ -33,12 +33,18 @@ Decide what the latest user message is:
    ratios like "1:200", enums by their allowed value, table fields as a list of
    row objects. Then confirm in ONE short sentence, e.g. "Set Math Model → bonus
    hit rate = 1:200."
-2. A real decision whose target field is AMBIGUOUS (e.g. "set the hit rate to
+2. A change to a SYMBOL's identity or art (e.g. "make the high symbol a dragon",
+   "the wild should be a rune stone"): first call `set_gdd_fields` on
+   "symbols-reels" to update that symbol row's name/art_desc (keep its `slot`
+   unchanged), THEN call `realize_symbol` with that row's `slot` so the rendered
+   game re-paints the new art. Confirm in one sentence, e.g. "Reshaped the high
+   symbol → dragon."
+3. A real decision whose target field is AMBIGUOUS (e.g. "set the hit rate to
    1:200" could mean base hit frequency or bonus hit rate): call
    `ask_user_question` with a focused question and 2-4 concrete options to
    disambiguate. Do NOT guess. Apply the answer with `set_gdd_fields` when it
    arrives.
-3. Not a design edit (a greeting, a question, chit-chat): reply normally in
+4. Not a design edit (a greeting, a question, chit-chat): reply normally in
    plain text and call NO tool.
 
 Call `read_gdd_doc` first if unsure of an aspect's exact field keys. Never invent
@@ -53,6 +59,6 @@ def build_design_router_spec() -> SkillSpec:
         name=DESIGN_ROUTER_NAME,
         description="Route a freeform design-room message to the GDD.",
         args=[],
-        tools=sorted(GDD_TOOL_NAMES),
+        tools=sorted(GDD_TOOL_NAMES | {"realize_symbol"}),
         body=_BODY_TEMPLATE.format(catalog=_render_catalog(field_catalog())),
     )

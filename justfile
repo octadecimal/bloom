@@ -46,6 +46,11 @@ ts-test:
 serve-frontend:
     npx nx serve frontend
 
+# Serve the runtime client Pixi engine. Port derives from BLOOM_PORT_OFFSET inside
+# vite.config.mts (base 4300; e.g. offset 2 → :4302). Binds 0.0.0.0 for LAN access.
+engine-serve:
+    cd runtime/client && npx vite --host 0.0.0.0
+
 # Python / studio backend
 mongo-up:
     powershell -NoProfile -Command "if ((Get-Service MongoDB).Status -ne 'Running') { Start-Service MongoDB }"

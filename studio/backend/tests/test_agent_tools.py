@@ -22,6 +22,7 @@ async def test_known_tool_names():
         "set_doc_status", "ask_user_question",
         "scene_add_node", "scene_set_prop", "scene_connect",
         "scene_disconnect", "scene_remove_node", "scene_apply_batch",
+        "realize_symbol",
     }
 
 
@@ -180,3 +181,50 @@ async def test_list_assets_marks_assets_without_a_generation():
     tool = build_list_assets_tool(ToolContext("r1", "g1", _ListStore([asset]), None))
     out = await tool.ainvoke({})
     assert "a2" in out and "no image yet" in out.lower()
+
+
+from app.agent_tools import build_generate_asset_tool
+
+
+class _RecordingAssetStore:
+    def __init__(self):
+        self.created = None
+    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None):
+        from app.assets.models import Asset
+        self.created = {"slot": slot, "name": name}
+        return Asset(id="a1", game_id=game_id, name=name, prompt=prompt,
+                     width=width, height=height, workflow=workflow, slot=slot)
+
+
+class _NoopAssetHub:
+    async def generate_and_wait(self, game_id, asset_id):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_generate_asset_passes_slot():
+    store = _RecordingAssetStore()
+    ctx = ToolContext("r1", "g1", store, _NoopAssetHub())
+    tool = build_generate_asset_tool(ctx)
+    await tool.ainvoke({"description": "a raven", "transparent": True, "slot": "high1"})
+    assert store.created["slot"] == "high1"
+
+
+class _SlotListStore:
+    async def list_assets(self, game_id):
+        from app.assets.models import Asset, Generation
+        from datetime import datetime, timezone
+        a = Asset(id="a1", game_id=game_id, name="High", prompt="raven",
+                  width=512, height=512, workflow="schnell-transparent", slot="high1",
+                  selected_generation_id="gen1",
+                  generations=[Generation(id="gen1", seed=1, image_ref="/media/g/a1/gen1.png",
+                                          created_at=datetime.now(timezone.utc))])
+        return [a]
+
+
+@pytest.mark.asyncio
+async def test_list_assets_includes_slot():
+    ctx = ToolContext("r1", "g1", _SlotListStore(), None)
+    out = await build_list_assets_tool(ctx).ainvoke({})
+    assert "slot=high1" in out
+    assert "/media/g/a1/gen1.png" in out

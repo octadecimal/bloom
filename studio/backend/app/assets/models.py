@@ -24,6 +24,7 @@ class Asset(_WireModel):
     game_id: str
     name: str
     category: Optional[str] = None
+    slot: Optional[str] = None
     prompt: str
     width: int
     height: int

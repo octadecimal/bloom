@@ -11,6 +11,13 @@
         "cwd": "runtime/client",
         "command": "npx vitest run"
       }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "runtime/client",
+        "command": "npx vite"
+      }
     }
   }
 }

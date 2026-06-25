@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from app.assets.models import Asset, Generation
 
-_AUTHORING_FIELDS = {"name", "category", "prompt", "width", "height", "workflow", "seed"}
+_AUTHORING_FIELDS = {"name", "category", "prompt", "width", "height", "workflow", "seed", "slot"}
 
 
 def _now() -> datetime:
@@ -27,13 +27,17 @@ class AssetStore:
     def __init__(self, db):
         self._assets = db["assets"]
 
-    async def create_asset(self, game_id, name, prompt, width, height, workflow, seed=None, category=None) -> Asset:
+    async def create_asset(self, game_id, name, prompt, width, height, workflow, seed=None, category=None, slot=None) -> Asset:
         asset = Asset(
-            id=uuid4().hex, game_id=game_id, name=name, category=category,
+            id=uuid4().hex, game_id=game_id, name=name, category=category, slot=slot,
             prompt=prompt, width=width, height=height, workflow=workflow, seed=seed,
         )
         await self._assets.insert_one(_to_doc(asset))
         return asset
+
+    async def get_by_slot(self, game_id, slot) -> Optional[Asset]:
+        doc = await self._assets.find_one({"game_id": game_id, "slot": slot})
+        return _from_doc(doc) if doc else None
 
     async def get_asset(self, asset_id) -> Optional[Asset]:
         doc = await self._assets.find_one({"_id": asset_id})

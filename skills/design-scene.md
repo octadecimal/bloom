@@ -30,7 +30,10 @@ Work in this order:
 
 3. SYMBOLS. Add Sprite nodes for the visible elements and parent them into their
    Containers. Use `scene_apply_batch` to build a repetitive group (e.g. a reel of
-   5 symbols) atomically.
+   5 symbols) atomically. For each symbol sprite, set `props.slot` to that symbol's
+   GDD `slot`, and bind it (data edge) to a Texture whose `src` is that slot's asset
+   media URL (match by `[slot=…]` in `list_assets`). Prefer one `scene_apply_batch`
+   per reel/group.
 
 4. TEXTURES. For each image, first call `list_assets` to see the Asset Board and
    copy the **media URL** of the asset you want. Add a Texture node whose `src` is
