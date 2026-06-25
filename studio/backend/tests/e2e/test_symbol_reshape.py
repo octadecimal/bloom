@@ -14,7 +14,7 @@ Harness: external subprocess server (live_server fixture from conftest.py).
 Cassette files used:
   - run/reshape-symbol.json  (keyed prompt: "make the high symbol a dragon")
   - run/seed-scene-high1.json (keyed prompt: "seed scene with high1 sprite and texture")
-  - run/default.json         (generate-sprite via generate_asset + generate_and_wait)
+  - run/generate-sprite-high1.json (generate-sprite via generate_asset + generate_and_wait, prompt-keyed)
 """
 import asyncio
 
@@ -53,32 +53,6 @@ async def _seed_gdd_high1(base_url: str, game_id: str) -> None:
                 }
             },
         )
-
-
-async def _run_skill_and_wait(
-    client: socketio.AsyncClient,
-    room_id: str,
-    skill_name: str,
-    args: dict,
-    text: str = "",
-    timeout: float = 25.0,
-) -> dict:
-    """Emit run_skill and wait for run_completed; return the completion event."""
-    completions: list[dict] = []
-    orig_handler = None
-
-    async def _wait() -> dict:
-        deadline = asyncio.get_event_loop().time() + timeout
-        while not completions and asyncio.get_event_loop().time() < deadline:
-            await asyncio.sleep(0.05)
-        return completions[0] if completions else {}
-
-    client.on("run_completed", lambda d: completions.append(d))
-    await client.emit(
-        "run_skill",
-        {"roomId": room_id, "skillName": skill_name, "args": args, "text": text},
-    )
-    return await _wait()
 
 
 # ---------------------------------------------------------------------------
@@ -222,11 +196,11 @@ async def test_chat_reshapes_high_symbol(live_server):
     symbols = sym_doc["data"].get("symbols") or []
     high1_row = next((r for r in symbols if r.get("slot") == "high1"), None)
     assert high1_row is not None, f"high1 row not found in symbols-reels data: {symbols}"
-    # The cassette sets name="Dragon" and art_desc includes "dragon"
-    assert high1_row.get("name", "").lower() in ("dragon", ""), (
+    # The cassette sets name="Dragon" via set_gdd_fields
+    assert high1_row.get("name", "").lower() == "dragon", (
         f"high1 name not updated to Dragon: {high1_row}"
     )
-    # More flexible: just check that either name or art_desc changed from phoenix
+    # Also verify art_desc changed from phoenix
     updated_text = (
         str(high1_row.get("name", "")) + " " + str(high1_row.get("art_desc", ""))
     ).lower()
