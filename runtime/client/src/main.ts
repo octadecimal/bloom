@@ -3,6 +3,7 @@ import { resolveTextureSrc } from './render/resolveSrc';
 import { createEngine } from './engine';
 import type { InboundMessage, OutboundMessage } from './protocol/messages';
 import { parseParentOrigin, originAllowed } from './protocol/origin';
+import { createSerializer } from './serialize';
 
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
@@ -29,11 +30,13 @@ const { host, model } = createEngine({ renderer, post });
 // Without this, concurrent handles race on async operations like renderer.mount()
 // (which awaits Pixi's app.init()), causing setParent to silently no-op because
 // the root object is not yet in the renderer's object map.
-let handleChain = Promise.resolve();
+// createSerializer() also catches handle() rejections so a single failure cannot
+// wedge the chain and drop all subsequent messages.
+const enqueue = createSerializer();
 window.addEventListener('message', (event: MessageEvent) => {
   if (!originAllowed(expectedOrigin, event.origin)) return;
   const msg = event.data as InboundMessage;
-  handleChain = handleChain.then(() => host.handle(msg));
+  enqueue(() => host.handle(msg));
 });
 
 host.start();
