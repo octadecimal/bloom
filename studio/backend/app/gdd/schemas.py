@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-FieldType = Literal["number", "percent", "ratio", "enum", "text", "table", "list"]
+FieldType = Literal["number", "percent", "ratio", "enum", "text", "table", "list", "range"]
 Role = Literal["param", "narrative"]
 
 
@@ -9,6 +9,7 @@ Role = Literal["param", "narrative"]
 class Column:
     key: str
     label: str
+    enum: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -24,8 +25,11 @@ class Field:
     help: str = ""
 
 
-def _t(*pairs: tuple[str, str]) -> tuple[Column, ...]:
-    return tuple(Column(k, l) for k, l in pairs)
+def _t(*pairs: tuple) -> tuple[Column, ...]:
+    return tuple(
+        Column(p[0], p[1], p[2]) if len(p) == 3 else Column(p[0], p[1])
+        for p in pairs
+    )
 
 
 ASPECT_SCHEMAS: dict[str, list[Field]] = {
@@ -44,7 +48,10 @@ ASPECT_SCHEMAS: dict[str, list[Field]] = {
               enum=("low", "medium", "medium-high", "high")),
         Field("reels", "Reels", "number", "param", default=5),
         Field("rows", "Rows", "number", "param", default=3),
-        Field("paylines", "Paylines / ways", "text", "param"),
+        Field("payline_mode", "Payline mode", "enum", "param",
+              enum=("lines", "ways")),
+        Field("payline_count", "Payline count", "number", "param"),
+        Field("payline_overrides", "Payline overrides", "list", "param"),
         Field("max_win", "Max win (x bet)", "number", "param"),
         Field("hit_frequency", "Hit frequency", "percent", "param"),
         Field("bonus_hit_rate", "Bonus hit rate", "ratio", "param", required=True),
@@ -52,10 +59,11 @@ ASPECT_SCHEMAS: dict[str, list[Field]] = {
     ],
     "symbols-reels": [
         Field("symbols", "Symbols", "table", "param", required=True,
-              columns=_t(("slot", "Slot"), ("name", "Name"), ("kind", "Kind"),
+              columns=_t(("slot", "Slot"), ("name", "Name"),
+                         ("kind", "Kind",
+                          ("high", "low", "wild", "scatter", "bonus")),
                          ("art_desc", "Art description"))),
-        Field("reel_strips", "Reel strips", "table", "param",
-              columns=_t(("reel", "Reel"), ("composition", "Composition"))),
+        Field("strip_length", "Strip length", "range", "param"),
         Field("wild_behavior", "Wild behavior", "text", "narrative"),
         Field("scatter_behavior", "Scatter behavior", "text", "narrative"),
     ],
@@ -102,8 +110,8 @@ def required_param_keys(aspect: str) -> list[str]:
 def field_catalog() -> dict[str, list[dict]]:
     """Machine-readable catalog of every aspect's fields for the design router.
 
-    Maps aspect -> ordered list of {key, label, type, role, required, enum}.
-    Seeds the design-router prompt with the addressable design surface.
+    Maps aspect -> ordered list of {key, label, type, role, required, enum,
+    columns}. Seeds the design-router prompt with the addressable design surface.
     """
     return {
         aspect: [
@@ -114,6 +122,14 @@ def field_catalog() -> dict[str, list[dict]]:
                 "role": f.role,
                 "required": f.required,
                 "enum": list(f.enum) if f.enum else None,
+                "columns": [
+                    {
+                        "key": c.key,
+                        "label": c.label,
+                        "enum": list(c.enum) if c.enum else None,
+                    }
+                    for c in f.columns
+                ] if f.columns else None,
             }
             for f in fields
         ]

@@ -53,3 +53,40 @@ def test_symbols_table_has_slot_column():
     symbols = next(f for f in schema_for("symbols-reels") if f.key == "symbols")
     cols = [c.key for c in symbols.columns]
     assert cols == ["slot", "name", "kind", "art_desc"]
+
+
+def test_math_model_payline_topology_is_structured():
+    fields = {f.key: f for f in schema_for("math-model")}
+    assert "paylines" not in fields  # old free-text field removed
+    assert fields["payline_mode"].type == "enum"
+    assert fields["payline_mode"].enum == ("lines", "ways")
+    assert fields["payline_count"].type == "number"
+    assert fields["payline_overrides"].type == "list"
+    # all new fields are optional
+    assert not fields["payline_mode"].required
+    assert not fields["payline_count"].required
+    assert not fields["payline_overrides"].required
+
+
+def test_symbols_reels_has_strip_length_range_and_no_composition():
+    fields = {f.key: f for f in schema_for("symbols-reels")}
+    assert "reel_strips" not in fields  # free-text composition table removed
+    assert fields["strip_length"].type == "range"
+    assert not fields["strip_length"].required
+
+
+def test_symbols_kind_column_is_enum_constrained():
+    symbols = next(f for f in schema_for("symbols-reels") if f.key == "symbols")
+    kind = next(c for c in symbols.columns if c.key == "kind")
+    assert kind.enum == ("high", "low", "wild", "scatter", "bonus")
+
+
+def test_field_catalog_emits_column_enums():
+    from app.gdd.schemas import field_catalog
+    cat = field_catalog()
+    symbols = next(f for f in cat["symbols-reels"] if f["key"] == "symbols")
+    kind = next(c for c in symbols["columns"] if c["key"] == "kind")
+    assert kind["enum"] == ["high", "low", "wild", "scatter", "bonus"]
+    # non-table fields carry columns=None
+    rtp = next(f for f in cat["math-model"] if f["key"] == "rtp")
+    assert rtp["columns"] is None
