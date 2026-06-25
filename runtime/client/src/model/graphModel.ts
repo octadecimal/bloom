@@ -51,6 +51,7 @@ export class GraphModel {
   private addNode(id: string, type: INode['type'], props?: INode['props']): IChange[] {
     if (this.nodes.has(id)) throw new OpError('duplicate_id', `node already exists: ${id}`);
     if (!NODE_TYPES.includes(type)) throw new OpError('bad_type', `unknown node type: ${type}`);
+    if (type === 'Root' && [...this.nodes.values()].some((n) => n.type === 'Root')) throw new OpError('root_exists', `a Root node already exists`);
     const node: INode = { id, type, props: { ...(props ?? {}) } };
     this.nodes.set(id, node);
     return [{ kind: 'nodeCreated', node: { id, type, props: { ...node.props } } }];
@@ -58,6 +59,7 @@ export class GraphModel {
 
   private removeNode(id: string): IChange[] {
     if (!this.nodes.has(id)) throw new OpError('unknown_node', `no such node: ${id}`);
+    if (this.nodes.get(id)!.type === 'Root') throw new OpError('cannot_remove_root', `the Root node cannot be removed`);
     const incident = [...this.edges.values()].filter((e) => e.from.node === id || e.to.node === id);
     const changes: IChange[] = [];
     for (const e of incident) {
@@ -73,11 +75,22 @@ export class GraphModel {
     if (this.edges.has(edgeId)) throw new OpError('duplicate_edge', `edge already exists: ${edgeId}`);
     if (!this.nodes.has(from.node)) throw new OpError('unknown_node', `no such node: ${from.node}`);
     if (!this.nodes.has(to.node)) throw new OpError('unknown_node', `no such node: ${to.node}`);
+    const fromType = this.nodes.get(from.node)!.type;
+    const toType = this.nodes.get(to.node)!.type;
     if (type === 'child') {
+      if (!(fromType === 'Root' || fromType === 'Container') || from.port !== 'children')
+        throw new OpError('invalid_edge', `child edge must start at a Root/Container 'children' port`);
+      if (!(toType === 'Container' || toType === 'Sprite') || to.port !== 'parent')
+        throw new OpError('invalid_edge', `child edge must end at a Container/Sprite 'parent' port`);
       const childId = to.node;
       const parentId = from.node;
       if (this.parentOf(childId) !== null) throw new OpError('already_parented', `node already has a parent: ${childId}`);
       if (childId === parentId || this.isAncestor(childId, parentId)) throw new OpError('cycle', `child edge would create a cycle`);
+    } else if (type === 'data') {
+      if (fromType !== 'Texture' || from.port !== 'data') throw new OpError('invalid_edge', `data edge must start at a Texture 'data' port`);
+      if (toType !== 'Sprite' || to.port !== 'texture') throw new OpError('invalid_edge', `data edge must end at a Sprite 'texture' port`);
+    } else {
+      throw new OpError('bad_edge_type', `unknown edge type: ${type as string}`);
     }
     const edge: IEdge = { id: edgeId, type, from: { ...from }, to: { ...to } };
     this.edges.set(edgeId, edge);

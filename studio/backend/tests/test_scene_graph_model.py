@@ -129,11 +129,14 @@ def test_two_parents_rejected():
 
 
 def test_cycle_rejected():
-    m = _with_nodes()
-    m.apply(_child("e1", "root", "box"))
-    with pytest.raises(OpError) as e:
-        m.apply(_child("e2", "box", "root"))
-    assert e.value.code == "cycle"
+    from app.scene.document import OpError
+    m = _wired()
+    m.apply({"kind": "addNode", "id": "box2", "type": "Container"})
+    m.apply({"kind": "connect", "edgeId": "e1", "type": "child",
+             "from": {"node": "box", "port": "children"}, "to": {"node": "box2", "port": "parent"}})
+    with pytest.raises(OpError):
+        m.apply({"kind": "connect", "edgeId": "e2", "type": "child",
+                 "from": {"node": "box2", "port": "children"}, "to": {"node": "box", "port": "parent"}})
 
 
 def test_disconnect_unknown_rejected():
@@ -199,3 +202,87 @@ def test_load_round_trips_document():
     m = GraphModel()
     m.load(doc)
     assert m.to_document() == doc
+
+
+def _wired():
+    from app.scene.graph_model import GraphModel
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "root", "type": "Root"})
+    m.apply({"kind": "addNode", "id": "box", "type": "Container"})
+    m.apply({"kind": "addNode", "id": "s", "type": "Sprite"})
+    m.apply({"kind": "addNode", "id": "tex", "type": "Texture", "props": {"src": "asset:1"}})
+    return m
+
+
+def test_reversed_data_edge_rejected():
+    from app.scene.document import OpError
+    m = _wired()
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "connect", "edgeId": "bad", "type": "data",
+                 "from": {"node": "s", "port": "data"}, "to": {"node": "tex", "port": "texture"}})
+    assert ei.value.code == "invalid_edge"
+
+
+def test_data_edge_to_non_texture_port_rejected():
+    from app.scene.document import OpError
+    m = _wired()
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "connect", "edgeId": "bad", "type": "data",
+                 "from": {"node": "tex", "port": "data"}, "to": {"node": "s", "port": "parent"}})
+    assert ei.value.code == "invalid_edge"
+
+
+def test_child_edge_swapped_ports_rejected():
+    from app.scene.document import OpError
+    m = _wired()
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "connect", "edgeId": "bad", "type": "child",
+                 "from": {"node": "root", "port": "parent"}, "to": {"node": "box", "port": "children"}})
+    assert ei.value.code == "invalid_edge"
+
+
+def test_child_edge_into_texture_rejected():
+    from app.scene.document import OpError
+    m = _wired()
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "connect", "edgeId": "bad", "type": "child",
+                 "from": {"node": "root", "port": "children"}, "to": {"node": "tex", "port": "parent"}})
+    assert ei.value.code == "invalid_edge"
+
+
+def test_remove_root_rejected():
+    from app.scene.graph_model import GraphModel
+    from app.scene.document import OpError
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "root", "type": "Root"})
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "removeNode", "id": "root"})
+    assert ei.value.code == "cannot_remove_root"
+
+
+def test_second_root_rejected():
+    from app.scene.graph_model import GraphModel
+    from app.scene.document import OpError
+    m = GraphModel()
+    m.apply({"kind": "addNode", "id": "root", "type": "Root"})
+    with pytest.raises(OpError) as ei:
+        m.apply({"kind": "addNode", "id": "root2", "type": "Root"})
+    assert ei.value.code == "root_exists"
+
+
+def test_unreachable_nodes_flags_orphan_then_clears():
+    from app.scene.document import unreachable_nodes
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {}},
+            "s": {"id": "s", "type": "Sprite", "props": {}},
+            "tex": {"id": "tex", "type": "Texture", "props": {"src": "a"}},
+        },
+        "edges": [],
+    }
+    assert unreachable_nodes(doc) == ["s"]
+    doc["edges"].append({"id": "e", "type": "child",
+                         "from": {"node": "root", "port": "children"},
+                         "to": {"node": "s", "port": "parent"}})
+    assert unreachable_nodes(doc) == []

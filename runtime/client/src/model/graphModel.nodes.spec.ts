@@ -46,4 +46,28 @@ describe('GraphModel addNode/removeNode', () => {
     m.apply({ kind: 'addNode', id: 'x', type: 'Sprite' });
     expect(m.toDocument()).toEqual({ version: 1, nodes: { x: { id: 'x', type: 'Sprite', props: {} } }, edges: [] });
   });
+
+  it('refuses to remove the Root node', () => {
+    const m = new GraphModel();
+    m.apply({ kind: 'addNode', id: 'root', type: 'Root' });
+    try {
+      m.apply({ kind: 'removeNode', id: 'root' });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(OpError);
+      expect((e as OpError).code).toBe('cannot_remove_root');
+    }
+  });
+
+  it('refuses a second Root', () => {
+    const m = new GraphModel();
+    m.apply({ kind: 'addNode', id: 'root', type: 'Root' });
+    try {
+      m.apply({ kind: 'addNode', id: 'root2', type: 'Root' });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(OpError);
+      expect((e as OpError).code).toBe('root_exists');
+    }
+  });
 });
