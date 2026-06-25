@@ -67,30 +67,46 @@ describe('GraphModel connect/disconnect', () => {
 
   it('rejects a reversed data edge (Sprite.data -> Texture.texture)', () => {
     const m = withNodes();
-    expect(() =>
-      m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 's', port: 'data' }, to: { node: 'tex', port: 'texture' } }),
-    ).toThrow(OpError);
+    try {
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 's', port: 'data' }, to: { node: 'tex', port: 'texture' } });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(OpError);
+      expect((e as OpError).code).toBe('invalid_edge');
+    }
   });
 
   it('rejects a data edge to a non-texture port', () => {
     const m = withNodes();
-    expect(() =>
-      m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 's', port: 'parent' } }),
-    ).toThrow(OpError);
+    try {
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 's', port: 'parent' } });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(OpError);
+      expect((e as OpError).code).toBe('invalid_edge');
+    }
   });
 
   it('rejects a child edge with swapped ports', () => {
     const m = withNodes();
-    expect(() =>
-      m.apply({ kind: 'connect', edgeId: 'bad', type: 'child', from: { node: 'root', port: 'parent' }, to: { node: 'box', port: 'children' } }),
-    ).toThrow(OpError);
+    try {
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'child', from: { node: 'root', port: 'parent' }, to: { node: 'box', port: 'children' } });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(OpError);
+      expect((e as OpError).code).toBe('invalid_edge');
+    }
   });
 
   it('rejects a child edge into a Texture', () => {
     const m = withNodes();
-    expect(() =>
-      m.apply({ kind: 'connect', edgeId: 'bad', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'tex', port: 'parent' } }),
-    ).toThrow(OpError);
+    try {
+      m.apply({ kind: 'connect', edgeId: 'bad', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'tex', port: 'parent' } });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(OpError);
+      expect((e as OpError).code).toBe('invalid_edge');
+    }
   });
 
   it('removeNode cascades incident edges', () => {
