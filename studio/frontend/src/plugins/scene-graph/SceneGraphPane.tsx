@@ -36,26 +36,13 @@ export function SceneGraphPane(_props: IDockviewPanelProps) {
   return (
     <div data-testid="scene-graph-pane" className="h-full overflow-auto bg-surface py-1 text-sm">
       {rows.map((row) => (
-        <Row
-          key={row.id}
-          row={row}
-          selected={row.id === selectedId}
-          collapsed={collapsed[row.id] === true}
-          onSelect={select}
-          onToggle={toggle}
-        />
+        <Row key={row.id} row={row} selected={row.id === selectedId} collapsed={collapsed[row.id] === true} onSelect={select} onToggle={toggle} />
       ))}
     </div>
   );
 }
 
-function Row(props: {
-  row: ITreeRow;
-  selected: boolean;
-  collapsed: boolean;
-  onSelect: (id: string) => void;
-  onToggle: (id: string) => void;
-}) {
+function Row(props: { row: ITreeRow; selected: boolean; collapsed: boolean; onSelect: (id: string) => void; onToggle: (id: string) => void }) {
   const { row, selected, collapsed, onSelect, onToggle } = props;
   const Icon = ICON[row.type];
   return (

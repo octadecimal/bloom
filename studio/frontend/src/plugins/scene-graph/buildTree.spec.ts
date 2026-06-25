@@ -61,10 +61,7 @@ describe('buildTree', () => {
         s1: { id: 's1', type: 'Sprite', props: {} },
         t1: { id: 't1', type: 'Texture', props: {} },
       },
-      edges: [
-        childEdge('e1', 'root', 's1'),
-        { id: 'e2', type: 'data', from: { node: 't1', port: 'out' }, to: { node: 's1', port: 'texture' } },
-      ],
+      edges: [childEdge('e1', 'root', 's1'), { id: 'e2', type: 'data', from: { node: 't1', port: 'out' }, to: { node: 's1', port: 'texture' } }],
     });
     expect(buildTree(d).map((r) => r.id)).toEqual(['root', 's1']);
   });
