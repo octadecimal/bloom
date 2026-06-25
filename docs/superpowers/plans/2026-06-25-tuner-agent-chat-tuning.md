@@ -80,11 +80,13 @@ GDD intent is read with `gdd = await ctx.gdd_store.get_doc(game_id, "math-model"
 ## Task 1: `read_tuner_setup` tool + `ToolContext` plumbing
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (`ToolContext` ~11-20; `ToolFactory.__init__`/`_BUILDERS`)
 - Create: `studio/backend/tests/test_tuner_tools.py`
 - Modify: `studio/backend/tests/test_agent_tools.py` (`test_known_tool_names`)
 
 **Interfaces:**
+
 - Produces: `ToolContext` fields `sim_store`, `tuner_store`, `tuner_hub` (default `None`); `ToolFactory(asset_store, asset_hub, *, gdd_store=None, gdd_hub=None, scene_store=None, scene_hub=None, sim_store=None, tuner_store=None, tuner_hub=None)`; `_BUILDERS["read_tuner_setup"] = build_read_tuner_setup_tool`; `build_read_tuner_setup_tool(ctx) -> BaseTool` exposing `read_tuner_setup() -> str`.
 - Consumes: `SlotModelStore`, `TunerStore`, `derive_target`, `TargetGap`.
 
@@ -262,11 +264,13 @@ git commit -m "feat(tuner): read_tuner_setup chat tool + ToolContext tuner plumb
 ## Task 2: `set_tuner_params` tool
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Modify: `studio/backend/tests/test_tuner_tools.py`
 - Modify: `studio/backend/tests/test_agent_tools.py` (`test_known_tool_names`)
 
 **Interfaces:**
+
 - Produces: `_BUILDERS["set_tuner_params"] = build_set_tuner_params_tool`; tool `set_tuner_params(master_seed?, population?, max_generations?, search_candidate_count?, final_candidate_count?, elitism?, mutation_rate?, crossover_rate?, stagnation_window?, weight_rtp?, weight_volatility?, weight_hit_rate?) -> str`.
 - Consumes: `TunerStore.get_or_seed`/`put`, `TuningParams`, `TuneWeights`.
 
@@ -414,11 +418,13 @@ git commit -m "feat(tuner): set_tuner_params chat tool (GA knobs only)"
 ## Task 3: `tune_slot_model` tool
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Modify: `studio/backend/tests/test_tuner_tools.py`
 - Modify: `studio/backend/tests/test_agent_tools.py` (`test_known_tool_names`)
 
 **Interfaces:**
+
 - Produces: `_BUILDERS["tune_slot_model"] = build_tune_slot_model_tool`; tool `tune_slot_model() -> str`.
 - Consumes: `ctx.tuner_hub.request_tune`, `ctx.tuner_store.get`, `ctx.sim_store.get_or_seed`, `ctx.gdd_store.get_doc`, `derive_target`/`TargetGap`.
 
@@ -586,11 +592,13 @@ git commit -m "feat(tuner): tune_slot_model chat tool (run to completion + repor
 ## Task 4: `apply_tuned_model` tool (human-gated)
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py`
 - Modify: `studio/backend/tests/test_tuner_tools.py`
 - Modify: `studio/backend/tests/test_agent_tools.py` (`test_known_tool_names`)
 
 **Interfaces:**
+
 - Produces: `_BUILDERS["apply_tuned_model"] = build_apply_tuned_model_tool`; tool `apply_tuned_model() -> str`.
 - Consumes: `ctx.tuner_store.get`, `ctx.sim_store.put`, module-level `interrupt`.
 
@@ -715,11 +723,13 @@ git commit -m "feat(tuner): apply_tuned_model chat tool (human-gated write-back)
 ## Task 5: Thread `sim_store` / `tuner_store` / `tuner_hub` through `RoomHub` and `main.py`
 
 **Files:**
+
 - Modify: `studio/backend/app/room_hub.py` (`__init__` ~14-43; `_run_skill` `ToolContext(...)` ~282-284)
 - Modify: `studio/backend/app/main.py` (`ToolFactory(...)` ~106-107; `RoomHub(...)` ~113-120)
 - Modify: `studio/backend/tests/test_room_hub.py` (or create `tests/test_room_hub_wiring.py` if no such file exists)
 
 **Interfaces:**
+
 - Consumes: the three tool deps from Task 1's `ToolContext`/`ToolFactory`.
 - Produces: `RoomHub(__init__)` keyword params `sim_store=None`, `tuner_store=None`, `tuner_hub=None` stored as `self._sim_store` / `self._tuner_store` / `self._tuner_hub`, threaded into the `ToolContext` built by `_run_skill`.
 
@@ -813,10 +823,12 @@ git commit -m "feat(tuner): thread sim/tuner stores + hub into RoomHub and main 
 ## Task 6: `tune-math` skill
 
 **Files:**
+
 - Create: `skills/tune-math.md` (repo root)
 - Create: `studio/backend/tests/test_skills_load.py`
 
 **Interfaces:**
+
 - Consumes: all four `_BUILDERS` keys from Tasks 1-4 (the skill's `tools:` are validated against `known_tool_names()`).
 - Produces: a loadable skill named `tune-math`.
 
@@ -912,14 +924,17 @@ git commit -m "feat(tuner): tune-math skill exposing the four tuning tools"
 ## Task 7: Playwright e2e — full chat → tune → verdict → apply loop
 
 **Files:**
+
 - Create: `studio/frontend/e2e/tuner-chat.spec.ts`
 - Create: the recorded run cassette for the agent's tool-calling turn (path per the existing run-cassette convention; discover it from `studio/backend` cassette config and the agentic-skill-chat e2e specs).
 
 **Interfaces:**
+
 - Consumes: the four tools + `tune-math` skill from Tasks 1-6, wired end-to-end via Task 5.
 - Produces: deterministic client-level proof of the chat tuning loop.
 
 **Prerequisites / context for the implementer:**
+
 - Per `AGENTS.md`: the e2e suite runs against a **replay** backend (`just backend-serve-replay`) and is run locally (`just e2e`), never in CI. The tuner itself is offline/deterministic and needs **no** cassette; only the chat LLM's tool-calling turn does.
 - This worktree uses `BLOOM_PORT_OFFSET=1` → backend `:8001`, frontend `:4201`. The Playwright/Vite configs derive ports from the offset already.
 - Recording the cassette requires a **live** provider session (`PROVIDER_MODE=live`, `just record-fixtures` / the project's run-cassette recorder) to capture the agent calling `tune_slot_model` then `apply_tuned_model`. Recording is a singleton (one live session at a time — see the worktree notes). Commit the recorded cassette so replay is deterministic.
@@ -946,9 +961,11 @@ With the backend in live mode, run the spec once to capture the agent's tool-cal
 - [ ] **Step 4: Run the spec against replay to verify pass**
 
 Run (from this worktree, with a replay backend on :8001 already started via `just backend-serve-replay`):
+
 ```bash
 just e2e -- tuner-chat.spec.ts
 ```
+
 Expected: PASS — the chat loop drives a real tune to PASS, surfaces + approves the apply gate, and the slot model is overwritten with the tuned model.
 
 - [ ] **Step 5: Commit**

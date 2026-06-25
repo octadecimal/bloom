@@ -35,16 +35,16 @@ slice, and nothing more.
 
 **In scope — four LangGraph tools + one skill:**
 
-1. **`read_tuner_setup`** *(read)* — report the seed model shape, current GA
+1. **`read_tuner_setup`** _(read)_ — report the seed model shape, current GA
    params, the derived target bands (the same intent the simulator verifies), and
    the last verdict.
-2. **`set_tuner_params`** *(write)* — patch the GA knobs (population, seeds,
+2. **`set_tuner_params`** _(write)_ — patch the GA knobs (population, seeds,
    candidate counts, weights, …). **Not** the design intent — that stays in the
    GDD.
-3. **`tune_slot_model`** *(action)* — run a real tune to completion and report the
+3. **`tune_slot_model`** _(action)_ — run a real tune to completion and report the
    verdict (PASS / NEAR-MISS, measured metrics, missed bands) in chat. Progress
    still streams to the Tuner pane.
-4. **`apply_tuned_model`** *(action, human-gated)* — write the last tuned model
+4. **`apply_tuned_model`** _(action, human-gated)_ — write the last tuned model
    back into `SlotModelStore`, behind a LangGraph `interrupt()` approval.
 
 Plus a `skills/tune-math.md` skill that declares these four tools and guides the
@@ -157,7 +157,7 @@ Reads and summarizes, never mutates:
 - **GA params** from `tuner_store.get_or_seed(game_id).params` — population,
   generations, candidate counts, master seed, weights.
 - **Derived target** via `derive_target(gdd_math_model, sim_doc.params,
-  num_bonuses)` — RTP target, volatility band, per-bonus hit-rate bands. On
+num_bonuses)` — RTP target, volatility band, per-bonus hit-rate bands. On
   `TargetGap`, report the gap ("design intent incomplete: <message> — fill it via
   the GDD") instead of bands.
 - **Last verdict** from `tuner_store.get(game_id).result` if present — status,
