@@ -26,15 +26,18 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         style: str = "",
         size: str = "512x512",
         transparent: bool = True,
+        slot: str = "",
     ) -> str:
         prompt = description if not style else f"{description}, {style} style"
         width, height = (int(x) for x in size.lower().split("x", 1))
         workflow = "schnell-transparent" if transparent else "schnell-opaque"
         asset = await ctx.asset_store.create_asset(
-            ctx.game_id, description[:40] or "asset", prompt, width, height, workflow
+            ctx.game_id, description[:40] or "asset", prompt, width, height, workflow,
+            slot=slot or None,
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
-        return f"Generated '{asset.name}' (asset {asset.id}) and added it to the Asset Board."
+        tag = f" (slot {slot})" if slot else ""
+        return f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the Asset Board."
 
     return StructuredTool.from_function(
         coroutine=generate_asset,
@@ -42,7 +45,7 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         description=(
             "Generate a game image from a text description and add it to the Asset Board. "
             "size is 'WIDTHxHEIGHT' (default 512x512); set transparent=false for an opaque "
-            "background/scene."
+            "background/scene. Pass slot='<id>' to tie a symbol's art to its design slot."
         ),
     )
 
