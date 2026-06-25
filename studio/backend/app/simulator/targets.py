@@ -24,8 +24,9 @@ def normalize_percent(raw) -> float:
         raw = float(raw.strip().rstrip("%"))
         # "96" (as string) means 96%, "0.96" means 0.96
         return raw / 100.0 if raw > 1.0 else raw
-    raw = float(raw)
-    return raw / 100.0 if raw > 1.0 else raw
+    # Non-string values come from the GDD store, which already normalises to
+    # decimal form via _percent (e.g. "5000%" → 50.0, "90%" → 0.9). Return as-is.
+    return float(raw)
 
 
 def parse_ratio(raw) -> float:

@@ -10,9 +10,16 @@ def test_parse_ratio_forms():
     assert parse_ratio("0.005") == pytest.approx(0.005)
 
 def test_normalize_percent_forms():
-    assert normalize_percent(96) == pytest.approx(0.96)
+    # String inputs: "96%" or "96" (bare) are treated as percentage strings.
     assert normalize_percent("96%") == pytest.approx(0.96)
+    assert normalize_percent("96") == pytest.approx(0.96)
+    # Non-string inputs come from the GDD store which already normalises to
+    # decimal via _percent ("90%" → 0.9, "5000%" → 50.0). Return as-is.
     assert normalize_percent(0.96) == pytest.approx(0.96)
+    assert normalize_percent(0.9) == pytest.approx(0.9)
+    # 5000% is stored as 50.0 by GDD; must pass through unchanged so the tuner
+    # target is 50.0 (unreachable), producing NEAR-MISS.
+    assert normalize_percent(50.0) == pytest.approx(50.0)
 
 def test_derive_target_maps_intent():
     md = {"rtp": "96%", "volatility": "high", "bonus_hit_rate": "1:200"}
