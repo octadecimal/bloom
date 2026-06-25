@@ -54,6 +54,25 @@ test.describe.serial('manage-assets approval gate', () => {
     await expect(card).toHaveCount(0, { timeout: 15_000 });
   });
 
+  test('pressing Enter on the approval card approves (#72)', async ({ page, request }) => {
+    await openSeededRoom(page, request, 'alice', `MA Enter ${Date.now()}`);
+
+    const card = page.getByTestId(`asset-card-${DOOMED_ID}`);
+    await expect(card).toBeVisible({ timeout: 10_000 });
+
+    await page.getByTestId('chat-composer').fill(`/manage-assets ${DOOMED_ID}`);
+    await page.getByTestId('chat-composer').press('Enter');
+
+    const approval = page.getByTestId('approval-card');
+    await expect(approval).toBeVisible({ timeout: 15_000 });
+    await expect(approval).toContainText(/can't be undone/i);
+
+    // The card autofocuses while pending — Enter approves without clicking a button.
+    await page.keyboard.press('Enter');
+
+    await expect(card).toHaveCount(0, { timeout: 15_000 });
+  });
+
   test('Deny leaves the asset on the board', async ({ page, request }) => {
     await openSeededRoom(page, request, 'alice', `MA Deny ${Date.now()}`);
 

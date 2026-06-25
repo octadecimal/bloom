@@ -34,8 +34,18 @@ export function SkillForm({ skill, onSubmit, onCancel }: { skill: ISkill; onSubm
     onSubmit(coerced);
   };
 
+  // Enter anywhere in a field submits (mirrors a native form's implicit submit),
+  // but not from the Cancel/Run buttons — let their own click semantics win.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.target as HTMLElement)?.tagName === 'BUTTON') return;
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
   return (
-    <div data-testid="skill-form" className="flex flex-col gap-2 rounded-md border bg-surface p-2.5 text-sm shadow-md">
+    <div data-testid="skill-form" onKeyDown={onKeyDown} className="flex flex-col gap-2 rounded-md border bg-surface p-2.5 text-sm shadow-md">
       <div className="text-[10.5px] font-semibold text-accent-text">/{skill.name}</div>
       {skill.args.map((a, i) => (
         <label key={a.name} className="flex flex-col gap-0.5">
