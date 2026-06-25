@@ -28,6 +28,11 @@ from app.simulator.hub import CurationHub
 from app.simulator.runner import build_curation_runner
 from app.simulator.sockets import register_sim_handlers
 from app.simulator.rest import router as sim_router
+from app.tuner.store import TunerStore
+from app.tuner.hub import TunerHub
+from app.tuner.runner import build_tuner_runner
+from app.tuner.sockets import register_tuner_handlers
+from app.tuner.rest import router as tuner_router
 from app.presence import PresenceRegistry
 from app.providers import build_provider, build_chat_model
 from app.rest import router
@@ -93,6 +98,8 @@ def build(settings: Settings) -> AppContext:
 
     sim_store = SlotModelStore(mongo[settings.mongo_db])
     sim_hub = CurationHub(sio, sim_store, build_curation_runner(settings), gdd_store)
+    tuner_store = TunerStore(mongo[settings.mongo_db])
+    tuner_hub = TunerHub(sio, tuner_store, sim_store, build_tuner_runner(settings), gdd_store)
 
     run_store = RunStore(mongo[settings.mongo_db])
     fastapi_app.state.run_store = run_store
@@ -119,14 +126,18 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.skill_registry = skill_registry
     fastapi_app.state.sim_store = sim_store
     fastapi_app.state.sim_hub = sim_hub
+    fastapi_app.state.tuner_store = tuner_store
+    fastapi_app.state.tuner_hub = tuner_hub
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(sim_router)
+    fastapi_app.include_router(tuner_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
     register_scene_handlers(sio, scene_hub)
     register_sim_handlers(sio, sim_hub)
+    register_tuner_handlers(sio, tuner_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
