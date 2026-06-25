@@ -1,0 +1,134 @@
+"""Invoke bloom-tuner's tune_json binary as a subprocess, parsing its NDJSON
+per-generation progress + final result stream. A FakeTunerRunner backs unit tests."""
+import asyncio
+import json
+import shutil
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable, Protocol
+
+from app.simulator.models import MetricsWire
+from app.tuner.models import BandMissWire, GenSnapshotWire, TuneResult
+
+
+@dataclass
+class TuneProgress:
+    generation: int
+    max_generations: int
+    best_fitness: float
+    best_rtp: float
+    best_volatility: float
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
+    d = json.loads(line)
+    m = d.get("metrics") or {}
+    metrics = MetricsWire(
+        rtp=m["rtp"], volatility=m["volatility"], hit_frequency=m["hitFrequency"],
+        base_rtp=m["baseRtp"], feature_rtp=m["featureRtp"],
+        bonus_hit_rates=m.get("bonusHitRates", []),
+    )
+    verdict = d["verdict"]  # "pass" | "near_miss"
+    return TuneResult(
+        status=verdict, verdict=verdict, tuned_model=d.get("model"), metrics=metrics,
+        missed=[BandMissWire(metric=x["metric"], measured=x["measured"],
+                             band_lo=x["bandLo"], band_hi=x["bandHi"]) for x in d.get("missed", [])],
+        trace=[GenSnapshotWire(generation=s["generation"], best_fitness=s["bestFitness"],
+                               best_rtp=s["bestRtp"], best_volatility=s["bestVolatility"])
+               for s in d.get("trace", [])],
+        failure=None, ran_at=ran_at,
+    )
+
+
+class TunerRunner(Protocol):
+    async def run(self, seed_model: dict, target: dict, config: dict,
+                  on_progress: Callable[[TuneProgress], None]) -> TuneResult: ...
+
+
+# Repo root = .../app/tuner/runner.py -> parents[4].
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+class SubprocessTunerRunner:
+    def __init__(self, settings):
+        self._bin = getattr(settings, "tuner_bin", "") or ""
+
+    def _command(self, seed_path: str, target_path: str, config_path: str) -> list[str]:
+        if self._bin:
+            return [self._bin, seed_path, target_path, config_path]
+        return ["cargo", "run", "--release", "-p", "bloom-tuner",
+                "--bin", "tune_json", "--", seed_path, target_path, config_path]
+
+    async def run(self, seed_model, target, config, on_progress) -> TuneResult:
+        ran_at = _now_iso()
+        tmp = Path(tempfile.mkdtemp(prefix="bloom-tuner-"))
+        try:
+            seed_path = str(tmp / "seed_model.json")
+            target_path = str(tmp / "target.json")
+            config_path = str(tmp / "tuner_config.json")
+            Path(seed_path).write_text(json.dumps(seed_model))
+            Path(target_path).write_text(json.dumps(target))
+            Path(config_path).write_text(json.dumps(config))
+
+            proc = await asyncio.create_subprocess_exec(
+                *self._command(seed_path, target_path, config_path),
+                cwd=str(_REPO_ROOT),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            result: TuneResult | None = None
+
+            async def _drain_stdout() -> None:
+                nonlocal result
+                assert proc.stdout is not None
+                async for raw in proc.stdout:
+                    line = raw.decode().strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if obj.get("type") == "progress":
+                        on_progress(TuneProgress(
+                            generation=obj["generation"], max_generations=obj["maxGenerations"],
+                            best_fitness=obj["bestFitness"], best_rtp=obj["bestRtp"],
+                            best_volatility=obj["bestVolatility"]))
+                    elif obj.get("type") == "result":
+                        result = parse_tune_result_line(line, ran_at=ran_at)
+
+            assert proc.stderr is not None
+            _, stderr_bytes = await asyncio.gather(_drain_stdout(), proc.stderr.read())
+            await proc.wait()
+
+            if result is None:
+                return TuneResult(
+                    status="error", verdict=None, tuned_model=None, metrics=None,
+                    missed=[], trace=[],
+                    failure=f"tuner produced no result (exit {proc.returncode}): {stderr_bytes.decode()[:500]}",
+                    ran_at=ran_at,
+                )
+            return result
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class FakeTunerRunner:
+    def __init__(self, *, progress: list[TuneProgress], result: TuneResult):
+        self._progress = progress
+        self._result = result
+
+    async def run(self, seed_model, target, config, on_progress) -> TuneResult:
+        for p in self._progress:
+            on_progress(p)
+        return self._result
+
+
+def build_tuner_runner(settings) -> TunerRunner:
+    return SubprocessTunerRunner(settings)

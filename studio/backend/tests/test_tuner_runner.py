@@ -1,0 +1,56 @@
+import pytest
+from app.config import Settings
+from app.tuner.runner import (
+    TuneProgress, FakeTunerRunner, parse_tune_result_line,
+)
+from app.tuner.models import TuneResult
+from app.simulator.models import MetricsWire
+
+
+def test_settings_has_tuner_bin():
+    assert hasattr(Settings(), "tuner_bin")
+
+
+def test_parse_result_pass():
+    line = (
+        '{"type":"result","verdict":"pass",'
+        '"model":{"reels":[[0,1]]},'
+        '"metrics":{"rtp":0.9,"volatility":2.0,"hitFrequency":0.4,'
+        '"baseRtp":0.9,"featureRtp":0.0,"bonusHitRates":[]},'
+        '"missed":[],"trace":[{"generation":0,"bestFitness":0.0,"bestRtp":0.9,"bestVolatility":2.0}]}'
+    )
+    r = parse_tune_result_line(line, ran_at="t")
+    assert r.status == "pass" and r.verdict == "pass"
+    assert r.tuned_model == {"reels": [[0, 1]]}
+    assert r.metrics.rtp == pytest.approx(0.9)
+    assert len(r.trace) == 1 and r.trace[0].best_rtp == pytest.approx(0.9)
+    assert r.missed == []
+
+
+def test_parse_result_near_miss():
+    line = (
+        '{"type":"result","verdict":"near_miss",'
+        '"model":{"reels":[[0]]},'
+        '"metrics":{"rtp":0.8,"volatility":2.0,"hitFrequency":0.4,'
+        '"baseRtp":0.8,"featureRtp":0.0,"bonusHitRates":[]},'
+        '"missed":[{"metric":"rtp","measured":0.8,"bandLo":0.89,"bandHi":0.91}],"trace":[]}'
+    )
+    r = parse_tune_result_line(line, ran_at="t")
+    assert r.status == "near_miss" and r.verdict == "near_miss"
+    assert r.missed[0].metric == "rtp" and r.missed[0].band_lo == pytest.approx(0.89)
+
+
+@pytest.mark.asyncio
+async def test_fake_runner_streams_then_returns():
+    seen = []
+    res = TuneResult(status="pass", verdict="pass", tuned_model={"reels": []},
+                     metrics=MetricsWire(rtp=0.9, volatility=2.0, hit_frequency=0.4,
+                                         base_rtp=0.9, feature_rtp=0.0, bonus_hit_rates=[]),
+                     missed=[], trace=[], ran_at="t")
+    runner = FakeTunerRunner(
+        progress=[TuneProgress(0, 40, -0.5, 0.5, 2.0), TuneProgress(1, 40, -0.1, 0.85, 2.1)],
+        result=res,
+    )
+    out = await runner.run({"reels": []}, {"rtp_target": 0.9}, {"population": 8}, on_progress=seen.append)
+    assert [p.generation for p in seen] == [0, 1]
+    assert out.status == "pass"

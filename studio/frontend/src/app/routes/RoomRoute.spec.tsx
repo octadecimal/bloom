@@ -13,6 +13,8 @@ const openGameDocs = vi.fn();
 const closeGameDocs = vi.fn();
 const openGameSim = vi.fn();
 const closeGameSim = vi.fn();
+const openGameTuner = vi.fn();
+const closeGameTuner = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
@@ -31,6 +33,10 @@ vi.mock('../../plugins/gdd/actions', () => ({
 vi.mock('../../plugins/simulator/actions', () => ({
   openGameSim: (id: string) => openGameSim(id),
   closeGameSim: () => closeGameSim(),
+}));
+vi.mock('../../plugins/tuner/actions', () => ({
+  openGameTuner: (id: string) => openGameTuner(id),
+  closeGameTuner: () => closeGameTuner(),
 }));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
 vi.mock('../Workbench', () => ({
@@ -52,6 +58,8 @@ beforeEach(() => {
   closeGameDocs.mockReset();
   openGameSim.mockReset();
   closeGameSim.mockReset();
+  openGameTuner.mockReset();
+  closeGameTuner.mockReset();
   error.mockReset();
 });
 

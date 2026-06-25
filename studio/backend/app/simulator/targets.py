@@ -20,12 +20,30 @@ class TargetGap(Exception):
 
 
 def normalize_percent(raw) -> float:
+    """Normalize a percent value to decimal form.
+
+    String branch — converts human-authored strings from a math-model dict:
+      "96"    → 0.96  (bare integer string, treated as percent)
+      "96%"   → 0.96  (explicit percent suffix)
+      "5000%" → 50.0  (large percent, e.g. an unreachable RTP sentinel)
+      "0.96"  → 0.96  (already-decimal string, passes through)
+
+    Non-string branch — values that originate from the GDD store are already
+    normalized to decimal form by ``app.gdd.normalize._percent`` before they are
+    written (e.g. "90%" → 0.9, "5000%" → 50.0).  Dividing again would be a
+    double-normalization bug, so non-string inputs are returned unchanged.
+    This means ``normalize_percent(0.9) == 0.9`` and
+    ``normalize_percent(50.0) == 50.0``.  Integer non-string inputs (e.g. ``96``)
+    are also passed through as-is (``96.0``) — production code never passes a
+    raw un-normalized integer, but the contract must be explicit.
+    """
     if isinstance(raw, str):
         raw = float(raw.strip().rstrip("%"))
         # "96" (as string) means 96%, "0.96" means 0.96
         return raw / 100.0 if raw > 1.0 else raw
-    raw = float(raw)
-    return raw / 100.0 if raw > 1.0 else raw
+    # Non-string values come from the GDD store, which already normalises to
+    # decimal form via _percent (e.g. "5000%" → 50.0, "90%" → 0.9). Return as-is.
+    return float(raw)
 
 
 def parse_ratio(raw) -> float:

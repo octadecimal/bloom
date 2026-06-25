@@ -22,9 +22,15 @@ def normalize_value(field: Field, raw) -> tuple[object, str | None]:
 def _percent(raw) -> tuple[object, str | None]:
     s = str(raw).strip()
     try:
-        v = float(s[:-1]) / 100 if s.endswith("%") else float(s)
-        if v > 1:
-            v = v / 100
+        if s.endswith("%"):
+            # "90%" → 0.9, "5000%" → 50.0; no second division: the % suffix is
+            # authoritative, so 5000% genuinely means 50x RTP.
+            v = float(s[:-1]) / 100
+        else:
+            # bare number: "0.96" → 0.96, "96" → 0.96 (assumed to mean 96%).
+            v = float(s)
+            if v > 1:
+                v = v / 100
         return (round(v, 4), None)
     except ValueError:
         return (raw, f"could not parse '{raw}' as a percent")
