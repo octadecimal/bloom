@@ -111,119 +111,128 @@ fn tournament<'a>(scored: &'a [(Genome, f64)], rng: &mut SplitMix64) -> &'a Geno
     }
 }
 
-impl Tuner for GeneticTuner {
-    fn tune(&self, seed_model: &SlotModel, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome {
-        let mut rng = SplitMix64::new(cfg.master_seed);
-        let base = encode(seed_model);
+/// Like `GeneticTuner::tune`, but reports each generation's best snapshot through
+/// `on_progress` as it is produced. `tune` delegates here with a no-op callback,
+/// so the deterministic result is identical. Progress is cosmetic.
+pub fn tune_with_progress(
+    seed_model: &SlotModel,
+    target: &TargetSpec,
+    cfg: &TunerConfig,
+    on_progress: &mut dyn FnMut(&GenSnapshot),
+) -> TuneOutcome {
+    let mut rng = SplitMix64::new(cfg.master_seed);
+    let base = encode(seed_model);
 
-        // Initial population: the seed model + mutated variants.
-        let mut pop: Vec<Genome> = (0..cfg.population)
-            .map(|i| {
-                if i == 0 {
-                    base.clone()
-                } else {
-                    let mut g = base.clone();
-                    mutate(&mut g, seed_model, cfg, &mut rng);
-                    g
-                }
+    // Initial population: the seed model + mutated variants.
+    let mut pop: Vec<Genome> = (0..cfg.population)
+        .map(|i| {
+            if i == 0 {
+                base.clone()
+            } else {
+                let mut g = base.clone();
+                mutate(&mut g, seed_model, cfg, &mut rng);
+                g
+            }
+        })
+        .collect();
+
+    let mut snapshots: Vec<GenSnapshot> = Vec::new();
+    let mut best: Option<(Genome, f64)> = None;
+    let mut stagnation = 0usize;
+    let mut generations_run = 0usize;
+    let max_generations = cfg.max_generations.max(1);
+
+    for g in 0..max_generations {
+        generations_run = g + 1;
+        let seeds = generation_seeds(cfg.master_seed, g, cfg.search_candidate_count);
+
+        let mut scored: Vec<(Genome, f64)> = pop
+            .iter()
+            .map(|genome| {
+                let model = decode(genome, seed_model);
+                let f = fitness(&measure(&simulate(&model, &seeds)), target, &cfg.weights);
+                (genome.clone(), f)
             })
             .collect();
+        scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
-        let mut snapshots: Vec<GenSnapshot> = Vec::new();
-        let mut best: Option<(Genome, f64)> = None;
-        let mut stagnation = 0usize;
-        let mut generations_run = 0usize;
-        // at least one generation must run so `best` is populated
-        let max_generations = cfg.max_generations.max(1);
-
-        for g in 0..max_generations {
-            generations_run = g + 1;
-            let seeds = generation_seeds(cfg.master_seed, g, cfg.search_candidate_count);
-
-            // Score every candidate on the SAME seed set (common random numbers).
-            let mut scored: Vec<(Genome, f64)> = pop
-                .iter()
-                .map(|genome| {
-                    let model = decode(genome, seed_model);
-                    let f = fitness(&measure(&simulate(&model, &seeds)), target, &cfg.weights);
-                    (genome.clone(), f)
-                })
-                .collect();
-            scored.sort_by(|a, b| b.1.total_cmp(&a.1));
-
-            // Snapshot the generation's best (re-derive its metrics for the trace).
-            let best_model = decode(&scored[0].0, seed_model);
-            let bm = measure(&simulate(&best_model, &seeds));
-            snapshots.push(GenSnapshot {
-                generation: g,
-                best_fitness: scored[0].1,
-                best_rtp: bm.rtp,
-                best_volatility: bm.volatility,
-                best_bonus_hit_rates: bm.bonus_hit_rates.clone(),
-            });
-
-            let improved = match &best {
-                Some((_, pf)) => scored[0].1 > *pf + 1e-12,
-                None => true,
-            };
-            if improved {
-                best = Some((scored[0].0.clone(), scored[0].1));
-                stagnation = 0;
-            } else {
-                stagnation += 1;
-            }
-
-            if scored[0].1 >= 0.0 {
-                break;
-            } // feasible in the search tier
-            if stagnation >= cfg.stagnation_window {
-                break;
-            }
-            if g + 1 == max_generations {
-                break;
-            }
-
-            // Next generation: elitism + tournament selection + crossover + mutation.
-            let mut next: Vec<Genome> = scored
-                .iter()
-                .take(cfg.elitism)
-                .map(|s| s.0.clone())
-                .collect();
-            while next.len() < cfg.population {
-                let p1 = tournament(&scored, &mut rng).clone();
-                let p2 = tournament(&scored, &mut rng).clone();
-                let mut child = crossover(&p1, &p2, seed_model, cfg, &mut rng);
-                mutate(&mut child, seed_model, cfg, &mut rng);
-                next.push(child);
-            }
-            pop = next;
-        }
-
-        // Final tier: re-measure the best at full fidelity, then the REAL verify.
-        let (best_genome, _) = best.expect("at least one generation always runs");
-        let model = decode(&best_genome, seed_model);
-        let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
-        let metrics = measure(&simulate(&model, &final_seeds));
-        let verdict = match verify(&metrics, target) {
-            Ok(()) => Verdict::Pass,
-            Err(_) => Verdict::NearMiss {
-                missed: band_misses(&metrics, target),
-            },
+        let best_model = decode(&scored[0].0, seed_model);
+        let bm = measure(&simulate(&best_model, &seeds));
+        let snap = GenSnapshot {
+            generation: g,
+            best_fitness: scored[0].1,
+            best_rtp: bm.rtp,
+            best_volatility: bm.volatility,
+            best_bonus_hit_rates: bm.bonus_hit_rates.clone(),
         };
+        on_progress(&snap);
+        snapshots.push(snap);
 
-        TuneOutcome {
-            model,
-            metrics,
-            verdict,
-            trace: TuningTrace {
-                master_seed: cfg.master_seed,
-                generations_run,
-                snapshots,
-                population: cfg.population,
-                search_candidate_count: cfg.search_candidate_count,
-                final_candidate_count: cfg.final_candidate_count,
-            },
+        let improved = match &best {
+            Some((_, pf)) => scored[0].1 > *pf + 1e-12,
+            None => true,
+        };
+        if improved {
+            best = Some((scored[0].0.clone(), scored[0].1));
+            stagnation = 0;
+        } else {
+            stagnation += 1;
         }
+
+        if scored[0].1 >= 0.0 {
+            break;
+        }
+        if stagnation >= cfg.stagnation_window {
+            break;
+        }
+        if g + 1 == max_generations {
+            break;
+        }
+
+        let mut next: Vec<Genome> = scored
+            .iter()
+            .take(cfg.elitism)
+            .map(|s| s.0.clone())
+            .collect();
+        while next.len() < cfg.population {
+            let p1 = tournament(&scored, &mut rng).clone();
+            let p2 = tournament(&scored, &mut rng).clone();
+            let mut child = crossover(&p1, &p2, seed_model, cfg, &mut rng);
+            mutate(&mut child, seed_model, cfg, &mut rng);
+            next.push(child);
+        }
+        pop = next;
+    }
+
+    let (best_genome, _) = best.expect("at least one generation always runs");
+    let model = decode(&best_genome, seed_model);
+    let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
+    let metrics = measure(&simulate(&model, &final_seeds));
+    let verdict = match verify(&metrics, target) {
+        Ok(()) => Verdict::Pass,
+        Err(_) => Verdict::NearMiss {
+            missed: band_misses(&metrics, target),
+        },
+    };
+
+    TuneOutcome {
+        model,
+        metrics,
+        verdict,
+        trace: TuningTrace {
+            master_seed: cfg.master_seed,
+            generations_run,
+            snapshots,
+            population: cfg.population,
+            search_candidate_count: cfg.search_candidate_count,
+            final_candidate_count: cfg.final_candidate_count,
+        },
+    }
+}
+
+impl Tuner for GeneticTuner {
+    fn tune(&self, seed_model: &SlotModel, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome {
+        tune_with_progress(seed_model, target, cfg, &mut |_| {})
     }
 }
 
@@ -355,5 +364,27 @@ mod tests {
             Verdict::NearMiss { missed } => assert!(missed.iter().any(|m| m.metric == "rtp")),
             Verdict::Pass => panic!("must not report PASS for an unreachable target"),
         }
+    }
+
+    #[test]
+    fn progress_fires_once_per_generation_and_matches_tune() {
+        use crate::genetic::tune_with_progress;
+        let seed = toy(1);
+        let t = target_09();
+        let c = cfg(7);
+
+        let mut gens: Vec<usize> = Vec::new();
+        let out = tune_with_progress(&seed, &t, &c, &mut |s: &GenSnapshot| gens.push(s.generation));
+
+        // Bit-identical to the trait method (no behavior drift).
+        let direct = GeneticTuner.tune(&seed, &t, &c);
+        assert_eq!(out.model, direct.model);
+        assert_eq!(out.metrics.rtp, direct.metrics.rtp);
+        assert_eq!(out.verdict, direct.verdict);
+        assert_eq!(out.trace.generations_run, direct.trace.generations_run);
+
+        // One callback per generation, in order 0..generations_run.
+        assert_eq!(gens.len(), out.trace.generations_run);
+        assert_eq!(gens, (0..out.trace.generations_run).collect::<Vec<_>>());
     }
 }

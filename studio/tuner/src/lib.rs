@@ -11,7 +11,7 @@ pub mod outcome;
 pub mod report;
 pub mod validate;
 
-pub use genetic::GeneticTuner;
+pub use genetic::{tune_with_progress, GeneticTuner};
 pub use validate::validate;
 
 use bloom_math::mechanics::slots::SlotModel;
