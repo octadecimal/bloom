@@ -1,7 +1,47 @@
 from app.simulator.realize import (
     RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
-    _realize_reels, _all_patterns, _realize_paylines,
+    _realize_reels, _all_patterns, _realize_paylines, _realize_paytable,
 )
+
+_DEFS = [
+    {"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
+    {"id": 2, "role": "wild"}, {"id": 3, "role": "scatter"},
+]
+_NAME_TO_ID = {"dragon": 0, "high1": 0, "ten": 1, "low1": 1,
+               "rune": 2, "coin": 3}
+
+
+def test_paytable_resolves_rows_to_oak_entries():
+    pt = {"payouts": [
+        {"symbol": "Dragon", "3oak": "5", "4oak": "20", "5oak": "100"},
+        {"symbol": "Ten", "3oak": "2", "4oak": "8", "5oak": "40"},
+    ]}
+    out, errors, warnings = _realize_paytable(pt, _NAME_TO_ID, _DEFS)
+    assert errors == []
+    assert out == {"entries": [
+        {"symbol": 0, "count": 3, "payout": 5},
+        {"symbol": 0, "count": 4, "payout": 20},
+        {"symbol": 0, "count": 5, "payout": 100},
+        {"symbol": 1, "count": 3, "payout": 2},
+        {"symbol": 1, "count": 4, "payout": 8},
+        {"symbol": 1, "count": 5, "payout": 40},
+    ]}
+
+
+def test_paytable_unresolved_symbol_warns_and_skips():
+    pt = {"payouts": [{"symbol": "Ghost", "3oak": "5"}]}
+    out, errors, warnings = _realize_paytable(pt, _NAME_TO_ID, _DEFS)
+    # nothing resolved -> falls back to placeholder; the skip is warned
+    assert any("Ghost" in w for w in warnings)
+
+
+def test_paytable_empty_seeds_placeholder_for_normal_symbols():
+    out, errors, warnings = _realize_paytable({}, _NAME_TO_ID, _DEFS)
+    assert errors == []
+    # only the two normal symbols (ids 0,1) get placeholder entries
+    syms = {e["symbol"] for e in out["entries"]}
+    assert syms == {0, 1}
+    assert any("placeholder" in w for w in warnings)
 
 
 def test_kind_to_role_map():

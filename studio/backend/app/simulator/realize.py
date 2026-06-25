@@ -162,3 +162,43 @@ def _realize_paylines(
         )
         return [], errors, warnings
     return _all_patterns(rows, reel_count)[:n], errors, warnings
+
+
+_OAK_COLUMNS = {"3oak": 3, "4oak": 4, "5oak": 5}
+
+
+def _realize_paytable(
+    paytable: dict, name_to_id: dict[str, int], symbol_defs: list[dict]
+) -> tuple[dict, list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    entries: list[dict] = []
+    for i, row in enumerate(paytable.get("payouts") or []):
+        sym = str(row.get("symbol", "")).strip().lower()
+        sid = name_to_id.get(sym)
+        if sid is None:
+            warnings.append(
+                f"paytable row {i} symbol '{row.get('symbol')}' does not resolve "
+                "to a known symbol; skipped"
+            )
+            continue
+        for col, count in _OAK_COLUMNS.items():
+            raw = row.get(col)
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                continue
+            try:
+                payout = int(float(str(raw)))
+            except ValueError:
+                warnings.append(f"paytable row {i} {col} '{raw}' is not numeric; skipped")
+                continue
+            entries.append({"symbol": sid, "count": count, "payout": payout})
+    if not entries:
+        for rank, d in enumerate(d for d in symbol_defs if d["role"] == "normal"):
+            base = rank + 1
+            entries.append({"symbol": d["id"], "count": 3, "payout": base})
+            entries.append({"symbol": d["id"], "count": 4, "payout": base * 5})
+            entries.append({"symbol": d["id"], "count": 5, "payout": base * 20})
+        warnings.append(
+            "paytable empty or unresolved; seeded placeholder payouts for paying symbols"
+        )
+    return {"entries": entries}, errors, warnings
