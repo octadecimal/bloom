@@ -269,7 +269,8 @@ mod tests {
 
     #[test]
     fn result_line_pass_shape() {
-        let v: serde_json::Value = serde_json::from_str(&result_line(&outcome(Verdict::Pass))).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&result_line(&outcome(Verdict::Pass))).unwrap();
         assert_eq!(v["type"], "result");
         assert_eq!(v["verdict"], "pass");
         assert_eq!(v["metrics"]["rtp"], 0.901);
@@ -282,15 +283,16 @@ mod tests {
 
     #[test]
     fn result_line_near_miss_carries_missed_bands() {
-        let v: serde_json::Value = serde_json::from_str(&result_line(&outcome(Verdict::NearMiss {
-            missed: vec![BandMiss {
-                metric: "rtp".into(),
-                measured: 0.80,
-                band_lo: 0.89,
-                band_hi: 0.91,
-            }],
-        })))
-        .unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&result_line(&outcome(Verdict::NearMiss {
+                missed: vec![BandMiss {
+                    metric: "rtp".into(),
+                    measured: 0.80,
+                    band_lo: 0.89,
+                    band_hi: 0.91,
+                }],
+            })))
+            .unwrap();
         assert_eq!(v["verdict"], "near_miss");
         assert_eq!(v["missed"][0]["metric"], "rtp");
         assert_eq!(v["missed"][0]["bandLo"], 0.89);

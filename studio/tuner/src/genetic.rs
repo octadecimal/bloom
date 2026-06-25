@@ -374,7 +374,9 @@ mod tests {
         let c = cfg(7);
 
         let mut gens: Vec<usize> = Vec::new();
-        let out = tune_with_progress(&seed, &t, &c, &mut |s: &GenSnapshot| gens.push(s.generation));
+        let out = tune_with_progress(&seed, &t, &c, &mut |s: &GenSnapshot| {
+            gens.push(s.generation)
+        });
 
         // Bit-identical to the trait method (no behavior drift).
         let direct = GeneticTuner.tune(&seed, &t, &c);
