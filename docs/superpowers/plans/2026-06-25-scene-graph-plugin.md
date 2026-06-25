@@ -25,10 +25,12 @@
 The heart of the plugin: a pure, fully-tested function that converts an `IGameDocument` into an ordered, depth-tagged row list following `child` edges from `Root`. No React, no hookstate.
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/scene-graph/buildTree.ts`
 - Test: `studio/frontend/src/plugins/scene-graph/buildTree.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `IGameDocument`, `NodeType` from `../game/state` (existing wire types: `IGameDocument = { version, nodes: Record<string, INode>, edges: IEdge[] }`; `INode = { id, type: NodeType, props: Record<string, JsonValue> }`; `IEdge = { id, type: 'child' | 'data', from: { node, port }, to: { node, port } }`).
 - Produces: `export interface ITreeRow { id: string; type: NodeType; depth: number; name?: string; hasChildren: boolean }` and `export function buildTree(doc: IGameDocument, collapsed?: Record<string, boolean>): ITreeRow[]`. `collapsed[id] === true` hides that node's descendants (its row still reports `hasChildren: true`); an absent entry means expanded.
 
@@ -100,10 +102,7 @@ describe('buildTree', () => {
         s1: { id: 's1', type: 'Sprite', props: {} },
         t1: { id: 't1', type: 'Texture', props: {} },
       },
-      edges: [
-        childEdge('e1', 'root', 's1'),
-        { id: 'e2', type: 'data', from: { node: 't1', port: 'out' }, to: { node: 's1', port: 'texture' } },
-      ],
+      edges: [childEdge('e1', 'root', 's1'), { id: 'e2', type: 'data', from: { node: 't1', port: 'out' }, to: { node: 's1', port: 'texture' } }],
     });
     expect(buildTree(d).map((r) => r.id)).toEqual(['root', 's1']);
   });
@@ -238,11 +237,13 @@ git commit -m "feat: add scene-graph buildTree hierarchy builder"
 The plugin's own state (selection + collapse) and the React pane that reads the `game` document, renders the tree, and records selection. Includes `state.ts` as scaffolding the pane needs.
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/scene-graph/state.ts`
 - Create: `studio/frontend/src/plugins/scene-graph/SceneGraphPane.tsx`
 - Test: `studio/frontend/src/plugins/scene-graph/SceneGraphPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `buildTree`, `ITreeRow` from `./buildTree`; `gameHooks`, `IGameDocument`, `NodeType` from `../game/state`; `makePluginHooks` from `../../state/makePluginHooks`; `rootStore` from `../../state/rootStore`; `bumpRenderCount` from `../../app/renderCount`.
 - Produces: `export const SCENE_GRAPH_PLUGIN_ID = 'scene-graph'`; `export interface ISceneGraphState { selectedId: string | null; collapsed: Record<string, boolean> }`; `export function makeInitialState(): ISceneGraphState`; `export const sceneGraphHooks`; `export function sceneGraphSlice(): State<ISceneGraphState>`; `export function SceneGraphPane(props: IDockviewPanelProps)`.
 
@@ -385,26 +386,13 @@ export function SceneGraphPane(_props: IDockviewPanelProps) {
   return (
     <div data-testid="scene-graph-pane" className="h-full overflow-auto bg-surface py-1 text-sm">
       {rows.map((row) => (
-        <Row
-          key={row.id}
-          row={row}
-          selected={row.id === selectedId}
-          collapsed={collapsed[row.id] === true}
-          onSelect={select}
-          onToggle={toggle}
-        />
+        <Row key={row.id} row={row} selected={row.id === selectedId} collapsed={collapsed[row.id] === true} onSelect={select} onToggle={toggle} />
       ))}
     </div>
   );
 }
 
-function Row(props: {
-  row: ITreeRow;
-  selected: boolean;
-  collapsed: boolean;
-  onSelect: (id: string) => void;
-  onToggle: (id: string) => void;
-}) {
+function Row(props: { row: ITreeRow; selected: boolean; collapsed: boolean; onSelect: (id: string) => void; onToggle: (id: string) => void }) {
   const { row, selected, collapsed, onSelect, onToggle } = props;
   const Icon = ICON[row.type];
   return (
@@ -460,11 +448,13 @@ git commit -m "feat: add scene-graph pane and state slice"
 Wire the plugin into the studio app via its `IPlugin` definition and the `PLUGINS` array, then prove the whole branch is green against all four CI gates.
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/scene-graph/index.ts`
 - Test: `studio/frontend/src/plugins/scene-graph/index.spec.ts`
 - Modify: `studio/frontend/src/plugins/index.ts`
 
 **Interfaces:**
+
 - Consumes: `IPlugin` from `../../host/types`; `IPluginHost` (for the command's `run`); `SceneGraphPane` from `./SceneGraphPane`; `ISceneGraphState`, `SCENE_GRAPH_PLUGIN_ID`, `makeInitialState` from `./state`.
 - Produces: `export const sceneGraph: IPlugin<ISceneGraphState>` with `id: 'scene-graph'`, pane `scene-graph/tree`, command `scene-graph/open`.
 
