@@ -21,11 +21,11 @@ committed `main` only. This caveat is stated in the report header.
 
 Source roots:
 
-| Stack | Roots |
-| --- | --- |
-| Python backend | `studio/backend/app` |
-| TS/TSX frontend | `studio/frontend/src`, `runtime/client` |
-| Rust crates | `trusted/math`, `trusted/package`, `studio/simulator`, `studio/tuner` |
+| Stack           | Roots                                                                 |
+| --------------- | --------------------------------------------------------------------- |
+| Python backend  | `studio/backend/app`                                                  |
+| TS/TSX frontend | `studio/frontend/src`, `runtime/client`                               |
+| Rust crates     | `trusted/math`, `trusted/package`, `studio/simulator`, `studio/tuner` |
 
 Excluded from all scanning: `node_modules`, `target`, `.venv`, `dist`,
 `__pycache__`.
