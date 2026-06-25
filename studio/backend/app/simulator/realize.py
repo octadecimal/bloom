@@ -69,3 +69,31 @@ def _realize_symbols(
     if not defs:
         errors.append("no symbols defined; cannot realize a model")
     return defs, name_to_id, errors, warnings
+
+
+def _realize_reels(
+    symbols_reels: dict, distinct_count: int, reel_count: int
+) -> tuple[list[list[int]], list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    sl = symbols_reels.get("strip_length")
+    if isinstance(sl, dict) and "min" in sl and "max" in sl:
+        lo, hi = float(sl["min"]), float(sl["max"])
+        if hi < distinct_count:
+            errors.append(
+                f"strip_length.max {hi:g} < distinct symbol count {distinct_count}; "
+                "cannot place every symbol on a strip"
+            )
+            return [], errors, warnings
+        length = round((lo + hi) / 2)
+        if length < distinct_count:
+            warnings.append(
+                f"strip_length midpoint {length} < distinct symbol count "
+                f"{distinct_count}; clamped up to {distinct_count}"
+            )
+            length = distinct_count
+    else:
+        length = max(distinct_count, DEFAULT_STRIP_LEN)
+        warnings.append(f"strip_length absent; defaulted strip length to {length}")
+    reel = [pos % distinct_count for pos in range(length)]
+    return [list(reel) for _ in range(reel_count)], errors, warnings
