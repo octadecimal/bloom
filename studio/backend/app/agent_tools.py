@@ -6,6 +6,7 @@ from langgraph.types import interrupt
 
 from app.gdd.store import GddEditError
 from app.scene.document import OpError
+from app.simulator.targets import derive_target, TargetGap
 
 
 @dataclass
@@ -18,6 +19,9 @@ class ToolContext:
     gdd_hub: object = None
     scene_store: object = None
     scene_hub: object = None
+    sim_store: object = None
+    tuner_store: object = None
+    tuner_hub: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -405,6 +409,56 @@ def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
+    async def read_tuner_setup() -> str:
+        sim_doc = await ctx.sim_store.get_or_seed(ctx.game_id)
+        model = sim_doc.model or {}
+        num_bonuses = len(model.get("bonuses", []) or [])
+        paytable = (model.get("paytable") or {}).get("entries") or []
+        tuner_doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
+        p = tuner_doc.params
+
+        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
+        math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        try:
+            target = derive_target(math_model, sim_doc.params, num_bonuses)
+            target_line = (
+                f"target: RTP {target['rtp_target']} ±{target['rtp_tolerance']}, "
+                f"volatility {target['volatility_min']}–{target['volatility_max']}, "
+                f"{len(target['bonus_hit_rate_bands'])} bonus band(s)"
+            )
+        except TargetGap as gap:
+            target_line = f"target: UNAVAILABLE — {gap.message}"
+
+        result = tuner_doc.result
+        if result is None:
+            result_line = "last result: no tune has run yet"
+        else:
+            tuned = "a tuned model is pending Apply" if result.tuned_model else "no tuned model"
+            result_line = f"last result: {result.status} ({tuned})"
+
+        return (
+            f"Seed model: {len(model.get('reels', []) or [])} reels, "
+            f"{model.get('rows', '?')} rows, {len(paytable)} paytable entries, "
+            f"{num_bonuses} bonus(es).\n"
+            f"GA params: population {p.population}, generations {p.max_generations}, "
+            f"search/final candidates {p.search_candidate_count}/{p.final_candidate_count}, "
+            f"seed {p.master_seed}, weights rtp/vol/hit "
+            f"{p.weights.rtp}/{p.weights.volatility}/{p.weights.hit_rate}.\n"
+            f"{target_line}\n{result_line}"
+        )
+
+    return StructuredTool.from_function(
+        coroutine=read_tuner_setup,
+        name="read_tuner_setup",
+        description=(
+            "Report the slot-math tuner setup for the current game: the seed model "
+            "shape, the GA parameters, the derived target bands (from GDD intent), and "
+            "the last tune verdict. Read-only. Call this first before tuning."
+        ),
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -422,16 +476,21 @@ class ToolFactory:
         "scene_remove_node": build_scene_remove_node_tool,
         "scene_apply_batch": build_scene_apply_batch_tool,
         "realize_symbol": build_realize_symbol_tool,
+        "read_tuner_setup": build_read_tuner_setup_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,
-                 scene_store=None, scene_hub=None):
+                 scene_store=None, scene_hub=None,
+                 sim_store=None, tuner_store=None, tuner_hub=None):
         self._asset_store = asset_store
         self._asset_hub = asset_hub
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
         self._scene_store = scene_store
         self._scene_hub = scene_hub
+        self._sim_store = sim_store
+        self._tuner_store = tuner_store
+        self._tuner_hub = tuner_hub
 
     def known_tool_names(self) -> set[str]:
         return set(self._BUILDERS)
