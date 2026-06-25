@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { Container } from 'pixi.js';
 import { applyPixiProp, PixiRenderer } from './pixiRenderer';
 
 function fakeObj() {
@@ -80,5 +81,32 @@ describe('PixiRenderer.createObject', () => {
     r.createObject('s', 'Sprite');
     r.setProp('s', 'anchor', { x: 0, y: 0 });
     expect(r.anchorOf('s')).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('PixiRenderer.onStage', () => {
+  it('is true for an object parented to the stage, false for an orphan or unknown id', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    // jsdom has no WebGL, so the real mount()/app.init() can't run. Stand in a real
+    // Pixi stage Container the way mount() does (objects[root] = app.stage), then
+    // exercise the real createObject/setParent/onStage scene-graph walk.
+    const stage = new Container();
+    const internals = r as unknown as {
+      app: { stage: Container };
+      rootId: string;
+      objects: Map<string, Container>;
+    };
+    internals.app = { stage };
+    internals.rootId = 'root';
+    internals.objects.set('root', stage);
+
+    r.createObject('s', 'Sprite');
+    r.setParent('s', 'root');
+    expect(r.onStage('s')).toBe(true); // parented up to the stage
+
+    r.createObject('orphan', 'Sprite'); // created but never parented
+    expect(r.onStage('orphan')).toBe(false);
+
+    expect(r.onStage('ghost')).toBe(false); // unknown id
   });
 });

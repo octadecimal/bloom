@@ -286,3 +286,28 @@ def test_unreachable_nodes_flags_orphan_then_clears():
                          "from": {"node": "root", "port": "children"},
                          "to": {"node": "s", "port": "parent"}})
     assert unreachable_nodes(doc) == []
+
+
+def test_unreachable_nodes_flags_whole_subtree_when_root_link_breaks():
+    from app.scene.document import unreachable_nodes
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {}},
+            "box": {"id": "box", "type": "Container", "props": {}},
+            "s": {"id": "s", "type": "Sprite", "props": {}},
+        },
+        "edges": [
+            {"id": "e1", "type": "child",
+             "from": {"node": "root", "port": "children"},
+             "to": {"node": "box", "port": "parent"}},
+            {"id": "e2", "type": "child",
+             "from": {"node": "box", "port": "children"},
+             "to": {"node": "s", "port": "parent"}},
+        ],
+    }
+    # root -> box -> sprite: the whole chain is reachable.
+    assert unreachable_nodes(doc) == []
+    # Break root -> box; both the container AND its grandchild sprite drop off.
+    doc["edges"] = [e for e in doc["edges"] if e["id"] != "e1"]
+    assert unreachable_nodes(doc) == ["box", "s"]
