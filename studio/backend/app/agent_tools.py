@@ -6,6 +6,8 @@ from langgraph.types import interrupt
 
 from app.gdd.store import GddEditError
 from app.scene.document import OpError
+from app.simulator.targets import derive_target, TargetGap
+from app.tuner.models import TuningParams
 
 
 @dataclass
@@ -18,6 +20,9 @@ class ToolContext:
     gdd_hub: object = None
     scene_store: object = None
     scene_hub: object = None
+    sim_store: object = None
+    tuner_store: object = None
+    tuner_hub: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -405,6 +410,210 @@ def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
+    async def read_tuner_setup() -> str:
+        sim_doc = await ctx.sim_store.get_or_seed(ctx.game_id)
+        model = sim_doc.model or {}
+        num_bonuses = len(model.get("bonuses", []) or [])
+        paytable = (model.get("paytable") or {}).get("entries") or []
+        tuner_doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
+        p = tuner_doc.params
+
+        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
+        math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        try:
+            target = derive_target(math_model, sim_doc.params, num_bonuses)
+            target_line = (
+                f"target: RTP {target['rtp_target']} ±{target['rtp_tolerance']}, "
+                f"volatility {target['volatility_min']}–{target['volatility_max']}, "
+                f"{len(target['bonus_hit_rate_bands'])} bonus band(s)"
+            )
+        except TargetGap as gap:
+            target_line = f"target: UNAVAILABLE — {gap.message}"
+
+        result = tuner_doc.result
+        if result is None:
+            result_line = "last result: no tune has run yet"
+        else:
+            tuned = "a tuned model is pending Apply" if result.tuned_model else "no tuned model"
+            result_line = f"last result: {result.status} ({tuned})"
+
+        return (
+            f"Seed model: {len(model.get('reels', []) or [])} reels, "
+            f"{model.get('rows', '?')} rows, {len(paytable)} paytable entries, "
+            f"{num_bonuses} bonus(es).\n"
+            f"GA params: population {p.population}, generations {p.max_generations}, "
+            f"search/final candidates {p.search_candidate_count}/{p.final_candidate_count}, "
+            f"seed {p.master_seed}, weights rtp/vol/hit "
+            f"{p.weights.rtp}/{p.weights.volatility}/{p.weights.hit_rate}.\n"
+            f"{target_line}\n{result_line}"
+        )
+
+    return StructuredTool.from_function(
+        coroutine=read_tuner_setup,
+        name="read_tuner_setup",
+        description=(
+            "Report the slot-math tuner setup for the current game: the seed model "
+            "shape, the GA parameters, the derived target bands (from GDD intent), and "
+            "the last tune verdict. Read-only. Call this first before tuning."
+        ),
+    )
+
+
+def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
+    _POSITIVE = ("population", "max_generations", "search_candidate_count",
+                 "final_candidate_count", "stagnation_window")
+
+    async def set_tuner_params(
+        master_seed: int | None = None,
+        population: int | None = None,
+        max_generations: int | None = None,
+        search_candidate_count: int | None = None,
+        final_candidate_count: int | None = None,
+        elitism: int | None = None,
+        mutation_rate: float | None = None,
+        crossover_rate: float | None = None,
+        stagnation_window: int | None = None,
+        weight_rtp: float | None = None,
+        weight_volatility: float | None = None,
+        weight_hit_rate: float | None = None,
+    ) -> str:
+        scalars = {
+            "master_seed": master_seed, "population": population,
+            "max_generations": max_generations,
+            "search_candidate_count": search_candidate_count,
+            "final_candidate_count": final_candidate_count, "elitism": elitism,
+            "mutation_rate": mutation_rate, "crossover_rate": crossover_rate,
+            "stagnation_window": stagnation_window,
+        }
+        for key in _POSITIVE:
+            v = scalars[key]
+            if v is not None and v <= 0:
+                return f"'{key}' must be positive (got {v}); no change made."
+        if elitism is not None and elitism < 0:
+            return f"'elitism' must be >= 0 (got {elitism}); no change made."
+        for rate_key, rate_val in (("mutation_rate", mutation_rate), ("crossover_rate", crossover_rate)):
+            if rate_val is not None and not (0.0 <= rate_val <= 1.0):
+                return f"'{rate_key}' must be between 0 and 1 (got {rate_val}); no change made."
+        for w_key, w_val in (("weight_rtp", weight_rtp), ("weight_volatility", weight_volatility),
+                              ("weight_hit_rate", weight_hit_rate)):
+            if w_val is not None and w_val < 0:
+                return f"'{w_key}' must be >= 0 (got {w_val}); no change made."
+
+        doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
+        data = doc.params.model_dump()
+        for key, v in scalars.items():
+            if v is not None:
+                data[key] = v
+        weights = dict(data["weights"])
+        if weight_rtp is not None:
+            weights["rtp"] = weight_rtp
+        if weight_volatility is not None:
+            weights["volatility"] = weight_volatility
+        if weight_hit_rate is not None:
+            weights["hit_rate"] = weight_hit_rate
+        data["weights"] = weights
+
+        updated = TuningParams.model_validate(data)
+        await ctx.tuner_store.put(ctx.game_id, params=updated)
+        return (
+            f"Updated tuner GA params: population {updated.population}, "
+            f"generations {updated.max_generations}, seed {updated.master_seed}, "
+            f"weights rtp/vol/hit "
+            f"{updated.weights.rtp}/{updated.weights.volatility}/{updated.weights.hit_rate}."
+        )
+
+    return StructuredTool.from_function(
+        coroutine=set_tuner_params,
+        name="set_tuner_params",
+        description=(
+            "Adjust the genetic-algorithm tuning knobs (population, generations, "
+            "candidate counts, master seed, and the rtp/volatility/hit_rate fitness "
+            "weights). Only the fields you pass change. This does NOT set the design "
+            "target (RTP / volatility / bonus rate) — that lives in the GDD math-model; "
+            "edit it with set_gdd_fields instead."
+        ),
+    )
+
+
+def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
+    async def tune_slot_model() -> str:
+        sim_doc = await ctx.sim_store.get_or_seed(ctx.game_id)
+        model = sim_doc.model or {}
+        num_bonuses = len(model.get("bonuses", []) or [])
+        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
+        math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        try:
+            derive_target(math_model, sim_doc.params, num_bonuses)   # gap pre-check
+        except TargetGap as gap:
+            return (f"Cannot tune: {gap.message}. Complete the GDD math-model intent "
+                    f"(RTP, volatility, bonus rate) first, then tune again.")
+
+        before = await ctx.tuner_store.get(ctx.game_id)
+        before_ran = before.result.ran_at if (before and before.result) else None
+
+        await ctx.tuner_hub.request_tune(ctx.game_id)   # runs GA, streams to the pane
+
+        after = await ctx.tuner_store.get(ctx.game_id)
+        result = after.result if after else None
+        if result is None or result.ran_at == before_ran:
+            return ("The tune did not produce a result — check the Tuner pane or the "
+                    "backend logs for a failure.")
+
+        m = result.metrics
+        head = (f"measured RTP {m.rtp}, volatility {m.volatility}, "
+                f"hit-frequency {m.hit_frequency}") if m else "no metrics"
+        if result.status == "pass":
+            return (f"Tuned to PASS — {head}. A tuned model is ready; say 'apply it' "
+                    f"to write it into the slot model (a human confirms).")
+        if result.status == "near_miss":
+            misses = "; ".join(
+                f"{x.metric} measured {x.measured}, needs {x.band_lo}–{x.band_hi}"
+                for x in result.missed) or "see the Tuner pane"
+            return (f"Tuned to NEAR-MISS — {head}. Missed: {misses}. Try raising "
+                    f"candidate counts / generations, re-weighting, or relaxing the "
+                    f"GDD intent, then tune again.")
+        return f"Tuning failed: {result.failure or 'unknown error'}."
+
+    return StructuredTool.from_function(
+        coroutine=tune_slot_model,
+        name="tune_slot_model",
+        description=(
+            "Run the genetic tuner on the current slot model toward the GDD design "
+            "intent, to completion, and report the verdict (PASS / NEAR-MISS) with "
+            "measured RTP, volatility, and hit-rates. Live convergence shows in the "
+            "Tuner pane. Does NOT apply the result — use apply_tuned_model for that."
+        ),
+    )
+
+
+def build_apply_tuned_model_tool(ctx: ToolContext) -> BaseTool:
+    async def apply_tuned_model() -> str:
+        doc = await ctx.tuner_store.get(ctx.game_id)
+        tuned = doc.result.tuned_model if (doc and doc.result) else None
+        if not tuned:
+            return "No tuned model to apply yet — run a tune first."
+        label = ("Apply the tuned model to the slot model? This overwrites the "
+                 "current realization.")
+        decision = interrupt(
+            {"tool": "apply_tuned_model", "args": {}, "label": label})
+        if decision != "approve":
+            return "Apply declined by the user; the slot model is unchanged."
+        await ctx.sim_store.put(ctx.game_id, model=tuned)
+        return ("Applied the tuned model to the slot model. Re-curate (in the "
+                "Simulator) to confirm it still passes.")
+
+    return StructuredTool.from_function(
+        coroutine=apply_tuned_model,
+        name="apply_tuned_model",
+        description=(
+            "Apply the most recent tuned slot model into the game's slot model, "
+            "overwriting the current realization. Destructive; the studio asks the "
+            "human to approve before it runs. Call only after a tune produced a model."
+        ),
+    )
+
+
 class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
@@ -422,16 +631,24 @@ class ToolFactory:
         "scene_remove_node": build_scene_remove_node_tool,
         "scene_apply_batch": build_scene_apply_batch_tool,
         "realize_symbol": build_realize_symbol_tool,
+        "read_tuner_setup": build_read_tuner_setup_tool,
+        "set_tuner_params": build_set_tuner_params_tool,
+        "tune_slot_model": build_tune_slot_model_tool,
+        "apply_tuned_model": build_apply_tuned_model_tool,
     }
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,
-                 scene_store=None, scene_hub=None):
+                 scene_store=None, scene_hub=None,
+                 sim_store=None, tuner_store=None, tuner_hub=None):
         self._asset_store = asset_store
         self._asset_hub = asset_hub
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
         self._scene_store = scene_store
         self._scene_hub = scene_hub
+        self._sim_store = sim_store
+        self._tuner_store = tuner_store
+        self._tuner_hub = tuner_hub
 
     def known_tool_names(self) -> set[str]:
         return set(self._BUILDERS)

@@ -104,7 +104,9 @@ def build(settings: Settings) -> AppContext:
     run_store = RunStore(mongo[settings.mongo_db])
     fastapi_app.state.run_store = run_store
     tool_factory = ToolFactory(asset_store, asset_hub, gdd_store=gdd_store, gdd_hub=gdd_hub,
-                               scene_store=scene_store, scene_hub=scene_hub)
+                               scene_store=scene_store, scene_hub=scene_hub,
+                               sim_store=sim_store, tuner_store=tuner_store,
+                               tuner_hub=tuner_hub)
     skill_registry = SkillRegistry(Path(settings.skills_dir), tool_factory.known_tool_names())
     skill_registry.load()
     turn_runner = TurnRunner(lambda model: build_chat_model(settings, model), tool_factory)
@@ -117,6 +119,7 @@ def build(settings: Settings) -> AppContext:
         asset_store=asset_store, asset_hub=asset_hub,
         gdd_store=gdd_store, gdd_hub=gdd_hub,
         scene_store=scene_store, scene_hub=scene_hub,
+        sim_store=sim_store, tuner_store=tuner_store, tuner_hub=tuner_hub,
     )
     register_socket_handlers(sio, hub, presence)
 

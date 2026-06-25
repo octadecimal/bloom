@@ -3,6 +3,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from app.simulator.models import MetricsWire
 
+TUNER_TOOL_NAMES: set[str] = {
+    "read_tuner_setup", "set_tuner_params", "tune_slot_model", "apply_tuned_model",
+}
+
 
 class _WireModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

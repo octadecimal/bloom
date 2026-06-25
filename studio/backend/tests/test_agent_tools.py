@@ -23,6 +23,10 @@ async def test_known_tool_names():
         "scene_add_node", "scene_set_prop", "scene_connect",
         "scene_disconnect", "scene_remove_node", "scene_apply_batch",
         "realize_symbol",
+        "read_tuner_setup",
+        "set_tuner_params",
+        "tune_slot_model",
+        "apply_tuned_model",
     }
 
 

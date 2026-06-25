@@ -27,6 +27,9 @@ class RoomHub:
         gdd_hub=None,
         scene_store=None,
         scene_hub=None,
+        sim_store=None,
+        tuner_store=None,
+        tuner_hub=None,
     ):
         self._sio = sio
         self._store = store
@@ -41,6 +44,9 @@ class RoomHub:
         self._gdd_hub = gdd_hub
         self._scene_store = scene_store
         self._scene_hub = scene_hub
+        self._sim_store = sim_store
+        self._tuner_store = tuner_store
+        self._tuner_hub = tuner_hub
         self._router_spec = None
         # queues hold turn descriptors: {"kind": "prompt"} (no-tool plain chat)
         # or {"kind": "skill", "author": …, "skillName": …, "args": …,
@@ -281,7 +287,9 @@ class RoomHub:
         messages = [{"role": m.role, "content": m.content} for m in history]
         ctx = ToolContext(room_id, room.game_id, self._asset_store, self._asset_hub,
                          gdd_store=self._gdd_store, gdd_hub=self._gdd_hub,
-                         scene_store=self._scene_store, scene_hub=self._scene_hub)
+                         scene_store=self._scene_store, scene_hub=self._scene_hub,
+                         sim_store=self._sim_store, tuner_store=self._tuner_store,
+                         tuner_hub=self._tuner_hub)
         status = "completed"
         try:
             async for ev in self._runner.run(
