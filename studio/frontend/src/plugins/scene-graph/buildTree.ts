@@ -1,4 +1,4 @@
-import type { IGameDocument, NodeType } from '../game/state';
+import type { ISceneDocument, NodeType } from '../../scene/types';
 
 export interface ITreeRow {
   id: string;
@@ -12,7 +12,7 @@ export interface ITreeRow {
 // depth-tagged row list. Pure: no React/hookstate. `collapsed[id] === true`
 // hides a node's descendants (the row still reports hasChildren). Absent =>
 // expanded. Data-only nodes (reachable only via `data` edges) are excluded.
-export function buildTree(doc: IGameDocument, collapsed: Record<string, boolean> = {}): ITreeRow[] {
+export function buildTree(doc: ISceneDocument, collapsed: Record<string, boolean> = {}): ITreeRow[] {
   const root = Object.values(doc.nodes).find((n) => n.type === 'Root');
   if (!root) return [];
 

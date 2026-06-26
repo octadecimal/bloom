@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { rootStore } from '../../state/rootStore';
-import { GAME_PLUGIN_ID, gameSlice, makeInitialState as makeGameState, type IGameDocument } from '../game/state';
+import { SCENE_STORE_ID, sceneStore, makeInitialSceneState } from '../../scene/sceneStore';
+import type { ISceneDocument } from '../../scene/types';
 import { SCENE_GRAPH_PLUGIN_ID, sceneGraphSlice, makeInitialState } from './state';
 import { SceneGraphPane } from './SceneGraphPane';
 
 const fakeProps = {} as Parameters<typeof SceneGraphPane>[0];
 
-const fixture: IGameDocument = {
+const fixture: ISceneDocument = {
   version: 1,
   nodes: {
     root: { id: 'root', type: 'Root', props: { name: 'Stage' } },
@@ -21,7 +22,7 @@ const fixture: IGameDocument = {
 };
 
 beforeEach(() => {
-  rootStore.plugins.nested(GAME_PLUGIN_ID).set(makeGameState() as never);
+  rootStore.plugins.nested(SCENE_STORE_ID).set(makeInitialSceneState() as never);
   rootStore.plugins.nested(SCENE_GRAPH_PLUGIN_ID).set(makeInitialState() as never);
 });
 
@@ -32,7 +33,7 @@ describe('SceneGraphPane', () => {
   });
 
   it('renders a row per hierarchy node, showing name or id', () => {
-    act(() => gameSlice().document.set(fixture as never));
+    act(() => sceneStore().document.set(fixture as never));
     render(<SceneGraphPane {...fakeProps} />);
     expect(screen.getByTestId('scene-row-root').textContent).toContain('Stage');
     expect(screen.getByTestId('scene-row-c1')).toBeTruthy();
@@ -40,7 +41,7 @@ describe('SceneGraphPane', () => {
   });
 
   it('records selectedId when a row is clicked', () => {
-    act(() => gameSlice().document.set(fixture as never));
+    act(() => sceneStore().document.set(fixture as never));
     render(<SceneGraphPane {...fakeProps} />);
     fireEvent.click(screen.getByTestId('scene-row-c1'));
     expect(sceneGraphSlice().selectedId.get()).toBe('c1');
@@ -48,7 +49,7 @@ describe('SceneGraphPane', () => {
   });
 
   it('collapses a node, hiding its descendants', () => {
-    act(() => gameSlice().document.set(fixture as never));
+    act(() => sceneStore().document.set(fixture as never));
     render(<SceneGraphPane {...fakeProps} />);
     fireEvent.click(screen.getByTestId('scene-toggle-c1'));
     expect(screen.queryByTestId('scene-row-s1')).toBeNull();
