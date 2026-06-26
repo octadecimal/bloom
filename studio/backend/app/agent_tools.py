@@ -581,9 +581,10 @@ class PlacedElement:
 def _texture_of(document: dict, sprite_id: str) -> str | None:
     """The Texture node id bound to a sprite's `texture` port, or None."""
     for e in document.get("edges", []):
-        if (e.get("type") == "data" and e["to"]["node"] == sprite_id
-                and e["to"]["port"] == "texture"):
-            return e["from"]["node"]
+        to = e.get("to") or {}
+        if (e.get("type") == "data" and to.get("node") == sprite_id
+                and to.get("port") == "texture"):
+            return (e.get("from") or {}).get("node")
     return None
 
 
@@ -600,7 +601,8 @@ def _placed_elements(document: dict, assets: list) -> list[PlacedElement]:
         handle = nid[len("spr."):] if nid.startswith("spr.") else nid
         role = props.get("role") or ""
         tex_id = _texture_of(document, nid)
-        src = (nodes.get(tex_id) or {}).get("props", {}).get("src") if tex_id else None
+        tex_node = nodes.get(tex_id) or {}
+        src = (tex_node.get("props") or {}).get("src") if tex_id else None
         asset = next(
             (a for a in assets
              if getattr(a, "slot", None) == handle or getattr(a, "id", None) == handle),

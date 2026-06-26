@@ -81,3 +81,24 @@ def test_resolve_returns_multiple_when_ref_is_ambiguous():
                                          "props": {"role": "prop"}}
     handles = sorted(e.handle for e in _resolve_placed_elements(doc, _ASSETS, "seaweed"))
     assert handles == ["seaweed", "seaweed_left", "seaweed_right"]
+
+
+def test_placed_elements_tolerates_malformed_doc():
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {"width": 1280, "height": 720}},
+            "spr.seaweed": {"id": "spr.seaweed", "type": "Sprite", "props": {"role": "prop"}},
+            "tex.seaweed": {"id": "tex.seaweed", "type": "Texture", "props": None},
+        },
+        "edges": [
+            {"id": "broken", "type": "data", "from": {"node": "tex.seaweed", "port": "data"}},
+            {"id": "d", "type": "data", "from": {"node": "tex.seaweed", "port": "data"},
+             "to": {"node": "spr.seaweed", "port": "texture"}},
+        ],
+    }
+    els = _placed_elements(doc, [])
+    by_handle = {e.handle: e for e in els}
+    assert "seaweed" in by_handle
+    assert by_handle["seaweed"].texture_id == "tex.seaweed"  # the well-formed edge still resolves
+    assert by_handle["seaweed"].src is None                  # props=None tolerated
