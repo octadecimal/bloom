@@ -197,7 +197,17 @@ class ReplayToolCallingChatModel(BaseChatModel):
             return None  # all rounds done → emit final
         raw = rounds[idx]
         if self._bound_names:
-            raw = [c for c in raw if c["name"] in self._bound_names]
+            filtered = [c for c in raw if c["name"] in self._bound_names]
+            # A round that was non-empty in the cassette but becomes empty after
+            # the binding-filter would emit an empty AIMessage, which the react
+            # agent reads as a final answer — silently swallowing every remaining
+            # round. Fail loudly instead.
+            if raw and not filtered:
+                raise ValueError(
+                    f"replay cassette round {idx} has no calls bound to this "
+                    f"model (bound={sorted(n for n in self._bound_names if n)})"
+                )
+            raw = filtered
         return raw
 
     async def _agenerate(
