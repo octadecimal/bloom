@@ -5,8 +5,15 @@ import { seedLocalStorage } from './helpers';
 // Backend must be started in replay mode (`just backend-serve-replay`, i.e. PROVIDER_MODE=replay).
 // Local-only; not in CI. Each test uses a UNIQUE room/game name for determinism.
 
-async function openApp(page: Page, username: string) {
+async function openApp(page: Page, username: string, seedViewMode: string | null = 'large') {
   await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username } }));
+  // Seed the asset-board view mode via an init script for tests that need full
+  // chrome (default 'large'). Pass null to skip it — required by the persistence
+  // test, since the init script otherwise re-applies on every reload and would
+  // clobber a mode the app itself saved.
+  if (seedViewMode) {
+    await seedLocalStorage(page, 'bloom.studio.assets.prefs', JSON.stringify({ version: 1, data: { viewMode: seedViewMode } }));
+  }
   await page.goto('/');
   await expect(page.getByTestId('room-picker')).toBeVisible();
 }
@@ -169,4 +176,37 @@ test('clicking a generated preview opens a full-size viewer', async ({ page }) =
   }).toPass({ timeout: 15_000 });
   await page.getByTestId('asset-candidates').locator('img').first().click();
   await expect(page.getByTestId('image-lightbox-img')).toBeHidden();
+});
+
+test('view-mode toggle changes density, reveals actions on hover, and persists', async ({ page }) => {
+  const name = `View ${Date.now()}`;
+  // No view-mode seed: start from the real default (medium) so the mode the app
+  // persists below survives the reload (an init-script seed would re-apply on reload).
+  await openApp(page, 'alice', null);
+  await createGameViaRoom(page, name);
+  await addAsset(page);
+
+  // Switch to Medium: card width shrinks vs Large (denser).
+  const card = page.getByTestId(/^asset-card-/).first();
+  await page.getByTestId('view-mode-large').click();
+  await expect(page.getByTestId('asset-grid')).toHaveAttribute('data-view-mode', 'large');
+  const largeWidth = (await card.boundingBox())!.width;
+  await page.getByTestId('view-mode-medium').click();
+  await expect(page.getByTestId('asset-grid')).toHaveAttribute('data-view-mode', 'medium');
+  const mediumWidth = (await card.boundingBox())!.width;
+  expect(mediumWidth).toBeLessThan(largeWidth);
+
+  // In Medium the Generate action is hidden until the card is hovered.
+  await expect(page.getByTestId('asset-generate')).toHaveCount(0);
+  await card.hover();
+  await expect(page.getByTestId('asset-generate')).toBeVisible();
+
+  // List mode lays cards out as full-width rows.
+  await page.getByTestId('view-mode-list').click();
+  await expect(page.getByTestId('asset-grid')).toHaveAttribute('data-view-mode', 'list');
+
+  // The chosen mode persists across a reload.
+  await page.reload();
+  await expect(page.getByTestId('chat-room-pane')).toBeVisible();
+  await expect(page.getByTestId('asset-grid')).toHaveAttribute('data-view-mode', 'list');
 });
