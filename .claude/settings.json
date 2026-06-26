@@ -2,9 +2,11 @@
   "extraKnownMarketplaces": {
     "superpowers-marketplace": {
       "source": { "source": "github", "repo": "obra/superpowers-marketplace" }
-    }
+    },
+    "bloom-local": { "source": { "source": "directory", "path": "./.claude/plugins" } }
   },
   "enabledPlugins": {
-    "superpowers@superpowers-marketplace": true
+    "superpowers@superpowers-marketplace": true,
+    "bloom@bloom-local": true
   }
 }
