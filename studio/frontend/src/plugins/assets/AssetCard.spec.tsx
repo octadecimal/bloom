@@ -38,7 +38,7 @@ beforeEach(() => {
 
 describe('AssetCard', () => {
   it('shows a progress indicator while generating', () => {
-    render(<AssetCard index={0} />);
+    render(<AssetCard index={0} mode="large" />);
     expect(screen.getByTestId('asset-progress')).toBeTruthy();
   });
 
@@ -51,7 +51,7 @@ describe('AssetCard', () => {
         progress: null,
       }),
     ]);
-    render(<AssetCard index={0} />);
+    render(<AssetCard index={0} mode="large" />);
     const img = screen.getByTestId('asset-selected-image') as HTMLImageElement;
     expect(img.src).toContain('/media/g1/a1/gen1.png');
   });
@@ -59,7 +59,7 @@ describe('AssetCard', () => {
   it('always renders a visible, enabled Generate button for an idle asset', () => {
     // Checks that an idle asset exposes a Generate button that is present and not disabled.
     assetsSlice().assets.set([mk({ status: 'idle', progress: null })]);
-    const { getByTestId } = render(<AssetCard index={0} />);
+    const { getByTestId } = render(<AssetCard index={0} mode="large" />);
     const gen = getByTestId('asset-generate') as HTMLButtonElement;
     expect(gen).toBeTruthy();
     expect(gen.disabled).toBe(false);
@@ -70,8 +70,8 @@ describe('AssetCard', () => {
     assetsSlice().assets.set([mk({ id: 'a1', progress: null, status: 'queued' }), mk({ id: 'a2', progress: null, status: 'queued' })]);
     render(
       <>
-        <AssetCard index={0} />
-        <AssetCard index={1} />
+        <AssetCard index={0} mode="large" />
+        <AssetCard index={1} mode="large" />
       </>,
     );
     window.__renderCounts = {}; // reset after mount
@@ -86,7 +86,7 @@ describe('AssetCard', () => {
 
   it('renders the error message when the asset status is error', () => {
     assetsSlice().assets.set([mk({ status: 'error', error: 'boom', progress: null })]);
-    const { getByTestId } = render(<AssetCard index={0} />);
+    const { getByTestId } = render(<AssetCard index={0} mode="large" />);
     const err = getByTestId('asset-error');
     expect(err).toBeTruthy();
     expect(err.textContent).toContain('boom');
@@ -101,7 +101,7 @@ describe('AssetCard', () => {
         progress: null,
       }),
     ]);
-    render(<AssetCard index={0} />);
+    render(<AssetCard index={0} mode="large" />);
     expect(screen.queryByTestId('image-lightbox')).toBeNull();
     fireEvent.click(screen.getByTestId('asset-selected-image'));
     const img = screen.getByTestId('image-lightbox-img') as HTMLImageElement;
@@ -120,7 +120,7 @@ describe('AssetCard', () => {
         progress: null,
       }),
     ]);
-    render(<AssetCard index={0} />);
+    render(<AssetCard index={0} mode="large" />);
     // Open the lightbox
     fireEvent.click(screen.getByTestId('asset-selected-image'));
     expect(screen.getByTestId('image-lightbox-img')).toBeTruthy();
@@ -144,10 +144,60 @@ describe('AssetCard', () => {
         progress: null,
       }),
     ]);
-    render(<AssetCard index={0} />);
+    render(<AssetCard index={0} mode="large" />);
     const thumb = screen.getByTestId('asset-candidates').querySelectorAll('img')[1];
     fireEvent.click(thumb);
     expect(selectGeneration).toHaveBeenCalledWith('a1', 'gen2');
     expect(screen.queryByTestId('image-lightbox')).toBeNull();
+  });
+
+  it('large mode shows the workflow tag, candidates, and an always-visible Generate', () => {
+    assetsSlice().assets.set([
+      mk({
+        status: 'done',
+        generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
+    ]);
+    render(<AssetCard index={0} mode="large" />);
+    expect(screen.getByTestId('asset-candidates')).toBeTruthy();
+    expect(screen.getByText('schnell-opaque')).toBeTruthy();
+    expect(screen.getByTestId('asset-generate')).toBeTruthy();
+  });
+
+  it('medium mode hides workflow + candidates and reveals actions only on hover', () => {
+    assetsSlice().assets.set([
+      mk({
+        status: 'done',
+        generations: [{ id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' }],
+        selectedGenerationId: 'gen1',
+        progress: null,
+      }),
+    ]);
+    render(<AssetCard index={0} mode="medium" />);
+    expect(screen.queryByTestId('asset-candidates')).toBeNull();
+    expect(screen.queryByText('schnell-opaque')).toBeNull();
+    expect(screen.queryByTestId('asset-generate')).toBeNull();
+    fireEvent.mouseEnter(screen.getByTestId('asset-card-a1'));
+    expect(screen.getByTestId('asset-generate')).toBeTruthy();
+    fireEvent.mouseLeave(screen.getByTestId('asset-card-a1'));
+    expect(screen.queryByTestId('asset-generate')).toBeNull();
+  });
+
+  it('surfaces the error state in compact (small) mode', () => {
+    assetsSlice().assets.set([mk({ status: 'error', error: 'boom', progress: null })]);
+    render(<AssetCard index={0} mode="small" />);
+    expect(screen.getByTestId('asset-error').textContent).toContain('boom');
+  });
+
+  it('list mode renders a row with name, workflow, and always-visible actions', () => {
+    assetsSlice().assets.set([mk({ status: 'idle', progress: null })]);
+    render(<AssetCard index={0} mode="list" />);
+    const card = screen.getByTestId('asset-card-a1');
+    expect(card.getAttribute('data-view-mode')).toBe('list');
+    expect(screen.getByText('Wild')).toBeTruthy();
+    expect(screen.getByText('schnell-opaque')).toBeTruthy();
+    expect(screen.getByTestId('asset-generate')).toBeTruthy();
   });
 });
