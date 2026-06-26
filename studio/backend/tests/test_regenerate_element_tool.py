@@ -163,3 +163,80 @@ def test_factory_registers_regenerate_element():
     assert "regenerate_element" in f.known_tool_names()
     ctx = ToolContext("r1", "g1", None, None)
     assert f.build(["regenerate_element"], ctx)[0].name == "regenerate_element"
+
+
+@pytest.mark.asyncio
+async def test_regenerate_element_no_bound_texture_is_friendly():
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {"width": 1280, "height": 720}},
+            "spr.orphan": {"id": "spr.orphan", "type": "Sprite", "props": {"role": "prop"}},
+        },
+        "edges": [
+            {"id": "c", "type": "child", "from": {"node": "root", "port": "children"},
+             "to": {"node": "spr.orphan", "port": "parent"}},
+        ],
+    }
+    ctx, _ = _ctx(doc, _seaweed_asset())
+    out = await build_regenerate_element_tool(ctx).ainvoke({"ref": "orphan"})
+    assert "no bound texture" in out.lower()
+    assert ctx.scene_hub.ops == []
+
+
+@pytest.mark.asyncio
+async def test_regenerate_element_asset_not_on_board_is_friendly():
+    doc = {
+        "version": 1,
+        "nodes": {
+            "root": {"id": "root", "type": "Root", "props": {"width": 1280, "height": 720}},
+            "spr.ghost": {"id": "spr.ghost", "type": "Sprite", "props": {"role": "prop"}},
+            "tex.ghost": {"id": "tex.ghost", "type": "Texture", "props": {"src": "/media/x.png"}},
+        },
+        "edges": [
+            {"id": "c", "type": "child", "from": {"node": "root", "port": "children"},
+             "to": {"node": "spr.ghost", "port": "parent"}},
+            {"id": "d", "type": "data", "from": {"node": "tex.ghost", "port": "data"},
+             "to": {"node": "spr.ghost", "port": "texture"}},
+        ],
+    }
+
+    class _EmptyAssets(_Assets):
+        async def list_assets(self, game_id):
+            return []
+        async def get_by_slot(self, game_id, slot):
+            return None
+        async def get_asset(self, asset_id):
+            return None
+
+    assets = _EmptyAssets(_seaweed_asset())
+    hub = _Hub().bind(_seaweed_asset())
+    ctx = ToolContext("r1", "g1", assets, hub,
+                      scene_store=_SceneStore(doc), scene_hub=_SceneHub())
+    out = await build_regenerate_element_tool(ctx).ainvoke({"ref": "ghost"})
+    assert "isn't on the board" in out.lower()
+    assert ctx.scene_hub.ops == []
+
+
+@pytest.mark.asyncio
+async def test_regenerate_element_no_image_leaves_scene_unchanged():
+    doc, asset = _seaweed_doc(), _seaweed_asset()
+
+    class _NoImageAssets(_Assets):
+        async def get_asset(self, asset_id):
+            return Asset(id="a1", game_id="g1", name="Seaweed", prompt="p",
+                         width=512, height=512, workflow="schnell-transparent",
+                         slot="seaweed", generations=[], selected_generation_id=None)
+
+    class _NoOpHub:
+        async def generate_and_wait(self, game_id, asset_id):
+            pass
+
+    assets = _NoImageAssets(asset)
+    ctx = ToolContext("r1", "g1", assets, _NoOpHub(),
+                      scene_store=_SceneStore(doc), scene_hub=_SceneHub())
+    before = set(doc["nodes"])
+    out = await build_regenerate_element_tool(ctx).ainvoke({"ref": "seaweed"})
+    assert "no image" in out.lower()
+    assert ctx.scene_hub.ops == []
+    assert set(doc["nodes"]) == before

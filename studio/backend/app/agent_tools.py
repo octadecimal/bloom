@@ -273,6 +273,8 @@ def build_regenerate_element_tool(ctx: ToolContext) -> BaseTool:
             return (f"'{el.handle}' is placed but has no bound texture to repaint; "
                     f"nothing regenerated.")
         asset = el.asset
+        # slot-less elements are placed as spr.{asset_id}, so the handle may be a
+        # slot (get_by_slot) or an asset id (get_asset) — try both.
         if asset is None:
             asset = (await ctx.asset_store.get_by_slot(ctx.game_id, el.handle)
                      or await ctx.asset_store.get_asset(el.handle))
