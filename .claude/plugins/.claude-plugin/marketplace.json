@@ -1,0 +1,12 @@
+{
+  "name": "bloom-local",
+  "description": "Bloom project-local plugins.",
+  "owner": { "name": "Bloom" },
+  "plugins": [
+    {
+      "name": "bloom",
+      "source": "./bloom",
+      "description": "Bloom project workflows and skills."
+    }
+  ]
+}
