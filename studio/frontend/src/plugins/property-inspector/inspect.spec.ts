@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { inspectSelection } from './inspect';
-import type { IGameDocument } from '../game/state';
+import type { ISceneDocument } from '../../scene/types';
 
-const doc: IGameDocument = {
+const doc: ISceneDocument = {
   version: 1,
   nodes: {
     s1: {
@@ -76,7 +76,7 @@ describe('inspectSelection', () => {
   it('does not loop on a cyclic/malformed value', () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
-    const cdoc: IGameDocument = {
+    const cdoc: ISceneDocument = {
       version: 1,
       nodes: { n: { id: 'n', type: 'Container', props: { c: cyclic as never } } },
       edges: [],

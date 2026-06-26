@@ -1,21 +1,25 @@
+import { useCallback, memo } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { gameHooks, type IGameDocument } from '../game/state';
+import { sceneHooks } from '../../scene/sceneStore';
+import type { ISceneDocument } from '../../scene/types';
 import { sceneGraphHooks } from '../scene-graph/state';
 import { propertyInspectorHooks } from './state';
 import { inspectSelection, type IPropRow } from './inspect';
 import { bumpRenderCount } from '../../app/renderCount';
 
 export function InspectorPane(_props: IDockviewPanelProps) {
-  const game = gameHooks.usePluginState();
+  const scene = sceneHooks.usePluginState();
   const sg = sceneGraphHooks.usePluginState();
   const pi = propertyInspectorHooks.usePluginState();
   bumpRenderCount('InspectorPane');
 
-  const doc = game.document.get({ noproxy: true }) as IGameDocument;
+  const doc = scene.document.get({ noproxy: true }) as ISceneDocument;
   const selectedId = sg.selectedId.get();
   const collapsed = pi.collapsed.get({ noproxy: true }) as Record<string, boolean>;
   const view = inspectSelection(doc, selectedId, collapsed);
+
+  const toggle = useCallback((path: string) => pi.collapsed.set((c) => ({ ...c, [path]: !c[path] })), [pi.collapsed]);
 
   if (!view) {
     return (
@@ -24,8 +28,6 @@ export function InspectorPane(_props: IDockviewPanelProps) {
       </div>
     );
   }
-
-  const toggle = (path: string) => pi.collapsed.set((c) => ({ ...c, [path]: !c[path] }));
 
   return (
     <div data-testid="inspector-pane" className="h-full overflow-auto bg-surface text-sm">
@@ -52,8 +54,13 @@ export function InspectorPane(_props: IDockviewPanelProps) {
   );
 }
 
-function PropRow(props: { row: IPropRow; collapsed: boolean; onToggle: (path: string) => void }) {
-  const { row, collapsed, onToggle } = props;
+interface IPropRowProps {
+  row: IPropRow;
+  collapsed: boolean;
+  onToggle: (path: string) => void;
+}
+
+const PropRow = memo(function PropRow({ row, collapsed, onToggle }: IPropRowProps) {
   const summary = row.kind === 'array' ? `[${row.count ?? 0}]` : `{${row.count ?? 0}}`;
   return (
     <div
@@ -77,4 +84,4 @@ function PropRow(props: { row: IPropRow; collapsed: boolean; onToggle: (path: st
       {row.hasChildren && row.count ? <span className="text-faint">{summary}</span> : <span className="truncate">{row.display}</span>}
     </div>
   );
-}
+});

@@ -31,14 +31,13 @@ The seams this plugin consumes already exist on `main`:
   `INode = { id, type, props: Record<string, JsonValue> }` with
   `type ∈ { Root, Container, Sprite, Texture }`.
 
-> **Note on the brief's premise:** an earlier brief referenced a shared
-> `studio/frontend/src/scene/sceneStore.ts` (PR #95). That shared store is **not**
-> on `main`; the scene document is still owned by the `game` plugin. This plugin
-> therefore reads `gameSlice().document` directly and imports the selection seam
-> from `../scene-graph/state`, mirroring exactly how the scene-graph plugin's
-> `buildTree.ts` / `SceneGraphPane.tsx` already consume these. If the shared
-> scene-store seam lands later, swapping the document import is a one-line change
-> (logged as deferred work in the scene-graph design).
+> **Note on the brief's premise:** an earlier draft of this doc noted that the
+> shared `studio/frontend/src/scene/sceneStore.ts` (PR #95) was not yet on `main`.
+> That seam has now **landed** (PR #95 merged). This plugin therefore reads the
+> shared `sceneHooks` from `../../scene/sceneStore` and types the document as
+> `ISceneDocument` from `../../scene/types`, mirroring exactly how
+> `SceneGraphPane.tsx` consumes these seams. The deferred swap described below is
+> now done.
 
 ## Approaches considered
 
@@ -183,9 +182,10 @@ touched only by a read-only import (`../game/state`).
 2. **UI→backend mutation path (issue #89)** — the write seam required before the
    inspector can edit props or before nodes can be added/removed. Until it exists,
    the inspector stays read-only.
-3. **Shared scene-store seam** — if the document mirror is extracted out of the
-   `game` plugin into a shared scene module (scene-graph design, deferred item 1),
-   swap this plugin's `../game/state` document import to the shared accessor.
+3. **Shared scene-store seam** — the document mirror has been extracted out of the
+   `game` plugin into the shared scene module (PR #95, now on `main`). This plugin
+   already reads `sceneHooks` / `ISceneDocument` from `../../scene/sceneStore` and
+   `../../scene/types`; the swap is complete.
 
 ## Out of scope for v1 (summary)
 

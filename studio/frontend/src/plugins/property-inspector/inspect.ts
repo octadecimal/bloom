@@ -1,4 +1,4 @@
-import type { IGameDocument, JsonValue, NodeType } from '../game/state';
+import type { ISceneDocument, JsonValue, NodeType } from '../../scene/types';
 
 export interface IPropRow {
   path: string; // unique, stable: 'name' | 'tint.r' | 'frames.0' — React key + collapse key
@@ -29,7 +29,7 @@ function formatScalar(v: JsonValue): string {
 // row list. Returns null when nothing is selected or the id is absent from the
 // document (a stale selection). Pure: no React/hookstate. `collapsed[path] === true`
 // hides a branch's descendants (the branch row is still emitted). Absent => expanded.
-export function inspectSelection(doc: IGameDocument, selectedId: string | null, collapsed: Record<string, boolean> = {}): IInspectorView | null {
+export function inspectSelection(doc: ISceneDocument, selectedId: string | null, collapsed: Record<string, boolean> = {}): IInspectorView | null {
   if (selectedId === null) return null;
   const node = doc.nodes[selectedId];
   if (!node) return null;
