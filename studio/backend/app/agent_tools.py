@@ -121,20 +121,28 @@ def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
 
         handle = slot or asset.id
 
-        # 2. read the scene: find the Root (its dims are the canvas) or plan one
-        doc = await ctx.scene_store.get_document(ctx.game_id) or empty_document()
-        nodes = doc.get("nodes", {})
-        root_id = next((nid for nid, n in nodes.items() if n.get("type") == "Root"), None)
-        ensure_root = parent == "root" and root_id is None
-        parent_id = (root_id or "root") if parent == "root" else parent
-        root_props = (nodes.get(root_id) or {}).get("props", {}) if root_id else {}
-        canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
-                  int(root_props.get("height", DEFAULT_CANVAS[1])))
+        # 2. resolve the parent + canvas. For the default 'root' parent the hub
+        #    creates the Root idempotently UNDER ITS LOCK (so two parallel
+        #    add_sprite calls can't both emit `addNode root` and collide); the
+        #    sprite batch below never carries a Root op. A custom parent does not
+        #    auto-create a Root — derive the canvas from a light read for centering.
+        if parent == "root":
+            info = await ctx.scene_hub.ensure_root(ctx.game_id, DEFAULT_CANVAS)
+            parent_id = info["root_id"]
+            canvas = info["canvas"]
+        else:
+            parent_id = parent
+            doc = await ctx.scene_store.get_document(ctx.game_id) or empty_document()
+            nodes = doc.get("nodes", {})
+            root_id = next((nid for nid, n in nodes.items() if n.get("type") == "Root"), None)
+            root_props = (nodes.get(root_id) or {}).get("props", {}) if root_id else {}
+            canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
+                      int(root_props.get("height", DEFAULT_CANVAS[1])))
 
-        # 3. build + apply the placement as one atomic batch
+        # 3. build + apply the placement as one atomic batch (no Root op)
         ops = build_sprite_ops(
             handle=handle, src=src, role=role, parent_id=parent_id,
-            ensure_root=ensure_root, canvas=canvas,
+            ensure_root=False, canvas=canvas,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
         )

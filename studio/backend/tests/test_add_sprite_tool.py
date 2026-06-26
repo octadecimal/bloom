@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from datetime import datetime, timezone
 
@@ -8,9 +9,9 @@ from app.scene.hub import GameSceneHub
 from app.scene.store import GameSceneStore
 
 
-def _asset(slot="background", width=1280, height=720, ref="/media/g/a/bg.png"):
+def _asset(slot="background", width=1280, height=720, ref="/media/g/a/bg.png", id="a1"):
     return Asset(
-        id="a1", game_id="g1", name=slot.title(), prompt="p",
+        id=id, game_id="g1", name=slot.title(), prompt="p",
         width=width, height=height, workflow="schnell-opaque", slot=slot,
         generations=[Generation(id="gen1", seed=1, image_ref=ref,
                                  created_at=datetime.now(timezone.utc))],
@@ -27,9 +28,30 @@ class _AssetStore:
         return self._asset if (self._asset and self._asset.id == asset_id) else None
 
 
+class _MultiAssetStore:
+    def __init__(self, assets):
+        self._by_slot = {a.slot: a for a in assets}
+        self._by_id = {a.id: a for a in assets}
+    async def get_by_slot(self, game_id, slot):
+        return self._by_slot.get(slot)
+    async def get_asset(self, asset_id):
+        return self._by_id.get(asset_id)
+
+
 class _RecordingHub:
-    def __init__(self):
+    def __init__(self, existing_root_canvas=None):
         self.batches = []
+        self._roots: dict[str, dict] = {}
+        self._existing_root_canvas = existing_root_canvas
+    async def ensure_root(self, game_id, canvas):
+        # Mirror the real hub: a pre-existing Root's dims win over the default;
+        # otherwise create+remember a root keyed by game (idempotent).
+        info = self._roots.get(game_id)
+        if info is None:
+            seed = self._existing_root_canvas or canvas
+            info = {"root_id": "root", "canvas": (int(seed[0]), int(seed[1]))}
+            self._roots[game_id] = info
+        return info
     async def apply_batch(self, game_id, ops):
         self.batches.append(ops)
         return {"version": 1, "nodes": {}, "edges": []}
@@ -50,7 +72,8 @@ class _RootSceneStore:
 
 @pytest.mark.asyncio
 async def test_add_sprite_resolves_by_slot_and_applies_one_batch():
-    hub = _RecordingHub()
+    # an existing Root (800x600) supplies the canvas via the hub's ensure_root
+    hub = _RecordingHub(existing_root_canvas=(800, 600))
     ctx = ToolContext("r1", "g1", _AssetStore(_asset()), None,
                       scene_store=_RootSceneStore(), scene_hub=hub)
     out = await build_add_sprite_tool(ctx).ainvoke(
@@ -71,9 +94,12 @@ async def test_add_sprite_creates_root_when_scene_empty():
     ctx = ToolContext("r1", "g1", _AssetStore(_asset()), None,
                       scene_store=_EmptySceneStore(), scene_hub=hub)
     await build_add_sprite_tool(ctx).ainvoke({"slot": "background"})
+    # Root is now created via the hub's lock-held ensure_root, not inside the
+    # sprite batch — the batch must NOT carry an addNode root op.
+    assert hub._roots.get("g1") == {"root_id": "root", "canvas": (1280, 720)}
     ops = hub.batches[0]
-    assert ops[0] == {"kind": "addNode", "id": "root", "type": "Root",
-                      "props": {"width": 1280, "height": 720}}
+    assert not any(o.get("type") == "Root" for o in ops)
+    assert ops[0]["id"] == "spr.background"
 
 
 @pytest.mark.asyncio
@@ -128,6 +154,44 @@ async def test_add_sprite_against_real_store_renders_a_parented_bound_sprite(mon
     data_edges = [e for e in doc["edges"] if e["type"] == "data"
                   and e["to"]["node"] == "spr.background"]
     assert data_edges and data_edges[0]["from"]["node"] == "tex.background"
+    await mongo_db["game_scenes"].delete_many({})
+
+
+@pytest.mark.asyncio
+async def test_concurrent_add_sprite_into_empty_scene_keeps_both(mongo_db):
+    """Two add_sprite calls in one turn (asyncio.gather) against an empty scene
+    must each persist their own sprite, share ONE Root, and orphan nothing.
+
+    Regression: the old code read the empty doc OUTSIDE the hub lock, so both
+    calls set ensure_root=True and both emitted `addNode root`; the second batch
+    was rejected on the duplicate Root id, silently dropping its sprite.
+    """
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+
+    class _SilentSio:
+        async def emit(self, *a, **k): ...
+        async def enter_room(self, *a, **k): ...
+
+    hub = GameSceneHub(_SilentSio(), store)
+    assets = _MultiAssetStore([
+        _asset(slot="background", id="a1", ref="/media/g/a/bg.png"),
+        _asset(slot="logo", width=768, height=512, id="a2", ref="/media/g/a/logo.png"),
+    ])
+    ctx = ToolContext("r1", "g1", assets, None, scene_store=store, scene_hub=hub)
+    tool = build_add_sprite_tool(ctx)
+
+    await asyncio.gather(
+        tool.ainvoke({"slot": "background", "role": "background", "fit": "cover"}),
+        tool.ainvoke({"slot": "logo", "role": "logo", "y": 0, "anchor_y": 0}),
+    )
+
+    doc = await store.get_document("g1")
+    nodes = doc["nodes"]
+    assert "spr.background" in nodes and "spr.logo" in nodes
+    roots = [nid for nid, n in nodes.items() if n["type"] == "Root"]
+    assert roots == ["root"]  # exactly one Root
+    assert unreachable_nodes(doc) == []
     await mongo_db["game_scenes"].delete_many({})
 
 
