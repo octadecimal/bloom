@@ -82,6 +82,14 @@ docs: clarify setup steps in README
   `enabledPlugins`), so cloning the repo makes the same skills available. If the
   install prompt doesn't fire on folder trust, run:
   `claude plugin install superpowers@superpowers-marketplace`.
+- The repo ships a **local `bloom` plugin** (`.claude/plugins/bloom/`) registered via
+  a co-located marketplace (`.claude/plugins/.claude-plugin/marketplace.json`) and
+  enabled in `.claude/settings.json`. It provides `/bloom:complete-work` — the
+  end-of-branch ritual that verifies CI, merges the open PR, cleans up the
+  worktree/branch, brings up the live stack, and prints a change-specific test
+  walkthrough. If folder-trust doesn't auto-install it on a fresh clone, run once:
+  `claude plugin marketplace add ./.claude/plugins` then
+  `claude plugin install bloom@bloom-local`.
 
 ## Branching & pull requests
 
