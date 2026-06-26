@@ -48,10 +48,12 @@ def load_run_cassettes(fixtures_dir: Path) -> dict[str, dict]:
         return out
     for path in sorted(run_dir.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
-        cassette = {
+        cassette: dict = {
             "tool_calls": data.get("tool_calls", []),
             "final": data.get("final", ["ok"]),
         }
+        if "tool_call_rounds" in data:
+            cassette["tool_call_rounds"] = data["tool_call_rounds"]
         if path.name == "default.json":
             out["__default__"] = cassette
         if "prompt" in data:

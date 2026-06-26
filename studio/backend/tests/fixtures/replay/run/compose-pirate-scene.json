@@ -1,0 +1,38 @@
+{
+  "prompt": "make a pirate theme game with a background and a logo centered at the top",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "generate_asset",
+        "args": {
+          "description": "a pirate ship on the high seas at sunset, full scene background",
+          "slot": "background",
+          "size": "1280x720",
+          "transparent": false
+        }
+      },
+      {
+        "name": "generate_asset",
+        "args": {
+          "description": "a pirate game logo with bold gold lettering and a skull",
+          "slot": "logo",
+          "size": "768x512",
+          "transparent": true
+        }
+      }
+    ],
+    [
+      {
+        "name": "add_sprite",
+        "args": { "slot": "background", "role": "background", "fit": "cover", "z_index": 0 }
+      }
+    ],
+    [
+      {
+        "name": "add_sprite",
+        "args": { "slot": "logo", "role": "logo", "y": 0, "anchor_y": 0 }
+      }
+    ]
+  ],
+  "final": ["Placed a pirate background and a logo at the top of the scene."]
+}
