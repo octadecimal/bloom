@@ -3,6 +3,8 @@ import type { JsonValue } from '../../model/document';
 import type { IGameModule, IModuleHost, IOutcome } from '../module';
 import { validateConfig, type IConfigSchema } from '../schema';
 import { reconcileOps, type IDesiredNode, type IDesiredScene } from '../reconcile';
+import type { IDisplayHandle } from '../../render/renderer';
+import { advance, blurFor, easeOutCubic, reelDelay, settleT, symbolAt, wrap } from './reelsMath';
 
 export const REELS_SCHEMA: IConfigSchema = {
   rows: { type: 'integer', default: 3, min: 1, max: 8 },
@@ -71,6 +73,19 @@ export class ReelsModule implements IGameModule {
   readonly configSchema = REELS_SCHEMA;
   private config: Record<string, JsonValue>;
 
+  private phase: 'idle' | 'spinning' | 'settling' = 'idle';
+  private offsets: number[] = [];
+  private elapsed = 0;
+  private outcome: IOutcome | null = null;
+  private offTick: (() => void) | null = null;
+  private settledGrid: string[][] = [];
+
+  private static readonly SPIN_SPEED = 1.2; // px/ms
+  private static readonly REF_SPEED = 1.2;
+  private static readonly MAX_BLUR = 8;
+  private static readonly SETTLE_MS = 600;
+  private static readonly STAGGER_MS = 150;
+
   constructor(private readonly args: { id: string; host: IModuleHost; config?: Record<string, JsonValue> }) {
     this.config = { ...(args.config ?? {}) };
   }
@@ -93,10 +108,97 @@ export class ReelsModule implements IGameModule {
     this.host.emit(reconcileOps(this.host.snapshot(), desired, owns));
   }
 
-  // Behavior verbs (Task 7) are added below.
-  mount(): void {}
-  update(_dtMs: number): void {}
-  dispose(): void {}
-  startSpinning(): void {}
-  stopSpinning(_outcome: IOutcome): void {}
+  mount(): void {
+    this.offTick = this.host.onTick((dt) => this.update(dt));
+  }
+
+  dispose(): void {
+    this.offTick?.();
+    this.offTick = null;
+  }
+
+  startSpinning(): void {
+    const cfg = resolveConfig(this.config);
+    this.offsets = new Array(cfg.cols).fill(0);
+    this.outcome = null;
+    this.elapsed = 0;
+    this.phase = 'spinning';
+  }
+
+  stopSpinning(outcome: IOutcome): void {
+    this.outcome = outcome;
+    this.elapsed = 0;
+    this.phase = 'settling';
+  }
+
+  update(dtMs: number): void {
+    if (this.phase === 'idle') return;
+    const cfg = resolveConfig(this.config);
+    const span = cfg.cellSize + cfg.spacing;
+
+    if (this.phase === 'spinning') {
+      for (let c = 0; c < cfg.cols; c++) {
+        this.offsets[c] = advance(this.offsets[c], ReelsModule.SPIN_SPEED, dtMs);
+        this.renderReel(c, cfg, span, ReelsModule.SPIN_SPEED, cfg.symbols);
+      }
+      return;
+    }
+
+    // settling
+    this.elapsed += dtMs;
+    let allDone = true;
+    for (let c = 0; c < cfg.cols; c++) {
+      const t = settleT(this.elapsed, reelDelay(c, ReelsModule.STAGGER_MS), ReelsModule.SETTLE_MS);
+      if (t < 1) allDone = false;
+      const eased = easeOutCubic(t);
+      // Decelerate: residual speed shrinks to 0 as eased -> 1.
+      const speed = ReelsModule.SPIN_SPEED * (1 - eased);
+      this.offsets[c] = advance(this.offsets[c], speed, dtMs);
+      const stripForReel = this.stopStrip(c, cfg.symbols);
+      this.renderReel(c, cfg, span, speed, stripForReel);
+    }
+
+    if (allDone) this.finishSettle(cfg);
+  }
+
+  private renderReel(col: number, cfg: IReelsConfig, span: number, speed: number, strip: string[]): void {
+    const blur = blurFor(speed, ReelsModule.MAX_BLUR, ReelsModule.REF_SPEED);
+    const total = cfg.rows + cfg.buffer;
+    const scrolled = Math.floor(this.offsets[col] / span);
+    for (let r = 0; r < total; r++) {
+      const handle = this.host.resolve(cellId(this.id, col, r));
+      if (!handle) continue;
+      handle.position.y = wrap(r * span + this.offsets[col], total * span) - span;
+      handle.setBlur(blur);
+      // Recycle: the visible symbol for this slot scrolls with the strip.
+      void symbolAt(strip, r - scrolled);
+    }
+  }
+
+  /** The settled stop column for reel `col`, padded to the strip length the renderer indexes. */
+  private stopStrip(col: number, symbols: string[]): string[] {
+    const stops = this.outcome?.grid[col] ?? [];
+    return stops.length ? stops : symbols;
+  }
+
+  private finishSettle(cfg: IReelsConfig): void {
+    const grid: string[][] = [];
+    for (let c = 0; c < cfg.cols; c++) {
+      const stops = this.outcome?.grid[c] ?? [];
+      grid.push(stops.slice(0, cfg.rows));
+      for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
+        const handle = this.host.resolve(cellId(this.id, c, r));
+        if (!handle) continue;
+        handle.setBlur(0);
+        handle.position.y = r * (cfg.cellSize + cfg.spacing);
+      }
+    }
+    this.settledGrid = grid;
+    this.phase = 'idle';
+    this.host.bus.emit('reels:settled', { grid });
+  }
+
+  debugState(): { phase: 'idle' | 'spinning' | 'settling'; grid: string[][] } {
+    return { phase: this.phase, grid: this.settledGrid };
+  }
 }
