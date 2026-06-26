@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BlurFilter } from 'pixi.js';
 import { PixiRenderer } from './pixiRenderer';
 
@@ -55,6 +55,20 @@ describe('PixiRenderer.getHandle', () => {
     const off = r.onTick(() => {});
     expect(typeof off).toBe('function');
     expect(() => off()).not.toThrow();
+  });
+
+  it('buffers ticks registered before mount and flushes them once the app exists', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    const cb = vi.fn();
+    r.onTick(cb); // app is null -> buffered, not dropped
+    const added: Array<(t: { deltaMS: number }) => void> = [];
+    const fakeApp = { ticker: { add: (fn: (t: { deltaMS: number }) => void) => added.push(fn), remove: () => {} } };
+    const internals = r as unknown as { app: unknown; flushPendingTicks(): void };
+    internals.app = fakeApp;
+    internals.flushPendingTicks();
+    expect(added).toHaveLength(1);
+    added[0]({ deltaMS: 16 }); // simulate a ticker frame
+    expect(cb).toHaveBeenCalledWith(16);
   });
 });
 

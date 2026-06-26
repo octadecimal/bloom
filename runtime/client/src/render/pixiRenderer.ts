@@ -57,6 +57,7 @@ export class PixiRenderer implements IRenderer {
   private app: Application | null = null;
   private rootId: string | null = null;
   private objects = new Map<string, DisplayObject>();
+  private pendingTicks: Array<(ticker: Ticker) => void> = [];
 
   constructor(
     private readonly host: HTMLElement,
@@ -69,6 +70,7 @@ export class PixiRenderer implements IRenderer {
     this.host.appendChild(app.canvas);
     app.stage.sortableChildren = true;
     this.app = app;
+    this.flushPendingTicks();
     this.rootId = rootId;
     this.objects.set(rootId, app.stage as unknown as Container);
   }
@@ -176,11 +178,24 @@ export class PixiRenderer implements IRenderer {
   }
 
   onTick(cb: (dtMs: number) => void): () => void {
-    const app = this.app;
-    if (!app) return () => {};
     const fn = (ticker: Ticker) => cb(ticker.deltaMS);
-    app.ticker.add(fn);
-    return () => app.ticker.remove(fn);
+    if (this.app) {
+      this.app.ticker.add(fn);
+    } else {
+      this.pendingTicks.push(fn); // not mounted yet — flushed in mount()
+    }
+    return () => {
+      const i = this.pendingTicks.indexOf(fn);
+      if (i >= 0) this.pendingTicks.splice(i, 1);
+      this.app?.ticker.remove(fn);
+    };
+  }
+
+  private flushPendingTicks(): void {
+    const app = this.app;
+    if (!app) return;
+    for (const fn of this.pendingTicks) app.ticker.add(fn);
+    this.pendingTicks = [];
   }
 }
 
