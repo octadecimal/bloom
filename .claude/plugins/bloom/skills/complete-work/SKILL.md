@@ -74,10 +74,12 @@ worktree being removed.
    git -C C:/code/bloom branch -D <branch>
    ```
 
-**Self-rooted special case:** if THIS session is rooted inside the worktree being
-removed, the OS locks that folder and `worktree remove` fails. Run
-`git worktree prune` + `git branch -D <branch>` anyway, then report the leftover
-folder path for the user to delete manually. Do NOT claim the folder was removed.
+**Self-rooted special case:** detect this first — compare your current working
+directory (`git rev-parse --show-toplevel`) against the worktree path from
+`git worktree list`. If THIS session is rooted inside the worktree being removed,
+the OS locks that folder and `worktree remove` fails. Run `git worktree prune` +
+`git branch -D <branch>` anyway, then report the leftover folder path for the user
+to delete manually. Do NOT claim the folder was removed.
 
 ## 5. Live-stack check + bring-up
 
@@ -85,6 +87,7 @@ All from the primary checkout at offset-0 ports (backend `8000`, frontend `4200`
 runtime `4300`).
 
 First probe health (PowerShell):
+
 ```
 Invoke-RestMethod http://localhost:8000/health
 ```
@@ -110,9 +113,11 @@ Invoke-RestMethod http://localhost:8000/health
   as a failure and report it.
 
 **ComfyUI (:8188) — health-check only, never launch:**
+
 ```
 Invoke-RestMethod http://localhost:8188/system_stats
 ```
+
 If it does not answer, WARN loudly that asset generation will fail and tell the
 user to start ComfyUI from `C:\ComfyUI`. Do NOT start the GPU process yourself.
 
@@ -122,6 +127,7 @@ session ends — say so, so the user isn't surprised later.
 ## 6. Change-specific test walkthrough
 
 Read the just-merged PR's title and diff:
+
 ```
 gh pr view <number> --json title,body,files
 gh pr diff <number>
@@ -132,7 +138,8 @@ Include:
 
 - **URLs:** studio at `http://localhost:4200` AND the LAN URL
   `http://<this-machine-ip>:4200` (the user often browses from another machine —
-  never assume localhost on their end).
+  never assume localhost on their end). Find the LAN IP by running `ipconfig` and
+  reading the IPv4 address of the active adapter.
 - **Where to go:** the exact pane/flow the merged change affects.
 - **What to do:** the concrete clicks/inputs to exercise the change.
 - **What "correct" looks like:** the observable behavior that confirms it works.

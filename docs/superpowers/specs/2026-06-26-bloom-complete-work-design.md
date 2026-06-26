@@ -32,8 +32,8 @@ in `.claude/settings.json` so every clone of the repo gets it.
 .claude/settings.json                   # + extraKnownMarketplaces + enabledPlugins entry
 ```
 
-**Open implementation risk:** the exact `settings.json` wiring for a *local,
-repo-committed* marketplace (source type + whether the path may be relative so it is
+**Open implementation risk:** the exact `settings.json` wiring for a _local,
+repo-committed_ marketplace (source type + whether the path may be relative so it is
 portable across clones, vs. an absolute `C:\code\bloom` path) must be confirmed
 against current Claude Code behavior during build. If a portable relative/local
 source is not supported, fall back to documenting the one-time
@@ -81,8 +81,8 @@ Following the repo's cleanup convention:
 2. `git checkout main` && `git pull` in the primary checkout.
 3. `git worktree remove <path>`, `git worktree prune`, `git branch -D <branch>`.
 
-**Self-rooted special case:** if *this very session is rooted in the worktree being
-removed*, the OS locks that directory and `git worktree remove` will fail. Deregister
+**Self-rooted special case:** if _this very session is rooted in the worktree being
+removed_, the OS locks that directory and `git worktree remove` will fail. Deregister
 it anyway (`git worktree prune` after the folder is gone is the fallback), delete the
 branch, and report the leftover folder path for the user to `rm` manually. Do not
 pretend it was removed.
@@ -136,4 +136,3 @@ script — not a generic tour. It must include:
 - Running or re-running e2e/unit suites (the pre-merge gate trusts prior validation).
 - Any repo other than `octadecimal/bloom`.
 - Detached/persistent server windows (explicitly chosen against).
-```

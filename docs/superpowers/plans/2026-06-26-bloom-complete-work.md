@@ -33,17 +33,20 @@
 ## Task 1: Scaffold the `bloom` plugin + local marketplace and register it
 
 **Files:**
+
 - Create: `.claude/plugins/.claude-plugin/marketplace.json`
 - Create: `.claude/plugins/bloom/.claude-plugin/plugin.json`
 - Create: `.claude/plugins/bloom/skills/complete-work/SKILL.md` (stub — full body lands in Task 2)
 - Modify: `.claude/settings.json`
 
 **Interfaces:**
+
 - Produces: a plugin `bloom` from marketplace `bloom-local`, making the skill discoverable as `/bloom:complete-work`. Task 2 fills the skill body; Task 4 documents the install path.
 
 - [ ] **Step 1: Write the marketplace manifest**
 
 `.claude/plugins/.claude-plugin/marketplace.json`:
+
 ```json
 {
   "name": "bloom-local",
@@ -58,11 +61,13 @@
   ]
 }
 ```
+
 (`source: "./bloom"` resolves relative to the marketplace root `.claude/plugins/`.)
 
 - [ ] **Step 2: Write the plugin manifest**
 
 `.claude/plugins/bloom/.claude-plugin/plugin.json`:
+
 ```json
 {
   "name": "bloom",
@@ -74,6 +79,7 @@
 - [ ] **Step 3: Write a minimal skill stub** (real body comes in Task 2)
 
 `.claude/plugins/bloom/skills/complete-work/SKILL.md`:
+
 ```markdown
 ---
 name: complete-work
@@ -88,6 +94,7 @@ Stub — implemented in Task 2.
 - [ ] **Step 4: Register the marketplace + enable the plugin in `.claude/settings.json`**
 
 Merge these keys into the existing object (keep the superpowers entries intact):
+
 ```json
 {
   "extraKnownMarketplaces": {
@@ -104,21 +111,25 @@ Merge these keys into the existing object (keep the superpowers entries intact):
 - [ ] **Step 5: Validate the JSON files parse**
 
 Run (Bash tool):
+
 ```bash
 for f in .claude/plugins/.claude-plugin/marketplace.json .claude/plugins/bloom/.claude-plugin/plugin.json .claude/settings.json; do
   python -c "import json,sys; json.load(open(sys.argv[1])); print('OK', sys.argv[1])" "$f" || echo "BAD $f"
 done
 ```
+
 Expected: three `OK` lines, no `BAD`.
 
 - [ ] **Step 6: Empirically verify the plugin installs and the skill is discoverable**
 
 Run from the worktree root:
+
 ```bash
 claude plugin marketplace add ./.claude/plugins
 claude plugin install bloom@bloom-local
 claude plugin list
 ```
+
 Expected: `claude plugin list` shows `bloom` enabled.
 
 **If `directory` source is rejected** (the one unconfirmed bit), try the string shorthand `"bloom-local": "./.claude/plugins"` in settings.json, then retry. If neither registers via settings.json, keep the artifacts as-is — they are correct — and rely on the documented manual `claude plugin marketplace add ./.claude/plugins` + `claude plugin install bloom@bloom-local` (added to `AGENTS.md` in Task 4). Record in the commit body which wiring worked.
@@ -135,9 +146,11 @@ git commit -m "feat(plugin): scaffold local bloom plugin + complete-work skill s
 ## Task 2: Author the `complete-work` skill procedure
 
 **Files:**
+
 - Modify: `.claude/plugins/bloom/skills/complete-work/SKILL.md` (replace stub body with full procedure)
 
 **Interfaces:**
+
 - Consumes: the plugin scaffold from Task 1 (skill is already discoverable).
 - Produces: the complete operator procedure for `/bloom:complete-work`.
 
@@ -233,6 +246,7 @@ All from the primary checkout at offset-0 ports (backend `8000`, frontend `4200`
 runtime `4300`).
 
 First probe health (PowerShell):
+
 ```
 Invoke-RestMethod http://localhost:8000/health
 ```
@@ -258,9 +272,11 @@ Invoke-RestMethod http://localhost:8000/health
   as a failure and report it.
 
 **ComfyUI (:8188) — health-check only, never launch:**
+
 ```
 Invoke-RestMethod http://localhost:8188/system_stats
 ```
+
 If it does not answer, WARN loudly that asset generation will fail and tell the
 user to start ComfyUI from `C:\ComfyUI`. Do NOT start the GPU process yourself.
 
@@ -270,6 +286,7 @@ session ends — say so, so the user isn't surprised later.
 ## 6. Change-specific test walkthrough
 
 Read the just-merged PR's title and diff:
+
 ```
 gh pr view <number> --json title,body,files
 gh pr diff <number>
@@ -296,6 +313,7 @@ noted), live stack status + URLs, ComfyUI status, and the walkthrough above.
 - [ ] **Step 2: Lint the skill structure**
 
 Run (Bash tool) — confirm frontmatter + all six step headings are present:
+
 ```bash
 python - <<'PY'
 import re, sys
@@ -309,6 +327,7 @@ for h in ["## 1. Identify the PR","## 2. Pre-merge gate","## 3. Merge",
 print("SKILL.md structure OK")
 PY
 ```
+
 Expected: `SKILL.md structure OK`.
 
 - [ ] **Step 3: Commit**
@@ -323,14 +342,17 @@ git commit -m "feat(skill): author /bloom:complete-work procedure"
 ## Task 3: Document the plugin + manual-install fallback in `AGENTS.md`
 
 **Files:**
+
 - Modify: `AGENTS.md` (under "## Tooling & plugins")
 
 **Interfaces:**
+
 - Consumes: the working (or fallback) wiring confirmed in Task 1 Step 6.
 
 - [ ] **Step 1: Add a Bloom-plugin subsection**
 
 Append to the "## Tooling & plugins" section of `AGENTS.md`:
+
 ```markdown
 - The repo ships a **local `bloom` plugin** (`.claude/plugins/bloom/`) registered via
   a co-located marketplace (`.claude/plugins/.claude-plugin/marketplace.json`) and
@@ -345,9 +367,11 @@ Append to the "## Tooling & plugins" section of `AGENTS.md`:
 - [ ] **Step 2: Verify markdown formatting passes the repo gate**
 
 Run:
+
 ```bash
 node_modules/.bin/prettier --check AGENTS.md
 ```
+
 Expected: `All matched files use Prettier code style!` (or the file listed as already formatted). If it reports a diff, run `node_modules/.bin/prettier --write AGENTS.md` and re-check.
 
 - [ ] **Step 3: Commit**
@@ -364,6 +388,7 @@ git commit -m "docs: document the bloom plugin + /bloom:complete-work"
 **Files:** none (verification only)
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1–3.
 
 - [ ] **Step 1: Confirm the skill is invokable end-to-end**
@@ -375,13 +400,16 @@ list with its description.
 - [ ] **Step 2: Dry-read the procedure for command accuracy**
 
 Re-read `SKILL.md` and cross-check every command against the repo:
+
 - `just mongo-up`, `just backend-serve`, `just serve-frontend`, `just engine-serve`,
   `just preflight` all exist in the `justfile`. ✓ (confirm by grep)
 - The health endpoint is `:8000/health` returning `providerMode`. ✓
-Run:
+  Run:
+
 ```bash
 grep -E "^(mongo-up|backend-serve|serve-frontend|engine-serve|preflight):" justfile
 ```
+
 Expected: all five recipes listed.
 
 - [ ] **Step 3: Prettier gate on all changed docs/JSON**
@@ -389,12 +417,14 @@ Expected: all five recipes listed.
 ```bash
 node_modules/.bin/prettier --check "docs/**/*.md" AGENTS.md ".claude/**/*.json"
 ```
+
 Expected: clean. Fix with `--write` + re-check if needed.
 
 - [ ] **Step 4: Final review + push**
 
 Confirm `git log --oneline main..HEAD` shows the spec, scaffold, skill, and docs
 commits. Push and open the PR:
+
 ```bash
 git push -u origin feat/complete-work-skill
 gh pr create --fill
@@ -405,6 +435,7 @@ gh pr create --fill
 ## Self-Review
 
 **Spec coverage:**
+
 - Packaging (plugin + marketplace + settings) → Task 1. ✓
 - Pure-instructions skill, six-step procedure → Task 2 (full SKILL.md). ✓
 - Pre-merge gate incl. PR-open + CI-running + CI-failing-asks → Task 2 §2. ✓
