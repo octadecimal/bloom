@@ -510,6 +510,63 @@ def build_scene_apply_batch_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+@dataclass
+class PlacedElement:
+    """A sprite that is placed in the scene, joined to its texture and asset."""
+    sprite_id: str
+    texture_id: str | None
+    handle: str
+    role: str
+    asset: object | None
+    src: str | None
+
+
+def _texture_of(document: dict, sprite_id: str) -> str | None:
+    """The Texture node id bound to a sprite's `texture` port, or None."""
+    for e in document.get("edges", []):
+        if (e.get("type") == "data" and e["to"]["node"] == sprite_id
+                and e["to"]["port"] == "texture"):
+            return e["from"]["node"]
+    return None
+
+
+def _placed_elements(document: dict, assets: list) -> list[PlacedElement]:
+    """One PlacedElement per Sprite node, joined to its bound texture and (by the
+    handle derived from the `spr.{handle}` id, matched against asset slot or id)
+    to an asset on the board."""
+    nodes = document.get("nodes", {})
+    out: list[PlacedElement] = []
+    for nid, n in nodes.items():
+        if n.get("type") != "Sprite":
+            continue
+        props = n.get("props") or {}
+        handle = nid[len("spr."):] if nid.startswith("spr.") else nid
+        role = props.get("role") or ""
+        tex_id = _texture_of(document, nid)
+        src = (nodes.get(tex_id) or {}).get("props", {}).get("src") if tex_id else None
+        asset = next(
+            (a for a in assets
+             if getattr(a, "slot", None) == handle or getattr(a, "id", None) == handle),
+            None,
+        )
+        out.append(PlacedElement(nid, tex_id, handle, role, asset, src))
+    return out
+
+
+def _resolve_placed_elements(document: dict, assets: list, ref: str) -> list[PlacedElement]:
+    """Placed elements whose handle, role, or asset name contains `ref`
+    (case-insensitive). An empty `ref` matches nothing."""
+    needle = ref.strip().lower()
+    if not needle:
+        return []
+    out = []
+    for el in _placed_elements(document, assets):
+        name = (getattr(el.asset, "name", "") or "").lower()
+        if needle in el.handle.lower() or needle in el.role.lower() or needle in name:
+            out.append(el)
+    return out
+
+
 def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
     """Resolve (sprite_id, texture_node_id) for a slot, or None.
 
