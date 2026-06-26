@@ -67,7 +67,7 @@ describe('inspectSelection', () => {
     expect(rows.find((r) => r.path === 'empty')).toMatchObject({ kind: 'object', hasChildren: false, display: '{}' });
   });
 
-  it('omits a branch\'s descendants when collapsed', () => {
+  it("omits a branch's descendants when collapsed", () => {
     const rows = inspectSelection(doc, 's1', { tint: true })!.rows;
     expect(rows.find((r) => r.path === 'tint')).toMatchObject({ hasChildren: true });
     expect(rows.find((r) => r.path === 'tint.r')).toBeUndefined();
