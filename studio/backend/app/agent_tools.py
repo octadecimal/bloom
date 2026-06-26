@@ -250,6 +250,61 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_regenerate_element_tool(ctx: ToolContext) -> BaseTool:
+    async def regenerate_element(ref: str, description: str = "") -> str:
+        document = await ctx.scene_store.get_document(ctx.game_id)
+        if not document or not document.get("nodes"):
+            return "The scene is empty; there's nothing placed to regenerate."
+        assets = await ctx.asset_store.list_assets(ctx.game_id)
+
+        matches = _resolve_placed_elements(document, assets, ref)
+        if not matches:
+            return (f"No placed element matches '{ref}'. "
+                    f"Placed: {_placed_summary(document, assets)}. "
+                    f"Use one of those, or add it with generate_and_place.")
+        if len(matches) > 1:
+            opts = ", ".join(
+                m.handle + (f" (role {m.role})" if m.role else "") for m in matches)
+            return (f"'{ref}' matches several placed elements: {opts}. "
+                    f"Call regenerate_element again with ref set to the exact one.")
+
+        el = matches[0]
+        if el.texture_id is None:
+            return (f"'{el.handle}' is placed but has no bound texture to repaint; "
+                    f"nothing regenerated.")
+        asset = el.asset
+        if asset is None:
+            asset = (await ctx.asset_store.get_by_slot(ctx.game_id, el.handle)
+                     or await ctx.asset_store.get_asset(el.handle))
+        if asset is None:
+            return (f"Matched '{el.handle}' in the scene, but its source asset isn't "
+                    f"on the board; can't regenerate.")
+
+        new_ref = await _regenerate_and_rebind(
+            ctx, asset=asset, texture_id=el.texture_id,
+            new_prompt=description or None)
+        if new_ref is None:
+            return (f"Regeneration for '{el.handle}' produced no image; "
+                    f"the scene is unchanged.")
+        return (f"Regenerated '{el.handle}' in place and re-rendered "
+                f"the game.")
+
+    return StructuredTool.from_function(
+        coroutine=regenerate_element, name="regenerate_element",
+        description=(
+            "Regenerate an element that is ALREADY placed in the scene and swap its "
+            "art IN PLACE — keeping its position, scale, and z-index. Use this for "
+            "'regenerate/redo/replace/fix the <thing>' on something already on "
+            "screen; do NOT use generate_and_place for that (it adds a duplicate). "
+            "`ref` is matched fuzzily against each placed element's slot, role, and "
+            "asset name. Pass a refined `description` to fix what was wrong (e.g. "
+            "'not cropped at the top'); omit it to just re-roll the art. If several "
+            "elements match, the tool returns the candidates — call again with the "
+            "exact one."
+        ),
+    )
+
+
 def build_delete_asset_tool(ctx: ToolContext) -> BaseTool:
     async def delete_asset(asset_id: str) -> str:
         asset = await ctx.asset_store.get_asset(asset_id)
@@ -567,6 +622,16 @@ def _resolve_placed_elements(document: dict, assets: list, ref: str) -> list[Pla
     return out
 
 
+def _placed_summary(document: dict, assets: list) -> str:
+    """A short comma list of what is placed, for a no-match message."""
+    els = _placed_elements(document, assets)
+    if not els:
+        return "(nothing placed)"
+    return ", ".join(
+        el.handle + (f" (role {el.role})" if el.role else "") for el in els
+    )
+
+
 def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
     """Resolve (sprite_id, texture_node_id) for a slot, or None.
 
@@ -866,6 +931,7 @@ class ToolFactory:
         "list_assets": build_list_assets_tool,
         "add_sprite": build_add_sprite_tool,
         "generate_and_place": build_generate_and_place_tool,
+        "regenerate_element": build_regenerate_element_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
         "read_gdd_doc": build_read_gdd_doc_tool,
