@@ -43,7 +43,7 @@ describe('ProtocolHost', () => {
       id: 'm3',
       document: { version: 1, nodes: { root: { id: 'root', type: 'Root', props: { width: 800, height: 600 } } }, edges: [] },
     });
-    expect(renderer.calls).toContainEqual(['mount', 'root', { width: 800, height: 600 }]);
+    expect(renderer.calls).toContainEqual(['mount', 'root']);
     expect(sent).toContainEqual({ v: 1, kind: 'ack', id: 'm3' });
   });
 

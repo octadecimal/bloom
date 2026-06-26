@@ -1,4 +1,5 @@
 import type { JsonValue, NodeType } from '../model/document';
+import type { IViewport } from './viewport';
 
 export type ITextureHandle = unknown;
 
@@ -14,7 +15,9 @@ export interface IDisplayHandle {
 }
 
 export interface IRenderer {
-  mount(rootId: string, opts: { width: number; height: number }): void | Promise<void>;
+  mount(rootId: string): void | Promise<void>;
+  /** Resize the canvas to the viewport and apply scale/offset to the root container. */
+  applyViewport(vp: IViewport): void;
   createObject(id: string, type: NodeType): void;
   destroyObject(id: string): void;
   setParent(childId: string, parentId: string | null): void;

@@ -4,6 +4,7 @@ import { createEngine } from './engine';
 import type { InboundMessage, OutboundMessage } from './protocol/messages';
 import { parseParentOrigin, originAllowed } from './protocol/origin';
 import { createSerializer } from './serialize';
+import { domHostSurface, type IViewport } from './render/viewportController';
 
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
@@ -20,7 +21,8 @@ const mediaBase = params.get('mediaBase') ?? '';
 
 const post = (m: OutboundMessage) => window.parent?.postMessage(m, expectedOrigin ?? '*');
 const renderer = new PixiRenderer(stage, (s) => resolveTextureSrc(s, mediaBase));
-const { host, model, modules } = createEngine({ renderer, post });
+const surface = domHostSurface(stage);
+const { host, model, modules, viewport } = createEngine({ renderer, post, surface });
 
 // Test/standalone observability.
 (window as unknown as { __engineModel: typeof model }).__engineModel = model;
@@ -38,6 +40,11 @@ modules.bus.on<{ grid: string[][] }>('reels:settled', (e) => settledEvents.push(
   state: () => modules.reels.debugState(),
   settled: () => settledEvents,
 };
+
+(window as unknown as { __engineViewport: () => IViewport | null }).__engineViewport = () => viewport?.current() ?? null;
+const viewportEvents: IViewport[] = [];
+modules.bus.on<IViewport>('viewport:changed', (e) => viewportEvents.push(e));
+(window as unknown as { __engineViewportEvents: IViewport[] }).__engineViewportEvents = viewportEvents;
 
 // Serialize message handling: each handle() must complete before the next starts.
 // Without this, concurrent handles race on async operations like renderer.mount()

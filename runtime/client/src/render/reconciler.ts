@@ -1,12 +1,15 @@
 import type { GraphModel } from '../model/graphModel';
 import type { IChange } from '../model/changes';
-import type { INode, JsonValue } from '../model/document';
+import type { INode } from '../model/document';
 import type { IRenderer } from './renderer';
+import { resolveSafeAreas } from './viewport';
+import type { IViewportSink } from './viewportController';
 
 export class Reconciler {
   constructor(
     private readonly renderer: IRenderer,
     private readonly model: GraphModel,
+    private readonly viewport?: IViewportSink,
   ) {}
 
   async applyChanges(changes: IChange[]): Promise<void> {
@@ -42,6 +45,9 @@ export class Reconciler {
           return;
         }
         this.renderer.setProp(change.id, change.path, change.value);
+        if (node && node.type === 'Root' && affectsSafeArea(change.path)) {
+          this.viewport?.setSafeAreas(resolveSafeAreas(node.props));
+        }
         return;
       }
       default:
@@ -52,9 +58,9 @@ export class Reconciler {
   private async created(node: INode): Promise<void> {
     if (node.type === 'Texture') return; // data-only node, no display object
     if (node.type === 'Root') {
-      const width = numProp(node.props.width, 800);
-      const height = numProp(node.props.height, 600);
-      await this.renderer.mount(node.id, { width, height });
+      await this.renderer.mount(node.id);
+      this.viewport?.setSafeAreas(resolveSafeAreas(node.props));
+      return;
     } else {
       this.renderer.createObject(node.id, node.type);
       for (const [key, value] of Object.entries(node.props)) this.renderer.setProp(node.id, key, value);
@@ -69,6 +75,6 @@ export class Reconciler {
   }
 }
 
-function numProp(value: JsonValue | undefined, fallback: number): number {
-  return typeof value === 'number' ? value : fallback;
+function affectsSafeArea(path: string): boolean {
+  return path === 'safeArea' || path.startsWith('safeArea.') || path === 'width' || path === 'height';
 }
