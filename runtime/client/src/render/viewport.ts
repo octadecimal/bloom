@@ -60,7 +60,3 @@ function readSize(v: JsonValue | undefined): ISize | null {
 function isRecord(v: unknown): v is Record<string, JsonValue> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
-
-function num(v: JsonValue | undefined, fallback: number): number {
-  return typeof v === 'number' ? v : fallback;
-}
