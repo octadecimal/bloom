@@ -156,29 +156,56 @@ def test_realize_symbols_empty_is_hard_error():
     assert any("no symbols" in e.lower() for e in errors)
 
 
+def _normals(n):
+    return [{"id": i, "role": "normal"} for i in range(n)]
+
+
 def test_realize_reels_seeds_midpoint_length_same_per_reel():
+    # 3 paying (normal/wild) symbols + 1 scatter. Paying fill round-robin; the
+    # scatter is sprinkled SPARSELY, not woven into the round-robin.
+    defs = [{"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
+            {"id": 2, "role": "wild"}, {"id": 3, "role": "scatter"}]
     reels, errors, warnings = _realize_reels(
-        {"strip_length": {"min": 30, "max": 40}}, distinct_count=4, reel_count=5)
+        {"strip_length": {"min": 30, "max": 40}}, defs, reel_count=5)
     assert errors == []
     assert len(reels) == 5
     assert all(len(r) == 35 for r in reels)  # round(mid(30,40)) = 35
-    # round-robin pos % 4 over 35 positions
-    assert reels[0][:5] == [0, 1, 2, 3, 0]
+    # paying symbols laid round-robin over ids [0, 1, 2]
+    assert reels[0][:3] == [0, 1, 2]
     from collections import Counter
-    assert Counter(reels[0]) == {0: 9, 1: 9, 2: 9, 3: 8}
+    counts = Counter(reels[0])
+    # scatter (id 3) is SPARSE: floor(35 / 20) = 1 occurrence, not ~8.
+    assert counts[3] == 1
     assert reels[0] == reels[4]  # identical per reel in SP2
 
 
+def test_realize_reels_scatter_is_sparse_not_round_robin_dense():
+    # Regression guard for the OOM root cause: a flat round-robin would put the
+    # scatter on ~1/distinct of cells (dense), driving the free-spins trigger.
+    defs = [{"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
+            {"id": 2, "role": "scatter"}]
+    reels, errors, warnings = _realize_reels(
+        {"strip_length": {"min": 40, "max": 40}}, defs, reel_count=3)
+    assert errors == []
+    from collections import Counter
+    counts = Counter(reels[0])
+    # 40 // 20 = 2 sparse occurrences, FAR below a round-robin's ~13 (40/3).
+    assert counts[2] == 2
+    assert counts[2] < len(reels[0]) // 4  # provably sparse
+
+
 def test_realize_reels_absent_strip_length_defaults_with_warning():
-    reels, errors, warnings = _realize_reels({}, distinct_count=4, reel_count=3)
+    reels, errors, warnings = _realize_reels({}, _normals(4), reel_count=3)
     assert errors == []
     assert all(len(r) == 30 for r in reels)  # max(4, DEFAULT_STRIP_LEN=30)
+    # all-normal: pure round-robin over ids [0, 1, 2, 3]
+    assert reels[0][:5] == [0, 1, 2, 3, 0]
     assert any("strip_length absent" in w for w in warnings)
 
 
 def test_realize_reels_midpoint_below_distinct_clamps_up_with_warning():
     reels, errors, warnings = _realize_reels(
-        {"strip_length": {"min": 2, "max": 8}}, distinct_count=6, reel_count=2)
+        {"strip_length": {"min": 2, "max": 8}}, _normals(6), reel_count=2)
     assert errors == []
     assert all(len(r) == 6 for r in reels)  # midpoint 5 -> clamped up to 6
     assert any("clamped" in w for w in warnings)
@@ -186,9 +213,19 @@ def test_realize_reels_midpoint_below_distinct_clamps_up_with_warning():
 
 def test_realize_reels_max_below_distinct_is_hard_error():
     reels, errors, warnings = _realize_reels(
-        {"strip_length": {"min": 2, "max": 3}}, distinct_count=6, reel_count=2)
+        {"strip_length": {"min": 2, "max": 3}}, _normals(6), reel_count=2)
     assert reels == []
     assert any("distinct symbol count" in e for e in errors)
+
+
+def test_realize_reels_only_scatters_falls_back_with_warning():
+    # Degenerate: no paying symbols at all. Strip still composed; warned.
+    defs = [{"id": 0, "role": "scatter"}, {"id": 1, "role": "scatter"}]
+    reels, errors, warnings = _realize_reels(
+        {"strip_length": {"min": 30, "max": 30}}, defs, reel_count=2)
+    assert errors == []
+    assert all(len(r) == 30 for r in reels)
+    assert any("no paying" in w for w in warnings)
 
 
 def test_all_patterns_horizontals_first_then_lexicographic():

@@ -13,6 +13,12 @@ DEFAULT_STRIP_LEN = 30
 DEFAULT_REELS = 5
 DEFAULT_ROWS = 3
 BONUS_MIN_COUNT = 3
+# Scatter/trigger symbols must be SPARSE on a strip: roughly one occurrence per
+# this many cells (>= 1). A dense scatter (e.g. round-robin's one-in-N) makes the
+# free-spins trigger near-certain every spin, which — with retrigger — is a
+# supercritical loop. The kernel hard-caps that anyway (MAX_FREE_SPINS), but the
+# realizer should never emit such a degenerate model in the first place.
+SCATTER_STRIP_SPACING = 20
 
 # GDD design-language `kind` -> kernel SymbolRole (serialized lowercase).
 _KIND_TO_ROLE = {
@@ -72,10 +78,15 @@ def _realize_symbols(
 
 
 def _realize_reels(
-    symbols_reels: dict, distinct_count: int, reel_count: int
+    symbols_reels: dict, symbol_defs: list[dict], reel_count: int
 ) -> tuple[list[list[int]], list[str], list[str]]:
+    """Seed one identical strip per reel. Paying symbols (normal/wild) fill the
+    strip round-robin; scatter symbols are sprinkled SPARSELY (see
+    SCATTER_STRIP_SPACING) so the trigger stays a rare event — never the dense
+    one-in-N that a flat round-robin would produce."""
     errors: list[str] = []
     warnings: list[str] = []
+    distinct_count = len(symbol_defs)
     sl = symbols_reels.get("strip_length")
     if isinstance(sl, dict) and "min" in sl and "max" in sl:
         lo, hi = float(sl["min"]), float(sl["max"])
@@ -95,7 +106,28 @@ def _realize_reels(
     else:
         length = max(distinct_count, DEFAULT_STRIP_LEN)
         warnings.append(f"strip_length absent; defaulted strip length to {length}")
-    reel = [pos % distinct_count for pos in range(length)]
+
+    paying = [d["id"] for d in symbol_defs if d["role"] in ("normal", "wild")]
+    scatters = [d["id"] for d in symbol_defs if d["role"] == "scatter"]
+    if not paying:
+        # Degenerate model (only scatters/unknowns): fall back to all symbols so
+        # the strip is still composed of something the kernel accepts.
+        paying = [d["id"] for d in symbol_defs]
+        warnings.append(
+            "no paying (normal/wild) symbols; reels seeded round-robin from all symbols"
+        )
+
+    reel = [paying[pos % len(paying)] for pos in range(length)]
+
+    # Sprinkle each scatter ~one per SCATTER_STRIP_SPACING cells, spread evenly so
+    # occurrences never cluster. Round-robin which scatter lands at each slot.
+    if scatters:
+        occ_per = max(1, length // SCATTER_STRIP_SPACING)
+        total = occ_per * len(scatters)
+        for idx in range(total):
+            pos = (2 * idx + 1) * length // (2 * total)  # evenly spaced midpoints
+            reel[pos % length] = scatters[idx % len(scatters)]
+
     return [list(reel) for _ in range(reel_count)], errors, warnings
 
 
@@ -249,7 +281,6 @@ def realize_slot_model(
     warnings += w
     if not symbol_defs:
         return RealizeResult(None, errors, warnings)
-    distinct = len(symbol_defs)
 
     if math_model.get("reels") in (None, ""):
         warnings.append(f"reels absent; defaulted to {DEFAULT_REELS}")
@@ -258,7 +289,7 @@ def realize_slot_model(
         warnings.append(f"rows absent; defaulted to {DEFAULT_ROWS}")
     rows = _to_int(math_model.get("rows"), DEFAULT_ROWS)
 
-    reels, e, w = _realize_reels(symbols_reels, distinct, reel_count)
+    reels, e, w = _realize_reels(symbols_reels, symbol_defs, reel_count)
     errors += e
     warnings += w
     paylines, e, w = _realize_paylines(math_model, reel_count, rows)
