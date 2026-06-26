@@ -216,8 +216,13 @@ TDD throughout; the e2e suite is the authoritative behavioral contract.
   record/verify the compose chain via `just e2e-live` (and refresh the cassette
   with `just record-fixtures` if the natural phrasing drifts) — the same
   deferred live-recording step noted for tuner-chat.
-- **`add_sprite` parallel-race gap.** `add_sprite` reads `ensure_root` scene
-  state outside the hub lock — two `add_sprite` calls in one parallel agent turn
-  would race (second `apply_batch` rejected on duplicate Root); the replay
-  cassette serializes around this via 3 rounds, but the live path is unproven.
-  Candidate fixes: read-inside-lock or idempotent `addNode(root)`.
+- **`add_sprite` parallel-root race — FIXED.** `add_sprite` previously read
+  `ensure_root` scene state outside the hub lock, so two `add_sprite` calls in one
+  parallel agent turn raced (second `apply_batch` rejected on duplicate Root,
+  silently dropping a sprite). Resolved by an idempotent, lock-held
+  `GameSceneHub.ensure_root(game_id, canvas)`: `add_sprite` calls it first and
+  builds its sprite batch with `ensure_root=False`, so parallel calls only add
+  slot-unique `spr.<h>`/`tex.<h>` nodes and cannot collide. A real-hub concurrent
+  (`asyncio.gather`) regression test covers it. Residual minor: Root creation and
+  the sprite batch are now two persisted ops, so a bare Root can linger if the
+  sprite batch later raises `OpError` (benign — a Root is never an orphan).
