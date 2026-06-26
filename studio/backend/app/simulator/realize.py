@@ -21,6 +21,7 @@ BONUS_MIN_COUNT = 3
 # supercritical loop. The kernel hard-caps that anyway (MAX_FREE_SPINS), but the
 # realizer should never emit such a degenerate model in the first place.
 SCATTER_STRIP_SPACING = 20
+MAX_STRIP_LEN = 1000  # absurdity ceiling for a single reel strip
 
 # GDD design-language `kind` -> kernel SymbolRole (serialized lowercase).
 _KIND_TO_ROLE = {
@@ -108,6 +109,12 @@ def _realize_reels(
     else:
         length = max(distinct_count, DEFAULT_STRIP_LEN)
         warnings.append(f"strip_length absent; defaulted strip length to {length}")
+
+    if length > MAX_STRIP_LEN:
+        warnings.append(
+            f"strip length {length} exceeds MAX_STRIP_LEN {MAX_STRIP_LEN}; clamped"
+        )
+        length = MAX_STRIP_LEN
 
     paying = [d["id"] for d in symbol_defs if d["role"] in ("normal", "wild")]
     scatters = [d["id"] for d in symbol_defs if d["role"] == "scatter"]

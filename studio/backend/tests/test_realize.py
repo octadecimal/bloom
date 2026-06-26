@@ -338,3 +338,11 @@ def test_realize_rejects_oversized_geometry_fast():
         _GDD_SYMBOLS, _GDD_PAYTABLE, _GDD_BONUS)
     assert res.model is None
     assert any("MAX_REELS" in e for e in res.errors)
+
+
+def test_realize_reels_clamps_oversized_strip_length():
+    reels, errors, warnings = _realize_reels(
+        {"strip_length": {"min": 1_000_000, "max": 1_000_000}}, _normals(4), reel_count=3)
+    assert errors == []
+    assert all(len(r) == 1000 for r in reels)  # clamped to MAX_STRIP_LEN
+    assert any("MAX_STRIP_LEN" in w for w in warnings)
