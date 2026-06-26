@@ -339,10 +339,7 @@ function checkField(name: string, field: IConfigField, raw: JsonValue, errors: s
   }
 }
 
-export function validateConfig<T = Record<string, JsonValue>>(
-  schema: IConfigSchema,
-  raw: Record<string, JsonValue>,
-): IValidationResult<T> {
+export function validateConfig<T = Record<string, JsonValue>>(schema: IConfigSchema, raw: Record<string, JsonValue>): IValidationResult<T> {
   const errors: string[] = [];
   const value: Record<string, JsonValue> = {};
   for (const [name, field] of Object.entries(schema)) {
@@ -1794,12 +1791,7 @@ import type { IModuleHost } from './module';
 
 /** Binds the two-plane seam to the concrete engine: model (+reconciler) for the
  *  structure plane, renderer for the behavior plane, bus for events (spec §2.3, §6.1). */
-export function createModuleHost(deps: {
-  model: GraphModel;
-  reconciler: Reconciler;
-  renderer: IRenderer;
-  bus: IEventBus;
-}): IModuleHost {
+export function createModuleHost(deps: { model: GraphModel; reconciler: Reconciler; renderer: IRenderer; bus: IEventBus }): IModuleHost {
   return {
     snapshot: () => deps.model.toDocument(),
     emit: (ops) => {
