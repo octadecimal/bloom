@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emptyDocument } from './state';
-import { applyOpToDocument } from './reducers';
+import { emptyDocument, applyOpToDocument } from './reducers';
 
 describe('applyOpToDocument', () => {
   it('adds a node', () => {
@@ -50,9 +49,7 @@ describe('applyOpToDocument', () => {
   it('ignores prototype-pollution setProp paths (no Object.prototype mutation)', () => {
     let d = applyOpToDocument(emptyDocument(), { kind: 'addNode', id: 's', type: 'Sprite' });
     d = applyOpToDocument(d, { kind: 'setProp', id: 's', path: '__proto__', value: { polluted: true } });
-    // Object.prototype must not be polluted:
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-    // document returned unchanged (node still has empty props):
     expect(d.nodes.s.props).toEqual({});
   });
 
@@ -71,6 +68,6 @@ describe('applyOpToDocument', () => {
     d = applyOpToDocument(d, { kind: 'connect', edgeId: 'e2', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 's', port: 'texture' } });
     d = applyOpToDocument(d, { kind: 'removeNode', id: 's' });
     expect(d.nodes.s).toBeUndefined();
-    expect(d.edges).toHaveLength(0); // both incident edges dropped
+    expect(d.edges).toHaveLength(0);
   });
 });

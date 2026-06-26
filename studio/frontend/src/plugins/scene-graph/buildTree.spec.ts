@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { IGameDocument } from '../game/state';
+import type { ISceneDocument } from '../../scene/types';
 import { buildTree } from './buildTree';
 
-function doc(partial: Partial<IGameDocument>): IGameDocument {
+function doc(partial: Partial<ISceneDocument>): ISceneDocument {
   return { version: 1, nodes: {}, edges: [], ...partial };
 }
 

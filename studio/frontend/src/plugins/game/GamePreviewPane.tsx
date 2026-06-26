@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { gameHooks, gameSlice, type IGameDocument } from './state';
+import { gameHooks } from './state';
+import { sceneStore } from '../../scene/sceneStore';
+import type { ISceneDocument } from '../../scene/types';
 import { engineOrigin, backendOrigin } from './config';
 import { ProtocolBridge, setBridge, clearBridge } from './protocolBridge';
 
@@ -24,7 +26,7 @@ export function GamePreviewPane(_props: IDockviewPanelProps) {
       bridge.handleEngineMessage(event.data, event.origin);
       // On the engine's first ready, init it from the current canonical document.
       if (event.origin === origin && event.data?.kind === 'ready') {
-        const doc = gameSlice().document.get({ noproxy: true }) as IGameDocument;
+        const doc = sceneStore().document.get({ noproxy: true }) as ISceneDocument;
         bridge.init(doc);
       }
     };

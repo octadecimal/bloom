@@ -1,4 +1,4 @@
-import type { EdgeType, IEdge, IGameDocument, INode, IPortRef, JsonValue, NodeType } from './state';
+import type { EdgeType, IEdge, INode, IPortRef, ISceneDocument, JsonValue, NodeType } from './types';
 
 export type ISceneOp =
   | { kind: 'addNode'; id: string; type: NodeType; props?: Record<string, JsonValue> }
@@ -7,9 +7,13 @@ export type ISceneOp =
   | { kind: 'connect'; edgeId: string; type: EdgeType; from: IPortRef; to: IPortRef }
   | { kind: 'disconnect'; edgeId: string };
 
+export function emptyDocument(): ISceneDocument {
+  return { version: 1, nodes: {}, edges: [] };
+}
+
 // Trusting structural applier: the backend has already validated. We only mirror
 // the durable document so the iframe can be (re-)initialised from cache.
-export function applyOpToDocument(doc: IGameDocument, op: ISceneOp): IGameDocument {
+export function applyOpToDocument(doc: ISceneDocument, op: ISceneOp): ISceneDocument {
   switch (op.kind) {
     case 'addNode': {
       const node: INode = { id: op.id, type: op.type, props: { ...(op.props ?? {}) } };
@@ -41,7 +45,7 @@ export function applyOpToDocument(doc: IGameDocument, op: ISceneOp): IGameDocume
   }
 }
 
-export function loadDocument(doc: IGameDocument): IGameDocument {
+export function loadDocument(doc: ISceneDocument): ISceneDocument {
   return {
     version: doc.version,
     nodes: Object.fromEntries(Object.entries(doc.nodes).map(([id, n]) => [id, { ...n, props: { ...n.props } }])),

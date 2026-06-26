@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../../state/rootStore';
 import { GAME_PLUGIN_ID, gameSlice, makeInitialState } from './state';
+import { SCENE_STORE_ID, sceneStore, makeInitialSceneState } from '../../scene/sceneStore';
 import { applyInbound } from './socketClient';
 import { setBridge, ProtocolBridge } from './protocolBridge';
 
 beforeEach(() => {
   rootStore.plugins.nested(GAME_PLUGIN_ID).set(makeInitialState() as never);
+  rootStore.plugins.nested(SCENE_STORE_ID).set(makeInitialSceneState() as never);
   gameSlice().activeGameId.set('g1');
 });
 
@@ -21,7 +23,7 @@ describe('game socket inbound', () => {
       document: { version: 1, nodes: { root: { id: 'root', type: 'Root', props: {} } }, edges: [] },
     });
 
-    expect(gameSlice().document.nodes.get({ noproxy: true })).toHaveProperty('root');
+    expect(sceneStore().document.nodes.get({ noproxy: true })).toHaveProperty('root');
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ kind: 'init' }), 'http://localhost:4300');
   });
 
@@ -33,7 +35,7 @@ describe('game socket inbound', () => {
 
     applyInbound('scene_op', { gameId: 'g1', op: { kind: 'addNode', id: 's', type: 'Sprite' } });
 
-    expect(gameSlice().document.nodes.get({ noproxy: true })).toHaveProperty('s');
+    expect(sceneStore().document.nodes.get({ noproxy: true })).toHaveProperty('s');
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ kind: 'op' }), 'http://localhost:4300');
   });
 
@@ -41,6 +43,6 @@ describe('game socket inbound', () => {
     const post = vi.fn();
     setBridge(new ProtocolBridge({ post, engineOrigin: 'http://localhost:4300' }));
     applyInbound('scene_op', { gameId: 'other', op: { kind: 'addNode', id: 's', type: 'Sprite' } });
-    expect(gameSlice().document.nodes.get({ noproxy: true })).not.toHaveProperty('s');
+    expect(sceneStore().document.nodes.get({ noproxy: true })).not.toHaveProperty('s');
   });
 });

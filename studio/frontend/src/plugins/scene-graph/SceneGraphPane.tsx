@@ -1,6 +1,7 @@
 import type { IDockviewPanelProps } from 'dockview-react';
 import { ChevronDown, ChevronRight, Box, Image, Layers, type LucideIcon } from 'lucide-react';
-import { gameHooks, type IGameDocument, type NodeType } from '../game/state';
+import { sceneHooks } from '../../scene/sceneStore';
+import type { ISceneDocument, NodeType } from '../../scene/types';
 import { sceneGraphHooks } from './state';
 import { buildTree, type ITreeRow } from './buildTree';
 import { bumpRenderCount } from '../../app/renderCount';
@@ -13,11 +14,11 @@ const ICON: Record<NodeType, LucideIcon> = {
 };
 
 export function SceneGraphPane(_props: IDockviewPanelProps) {
-  const game = gameHooks.usePluginState();
+  const scene = sceneHooks.usePluginState();
   const sg = sceneGraphHooks.usePluginState();
   bumpRenderCount('SceneGraphPane');
 
-  const doc = game.document.get({ noproxy: true }) as IGameDocument;
+  const doc = scene.document.get({ noproxy: true }) as ISceneDocument;
   const collapsed = sg.collapsed.get({ noproxy: true }) as Record<string, boolean>;
   const selectedId = sg.selectedId.get();
   const rows = buildTree(doc, collapsed);
