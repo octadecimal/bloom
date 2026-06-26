@@ -13,7 +13,7 @@ a crystal bottom-right"), the model emits **parallel tool calls**: all
 Game Scene snaps into existence all at once at the end of the turn, instead of
 visibly building up element-by-element.
 
-For demos, the element-by-element build-up *is* the point. The root cause is model
+For demos, the element-by-element build-up _is_ the point. The root cause is model
 batching behavior, not a code bug — so prompt text alone cannot guarantee a fix:
 even with perfect "do one element at a time" wording, the placements still land in
 one final clump.
@@ -23,10 +23,10 @@ one final clump.
 PR #102 routes `generate_and_wait` through a **per-game generation queue**, so
 generations serialize one-at-a-time even when the model fires them in parallel.
 
-- **Prompt-only (rejected as sole fix):** assets *will* appear on the Asset Board
+- **Prompt-only (rejected as sole fix):** assets _will_ appear on the Asset Board
   one-by-one (queue serializes generation), but the **placements still batch at the
   end** → the scene does not build incrementally.
-- **Combined tool (chosen):** a single `generate_and_place` call generates *then*
+- **Combined tool (chosen):** a single `generate_and_place` call generates _then_
   places one element atomically. Even if the model fires N calls in parallel, the
   generation queue serializes them and each placement lands immediately after its
   own asset finishes → the scene reliably fills in one sprite at a time.
@@ -125,8 +125,8 @@ Backend tests: `cd studio/backend && uv run pytest` (mongod on :27017).
 ## Live verification
 
 With the live stack on main (backend :8000, engine :4300, frontend :4200), in a
-fresh room send: *"make a neon cyberpunk arcade game with a skyline background, a
-logo at the top, a robot bottom-left, and a crystal bottom-right."* Expected: the
+fresh room send: _"make a neon cyberpunk arcade game with a skyline background, a
+logo at the top, a robot bottom-left, and a crystal bottom-right."_ Expected: the
 chat feed shows tool calls alternating `generate_and_place` → `generate_and_place`
 … and the Game Scene pane (View → Game Scene) fills in one sprite at a time.
 

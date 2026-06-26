@@ -2,8 +2,12 @@ import { test, expect, type Page } from '@playwright/test';
 import { seedLocalStorage } from './helpers';
 
 // Browser e2e — authoritative behavioral contract for:
-//   chat → design-router → generate_asset + add_sprite (×2) → engine iframe
-//   renders a background sprite and a logo sprite with real textures.
+//   chat → design-router → generate_and_place (×2, one element at a time) → engine
+//   iframe renders a background sprite and a logo sprite with real textures.
+//
+// The compose path uses the combined generate_and_place tool: each call generates
+// one element's art and immediately places it, so the scene builds element-by-element
+// instead of generating every asset first and placing them all at the end.
 //
 // Stack required (replay backend): backend :8000+offset, engine, studio.
 // Run: just backend-serve-replay  (then)  just e2e   — or target this file:
@@ -12,10 +16,10 @@ import { seedLocalStorage } from './helpers';
 // Cassette (prompt-keyed, replay backend):
 //   run/compose-pirate-scene.json
 //     — prompt: "make a pirate theme game with a background and a logo centered at the top"
-//     — generate_asset(slot=background) + add_sprite(slot=background, fit=cover)
-//       generate_asset(slot=logo)       + add_sprite(slot=logo, y=0, anchor_y=0)
+//     — generate_and_place(slot=background, fit=cover)   [round 1]
+//       generate_and_place(slot=logo, y=0, anchor_y=0)   [round 2]
 //
-// Scene node ids (derived from the slots by add_sprite):
+// Scene node ids (derived from the slots by generate_and_place):
 //   spr.background / tex.background, spr.logo / tex.logo, root (auto-created)
 
 const PROMPT = 'make a pirate theme game with a background and a logo centered at the top';
@@ -55,10 +59,9 @@ test('one chat prompt generates and places a background and logo, rendered live'
   await composer.fill(PROMPT);
   await page.getByTestId('chat-send').click();
 
-  // 2. The feed shows the discrete tool calls (generate_asset + add_sprite) and the final line.
+  // 2. The feed shows the combined per-element tool calls and the final line.
   const feed = page.getByTestId('chat-messages');
-  await expect(feed).toContainText('generate_asset', { timeout: 60_000 });
-  await expect(feed).toContainText('add_sprite', { timeout: 60_000 });
+  await expect(feed).toContainText('generate_and_place', { timeout: 60_000 });
   await expect(feed).toContainText('Placed a pirate background and a logo', { timeout: 60_000 });
 
   // 3. Both assets exist with a generated image (backend wire).

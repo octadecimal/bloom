@@ -92,6 +92,44 @@ def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+async def _place_in_scene(
+    ctx: ToolContext, *, handle: str, src: str, role: str, parent: str,
+    x: float | None, y: float | None, anchor_x: float, anchor_y: float,
+    fit: str, z_index: int, tex_size: tuple[int, int],
+) -> str:
+    """Place an already-resolved asset image into the live scene as one atomic batch.
+
+    Shared by add_sprite and generate_and_place so the two placement paths never
+    drift. For the default 'root' parent the hub creates the Root idempotently UNDER
+    ITS LOCK (so two parallel calls can't both emit `addNode root` and collide); the
+    sprite batch never carries a Root op. A custom parent does not auto-create a Root
+    — derive the canvas from a light read for centering. Returns the human message.
+    """
+    if parent == "root":
+        info = await ctx.scene_hub.ensure_root(ctx.game_id, DEFAULT_CANVAS)
+        parent_id = info["root_id"]
+        canvas = info["canvas"]
+    else:
+        parent_id = parent
+        doc = await ctx.scene_store.get_document(ctx.game_id) or empty_document()
+        nodes = doc.get("nodes", {})
+        root_id = next((nid for nid, n in nodes.items() if n.get("type") == "Root"), None)
+        root_props = (nodes.get(root_id) or {}).get("props", {}) if root_id else {}
+        canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
+                  int(root_props.get("height", DEFAULT_CANVAS[1])))
+
+    ops = build_sprite_ops(
+        handle=handle, src=src, role=role, parent_id=parent_id,
+        ensure_root=False, canvas=canvas, tex_size=tex_size,
+        x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
+    )
+    try:
+        doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
+    except OpError as e:
+        return f"Rejected ({e.code}): {e}"
+    return f"Placed '{role or handle}' as sprite 'spr.{handle}'." + _orphan_suffix(doc)
+
+
 def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
     async def add_sprite(
         slot: str = "",
@@ -105,7 +143,7 @@ def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
         fit: str = "none",
         z_index: int = 0,
     ) -> str:
-        # 1. resolve the asset by stable slot handle (preferred) or explicit id
+        # resolve the asset by stable slot handle (preferred) or explicit id
         if slot:
             asset = await ctx.asset_store.get_by_slot(ctx.game_id, slot)
         elif asset_id:
@@ -119,38 +157,11 @@ def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
         if not src:
             return f"Asset '{asset.name}' has no image yet; generate it before placing it."
 
-        handle = slot or asset.id
-
-        # 2. resolve the parent + canvas. For the default 'root' parent the hub
-        #    creates the Root idempotently UNDER ITS LOCK (so two parallel
-        #    add_sprite calls can't both emit `addNode root` and collide); the
-        #    sprite batch below never carries a Root op. A custom parent does not
-        #    auto-create a Root — derive the canvas from a light read for centering.
-        if parent == "root":
-            info = await ctx.scene_hub.ensure_root(ctx.game_id, DEFAULT_CANVAS)
-            parent_id = info["root_id"]
-            canvas = info["canvas"]
-        else:
-            parent_id = parent
-            doc = await ctx.scene_store.get_document(ctx.game_id) or empty_document()
-            nodes = doc.get("nodes", {})
-            root_id = next((nid for nid, n in nodes.items() if n.get("type") == "Root"), None)
-            root_props = (nodes.get(root_id) or {}).get("props", {}) if root_id else {}
-            canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
-                      int(root_props.get("height", DEFAULT_CANVAS[1])))
-
-        # 3. build + apply the placement as one atomic batch (no Root op)
-        ops = build_sprite_ops(
-            handle=handle, src=src, role=role, parent_id=parent_id,
-            ensure_root=False, canvas=canvas,
-            tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+        return await _place_in_scene(
+            ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
+            tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
         )
-        try:
-            doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
-        except OpError as e:
-            return f"Rejected ({e.code}): {e}"
-        return f"Placed '{role or handle}' as sprite 'spr.{handle}'." + _orphan_suffix(doc)
 
     return StructuredTool.from_function(
         coroutine=add_sprite, name="add_sprite",
@@ -163,6 +174,78 @@ def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
             "y=0 and anchor_y=0; for a full-bleed background pass fit='cover' and "
             "z_index=0. Pass a short role like 'background' or 'logo'. If the scene has no "
             "Root yet, one is created automatically."
+        ),
+    )
+
+
+def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
+    async def generate_and_place(
+        description: str = "",
+        style: str = "",
+        size: str = "512x512",
+        transparent: bool = True,
+        slot: str = "",
+        role: str = "",
+        parent: str = "root",
+        x: float | None = None,
+        y: float | None = None,
+        anchor_x: float = 0.5,
+        anchor_y: float = 0.5,
+        fit: str = "none",
+        z_index: int = 0,
+    ) -> str:
+        # 1. reuse: if the slot already holds an asset with a selected image, place
+        #    it as-is instead of regenerating (idempotent re-runs of the same build).
+        asset = None
+        reused = False
+        if slot:
+            existing = await ctx.asset_store.get_by_slot(ctx.game_id, slot)
+            if existing is not None and _selected_media_ref(existing):
+                asset, reused = existing, True
+
+        # 2. otherwise generate this one element's art now and wait for it (the
+        #    per-game queue serializes generations even when many calls run at once).
+        if asset is None:
+            if not description:
+                return ("Pass a description to generate the element, or a slot that "
+                        "already has art to place.")
+            prompt = description if not style else f"{description}, {style} style"
+            width, height = (int(v) for v in size.lower().split("x", 1))
+            workflow = "schnell-transparent" if transparent else "schnell-opaque"
+            created = await ctx.asset_store.create_asset(
+                ctx.game_id, description[:40] or "asset", prompt, width, height,
+                workflow, slot=slot or None,
+            )
+            await ctx.asset_hub.generate_and_wait(ctx.game_id, created.id)
+            asset = await ctx.asset_store.get_asset(created.id)
+
+        # 3. place it immediately, so the scene fills in element-by-element.
+        src = _selected_media_ref(asset) if asset else None
+        if asset is None or not src:
+            ref = slot or description[:40] or "asset"
+            return f"Generation for '{ref}' produced no image; nothing placed."
+        placement = await _place_in_scene(
+            ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
+            x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
+            tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+        )
+        if placement.startswith("Rejected"):
+            return placement
+        verb = "Reused" if reused else "Generated"
+        return f"{verb} '{asset.name}' and {placement[0].lower()}{placement[1:]}"
+
+    return StructuredTool.from_function(
+        coroutine=generate_and_place, name="generate_and_place",
+        description=(
+            "Generate ONE game image and immediately place it into the live scene as a "
+            "Sprite — the atomic per-element verb for building a scene so it fills in "
+            "element-by-element. Combines generate_asset + add_sprite: pass the "
+            "generation args (description, size 'WxH', transparent, slot) AND the "
+            "placement args (role, x, y, anchor_x, anchor_y, fit, z_index). If the slot "
+            "already has art, it is reused instead of regenerated. Positioning is the "
+            "Root's pixel space: omit x to centre; top edge → y=0, anchor_y=0; full-bleed "
+            "background → transparent=false, fit='cover', z_index=0. Call once per element, "
+            "in order; do NOT generate every asset first."
         ),
     )
 
@@ -702,6 +785,7 @@ class ToolFactory:
         "generate_asset": build_generate_asset_tool,
         "list_assets": build_list_assets_tool,
         "add_sprite": build_add_sprite_tool,
+        "generate_and_place": build_generate_and_place_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
         "read_gdd_doc": build_read_gdd_doc_tool,

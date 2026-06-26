@@ -2,10 +2,12 @@
 
 Under PROVIDER_MODE=replay, "make a pirate theme game with a background and a logo
 centered at the top" routes through the design-router. Its replayed tool calls run
-the REAL generate_asset (-> replay ComfyUI) and REAL add_sprite (-> real scene
-mutation), so the persisted scene ends with two parented, texture-bound sprites.
+the REAL generate_and_place tool once per element — generating each asset (-> replay
+ComfyUI) and immediately placing it (-> real scene mutation) before the next — so the
+scene builds element-by-element and ends with two parented, texture-bound sprites.
 
-Cassette: run/compose-pirate-scene.json (prompt-keyed).
+Cassette: run/compose-pirate-scene.json (prompt-keyed; one generate_and_place per
+round, so the background is fully placed before the logo is generated).
 """
 import asyncio
 
@@ -83,5 +85,14 @@ async def test_one_prompt_generates_and_places_background_and_logo(live_server):
     # The placement was broadcast live (addNode + connect ops seen).
     kinds = [o.get("op", {}).get("kind") for o in scene_ops]
     assert "addNode" in kinds and "connect" in kinds, f"ops seen: {kinds}"
+
+    # Built element-by-element: the background sprite is added to the scene before
+    # the logo sprite, because each generate_and_place generates AND places one
+    # element before the next runs (no all-generate-then-all-place batching).
+    added_sprites = [o["op"]["id"] for o in scene_ops
+                     if o.get("op", {}).get("kind") == "addNode"
+                     and o["op"].get("id", "").startswith("spr.")]
+    assert added_sprites.index("spr.background") < added_sprites.index("spr.logo"), \
+        f"sprites not added background-then-logo: {added_sprites}"
 
     await client.disconnect()

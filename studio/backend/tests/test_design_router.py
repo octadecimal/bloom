@@ -9,8 +9,23 @@ def test_router_binds_realize_symbol_and_explains_it():
 
 def test_router_binds_visual_compose_tools():
     spec = build_design_router_spec()
-    for name in ("generate_asset", "add_sprite", "list_assets"):
+    for name in ("generate_asset", "add_sprite", "list_assets", "generate_and_place"):
         assert name in spec.tools
+
+
+def test_router_compose_branch_interleaves_via_generate_and_place():
+    """Branch 4 (build/compose the scene) must drive the model to generate AND place
+    each element together, one at a time, so the scene visibly builds element-by-element
+    in a demo — not all-generate-then-all-place. The combined `generate_and_place` tool
+    is the verb; the prose forbids generating every asset up front."""
+    body = build_design_router_spec().body
+    assert "generate_and_place" in body
+    low = body.lower()
+    # strict per-element sequencing guidance
+    assert "each visual element" in low or "one element" in low
+    assert "do not generate all" in low or "not generate all the assets" in low
+    # it must immediately place after generating (interleave), not defer placement
+    assert "immediately" in low
 
 
 def test_router_body_documents_visual_compose_branch():
