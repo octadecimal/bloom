@@ -1,8 +1,80 @@
+import sys
+from types import SimpleNamespace
+
 import pytest
 from app.simulator.models import MetricsWire, CurationResult
 from app.simulator.runner import (
-    CurationProgress, FakeCurationRunner, parse_result_line,
+    CurationProgress, FakeCurationRunner, SubprocessCurationRunner,
+    parse_result_line,
 )
+
+
+def _runner(*, mem_cap_mb=4096.0, timeout_s=600.0, poll_s=0.05):
+    """A SubprocessCurationRunner with tight guard knobs for tests."""
+    r = SubprocessCurationRunner(SimpleNamespace(simulator_bin=""))
+    r._mem_cap_mb = mem_cap_mb
+    r._timeout_s = timeout_s
+    r._poll_s = poll_s
+    return r
+
+
+# A child that allocates ~20 MiB every 0.1s up to a hard ceiling, then exits.
+# Bounded so that if the guard FAILS the test machine is never exhausted and the
+# test fails on an assertion instead of hanging.
+_MEM_HOG = (
+    "import time\n"
+    "buf = []\n"
+    "for _ in range(20):\n"
+    "    buf.append(bytearray(20 * 1024 * 1024))\n"
+    "    time.sleep(0.1)\n"
+    "time.sleep(2)\n"
+)
+
+# A child that sleeps long and emits nothing — only the wall-clock guard ends it.
+_SLEEPER = "import time\ntime.sleep(60)\n"
+
+# A well-behaved child: emits one progress line and one result line, then exits.
+_GOOD = (
+    'import sys\n'
+    'sys.stdout.write(\'{"type":"progress","phase":"simulate","done":1,"total":1}\\n\')\n'
+    'sys.stdout.write(\'{"type":"result","status":"fail","rtp":1.0,"volatility":0.0,'
+    '"hitFrequency":0.0,"baseRtp":1.0,"featureRtp":0.0,"bonusHitRates":[],'
+    '"realizedRtp":null,"poolSize":null,"failure":"rough"}\\n\')\n'
+    'sys.stdout.flush()\n'
+)
+
+
+def _cmd_for(script: str):
+    return lambda *_a, **_k: [sys.executable, "-c", script]
+
+
+@pytest.mark.asyncio
+async def test_guard_kills_runaway_memory_and_returns_error():
+    runner = _runner(mem_cap_mb=120.0, timeout_s=30.0)
+    runner._command = _cmd_for(_MEM_HOG)
+    res = await runner.run({"m": 1}, {"t": 1}, on_progress=lambda _p: None)
+    assert res.status == "error"
+    assert "memory" in res.failure.lower()
+
+
+@pytest.mark.asyncio
+async def test_guard_kills_on_wall_clock_timeout():
+    runner = _runner(mem_cap_mb=8192.0, timeout_s=0.5)
+    runner._command = _cmd_for(_SLEEPER)
+    res = await runner.run({"m": 1}, {"t": 1}, on_progress=lambda _p: None)
+    assert res.status == "error"
+    assert "wall-clock" in res.failure.lower()
+
+
+@pytest.mark.asyncio
+async def test_guard_does_not_trip_for_a_well_behaved_child():
+    seen = []
+    runner = _runner(mem_cap_mb=8192.0, timeout_s=30.0)
+    runner._command = _cmd_for(_GOOD)
+    res = await runner.run({"m": 1}, {"t": 1}, on_progress=seen.append)
+    assert res.status == "fail"
+    assert res.metrics.rtp == pytest.approx(1.0)
+    assert any(p.phase == "simulate" for p in seen)
 
 def test_parse_result_line_pass():
     line = (
