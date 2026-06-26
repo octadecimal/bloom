@@ -5,10 +5,11 @@ from app.gdd.models import GDD_TOOL_NAMES
 def test_router_spec_binds_gdd_tools():
     spec = build_design_router_spec()
     assert spec.name == DESIGN_ROUTER_NAME
-    # tools must be exactly the GDD tools plus realize_symbol and the visual-compose set
+    # tools must be exactly the GDD tools plus realize_symbol, the visual-compose set,
+    # and the in-place regeneration tool
     assert set(spec.tools) == GDD_TOOL_NAMES | {
         "realize_symbol", "generate_asset", "add_sprite", "list_assets",
-        "generate_and_place",
+        "generate_and_place", "regenerate_element",
     }
     assert spec.args == []
 
