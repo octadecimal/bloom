@@ -25,11 +25,11 @@ Every building block for this already exists and works **in isolation**:
 The gap is **orchestration, not capability**. The three relevant skills are
 siloed and no single agent context holds both halves of "generate → place":
 
-| Skill            | Tools bundled                              | Can do the pirate prompt?            |
-| ---------------- | ------------------------------------------ | ------------------------------------ |
-| `design-game`    | GDD docs only                              | Edits design fields, no visuals      |
-| `generate-sprite`| `generate_asset` only                      | Makes an image, **doesn't place it** |
-| `design-scene`   | `scene_*` + `list_assets` (no `generate_asset`) | Places assets that **already exist** |
+| Skill             | Tools bundled                                   | Can do the pirate prompt?            |
+| ----------------- | ----------------------------------------------- | ------------------------------------ |
+| `design-game`     | GDD docs only                                   | Edits design fields, no visuals      |
+| `generate-sprite` | `generate_asset` only                           | Makes an image, **doesn't place it** |
+| `design-scene`    | `scene_*` + `list_assets` (no `generate_asset`) | Places assets that **already exist** |
 
 Today, the pirate prompt typed as plain chat in a game room hits the
 **design-router**, which only routes to GDD field edits — no generation, no
@@ -210,3 +210,14 @@ TDD throughout; the e2e suite is the authoritative behavioral contract.
 - **Router prompt bloat.** A 5th branch grows the router body; keep the
   visual-branch wording tight and lean on the e2e/back-end cassettes to catch
   regressions in the existing four branches.
+- **Live-provider verification deferred.** The committed cassette scripts the
+  agent's decisions; the pipeline beneath runs for real, but the LLM has not
+  been verified to actually emit this chain against live providers. Follow up:
+  record/verify the compose chain via `just e2e-live` (and refresh the cassette
+  with `just record-fixtures` if the natural phrasing drifts) — the same
+  deferred live-recording step noted for tuner-chat.
+- **`add_sprite` parallel-race gap.** `add_sprite` reads `ensure_root` scene
+  state outside the hub lock — two `add_sprite` calls in one parallel agent turn
+  would race (second `apply_batch` rejected on duplicate Root); the replay
+  cassette serializes around this via 3 rounds, but the live path is unproven.
+  Candidate fixes: read-inside-lock or idempotent `addNode(root)`.

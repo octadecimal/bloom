@@ -28,10 +28,12 @@
 The fiddly, branch-heavy part (id derivation, position defaults, fit math, edge wiring) isolated as a pure, synchronous, I/O-free function so it is exhaustively unit-testable without Mongo or async. Lives in a new `app/scene/compose.py` — the home for the per-type op-builder pattern (`build_text_ops`, `build_spine_ops` are future siblings here).
 
 **Files:**
+
 - Create: `studio/backend/app/scene/compose.py`
 - Test: `studio/backend/tests/test_scene_compose.py`
 
 **Interfaces:**
+
 - Consumes: nothing (pure).
 - Produces: `DEFAULT_CANVAS: tuple[int, int]` and
   `build_sprite_ops(*, handle: str, src: str, role: str = "", parent_id: str = "root", ensure_root: bool = False, canvas: tuple[int, int] = DEFAULT_CANVAS, tex_size: tuple[int, int] = (512, 512), x: float | None = None, y: float | None = None, anchor_x: float = 0.5, anchor_y: float = 0.5, fit: str = "none", z_index: int = 0) -> list[dict]` — returns an ordered op list: `[addNode root?, addNode Sprite, addNode Texture, connect data, connect child]`. Node ids are `spr.<handle>` / `tex.<handle>`; edge ids `e.data.<handle>` / `e.child.<handle>`.
@@ -225,10 +227,12 @@ git commit -m "feat(scene): pure build_sprite_ops op-builder for asset placement
 The async tool wrapper: resolve the asset by stable `slot` (or `asset_id`), read the scene to find the Root (canvas dims) or plan to create one, then build the batch via `build_sprite_ops` and apply it atomically. Registered in `ToolFactory._BUILDERS` so the router can bind it by name.
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (add import of `empty_document` + `build_sprite_ops`/`DEFAULT_CANVAS`; add `build_add_sprite_tool`; register in `ToolFactory._BUILDERS`)
 - Test: `studio/backend/tests/test_add_sprite_tool.py`
 
 **Interfaces:**
+
 - Consumes: `build_sprite_ops`, `DEFAULT_CANVAS` (Task 1); `_selected_media_ref`, `_orphan_suffix`, `ToolContext`, `ToolFactory` (existing in `agent_tools.py`); `asset_store.get_by_slot` / `asset_store.get_asset`; `scene_store.get_document`; `scene_hub.apply_batch`.
 - Produces: `build_add_sprite_tool(ctx: ToolContext) -> BaseTool` (tool name `add_sprite`), and `"add_sprite"` in `ToolFactory._BUILDERS` / `known_tool_names()`.
 
@@ -489,10 +493,12 @@ git commit -m "feat(scene): add_sprite tool placing a generated asset in one ato
 Give the existing `design-router` the visual tools and a branch that turns a "make/place visual elements" message into a `generate_asset` → `add_sprite` chain per element, while leaving the existing GDD/symbol/question branches intact.
 
 **Files:**
+
 - Modify: `studio/backend/app/gdd/router.py` (`build_design_router_spec` tools set + `_BODY_TEMPLATE`)
 - Test: `studio/backend/tests/test_design_router.py` (extend)
 
 **Interfaces:**
+
 - Consumes: `add_sprite` registered in `ToolFactory._BUILDERS` (Task 2); existing `generate_asset` / `list_assets` builders.
 - Produces: `build_design_router_spec().tools` now includes `generate_asset`, `add_sprite`, `list_assets`; `.body` documents the visual branch (mentions `add_sprite`, `fit`, `background`, `logo`).
 
@@ -596,10 +602,12 @@ git commit -m "feat(gdd): route visual-compose prompts to generate_asset + add_s
 Prove the whole chain offline and deterministically: a plain-chat pirate prompt routes through the design-router, whose replayed tool calls run the **real** `generate_asset` (→ replay ComfyUI) and **real** `add_sprite` (→ real scene mutation), leaving two parented, texture-bound sprites in the persisted scene. The cassette is a committed JSON artifact (the LLM's decisions); the pipeline under it runs for real.
 
 **Files:**
+
 - Create: `studio/backend/tests/fixtures/replay/run/compose-pirate-scene.json`
 - Create: `studio/backend/tests/e2e/test_scene_compose.py`
 
 **Interfaces:**
+
 - Consumes: `add_sprite` + router branch (Tasks 2–3); the `live_server` fixture (`tests/e2e/conftest.py`); run-cassette keying by normalized prompt (`app/replay/cassette.py::load_run_cassettes`).
 - Produces: an e2e proof keyed on the prompt `"make a pirate theme game with a background and a logo centered at the top"`.
 
@@ -764,9 +772,11 @@ git commit -m "test(scene): backend e2e for one-prompt compose (generate + place
 The behavioral contract: a user types the pirate prompt into the chat composer and watches the agent's discrete tool calls in the feed, then the engine iframe renders both sprites with real (>64px) textures. Mirrors `symbol-reshape.spec.ts` (chat → scene render) and `game-scene.spec.ts` (engine `textureSizeOf`).
 
 **Files:**
+
 - Create: `studio/frontend/e2e/compose-scene.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the same replay backend + `compose-pirate-scene.json` cassette (Task 4); studio testids `chat-composer`, `chat-send`, `chat-messages`, `menu-view`, `view-open-game/preview`, `game-engine-frame`; dev hooks `window.__gameActiveId`, `window.__engineMsgs`, engine-frame `window.__engineRenderer.textureSizeOf(id)`.
 - Produces: an authoritative client e2e proving prompt → visible tool calls → rendered sprites.
 
@@ -902,21 +912,25 @@ Run every affordable gate, record the result honestly, and note the live-verific
 - [ ] **Step 1: Backend unit + non-browser e2e**
 
 From `studio/backend` (with `mongod` up):
+
 ```bash
 uv run pytest tests/test_scene_compose.py tests/test_add_sprite_tool.py tests/test_design_router.py -q
 uv run pytest tests/e2e/test_scene_compose.py tests/e2e/test_gdd_routing.py tests/e2e/test_symbol_reshape.py -q
 ```
+
 Expected: all PASS. Also run the linter the repo uses (`uv run ruff check app tests` if configured).
 
 - [ ] **Step 2: Frontend gates (the four that CI runs)**
 
 Per the repo's frontend CI gates, run all four — vitest passing does not imply types/build pass:
+
 ```bash
 node_modules/.bin/prettier --check .
 npx nx typecheck studio-frontend
 npx nx test studio-frontend
 npx nx build studio-frontend
 ```
+
 Expected: all PASS. (Use the pinned `node_modules/.bin/prettier`, not `npx prettier`, to match CI's version.)
 
 - [ ] **Step 3: Browser e2e (local, never CI)**
@@ -926,7 +940,7 @@ Expected: PASS. Record the actual outcome; do not claim success without the gree
 
 - [ ] **Step 4: Note the live-verification follow-up**
 
-The committed cassette scripts the agent's *decisions*; the pipeline beneath runs for real, but the LLM has not been verified to actually emit this chain. Add a one-line follow-up to the spec's "Risks / open items" (or a tracking todo): _record/verify the compose chain against live providers via `just e2e-live` (and refresh the cassette with `just record-fixtures` if the natural phrasing drifts) — the same deferred live-recording step noted for tuner-chat._ This mirrors the established repo rhythm (hand-author for deterministic replay now; live-verify as a follow-up).
+The committed cassette scripts the agent's _decisions_; the pipeline beneath runs for real, but the LLM has not been verified to actually emit this chain. Add a one-line follow-up to the spec's "Risks / open items" (or a tracking todo): _record/verify the compose chain against live providers via `just e2e-live` (and refresh the cassette with `just record-fixtures` if the natural phrasing drifts) — the same deferred live-recording step noted for tuner-chat._ This mirrors the established repo rhythm (hand-author for deterministic replay now; live-verify as a follow-up).
 
 - [ ] **Step 5: Finish the branch**
 
@@ -937,6 +951,7 @@ Use the `superpowers:finishing-a-development-branch` skill: push `feat/scene-com
 ## Self-Review
 
 **Spec coverage:**
+
 - "One prompt generates named visual elements and places them, positioned, one turn" → Tasks 2–4 (tool + router branch + e2e proof). ✅
 - "Every action a discrete, visible tool call" → router emits separate `generate_asset`/`add_sprite` steps; asserted in Task 5 feed checks. ✅
 - "Placement seam generalizes to future node types" → `app/scene/compose.py` per-type op-builder pattern (Task 1), documented as the home for `build_text_ops`/`build_spine_ops`. ✅
