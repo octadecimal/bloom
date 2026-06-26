@@ -7,3 +7,6 @@ pub mod measure;
 pub mod run;
 pub mod seedgen;
 pub mod target;
+pub mod validate;
+
+pub use validate::validate_target;
