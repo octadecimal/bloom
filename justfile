@@ -61,8 +61,11 @@ mongo-down:
 backend-install:
     cd studio/backend && uv sync
 
+# Binds 0.0.0.0 so the engine iframe's host-derived mediaBase (and any LAN browser) can
+# reach /media — mirrors engine-serve's --host 0.0.0.0. Without it uvicorn binds 127.0.0.1
+# only, so a LAN-IP studio shows a blank Game Scene (textures fail to load).
 backend-serve:
-    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --reload --port $((8000 + off))
+    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --reload --host 0.0.0.0 --port $((8000 + off))
 
 backend-test:
     cd studio/backend && uv run pytest -m "not e2e"
