@@ -17,7 +17,8 @@ class FakeHub:
 async def test_known_tool_names():
     f = ToolFactory(asset_store=None, asset_hub=None)
     assert f.known_tool_names() == {
-        "generate_asset", "list_assets", "add_sprite", "delete_asset",
+        "generate_asset", "list_assets", "add_sprite", "generate_and_place",
+        "delete_asset",
         "list_gdd_docs", "read_gdd_doc", "set_gdd_fields",
         "set_doc_status", "ask_user_question",
         "scene_add_node", "scene_set_prop", "scene_connect",

@@ -52,24 +52,32 @@ Decide what the latest user message is:
    arrives.
 4. A request to CREATE or PLACE visual art, or to build/compose the scene
    (e.g. "make a pirate game with a background and a logo at the top", "add a
-   treasure chest bottom-right"): treat it as a short build list. For EACH visual
-   element the user names:
-     a. call `generate_asset` with a vivid, concrete description and a stable
-        `slot` handle you choose (e.g. slot="background", slot="logo"); set
-        transparent=false for a full-bleed background, true for logos and props;
-        pass size like "1280x720" for a background or "768x512" for a logo.
-        For a BACKGROUND, describe it as pure scenery/environment art and END the
-        description with "no text, no words, no letters, no title, no logo, no UI".
-        Do NOT call a background a "slot game", "title screen", or "game logo" and
-        do NOT put the game's name in it — the image model bakes garbled titles
-        into backgrounds otherwise. Keep all wordmarks and lettering on the LOGO
-        asset, never the background.
-     b. call `add_sprite` with that SAME `slot` plus a short `role` and the
-        placement: a background uses fit="cover" and z_index=0; for "centered at
-        the top" pass y=0 and anchor_y=0 and omit x (x defaults to centred).
-   Call `list_assets` first and reuse a fitting asset instead of regenerating it.
-   You do NOT add Texture nodes or edges by hand — add_sprite does that. You MAY
-   generate and place several elements in this one turn.
+   treasure chest bottom-right"): treat it as a short build list. Work through it
+   ONE element at a time, in order. For EACH visual element the user names, make a
+   SINGLE `generate_and_place` call that generates that element's art and
+   immediately places it in the scene — then move to the next element.
+   Do not generate all the assets up front and place them at the end: complete one
+   element fully (generate + place) before you start the next, so the scene visibly
+   builds up element-by-element. Each call:
+     - description: a vivid, concrete description; choose a stable `slot` handle
+       (e.g. slot="background", slot="logo"). set transparent=false for a
+       full-bleed background, true for logos and props; pass size like "1280x720"
+       for a background or "768x512" for a logo.
+       For a BACKGROUND, describe it as pure scenery/environment art and END the
+       description with "no text, no words, no letters, no title, no logo, no UI".
+       Do NOT call a background a "slot game", "title screen", or "game logo" and
+       do NOT put the game's name in it — the image model bakes garbled titles
+       into backgrounds otherwise. Keep all wordmarks and lettering on the LOGO
+       asset, never the background.
+     - placement: a short `role` plus the position. A background uses fit="cover"
+       and z_index=0; for "centered at the top" pass y=0 and anchor_y=0 and omit x
+       (x defaults to centred).
+   `generate_and_place` reuses a fitting asset for a slot instead of regenerating
+   it, and wires the Texture + Sprite edges for you — you do NOT add Texture nodes
+   or edges by hand. (To place an asset that already exists without regenerating,
+   you may instead call `add_sprite`; to generate without placing, `generate_asset`.
+   Use `list_assets` to see what is already on the board.) You MAY build several
+   elements in this one turn — just keep each generate+place paired and sequential.
 5. Not a design or scene request (a greeting, a question, chit-chat): reply
    normally in plain text and call NO tool.
 
@@ -88,7 +96,8 @@ def build_design_router_spec() -> SkillSpec:
         args=[],
         tools=sorted(
             GDD_TOOL_NAMES
-            | {"realize_symbol", "generate_asset", "add_sprite", "list_assets"}
+            | {"realize_symbol", "generate_asset", "add_sprite", "list_assets",
+               "generate_and_place"}
         ),
         body=_BODY_TEMPLATE.format(catalog=_render_catalog(field_catalog())),
     )
