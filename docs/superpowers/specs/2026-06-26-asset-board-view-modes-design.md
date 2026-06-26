@@ -48,10 +48,11 @@ renderer that looks up its tokens by mode:
   on tiles as a small status overlay/badge so an in-flight or failed generation
   is never silently hidden.
 - **Lightbox-on-click** of the selected image is preserved in all modes.
-- **Selection** (clicking a candidate to select a generation) remains available;
-  the candidate-seed row is only shown inline in Large. In Small/Medium it
-  appears on hover/selection; in List it is hidden (selection still reachable via
-  the lightbox / Large mode).
+- **Selection** (clicking a candidate to select a generation) is exposed inline
+  in Large only — the candidate-seed strip is too large for compact tiles. In
+  Small/Medium/List the strip is hidden; to change the selected generation, the
+  user switches to Large (or opens the lightbox). The selected image itself still
+  renders in every mode.
 
 ## The toolbar control
 
