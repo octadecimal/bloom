@@ -5,9 +5,15 @@ import { seedLocalStorage } from './helpers';
 // Backend must be started in replay mode (`just backend-serve-replay`, i.e. PROVIDER_MODE=replay).
 // Local-only; not in CI. Each test uses a UNIQUE room/game name for determinism.
 
-async function openApp(page: Page, username: string) {
+async function openApp(page: Page, username: string, seedViewMode: string | null = 'large') {
   await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username } }));
-  await seedLocalStorage(page, 'bloom.studio.assets.prefs', JSON.stringify({ version: 1, data: { viewMode: 'large' } }));
+  // Seed the asset-board view mode via an init script for tests that need full
+  // chrome (default 'large'). Pass null to skip it — required by the persistence
+  // test, since the init script otherwise re-applies on every reload and would
+  // clobber a mode the app itself saved.
+  if (seedViewMode) {
+    await seedLocalStorage(page, 'bloom.studio.assets.prefs', JSON.stringify({ version: 1, data: { viewMode: seedViewMode } }));
+  }
   await page.goto('/');
   await expect(page.getByTestId('room-picker')).toBeVisible();
 }
@@ -174,7 +180,9 @@ test('clicking a generated preview opens a full-size viewer', async ({ page }) =
 
 test('view-mode toggle changes density, reveals actions on hover, and persists', async ({ page }) => {
   const name = `View ${Date.now()}`;
-  await openApp(page, 'alice'); // seeds large; we switch modes explicitly below
+  // No view-mode seed: start from the real default (medium) so the mode the app
+  // persists below survives the reload (an init-script seed would re-apply on reload).
+  await openApp(page, 'alice', null);
   await createGameViaRoom(page, name);
   await addAsset(page);
 
