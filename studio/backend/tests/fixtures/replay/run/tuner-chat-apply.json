@@ -1,0 +1,7 @@
+{
+  "prompt": "apply it",
+  "tool_calls": [
+    { "name": "apply_tuned_model", "args": {} }
+  ],
+  "final": ["Applied the tuned model to the slot model."]
+}

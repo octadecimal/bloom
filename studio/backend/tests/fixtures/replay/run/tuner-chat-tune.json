@@ -1,0 +1,8 @@
+{
+  "prompt": "tune the slot math",
+  "tool_calls": [
+    { "name": "read_tuner_setup", "args": {} },
+    { "name": "tune_slot_model", "args": {} }
+  ],
+  "final": ["Tuned the slot math toward the GDD intent — the verdict is above."]
+}
