@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     # The watchdog hard-kills the process tree if either bound is crossed.
     curation_mem_cap_mb: float = 1024.0  # resident-memory cap for the proc tree
     curation_timeout_s: float = 120.0  # wall-clock cap (backstop)
-    tuner_mem_cap_mb: float = 1024.0  # resident-memory cap for the tuner proc tree
+    tuner_mem_cap_mb: float = 4096.0  # resident-memory cap for the tuner proc tree
+    # (honest cargo-run tunes can approach ~1.2 GiB; 4 GiB gives headroom while
+    #  still catching unbounded runaways that grow to many GB)
     tuner_timeout_s: float = 120.0  # wall-clock cap (backstop)
     skills_dir: str = str(
         (__import__("pathlib").Path(__file__).resolve().parents[3] / "skills")
