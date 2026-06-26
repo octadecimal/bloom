@@ -43,6 +43,9 @@ Evaluate, in order:
      re-run this gate.
   2. **Merge anyway** — proceed to step 3 (only if they explicitly choose this).
   3. **Abort** — stop the skill.
+- **CI green but branch is BEHIND main?** If `mergeStateStatus` is `BEHIND`, update
+  the branch first (`gh pr update-branch` or rebase/merge main in) and then
+  re-evaluate this gate — do not silently stall.
 - **All green + working tree clean + mergeable?** Confirm `git status` is clean and
   `mergeStateStatus` is mergeable (e.g. `CLEAN`), then proceed.
 
@@ -77,11 +80,21 @@ worktree being removed.
 **Self-rooted special case:** detect this first — compare your current working
 directory (`git rev-parse --show-toplevel`) against the worktree path from
 `git worktree list`. If THIS session is rooted inside the worktree being removed,
-the OS locks that folder and `worktree remove` fails. Run `git worktree prune` +
-`git branch -D <branch>` anyway, then report the leftover folder path for the user
-to delete manually. Do NOT claim the folder was removed.
+BOTH `git worktree remove` AND `git branch -D <branch>` will fail: the OS locks
+the directory so the worktree cannot be removed, and git refuses to delete a branch
+that is still checked out in an existing worktree. These are **expected failures in
+this case — do NOT STOP**. Note them and continue: report to the user BOTH the
+leftover folder path AND the still-present branch name for manual cleanup after this
+session ends (delete the folder, then run `git worktree prune` +
+`git branch -D <branch>` from the primary checkout in a later session). Do NOT
+claim either was removed.
 
 ## 5. Live-stack check + bring-up
+
+**Every command in this step MUST run with the working directory set to the primary
+checkout `C:\code\bloom` (where `BLOOM_PORT_OFFSET` is 0) — NEVER from a worktree,
+because `just` loads the cwd's `.env` and a worktree's offset would bind the wrong
+ports while the URLs below assume offset 0.**
 
 All from the primary checkout at offset-0 ports (backend `8000`, frontend `4200`,
 runtime `4300`).
@@ -100,6 +113,7 @@ Invoke-RestMethod http://localhost:8000/health
 - **Down / not answering?** Bring it up as background processes (run each with your
   background-run option so they persist for the session), polling between:
   ```
+  Set-Location C:\code\bloom   # PowerShell — ensures offset 0
   just mongo-up
   just backend-serve     # live by default — run in background
   just serve-frontend    # run in background

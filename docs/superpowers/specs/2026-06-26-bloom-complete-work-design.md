@@ -28,7 +28,7 @@ in `.claude/settings.json` so every clone of the repo gets it.
 .claude/plugins/bloom/
   .claude-plugin/plugin.json            # plugin manifest (name: bloom)
   skills/complete-work/SKILL.md         # the skill (pure instructions, no script)
-.claude/plugins/marketplace.json        # local marketplace listing the bloom plugin
+.claude/plugins/.claude-plugin/marketplace.json  # local marketplace listing the bloom plugin
 .claude/settings.json                   # + extraKnownMarketplaces + enabledPlugins entry
 ```
 
