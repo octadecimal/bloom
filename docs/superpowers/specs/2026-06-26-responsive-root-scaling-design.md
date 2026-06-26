@@ -68,8 +68,8 @@ document/protocol:
 {
   "safeArea": {
     "landscape": { "width": 1280, "height": 720 },
-    "portrait":  { "width": 720,  "height": 1280 }
-  }
+    "portrait": { "width": 720, "height": 1280 },
+  },
 }
 ```
 
@@ -96,7 +96,7 @@ and recomputes.
 - **In:** `{ width, height }` host size + resolved `{ landscape, portrait }` safe
   rects.
 - **Out:** `IViewport = { orientation, safeArea: { width, height }, scale,
-  offset: { x, y }, canvas: { width, height }, dpr }`.
+offset: { x, y }, canvas: { width, height }, dpr }`.
 - Zero Pixi. This is the entire fit/center/orientation math — the primary
   unit-test target.
 
@@ -160,7 +160,7 @@ framebuffer — "only as big as it needs to be".
 **Unit (Vitest, pure):**
 
 - `computeViewport`: landscape / portrait pick incl. square tiebreak; `scale =
-  min` ratio; centered offset; correct bleed axis; DPR cap; fallback chain;
+min` ratio; centered offset; correct bleed axis; DPR cap; fallback chain;
   zero-size guard.
 - `ViewportController` with `MockRenderer` + a fake host: rAF coalescing,
   `applyViewport` payload, `viewport:changed` emitted **only** on orientation /

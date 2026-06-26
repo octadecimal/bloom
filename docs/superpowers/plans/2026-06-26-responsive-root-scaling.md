@@ -24,10 +24,12 @@
 The whole fit/center/orientation calculation and the safe-area fallback chain, with zero Pixi — the primary unit-test target.
 
 **Files:**
+
 - Create: `runtime/client/src/render/viewport.ts`
 - Test: `runtime/client/src/render/viewport.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `JsonValue` from `../model/document`.
 - Produces:
   - `interface ISize { width: number; height: number }`
@@ -212,6 +214,7 @@ git commit -m "feat(runtime): pure computeViewport + resolveSafeAreas"
 Drop the fixed design-size from `mount` (the canvas is now the viewport) and add one new method `applyViewport(vp)` to the `IRenderer` seam. Update both implementations and the existing tests that asserted the old `mount` signature, so the branch keeps building and typechecking.
 
 **Files:**
+
 - Modify: `runtime/client/src/render/renderer.ts` (interface)
 - Modify: `runtime/client/src/render/mockRenderer.ts`
 - Modify: `runtime/client/src/render/pixiRenderer.ts`
@@ -221,6 +224,7 @@ Drop the fixed design-size from `mount` (the canvas is now the viewport) and add
 - Test: `runtime/client/src/render/mockRenderer.spec.ts` (add applyViewport case), `runtime/client/src/render/pixiRenderer.viewport.spec.ts` (new)
 
 **Interfaces:**
+
 - Consumes: `IViewport` from `./viewport` (Task 1).
 - Produces:
   - `IRenderer.mount(rootId: string): void | Promise<void>` (no `opts`)
@@ -422,7 +426,7 @@ Delete the `numProp` function at the bottom of `reconciler.ts` and drop `JsonVal
 In `runtime/client/src/engine.spec.ts:14`, update the expectation to the new `mount` signature:
 
 ```ts
-    expect(renderer.calls).toContainEqual(['mount', 'root']);
+expect(renderer.calls).toContainEqual(['mount', 'root']);
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -449,10 +453,12 @@ git commit -m "feat(runtime): add applyViewport seam; mount sizes to host"
 The controller that owns the `ResizeObserver`, coalesces to one frame, drives `computeViewport` → `renderer.applyViewport`, and emits `viewport:changed` only on orientation/shape change. Plus `domHostSurface`, the real DOM/`ResizeObserver` wrapper.
 
 **Files:**
+
 - Create: `runtime/client/src/render/viewportController.ts`
 - Test: `runtime/client/src/render/viewportController.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `computeViewport`, `ISafeAreaDefs`, `ISize`, `IViewport` from `./viewport`; `IEventBus` from `../orchestration/bus`.
 - Produces:
   - `interface IViewportRenderer { applyViewport(vp: IViewport): void }`
@@ -640,13 +646,7 @@ export class ViewportController implements IViewportSink {
   private readonly schedule: (cb: () => void) => () => void;
   private readonly readDpr: () => number;
 
-  constructor(opts: {
-    surface: IHostSurface;
-    renderer: IViewportRenderer;
-    bus: IEventBus;
-    schedule?: (cb: () => void) => () => void;
-    readDpr?: () => number;
-  }) {
+  constructor(opts: { surface: IHostSurface; renderer: IViewportRenderer; bus: IEventBus; schedule?: (cb: () => void) => () => void; readDpr?: () => number }) {
     this.surface = opts.surface;
     this.renderer = opts.renderer;
     this.bus = opts.bus;
@@ -697,12 +697,7 @@ export class ViewportController implements IViewportSink {
 }
 
 function shapeChanged(prev: IViewport | null, next: IViewport): boolean {
-  return (
-    !prev ||
-    prev.orientation !== next.orientation ||
-    prev.safeArea.width !== next.safeArea.width ||
-    prev.safeArea.height !== next.safeArea.height
-  );
+  return !prev || prev.orientation !== next.orientation || prev.safeArea.width !== next.safeArea.width || prev.safeArea.height !== next.safeArea.height;
 }
 
 function rafSchedule(cb: () => void): () => void {
@@ -750,10 +745,12 @@ git commit -m "feat(runtime): ViewportController + domHostSurface"
 The reconciler resolves safe rects from Root props and pushes them to the viewport sink — on Root creation and whenever a safe-area-affecting prop changes.
 
 **Files:**
+
 - Modify: `runtime/client/src/render/reconciler.ts`
 - Test: `runtime/client/src/render/reconciler.viewport.spec.ts` (new)
 
 **Interfaces:**
+
 - Consumes: `resolveSafeAreas` from `./viewport`; `IViewportSink` from `./viewportController`.
 - Produces: `Reconciler` constructor gains an optional third arg `viewport?: IViewportSink`. On Root `nodeCreated` it calls `viewport.setSafeAreas(resolveSafeAreas(node.props))` after `mount`; on Root `propSet` of a safe-area-affecting path it calls `viewport.setSafeAreas(resolveSafeAreas(node.props))`.
 
@@ -853,11 +850,11 @@ Add the optional constructor arg:
 In `created()`, push safe areas after mounting the Root:
 
 ```ts
-    if (node.type === 'Root') {
-      await this.renderer.mount(node.id);
-      this.viewport?.setSafeAreas(resolveSafeAreas(node.props));
-      return;
-    }
+if (node.type === 'Root') {
+  await this.renderer.mount(node.id);
+  this.viewport?.setSafeAreas(resolveSafeAreas(node.props));
+  return;
+}
 ```
 
 In the `propSet` case, after `this.renderer.setProp(...)`, re-resolve when a Root safe-area-affecting prop changed:
@@ -908,11 +905,13 @@ git commit -m "feat(runtime): resolve Root safe areas through the reconciler"
 Construct the `ViewportController` inside `createEngine` (when a host surface is supplied), hand it to the reconciler as the sink, and expose viewport state to standalone/e2e from `main.ts`.
 
 **Files:**
+
 - Modify: `runtime/client/src/engine.ts`
 - Modify: `runtime/client/src/main.ts`
 - Test: `runtime/client/src/engine.viewport.spec.ts` (new)
 
 **Interfaces:**
+
 - Consumes: `ViewportController`, `domHostSurface`, `IHostSurface` from `./render/viewportController`.
 - Produces: `createEngine` accepts an optional `surface?: IHostSurface` in its deps and returns an added `viewport?: ViewportController`. `main.ts` exposes `window.__engineViewport()` and `window.__engineViewportEvents`.
 
@@ -986,11 +985,7 @@ import { ViewportController, type IHostSurface } from './render/viewportControll
 Reorder construction so the bus exists before the controller and reconciler, build the controller when a surface is present, pass it to the reconciler, and return it. Replace the body of `createEngine`:
 
 ```ts
-export function createEngine(deps: {
-  renderer: IRenderer;
-  post: (m: OutboundMessage) => void;
-  surface?: IHostSurface;
-}): {
+export function createEngine(deps: { renderer: IRenderer; post: (m: OutboundMessage) => void; surface?: IHostSurface }): {
   host: ProtocolHost;
   model: GraphModel;
   modules: IEngineModules;
@@ -1060,9 +1055,11 @@ git commit -m "feat(runtime): wire ViewportController into engine + main"
 Prove the real canvas in a real browser: fit, centering/bleed, orientation flip, and the `viewport:changed` signal — by resizing the iframe that hosts the engine.
 
 **Files:**
+
 - Create: `runtime/client/e2e/viewport.e2e.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `window.__engineViewport()` and `window.__engineViewportEvents` exposed by `main.ts` (Task 5); standalone `?doc=` load path (existing).
 
 - [ ] **Step 1: Write the e2e spec**
