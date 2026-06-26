@@ -11,7 +11,7 @@ describe('createEngine', () => {
     host.start();
     await host.handle({ v: 1, kind: 'op', id: '1', op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
     expect(sent[0]).toEqual({ v: 1, kind: 'ready', protocolVersion: 1 });
-    expect(renderer.calls).toContainEqual(['mount', 'root', { width: 640, height: 480 }]);
+    expect(renderer.calls).toContainEqual(['mount', 'root']);
     expect(model.getNode('root')).toBeDefined();
     expect(sent).toContainEqual({ v: 1, kind: 'ack', id: '1' });
   });

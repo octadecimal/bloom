@@ -1,13 +1,17 @@
 import type { JsonValue, NodeType } from '../model/document';
 import type { IDisplayHandle, IRenderer, ITextureHandle } from './renderer';
+import type { IViewport } from './viewport';
 
 export class MockRenderer implements IRenderer {
   calls: Array<[string, ...unknown[]]> = [];
   private handles = new Map<string, IDisplayHandle>();
   tickCbs: Array<(dtMs: number) => void> = [];
 
-  mount(rootId: string, opts: { width: number; height: number }): void {
-    this.calls.push(['mount', rootId, opts]);
+  mount(rootId: string): void {
+    this.calls.push(['mount', rootId]);
+  }
+  applyViewport(vp: IViewport): void {
+    this.calls.push(['applyViewport', vp]);
   }
   createObject(id: string, type: NodeType): void {
     this.calls.push(['createObject', id, type]);

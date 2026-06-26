@@ -1,6 +1,6 @@
 import type { GraphModel } from '../model/graphModel';
 import type { IChange } from '../model/changes';
-import type { INode, JsonValue } from '../model/document';
+import type { INode } from '../model/document';
 import type { IRenderer } from './renderer';
 
 export class Reconciler {
@@ -52,9 +52,7 @@ export class Reconciler {
   private async created(node: INode): Promise<void> {
     if (node.type === 'Texture') return; // data-only node, no display object
     if (node.type === 'Root') {
-      const width = numProp(node.props.width, 800);
-      const height = numProp(node.props.height, 600);
-      await this.renderer.mount(node.id, { width, height });
+      await this.renderer.mount(node.id);
     } else {
       this.renderer.createObject(node.id, node.type);
       for (const [key, value] of Object.entries(node.props)) this.renderer.setProp(node.id, key, value);
@@ -67,8 +65,4 @@ export class Reconciler {
     const handle = src ? await this.renderer.loadTexture(src) : null;
     this.renderer.assignTexture(spriteId, handle);
   }
-}
-
-function numProp(value: JsonValue | undefined, fallback: number): number {
-  return typeof value === 'number' ? value : fallback;
 }

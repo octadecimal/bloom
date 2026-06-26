@@ -1,6 +1,7 @@
 import { Application, Assets, BlurFilter, Container, Sprite, Texture, type Filter, type Ticker } from 'pixi.js';
 import type { JsonValue, NodeType } from '../model/document';
 import type { IDisplayHandle, IRenderer, ITextureHandle } from './renderer';
+import type { IViewport } from './viewport';
 
 type DisplayObject = Container | Sprite;
 type Vec2 = { x?: number; y?: number };
@@ -64,15 +65,34 @@ export class PixiRenderer implements IRenderer {
     private readonly resolveSrc: SrcResolver = (s) => s,
   ) {}
 
-  async mount(rootId: string, opts: { width: number; height: number }): Promise<void> {
+  async mount(rootId: string): Promise<void> {
     const app = new Application();
-    await app.init({ width: opts.width, height: opts.height, background: '#0b0b0c', antialias: true });
+    const width = Math.max(1, this.host.clientWidth);
+    const height = Math.max(1, this.host.clientHeight);
+    await app.init({
+      width,
+      height,
+      background: '#0b0b0c',
+      antialias: true,
+      resolution: Math.min(globalThis.devicePixelRatio ?? 1, 2),
+      autoDensity: true,
+    });
     this.host.appendChild(app.canvas);
     app.stage.sortableChildren = true;
     this.app = app;
     this.flushPendingTicks();
     this.rootId = rootId;
     this.objects.set(rootId, app.stage as unknown as Container);
+  }
+
+  applyViewport(vp: IViewport): void {
+    const app = this.app;
+    if (!app || this.rootId === null) return;
+    app.renderer.resize(vp.canvas.width, vp.canvas.height);
+    const root = this.objects.get(this.rootId);
+    if (!root) return;
+    root.scale.set(vp.scale);
+    root.position.set(vp.offset.x, vp.offset.y);
   }
 
   createObject(id: string, type: NodeType): void {

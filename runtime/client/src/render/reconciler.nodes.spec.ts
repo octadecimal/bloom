@@ -16,7 +16,7 @@ describe('Reconciler node lifecycle + hierarchy', () => {
       model.apply({ kind: 'connect', edgeId: 'e1', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 's', port: 'parent' } }),
     );
 
-    expect(r.calls).toContainEqual(['mount', 'root', { width: 1280, height: 720 }]);
+    expect(r.calls).toContainEqual(['mount', 'root']);
     expect(r.calls).toContainEqual(['createObject', 's', 'Sprite']);
     expect(r.calls.find((c) => c[0] === 'createObject' && c[1] === 'tex')).toBeUndefined();
     expect(r.calls).toContainEqual(['setParent', 's', 'root']);
