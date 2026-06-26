@@ -1,5 +1,6 @@
 import type { IEventBus } from '../orchestration/bus';
 import { computeViewport, type ISafeAreaDefs, type ISize, type IViewport } from './viewport';
+export type { IViewport } from './viewport';
 
 export interface IViewportRenderer {
   applyViewport(vp: IViewport): void;
