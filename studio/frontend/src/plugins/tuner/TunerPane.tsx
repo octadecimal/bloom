@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { tunerHooks, tunerSlice } from './state';
 import { tune, applyTuner, putTuner } from './restClient';
-import { refreshSeedAndTarget } from './actions';
+import { refreshSeedAndTarget, refreshTunerResult } from './actions';
 
 export function TunerPane(_props: IDockviewPanelProps) {
   const s = tunerHooks.usePluginState();
   const activeGameId = s.activeGameId.get();
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Re-hydrate the persisted tuner result every time the pane opens for a game, so Apply
+  // reflects an already-completed tune (e.g. one started from chat) even when the live
+  // `tuning_complete` socket event was missed while the pane wasn't subscribed (issue #82).
+  useEffect(() => {
+    if (activeGameId) void refreshTunerResult(activeGameId);
+  }, [activeGameId]);
 
   if (!activeGameId) {
     return (

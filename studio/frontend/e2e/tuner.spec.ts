@@ -114,6 +114,46 @@ test('tune a detuned model to PASS and apply it back', async ({ page, request })
   expect(sym2.payout).toBeGreaterThan(1); // raised from the detuned seed
 });
 
+// Issue #82: a tune started OUTSIDE the pane (the chat path `tune_slot_model` →
+// `request_tune`, exercised here via the equivalent REST endpoint) must be applyable
+// from the Tuner pane. The pane re-hydrates the persisted result on open, so Apply
+// reflects the completed tune even when the live `tuning_complete` socket event was not
+// observed by the pane. Without the fix, Apply is a silent no-op and the model stays
+// detuned (a later Curate would FAIL on the unchanged model).
+test('applies a tune started outside the pane (chat/REST path) — issue #82', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const gameId = await setupGame(page, request, 'carol', `tuner ${Date.now()}`, { rtp: '90%', volatility: 'low' });
+
+  // Tune via the backend directly — the same `request_tune` path a chat tune drives —
+  // while the pane is NOT open. Wait for the persisted result to land.
+  const tuneResp = await request.post(`${BACKEND}/games/${gameId}/tuner/tune`);
+  expect(tuneResp.status()).toBe(202);
+  await expect
+    .poll(
+      async () => {
+        const r = await request.get(`${BACKEND}/games/${gameId}/tuner/result`);
+        const body = (await r.json()) as { status?: string } | null;
+        return body?.status ?? null;
+      },
+      { timeout: 120_000, intervals: [1_000] },
+    )
+    .toBe('pass');
+
+  // Now open the pane. It must reflect the already-completed tune and enable Apply.
+  await openTuner(page);
+  await expect(page.getByTestId('tuning-status')).toContainText('PASS', { timeout: 10_000 });
+  await expect(page.getByTestId('apply-button')).toBeEnabled();
+
+  await page.getByTestId('apply-button').click();
+  await expect(page.getByTestId('tuner-applied')).toBeVisible({ timeout: 15_000 });
+
+  // The tuned model was written back into the slot-model store.
+  const after = await request.get(`${BACKEND}/games/${gameId}/slot-model`);
+  const doc = (await after.json()) as { model: { paytable: { entries: { symbol: number; payout: number }[] } } };
+  const sym2 = doc.model.paytable.entries.find((e) => e.symbol === 2)!;
+  expect(sym2.payout).toBeGreaterThan(1);
+});
+
 test('an unreachable RTP intent reports NEAR-MISS', async ({ page, request }) => {
   test.setTimeout(180_000);
   await setupGame(page, request, 'bob', `tuner ${Date.now()}`, { rtp: '5000%', volatility: 'low' });

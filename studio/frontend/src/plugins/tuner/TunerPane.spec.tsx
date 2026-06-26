@@ -4,17 +4,36 @@ import { TunerPane } from './TunerPane';
 import { TUNER_PLUGIN_ID, makeInitialState, tunerSlice } from './state';
 import { rootStore } from '../../state/rootStore';
 
-vi.mock('./actions', () => ({ openGameTuner: vi.fn(), closeGameTuner: vi.fn(), initTuner: vi.fn(), refreshSeedAndTarget: vi.fn() }));
-vi.mock('./restClient', () => ({ tune: vi.fn(), applyTuner: vi.fn() }));
+const refreshTunerResult = vi.fn();
+vi.mock('./actions', () => ({
+  openGameTuner: vi.fn(),
+  closeGameTuner: vi.fn(),
+  initTuner: vi.fn(),
+  refreshSeedAndTarget: vi.fn(),
+  refreshTunerResult: (id: string) => refreshTunerResult(id),
+}));
+vi.mock('./restClient', () => ({ tune: vi.fn(), applyTuner: vi.fn(), putTuner: vi.fn() }));
 
 beforeEach(() => {
   rootStore.plugins.nested(TUNER_PLUGIN_ID).set(makeInitialState() as never);
   tunerSlice().activeGameId.set(null);
   tunerSlice().status.set('idle');
   tunerSlice().result.set(null);
+  refreshTunerResult.mockReset();
 });
 
 describe('TunerPane', () => {
+  it('refreshes the persisted tuner result when the pane opens for a game (issue #82)', () => {
+    tunerSlice().activeGameId.set('g1');
+    render(<TunerPane {...({} as never)} />);
+    expect(refreshTunerResult).toHaveBeenCalledWith('g1');
+  });
+
+  it('does not refresh when no game is open', () => {
+    render(<TunerPane {...({} as never)} />);
+    expect(refreshTunerResult).not.toHaveBeenCalled();
+  });
+
   it('shows a no-game placeholder when no game is open', () => {
     render(<TunerPane {...({} as never)} />);
     expect(screen.getByTestId('tuner-no-game')).toBeTruthy();
