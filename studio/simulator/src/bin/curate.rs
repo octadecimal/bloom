@@ -70,6 +70,11 @@ fn main() {
         realized_correction_band: tj.realized_correction_band,
     };
 
+    if let Err(e) = bloom_simulator::validate_target(&target) {
+        eprintln!("invalid target: {e}");
+        std::process::exit(2);
+    }
+
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only
     match run_curation(&model, &target, tj.master_seed, &args[3], &signing_key) {
         Ok(out) => {
