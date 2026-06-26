@@ -83,13 +83,10 @@ imports**:
   - Otherwise returns `{ id, type, rows }` where
     `IInspectorView = { id: string; type: NodeType; rows: IPropRow[] }` and
     `IPropRow = { path: string; key: string; depth: number; kind: 'scalar' | 'object' | 'array'; display?: string; hasChildren: boolean; count?: number }`.
-  - Recursively flattens `node.props` into a pre-order, depth-tagged row list:
-    - **scalars** (`string | number | boolean | null`) → leaf row, `hasChildren:
-false`, with a formatted `display` string (`"hero"`, `120`, `true`, `null`);
-    - **objects / arrays** → branch row, `hasChildren: true`, `count` = number of
-      entries; recurses into entries (object keys / array indices in order) unless
-      `collapsed[path] === true`;
-    - **empty `{}` / `[]`** → leaf row (`hasChildren: false`), shown as `{}` / `[]`.
+  - Recursively flattens `node.props` into a pre-order, depth-tagged row list: - **scalars** (`string | number | boolean | null`) → leaf row, `hasChildren:
+false`, with a formatted `display` string (`"hero"`, `120`, `true`, `null`); - **objects / arrays** → branch row, `hasChildren: true`, `count` = number of
+    entries; recurses into entries (object keys / array indices in order) unless
+    `collapsed[path] === true`; - **empty `{}` / `[]`** → leaf row (`hasChildren: false`), shown as `{}` / `[]`.
   - `path` is a unique, stable string used as both the React key and the collapse
     key: top-level prop `name` → `"name"`; nested → `"tint.r"`; array element →
     `"items.0"`.
