@@ -1,6 +1,6 @@
-import { Application, Assets, Container, Sprite, Texture } from 'pixi.js';
+import { Application, Assets, BlurFilter, Container, Sprite, Texture, type Filter, type Ticker } from 'pixi.js';
 import type { JsonValue, NodeType } from '../model/document';
-import type { IRenderer, ITextureHandle } from './renderer';
+import type { IDisplayHandle, IRenderer, ITextureHandle } from './renderer';
 
 type DisplayObject = Container | Sprite;
 type Vec2 = { x?: number; y?: number };
@@ -139,4 +139,53 @@ export class PixiRenderer implements IRenderer {
     }
     return false;
   }
+
+  getHandle(id: string): IDisplayHandle | null {
+    const obj = this.objects.get(id);
+    if (!obj) return null;
+    return {
+      position: obj.position,
+      scale: obj.scale,
+      get alpha() {
+        return obj.alpha;
+      },
+      set alpha(v: number) {
+        obj.alpha = v;
+      },
+      get visible() {
+        return obj.visible;
+      },
+      set visible(v: boolean) {
+        obj.visible = v;
+      },
+      setBlur(strength: number) {
+        const current = asFilterArray(obj.filters);
+        const existing = current.find((f): f is BlurFilter => f instanceof BlurFilter);
+        if (strength <= 0) {
+          obj.filters = current.filter((f) => !(f instanceof BlurFilter));
+          return;
+        }
+        if (existing) {
+          existing.strength = strength;
+          obj.filters = current;
+        } else {
+          obj.filters = [...current, new BlurFilter({ strength })];
+        }
+      },
+    };
+  }
+
+  onTick(cb: (dtMs: number) => void): () => void {
+    const app = this.app;
+    if (!app) return () => {};
+    const fn = (ticker: Ticker) => cb(ticker.deltaMS);
+    app.ticker.add(fn);
+    return () => app.ticker.remove(fn);
+  }
+}
+
+function asFilterArray(filters: Filter | readonly Filter[] | null | undefined): Filter[] {
+  if (filters == null) return [];
+  if (Array.isArray(filters)) return [...filters];
+  return [filters as Filter];
 }
