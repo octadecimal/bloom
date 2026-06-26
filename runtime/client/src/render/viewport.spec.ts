@@ -70,4 +70,18 @@ describe('resolveSafeAreas', () => {
       portrait: { width: 640, height: 480 },
     });
   });
+
+  it('ignores a malformed safeArea entry with non-numeric width', () => {
+    expect(resolveSafeAreas({ safeArea: { landscape: { width: 'x', height: 720 } }, width: 640, height: 480 })).toEqual({
+      landscape: { width: 640, height: 480 },
+      portrait: { width: 640, height: 480 },
+    });
+  });
+
+  it('falls back to 800x600 when root width is non-positive (zero)', () => {
+    expect(resolveSafeAreas({ width: 0, height: 480 })).toEqual({
+      landscape: { width: 800, height: 600 },
+      portrait: { width: 800, height: 600 },
+    });
+  });
 });

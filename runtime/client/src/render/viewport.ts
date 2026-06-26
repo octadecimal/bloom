@@ -44,7 +44,9 @@ export function resolveSafeAreas(props: Record<string, JsonValue>): ISafeAreaDef
   if (land && port) return { landscape: land, portrait: port };
   if (land) return { landscape: land, portrait: land };
   if (port) return { landscape: port, portrait: port };
-  const fallback: ISize = { width: num(props.width, 800), height: num(props.height, 600) };
+  const w = typeof props.width === 'number' && props.width > 0 ? props.width : 0;
+  const h = typeof props.height === 'number' && props.height > 0 ? props.height : 0;
+  const fallback: ISize = w > 0 && h > 0 ? { width: w, height: h } : { width: 800, height: 600 };
   return { landscape: fallback, portrait: fallback };
 }
 
