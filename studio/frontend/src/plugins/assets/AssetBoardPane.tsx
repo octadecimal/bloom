@@ -5,6 +5,9 @@ import { assetsHooks } from './state';
 import type { Workflow } from './state';
 import { createAsset } from './actions';
 import { AssetCard } from './AssetCard';
+import { ViewToggle } from './ViewToggle';
+import { VIEW_CONFIG, type AssetViewMode } from './viewConfig';
+import { loadPrefs, savePrefs } from './prefs';
 import { bumpRenderCount } from '../../app/renderCount';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +28,11 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [workflow, setWorkflow] = useState<Workflow>('schnell-transparent');
+  const [mode, setMode] = useState<AssetViewMode>(() => loadPrefs().viewMode);
+  const changeMode = (m: AssetViewMode) => {
+    setMode(m);
+    savePrefs({ viewMode: m });
+  };
 
   if (!activeGameId) {
     return (
@@ -36,7 +44,15 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
 
   return (
     <div className="flex h-full flex-col bg-surface" data-testid="asset-board">
-      <PanelHeader label="Asset Board" right={<span className="font-mono">{activeGameId}</span>} />
+      <PanelHeader
+        label="Asset Board"
+        right={
+          <span className="flex items-center gap-2">
+            <ViewToggle mode={mode} onChange={changeMode} />
+            <span className="font-mono">{activeGameId}</span>
+          </span>
+        }
+      />
       <div className="flex flex-1 flex-col gap-2.5 overflow-auto p-2.5">
         <Card>
           <CardContent className="pt-2.5">
@@ -71,9 +87,9 @@ export function AssetBoardPane(_props: IDockviewPanelProps) {
           </p>
         )}
 
-        <div className="flex flex-wrap gap-2.5" data-testid="asset-grid">
+        <div className={VIEW_CONFIG[mode].container} data-testid="asset-grid" data-view-mode={mode}>
           {Array.from({ length: assetCount }, (_, i) => (
-            <AssetCard key={i} index={i} />
+            <AssetCard key={i} index={i} mode={mode} />
           ))}
         </div>
       </div>
