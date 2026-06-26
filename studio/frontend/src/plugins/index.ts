@@ -9,5 +9,6 @@ import { game } from './game';
 import { simulator } from './simulator';
 import { tuner } from './tuner';
 import { sceneGraph } from './scene-graph';
+import { propertyInspector } from './property-inspector';
 
-export const PLUGINS: IPlugin[] = [sceneStorePlugin, demoCounter, demoScratch, llmChat, assets, gdd, game, simulator, tuner, sceneGraph];
+export const PLUGINS: IPlugin[] = [sceneStorePlugin, demoCounter, demoScratch, llmChat, assets, gdd, game, simulator, tuner, sceneGraph, propertyInspector];
