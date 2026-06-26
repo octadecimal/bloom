@@ -5,7 +5,8 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
 
 from app.gdd.store import GddEditError
-from app.scene.document import OpError, unreachable_nodes
+from app.scene.document import OpError, unreachable_nodes, empty_document
+from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.simulator.targets import derive_target, TargetGap
 from app.tuner.models import TuningParams
 
@@ -88,6 +89,73 @@ def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
         description="List the assets on the Asset Board for the current game: id, "
                     "name, category, and the image's media URL (use that URL as a "
                     "Texture's src). Assets with no generation show '(no image yet)'.",
+    )
+
+
+def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
+    async def add_sprite(
+        slot: str = "",
+        asset_id: str = "",
+        role: str = "",
+        parent: str = "root",
+        x: float | None = None,
+        y: float | None = None,
+        anchor_x: float = 0.5,
+        anchor_y: float = 0.5,
+        fit: str = "none",
+        z_index: int = 0,
+    ) -> str:
+        # 1. resolve the asset by stable slot handle (preferred) or explicit id
+        if slot:
+            asset = await ctx.asset_store.get_by_slot(ctx.game_id, slot)
+        elif asset_id:
+            asset = await ctx.asset_store.get_asset(asset_id)
+        else:
+            return "Pass slot or asset_id to choose which asset to place."
+        if asset is None:
+            ref = slot or asset_id
+            return f"No asset for '{ref}'; generate it first."
+        src = _selected_media_ref(asset)
+        if not src:
+            return f"Asset '{asset.name}' has no image yet; generate it before placing it."
+
+        handle = slot or asset.id
+
+        # 2. read the scene: find the Root (its dims are the canvas) or plan one
+        doc = await ctx.scene_store.get_document(ctx.game_id) or empty_document()
+        nodes = doc.get("nodes", {})
+        root_id = next((nid for nid, n in nodes.items() if n.get("type") == "Root"), None)
+        ensure_root = parent == "root" and root_id is None
+        parent_id = (root_id or "root") if parent == "root" else parent
+        root_props = (nodes.get(root_id) or {}).get("props", {}) if root_id else {}
+        canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
+                  int(root_props.get("height", DEFAULT_CANVAS[1])))
+
+        # 3. build + apply the placement as one atomic batch
+        ops = build_sprite_ops(
+            handle=handle, src=src, role=role, parent_id=parent_id,
+            ensure_root=ensure_root, canvas=canvas,
+            tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+            x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
+        )
+        try:
+            doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return f"Placed '{role or handle}' as sprite 'spr.{handle}'." + _orphan_suffix(doc)
+
+    return StructuredTool.from_function(
+        coroutine=add_sprite, name="add_sprite",
+        description=(
+            "Place an already-generated image asset into the live scene as a Sprite, "
+            "creating its Texture and wiring both edges in ONE atomic step — do NOT add "
+            "Texture nodes or edges yourself. Identify the asset by the same `slot` you "
+            "passed to generate_asset (preferred), or by `asset_id`. Positioning is in "
+            "the Root's pixel space: omit x to centre horizontally; for the top edge pass "
+            "y=0 and anchor_y=0; for a full-bleed background pass fit='cover' and "
+            "z_index=0. Pass a short role like 'background' or 'logo'. If the scene has no "
+            "Root yet, one is created automatically."
+        ),
     )
 
 
@@ -625,6 +693,7 @@ class ToolFactory:
     _BUILDERS = {
         "generate_asset": build_generate_asset_tool,
         "list_assets": build_list_assets_tool,
+        "add_sprite": build_add_sprite_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
         "read_gdd_doc": build_read_gdd_doc_tool,
