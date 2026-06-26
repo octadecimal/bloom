@@ -3,8 +3,15 @@
 // .git/worktrees/tuner-agent/sdd/ directory).
 //
 // Cassette files expected (relative to studio/backend/tests/fixtures/replay/run/):
-//   tuner-chat-tune.json   — prompt: "/tune-math tune the slot math"
-//   tuner-chat-apply.json  — prompt: "apply it"
+//   tuner-chat-tune.json   — prompt key: "tune the slot math"
+//   tuner-chat-apply.json  — prompt key: "apply it"
+//
+// Prompt keys are the bare prose the agent receives (invocation_text strips the
+// "/tune-math " slash prefix), normalized lower/whitespace-collapsed. Both apply
+// and tune are invoked via the /tune-math skill so the four tuner tools are BOUND:
+// the replay model filters a cassette's tool_calls to the active skill's tool set,
+// and plain (non-slash) chat in a game room routes to the design-router, which
+// binds only the GDD tools — apply_tuned_model would be filtered out there.
 //
 // Stack (BLOOM_PORT_OFFSET=1): backend replay :8001, frontend :4201.
 // Run: BLOOM_PORT_OFFSET=1 npx playwright test --config=studio/frontend/playwright.config.ts e2e/tuner-chat.spec.ts
@@ -124,43 +131,47 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
 
   // -------------------------------------------------------------------------
   // 1. Invoke the tune-math skill.
-  //    Cassette key: "/tune-math tune the slot math" (prompt-keyed run cassette).
+  //    Cassette key: "tune the slot math" (prose only; the slash prefix is stripped).
   //    The replay model calls read_tuner_setup + tune_slot_model (bound to the
   //    tune-math skill). tune_slot_model awaits the real GA — it is offline and
-  //    deterministic, so no cassette is needed for it. The tool result text
-  //    "Tuned to PASS" is produced by the tool function itself, not the LLM.
+  //    deterministic, so no cassette is needed for it.
   // -------------------------------------------------------------------------
   await composerSend(page, '/tune-math tune the slot math');
 
-  // The run steps appear in the chat feed: first the tool calls, then the final.
-  // Confirm the tool names show (deterministic from replay cassette).
+  // The run steps appear in the chat feed as concise tool lines (tool NAME only —
+  // RunTurnBlock's ToolLine renders the name, not the tool-result body). Confirm the
+  // tune tool ran, then wait for the run to settle by its streamed final summary.
+  await expect(feed).toContainText('read_tuner_setup', { timeout: 30_000 });
   await expect(feed).toContainText('tune_slot_model', { timeout: 30_000 });
-
-  // "Tuned to PASS" is the deterministic tool-result string from tune_slot_model
-  // (see agent_tools.py:560). It appears in the tool-result step rendered in the
-  // RunTurnBlock. This is NOT free LLM prose — it is our own formatted string.
-  await expect(feed).toContainText(/Tuned to PASS/i, { timeout: 120_000 });
+  await expect(feed).toContainText(/verdict is above/i, { timeout: 120_000 });
 
   // -------------------------------------------------------------------------
-  // 2. (Optional) Confirm the Tuner pane reflects the completed run.
-  //    tuning_complete socket event is emitted by TunerHub.request_tune regardless
-  //    of whether the trigger is REST or chat. Open the pane and check the status.
-  //    This step is best-effort — the main contract is the chat feed text above.
+  // 2. Confirm the PASS verdict in the Tuner pane.
+  //    The tool RESULT ("Tuned to PASS …") is NOT shown in the chat feed (tool
+  //    results don't render there). The deterministic verdict surfaces in the Tuner
+  //    pane instead — tuning_complete is emitted by TunerHub.request_tune whether the
+  //    trigger is REST or chat. This mirrors tuner.spec.ts's PASS assertion for the
+  //    same DETUNED seed + FAST params, so PASS is deterministic here.
   // -------------------------------------------------------------------------
   await page.getByTestId('menu-view').click();
   await expect(page.getByTestId('view-open-tuner/viewer')).toBeVisible({ timeout: 5_000 });
   await page.getByTestId('view-open-tuner/viewer').click();
   await expect(page.getByTestId('tuning-status')).toContainText('PASS', { timeout: 10_000 });
-  // Close the Tuner pane (or leave it open); navigate back to chat.
-  // The approval flow below does not require the Tuner pane to be closed.
+  // Opening the Tuner pane covered the chat composer. Re-activate the chat pane via
+  // the View menu (openPane is a singleton — it focuses the pane if already open) so
+  // the composer is visible again for the apply turn.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-llm-chat/room').click();
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: 10_000 });
 
   // -------------------------------------------------------------------------
   // 3. Tell the agent to apply the tuned model.
-  //    Cassette key: "apply it" (prompt-keyed run cassette).
-  //    The replay model calls apply_tuned_model (bound to tune-math).
+  //    Cassette key: "apply it" (prose only). Invoked via the /tune-math skill so
+  //    apply_tuned_model is BOUND — plain "apply it" would route to the design-router,
+  //    whose tool set excludes the tuner tools, and the call would be filtered out.
   //    apply_tuned_model triggers interrupt() → the approval-card surfaces.
   // -------------------------------------------------------------------------
-  await composerSend(page, 'apply it');
+  await composerSend(page, '/tune-math apply it');
 
   // The approval card renders inside the RunTurnBlock (step type="approval").
   // Its label: "Apply the tuned model to the slot model? This overwrites the
@@ -172,8 +183,15 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
   // Approve: the apply_tuned_model tool calls sim_store.put(game_id, model=tuned).
   await approval.getByRole('button', { name: /approve/i }).click();
 
-  // The approval card resolves (shows "Approved") and the run completes.
+  // The approval card resolves (shows "Approved").
   await expect(approval).toContainText(/approved/i, { timeout: 15_000 });
+
+  // Wait for the run to FINISH before asserting the write-back. "Approved" renders
+  // when the approval step completes, but apply_tuned_model's sim_store.put runs
+  // afterward, on graph resume — the tool's final summary ("Applied the tuned
+  // model…") streams only once the put has committed, so it gates the GET below
+  // and removes the read-before-write race.
+  await expect(feed).toContainText(/Applied the tuned model/i, { timeout: 15_000 });
 
   // -------------------------------------------------------------------------
   // 4. Assert write-back: the slot model changed from the detuned seed.
