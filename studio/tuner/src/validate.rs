@@ -219,4 +219,13 @@ mod tests {
             .unwrap_err()
             .contains("search_candidate_count"));
     }
+
+    #[test]
+    fn rejects_oversized_final_candidate_count() {
+        let mut c = cfg();
+        c.final_candidate_count = MAX_CANDIDATE_COUNT + 1;
+        assert!(validate(&model(1), &target(1), &c)
+            .unwrap_err()
+            .contains("final_candidate_count"));
+    }
 }

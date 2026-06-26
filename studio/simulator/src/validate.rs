@@ -63,6 +63,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_oversized_pool_size() {
+        let err =
+            validate_target(&target(MAX_CANDIDATE_COUNT + 1, MAX_CANDIDATE_COUNT + 1)).unwrap_err();
+        assert!(err.contains("candidate_count"));
+    }
+
+    #[test]
     fn rejects_pool_larger_than_candidates() {
         let err = validate_target(&target(1_000, 2_000)).unwrap_err();
         assert!(err.contains("exceeds candidate_count"));
