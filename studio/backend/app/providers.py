@@ -167,6 +167,49 @@ class ReplayToolCallingChatModel(BaseChatModel):
             calls = [c for c in calls if c["name"] in self._bound_names]
         return calls
 
+    def _round_idx(self, messages: list[BaseMessage]) -> int:
+        """Number of AI tool-call turns that have already been issued.
+
+        Used by multi-round cassettes (``tool_call_rounds``) to know which batch
+        of tool calls to emit next.  Counts AIMessages that carried at least one
+        tool_call — each one represents a completed round of tool invocations.
+        """
+        return sum(
+            1 for m in messages
+            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
+        )
+
+    def _next_round_calls(self, cassette: dict, messages: list[BaseMessage]) -> list | None:
+        """Return the next batch of tool calls for multi-round cassettes.
+
+        When a cassette has ``tool_call_rounds`` (a list of lists), each inner
+        list is emitted as a separate tool-call turn, enabling sequential
+        generate→place chains that cannot run in parallel.  Returns ``None``
+        when all rounds are exhausted (the caller should emit the final reply).
+        Single-round cassettes (``tool_calls`` key) return ``None`` from here
+        so the existing code path handles them.
+        """
+        rounds = cassette.get("tool_call_rounds")
+        if not rounds:
+            return None
+        idx = self._round_idx(messages)
+        if idx >= len(rounds):
+            return None  # all rounds done → emit final
+        raw = rounds[idx]
+        if self._bound_names:
+            filtered = [c for c in raw if c["name"] in self._bound_names]
+            # A round that was non-empty in the cassette but becomes empty after
+            # the binding-filter would emit an empty AIMessage, which the react
+            # agent reads as a final answer — silently swallowing every remaining
+            # round. Fail loudly instead.
+            if raw and not filtered:
+                raise ValueError(
+                    f"replay cassette round {idx} has no calls bound to this "
+                    f"model (bound={sorted(n for n in self._bound_names if n)})"
+                )
+            raw = filtered
+        return raw
+
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -179,8 +222,18 @@ class ReplayToolCallingChatModel(BaseChatModel):
         if self._text_mode():
             msg = AIMessage(content="".join(self._text_chunks(messages)))
             return ChatResult(generations=[ChatGeneration(message=msg)])
-        has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
         cassette = self._run_cassette(messages)
+        # Multi-round path: cassette defines tool_call_rounds
+        round_calls = self._next_round_calls(cassette, messages)
+        if round_calls is not None:
+            calls = [
+                {"name": c["name"], "args": c["args"], "id": f"call_r{self._round_idx(messages)}_{i}"}
+                for i, c in enumerate(round_calls)
+            ]
+            msg = AIMessage(content="", tool_calls=calls)
+            return ChatResult(generations=[ChatGeneration(message=msg)])
+        # Single-round path (legacy / existing cassettes)
+        has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
         cassette_calls = self._tool_calls_for(cassette)
         if not has_tool_result and cassette_calls:
             calls = [
@@ -214,8 +267,17 @@ class ReplayToolCallingChatModel(BaseChatModel):
                     await run_manager.on_llm_new_token(token, chunk=chunk)
                 yield ChatGenerationChunk(message=chunk)
             return
-        has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
         cassette = self._run_cassette(messages)
+        # Multi-round path: cassette defines tool_call_rounds
+        round_calls = self._next_round_calls(cassette, messages)
+        if round_calls is not None:
+            # Emit the current round's tool calls as a non-streaming chunk
+            result = await self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            msg = result.generations[0].message
+            yield ChatGenerationChunk(message=AIMessageChunk(content=msg.content, tool_calls=msg.tool_calls))
+            return
+        # Single-round path (legacy / existing cassettes)
+        has_tool_result = any(isinstance(m, ToolMessage) for m in messages)
         if not has_tool_result and self._tool_calls_for(cassette):
             # First turn: emit a single non-streaming tool-call chunk
             result = await self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)

@@ -54,6 +54,23 @@ async def test_tool_mode_selects_cassette_by_prompt():
 
 
 @pytest.mark.asyncio
+async def test_round_with_no_bound_calls_raises_loudly():
+    """A multi-round cassette round that becomes EMPTY after binding-filter must
+    fail loudly, not return [] — an empty AIMessage would be read by the react
+    agent as a final answer and silently swallow the remaining rounds."""
+    cass = {
+        "tool_call_rounds": [
+            [{"name": "generate_asset", "args": {"slot": "background"}}],
+        ],
+        "final": ["done"],
+    }
+    model = ReplayToolCallingChatModel(cassette=cass, run_cassettes={}, model="m")
+    model.bind_tools([_tool("add_sprite")])  # disjoint from the round's calls
+    with pytest.raises(ValueError, match="no calls bound"):
+        await model._agenerate([HumanMessage("make a scene")])
+
+
+@pytest.mark.asyncio
 async def test_tool_mode_unknown_prompt_falls_back_to_default():
     cass = {"__default__": {"tool_calls": [], "final": ["hi"]}}
     model = ReplayToolCallingChatModel(
