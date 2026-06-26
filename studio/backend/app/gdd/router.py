@@ -58,6 +58,12 @@ Decide what the latest user message is:
         `slot` handle you choose (e.g. slot="background", slot="logo"); set
         transparent=false for a full-bleed background, true for logos and props;
         pass size like "1280x720" for a background or "768x512" for a logo.
+        For a BACKGROUND, describe it as pure scenery/environment art and END the
+        description with "no text, no words, no letters, no title, no logo, no UI".
+        Do NOT call a background a "slot game", "title screen", or "game logo" and
+        do NOT put the game's name in it — the image model bakes garbled titles
+        into backgrounds otherwise. Keep all wordmarks and lettering on the LOGO
+        asset, never the background.
      b. call `add_sprite` with that SAME `slot` plus a short `role` and the
         placement: a background uses fit="cover" and z_index=0; for "centered at
         the top" pass y=0 and anchor_y=0 and omit x (x defaults to centred).
