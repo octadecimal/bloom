@@ -3,7 +3,7 @@
 ## Problem
 
 The scene toolset can **add** art but cannot **replace** a freeform placed element.
-When a user says *"regenerate the seaweed, it's cut off at the top,"* the agent has
+When a user says _"regenerate the seaweed, it's cut off at the top,"_ the agent has
 no "replace this placed element in place" verb, so it falls into the scene-compose
 branch and **adds** a new sprite. Re-placing under the same `slot` (`spr.{slot}`) is
 rejected by the `duplicate_id` guard (`graph_model.py`), so the agent picks a fresh
@@ -54,7 +54,7 @@ occur.
 
 - `ref` — fuzzy element reference, matched case-insensitively against each _placed_
   sprite's `{slot (derived from the `spr.{slot}` node id), role (`props.role`),
-  bound asset name}`.
+bound asset name}`.
 - `description` — optional. When given, updates the asset's prompt (so a complaint
   like "it's cut off at the top" becomes a refined prompt, e.g. "full seaweed plant,
   fully within frame, not cropped"). When omitted, regenerates with the existing

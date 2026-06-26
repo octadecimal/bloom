@@ -22,11 +22,13 @@
 ### Task 1: Shared `_regenerate_and_rebind` core + refactor `realize_symbol`
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (add `_regenerate_and_rebind`; refactor `realize_symbol` body, lines ~533-576)
 - Test: `studio/backend/tests/test_regenerate_core.py` (create)
 - Guard (must stay green): `studio/backend/tests/test_realize_symbol.py`, `studio/backend/tests/e2e/test_realize_parity.py`
 
 **Interfaces:**
+
 - Produces: `async def _regenerate_and_rebind(ctx: ToolContext, *, asset, texture_id: str | None, new_prompt: str | None) -> str | None` — updates the asset prompt (if `new_prompt` truthy), regenerates and selects the newest generation, then issues ONE `setProp` writing the new `image_ref` into `texture_id` (skipped when `texture_id is None`). Returns the new `image_ref`, or `None` if regeneration produced no image (scene untouched in that case).
 - Consumes: `ctx.asset_store.update_asset`, `ctx.asset_hub.generate_and_wait`, `ctx.asset_store.get_asset`, `ctx.asset_store.select_generation`, `ctx.scene_hub.apply_op` (all already used by today's `realize_symbol`).
 
@@ -222,10 +224,12 @@ git commit -m "refactor: extract _regenerate_and_rebind core from realize_symbol
 ### Task 2: Placed-element resolver
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (add `PlacedElement`, `_texture_of`, `_placed_elements`, `_resolve_placed_elements`)
 - Test: `studio/backend/tests/test_placed_resolver.py` (create)
 
 **Interfaces:**
+
 - Produces:
   - `@dataclass class PlacedElement` with fields `sprite_id: str`, `texture_id: str | None`, `handle: str`, `role: str`, `asset` (object or None), `src: str | None`.
   - `def _texture_of(document: dict, sprite_id: str) -> str | None` — the Texture node id bound to a sprite's `texture` port, or None.
@@ -408,10 +412,12 @@ git commit -m "feat: add placed-element resolver for scene regeneration"
 ### Task 3: `regenerate_element` tool + factory registration
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (add `_placed_summary`, `build_regenerate_element_tool`; register in `ToolFactory._BUILDERS`)
 - Test: `studio/backend/tests/test_regenerate_element_tool.py` (create)
 
 **Interfaces:**
+
 - Consumes: `_resolve_placed_elements`, `_placed_elements`, `_regenerate_and_rebind` (Tasks 1-2); `ctx.scene_store.get_document`, `ctx.asset_store.list_assets`, `ctx.asset_store.get_by_slot`, `ctx.asset_store.get_asset`.
 - Produces: `def build_regenerate_element_tool(ctx: ToolContext) -> BaseTool` named `regenerate_element` with args `ref: str`, `description: str = ""`; registered under key `"regenerate_element"` in `ToolFactory._BUILDERS`.
 
@@ -691,10 +697,12 @@ git commit -m "feat: add regenerate_element tool to replace a placed scene eleme
 ### Task 4: Design-router branch + tool allowlist
 
 **Files:**
+
 - Modify: `studio/backend/app/gdd/router.py` (add `regenerate_element` to the tool set; add branch 5; renumber the chit-chat branch to 6)
 - Test: `studio/backend/tests/test_design_router.py` (add cases)
 
 **Interfaces:**
+
 - Consumes: the `regenerate_element` tool name registered in Task 3.
 - Produces: `build_design_router_spec()` whose `.tools` contains `"regenerate_element"` and whose `.body` documents the regenerate-in-place branch and warns against using `generate_and_place` for on-screen elements.
 
@@ -786,11 +794,13 @@ git commit -m "feat: route regenerate/fix of placed elements to regenerate_eleme
 ### Task 5: Backend e2e — compose then regenerate, no duplicate
 
 **Files:**
+
 - Create: `studio/backend/tests/fixtures/replay/run/compose-seaweed.json`
 - Create: `studio/backend/tests/fixtures/replay/run/regenerate-seaweed.json`
 - Create: `studio/backend/tests/e2e/test_scene_regenerate.py`
 
 **Interfaces:**
+
 - Consumes: the full chain (design-router branch 5 → `regenerate_element` → `_regenerate_and_rebind`). Replay ComfyUI uses the single shared `comfy/default.png`, so each generation still gets a distinct `image_ref` (its own generation id), and NO new image fixtures are needed.
 - Produces: a non-browser e2e proving that after "regenerate the seaweed" there is exactly ONE seaweed sprite (no duplicate), the asset gained a second generation, and the bound texture `src` points at the newest generation.
 
@@ -963,6 +973,7 @@ git commit -m "test(e2e): regenerate replaces a placed element in place, no dupl
 ## Self-Review
 
 **Spec coverage:**
+
 - Verb split (`generate_and_place` add vs `regenerate_element` replace) → Task 3.
 - Keep placement, swap `Texture.src` → Tasks 1 + 3 (assert no new nodes; only `setProp`).
 - Fuzzy `ref` matched against slot/role/asset name; 0/1/many resolution → Task 2 + Task 3 tests.
