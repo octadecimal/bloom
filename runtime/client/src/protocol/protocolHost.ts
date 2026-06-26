@@ -2,12 +2,14 @@ import { emptyDocument } from '../model/document';
 import { OpError } from '../model/ops';
 import type { GraphModel } from '../model/graphModel';
 import type { Reconciler } from '../render/reconciler';
+import type { IOutcome } from '../modules/module';
 import { PROTOCOL_VERSION, type InboundMessage, type OutboundMessage } from './messages';
 
 export interface IProtocolDeps {
   model: GraphModel;
   reconciler: Reconciler;
   post: (msg: OutboundMessage) => void;
+  onSpin?: (outcome: IOutcome) => void;
 }
 
 export class ProtocolHost {
@@ -29,6 +31,8 @@ export class ProtocolHost {
       } else if (msg.kind === 'batch') {
         const changes = this.deps.model.applyBatch(msg.ops);
         await this.deps.reconciler.applyChanges(changes);
+      } else if (msg.kind === 'spin') {
+        this.deps.onSpin?.(msg.outcome);
       } else {
         return;
       }

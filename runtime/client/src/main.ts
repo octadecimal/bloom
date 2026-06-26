@@ -20,11 +20,24 @@ const mediaBase = params.get('mediaBase') ?? '';
 
 const post = (m: OutboundMessage) => window.parent?.postMessage(m, expectedOrigin ?? '*');
 const renderer = new PixiRenderer(stage, (s) => resolveTextureSrc(s, mediaBase));
-const { host, model } = createEngine({ renderer, post });
+const { host, model, modules } = createEngine({ renderer, post });
 
 // Test/standalone observability.
 (window as unknown as { __engineModel: typeof model }).__engineModel = model;
 (window as unknown as { __engineRenderer: typeof renderer }).__engineRenderer = renderer;
+
+const settledEvents: Array<{ grid: string[][] }> = [];
+modules.bus.on<{ grid: string[][] }>('reels:settled', (e) => settledEvents.push(e));
+(window as unknown as { __engineModules: unknown }).__engineModules = {
+  spin: (outcome: { grid: string[][] }) => modules.orchestrator.spin(outcome),
+  setConfig: (partial: Record<string, unknown>) => {
+    modules.reels.setConfig(partial as Record<string, never>);
+    modules.reels.project();
+  },
+  project: () => modules.reels.project(),
+  state: () => modules.reels.debugState(),
+  settled: () => settledEvents,
+};
 
 // Serialize message handling: each handle() must complete before the next starts.
 // Without this, concurrent handles race on async operations like renderer.mount()
