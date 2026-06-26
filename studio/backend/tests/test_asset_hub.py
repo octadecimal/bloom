@@ -157,6 +157,94 @@ async def test_generate_and_wait_completes_inline(mongo_db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_concurrent_generate_and_wait_same_game_both_complete(mongo_db, tmp_path):
+    """Two generate_and_wait calls fired concurrently for ONE game must BOTH produce a
+    generation. The scene-compose agent does exactly this (multiple generate_asset in a
+    single ToolNode turn → asyncio.gather). The single-active-per-game slot must not be
+    popped out from under a still-running generation (KeyError)."""
+    store = AssetStore(mongo_db)
+    a = await store.create_asset("g1", "bg", "a beach", 512, 512, "schnell-opaque", seed=1)
+    b = await store.create_asset("g1", "logo", "a crest", 512, 512, "schnell-transparent", seed=2)
+
+    class RacingProvider:
+        """Deterministically forces the concurrent-write race on the single
+        _active[game_id] slot, while staying deadlock-free if the hub serializes the two
+        generations (the fix):
+
+        1. Both generations emit a first progress event, so both are inside their _run's
+           "active" region (each having set _active[game_id]).
+        2. Generation #1 then completes, so _run pops _active[game_id] in its finally.
+        3. Generation #2, released afterwards, emits another progress event whose
+           `self._active[game_id].update(...)` hits the popped key → KeyError under the
+           buggy direct-_run path. When the hub serializes (#1 fully finishes before #2
+           starts), #2 simply runs alone and there is no popped-slot collision.
+
+        Gen #1 waits (with a timeout) for #2 to reach its active region before finishing,
+        so under true concurrency both are active together; the timeout means a serial hub
+        — where #2 never runs concurrently — can never hang here, it just proceeds."""
+
+        def __init__(self):
+            self.calls = 0
+            self.second_active = asyncio.Event()
+            self.first_done = asyncio.Event()
+
+        async def generate(self, graph):
+            self.calls += 1
+            mine = self.calls
+            if mine == 1:
+                yield ProgressEvent(value=1, max=2)
+                # Wait until #2 is also active (true concurrency). The timeout keeps a
+                # serial hub — where #2 only starts after #1 finishes — from hanging.
+                try:
+                    await asyncio.wait_for(self.second_active.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+                yield ImageEvent(data=_FAKE_PNG)  # #1 done → _run pops _active in finally
+                self.first_done.set()
+            else:
+                yield ProgressEvent(value=1, max=2)  # #2 now in its active region
+                self.second_active.set()
+                await self.first_done.wait()  # wait until #1 has popped the shared slot
+                yield ProgressEvent(value=2, max=2)  # update popped slot → KeyError (buggy)
+                yield ImageEvent(data=_FAKE_PNG)
+
+    sio = FakeSio()
+    hub = AssetHub(sio, store, RacingProvider(), MediaStore(tmp_path))
+
+    await asyncio.gather(
+        hub.generate_and_wait("g1", a.id),
+        hub.generate_and_wait("g1", b.id),
+    )
+
+    done_a = await store.get_asset(a.id)
+    done_b = await store.get_asset(b.id)
+    assert done_a.status == "done" and len(done_a.generations) == 1
+    assert done_b.status == "done" and len(done_b.generations) == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_and_wait_raises_on_failure(mongo_db, tmp_path):
+    """generate_and_wait must report failure honestly (raise) so the agent tool surfaces
+    it, even now that the work is routed through the shared per-game drain."""
+    store = AssetStore(mongo_db)
+    asset = await store.create_asset("g1", "spr", "a knight", 512, 512, "schnell-opaque", seed=1)
+
+    class BoomProvider:
+        async def generate(self, graph):
+            raise RuntimeError("gpu exploded")
+            yield  # pragma: no cover
+
+    sio = FakeSio()
+    hub = AssetHub(sio, store, BoomProvider(), MediaStore(tmp_path))
+
+    with pytest.raises(Exception):
+        await hub.generate_and_wait("g1", asset.id)
+
+    refreshed = await store.get_asset(asset.id)
+    assert refreshed.status == "error"
+
+
+@pytest.mark.asyncio
 async def test_notify_deleted_emits_asset_deleted_to_game_room():
     class _Sio:
         def __init__(self): self.emits = []

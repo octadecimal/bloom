@@ -17,6 +17,7 @@ class AssetHub:
         self._busy: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._active: dict[str, dict] = {}  # game_id -> {assetId, value, max}
+        self._waiters: dict[str, dict] = {}  # asset_id -> {event, error} (generate_and_wait)
 
     def _lock(self, game_id: str) -> asyncio.Lock:
         return self._locks.setdefault(game_id, asyncio.Lock())
@@ -52,11 +53,16 @@ class AssetHub:
                     self._busy.discard(game_id)
                     return
                 asset_id = queue.pop(0)
+            error: str | None = None
             try:
                 await self._run(game_id, asset_id)
             except Exception:
-                await self._store.set_status(asset_id, "error", error="generation failed")
+                error = "generation failed"
+                await self._store.set_status(asset_id, "error", error=error)
                 await self._emit_status(game_id, asset_id, "error")
+            finally:
+                # Unblock any generate_and_wait() awaiting this asset — on success or error.
+                self._signal_done(asset_id, error)
 
     async def _run(self, game_id: str, asset_id: str) -> None:
         asset = await self._store.get_asset(asset_id)
@@ -90,8 +96,30 @@ class AssetHub:
         asset = await self._store.add_generation(asset_id, gen_id, seed, image_ref)
         await self._sio.emit("asset_completed", {"gameId": game_id, "asset": asset_wire(asset)}, room=game_id)
 
+    def _signal_done(self, asset_id: str, error: str | None) -> None:
+        rec = self._waiters.get(asset_id)
+        if rec is not None:
+            rec["error"] = error
+            rec["event"].set()
+
     async def generate_and_wait(self, game_id: str, asset_id: str) -> None:
-        await self._run(game_id, asset_id)
+        """Generate an asset and block until it finishes, reporting failure honestly.
+
+        Routes through the same per-game queue as request_generation so concurrent
+        agent-driven generations for one game serialize (one GPU runs them sequentially),
+        preserving the single-active-per-game invariant. The work itself runs in _drain;
+        we register a per-asset completion signal first, then await it.
+        """
+        event = asyncio.Event()
+        self._waiters[asset_id] = {"event": event, "error": None}
+        try:
+            await self.request_generation(game_id, asset_id)
+            await event.wait()
+            error = self._waiters[asset_id]["error"]
+            if error is not None:
+                raise RuntimeError(error)
+        finally:
+            self._waiters.pop(asset_id, None)
 
     async def notify_deleted(self, game_id: str, asset_id: str) -> None:
         await self._sio.emit("asset_deleted", {"gameId": game_id, "assetId": asset_id}, room=game_id)
