@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     media_dir: str = "var/media"
     simulator_bin: str = ""  # optional path to a prebuilt curate_json; "" => cargo run
     tuner_bin: str = ""  # optional path to a prebuilt tune_json; "" => cargo run
+    # Runaway-guard for the curation subprocess (a numerically-degenerate model can
+    # drive the kernel's free-spins retrigger into unbounded memory — see
+    # docs/superpowers/followups/2026-06-25-unbounded-free-spins-retrigger.md).
+    # The watchdog hard-kills the process tree if either bound is crossed.
+    curation_mem_cap_mb: float = 1024.0  # resident-memory cap for the proc tree
+    curation_timeout_s: float = 120.0  # wall-clock cap (backstop)
     skills_dir: str = str(
         (__import__("pathlib").Path(__file__).resolve().parents[3] / "skills")
     )

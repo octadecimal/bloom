@@ -4,6 +4,17 @@
 use super::model::*;
 use crate::rng::SplitMix64;
 
+/// Hard safety bound on the total number of free spins a single feature may play
+/// in one round, including all retriggers. This is NOT a game-design knob — it is
+/// a kernel guardrail: a model whose retrigger probability per spin times its
+/// `spins_awarded` is >= 1 is a supercritical branching process that never
+/// terminates and grows memory without bound. Real games cap free spins anyway,
+/// and any legitimate feature plays far fewer than this, so the bound is
+/// invisible to honest models while making the kernel incapable of unbounded
+/// memory/time for ANY input (umbrella: a trusted kernel must not be OOM-able by
+/// its data). Changing this value does not alter any honest model's payout.
+pub const MAX_FREE_SPINS: u32 = 1000;
+
 /// Spin every reel: pick a stop, read `rows` consecutive cells (wrapping).
 /// Returns `grid[reel][row]`.
 fn spin(reels: &[Vec<Symbol>], rows: usize, rng: &mut SplitMix64) -> Vec<Vec<Symbol>> {
@@ -174,6 +185,11 @@ pub fn evaluate(model: &SlotModel, seed: u64) -> RoundOutcome {
 
 /// Run a free-spins feature. Retrigger re-checks THIS feature's own trigger
 /// against each feature-spin grid (spec §3.1 — no nesting/cross-triggering).
+///
+/// Total spins (awards + retriggers) are hard-capped at `MAX_FREE_SPINS`: a
+/// supercritical retrigger (expected added spins per spin >= 1) would otherwise
+/// loop forever and grow `spins` without bound, exhausting RAM. The cap bounds
+/// both time and memory and never binds for an honest feature.
 fn run_free_spins(
     model: &SlotModel,
     trigger: &TriggerSpec,
@@ -186,13 +202,15 @@ fn run_free_spins(
     let mut payout: u64 = 0;
     let mut spins = Vec::new();
 
-    while remaining > 0 {
+    while remaining > 0 && spins_played < MAX_FREE_SPINS {
         remaining -= 1;
         spins_played += 1;
         let grid = spin(reels, model.rows, rng);
         payout += eval_grid(model, &grid) * config.multiplier;
         if config.retrigger && count_symbol(&grid, trigger.symbol) >= trigger.min_count as usize {
-            remaining += config.spins_awarded;
+            // saturating: a runaway retrigger must never overflow the counter;
+            // the spins_played cap is what actually terminates the loop.
+            remaining = remaining.saturating_add(config.spins_awarded);
         }
         spins.push(grid);
     }
@@ -411,6 +429,48 @@ mod tests {
         assert_eq!(out.spins_played, 4);
         assert_eq!(out.payout, 4 * 2 * 3); // 24
         assert_eq!(out.spins.len(), 4);
+    }
+
+    #[test]
+    fn supercritical_retrigger_is_capped_not_unbounded() {
+        // A maximally supercritical feature: every feature spin shows 3 scatters
+        // (feature reels are all-scatter), so retrigger fires every spin and
+        // `remaining` only ever grows. Without the MAX_FREE_SPINS cap this loops
+        // forever and `spins` grows until the process is OOM-killed. The cap must
+        // terminate it deterministically at exactly MAX_FREE_SPINS spins.
+        let m = SlotModel {
+            symbols: vec![
+                SymbolDef {
+                    id: 9,
+                    role: SymbolRole::Scatter,
+                },
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+            ],
+            reels: vec![vec![0], vec![0], vec![0]],
+            rows: 1,
+            paylines: vec![],
+            paytable: Paytable { entries: vec![] },
+            bonuses: vec![],
+        };
+        let trigger = TriggerSpec {
+            symbol: 9,
+            min_count: 3,
+        };
+        let config = FreeSpinsConfig {
+            spins_awarded: 5,
+            retrigger: true,
+            multiplier: 1,
+            // Every reel is pure scatter -> every spin has 3 scatters -> always retriggers.
+            feature_reels: Some(vec![vec![9], vec![9], vec![9]]),
+        };
+        let mut rng = SplitMix64::new(99);
+        let out = run_free_spins(&m, &trigger, &config, &mut rng);
+        assert_eq!(out.spins_played, MAX_FREE_SPINS);
+        assert_eq!(out.spins.len() as u32, MAX_FREE_SPINS);
+        assert!(out.triggered);
     }
 
     #[test]
