@@ -1,7 +1,7 @@
 from app.simulator.realize import (
     RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
-    _realize_reels, _all_patterns, _realize_paylines, _realize_paytable,
-    _realize_bonuses, realize_slot_model,
+    _realize_reels, _all_patterns, _first_n_patterns, _realize_paylines,
+    _realize_paytable, _realize_bonuses, realize_slot_model,
 )
 
 _GDD_MATH = {"rtp": "0.96", "volatility": "high", "reels": 5, "rows": 3,
@@ -311,3 +311,30 @@ def test_bonuses_without_trigger_symbol_warns_and_skips():
 def test_bonuses_absent_is_empty_no_warning():
     out, errors, warnings = _realize_bonuses({}, _DEFS)
     assert out == [] and errors == [] and warnings == []
+
+
+def test_first_n_patterns_matches_all_patterns_ordering():
+    # Lazy generator must produce exactly the same prefix as _all_patterns.
+    full = _all_patterns(rows=3, reel_count=5)
+    assert _first_n_patterns(3, 5, 5) == full[:5]
+    assert _first_n_patterns(3, 5, 1) == full[:1]
+
+
+def test_paylines_lines_mode_is_lazy_for_huge_geometry():
+    import time
+    # 12^12 ≈ 8.9e12 combos: a full materialization would OOM/hang. Lazy first-n
+    # must return instantly with exactly n lines.
+    t0 = time.perf_counter()
+    lines, errors, warnings = _realize_paylines(
+        {"payline_mode": "lines", "payline_count": 3}, reel_count=12, rows=12)
+    assert errors == []
+    assert lines == [[0] * 12, [1] * 12, [2] * 12]
+    assert time.perf_counter() - t0 < 1.0  # never built 12^12
+
+
+def test_realize_rejects_oversized_geometry_fast():
+    res = realize_slot_model(
+        {"reels": 999, "rows": 999, "payline_mode": "lines", "payline_count": 1},
+        _GDD_SYMBOLS, _GDD_PAYTABLE, _GDD_BONUS)
+    assert res.model is None
+    assert any("MAX_REELS" in e for e in res.errors)
