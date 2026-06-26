@@ -1,8 +1,8 @@
-import type { IGameDocument } from './state';
-import type { ISceneOp } from './reducers';
+import type { ISceneDocument } from '../../scene/types';
+import type { ISceneOp } from '../../scene/reducers';
 
 type InboundMessage =
-  | { v: 1; kind: 'init'; id: string; document?: IGameDocument }
+  | { v: 1; kind: 'init'; id: string; document?: ISceneDocument }
   | { v: 1; kind: 'op'; id: string; op: ISceneOp }
   | { v: 1; kind: 'batch'; id: string; ops: ISceneOp[] };
 
@@ -37,7 +37,7 @@ export class ProtocolBridge {
     }
   }
 
-  init(document: IGameDocument): void {
+  init(document: ISceneDocument): void {
     this.send({ v: 1, kind: 'init', id: this.nextId(), document });
   }
 

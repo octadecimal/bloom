@@ -1,7 +1,9 @@
 import { io, type Socket } from 'socket.io-client';
 import { BACKEND_URL } from './config';
-import { gameSlice, type IGameDocument } from './state';
-import { applyOpToDocument, loadDocument, type ISceneOp } from './reducers';
+import { gameSlice } from './state';
+import { sceneStore } from '../../scene/sceneStore';
+import type { ISceneDocument } from '../../scene/types';
+import { applyOpToDocument, loadDocument, type ISceneOp } from '../../scene/reducers';
 import { getBridge } from './protocolBridge';
 
 let sock: Socket | null = null;
@@ -12,17 +14,17 @@ function isActive(gameId: string): boolean {
 
 export function applyInbound(event: 'scene_snapshot' | 'scene_op', payload: unknown): void {
   if (event === 'scene_snapshot') {
-    const p = payload as { gameId: string; document: IGameDocument };
+    const p = payload as { gameId: string; document: ISceneDocument };
     if (!isActive(p.gameId)) return;
     const doc = loadDocument(p.document);
-    gameSlice().document.set(doc as never);
+    sceneStore().document.set(doc as never);
     const bridge = getBridge();
     bridge?.init(doc);
   } else {
     const p = payload as { gameId: string; op: ISceneOp };
     if (!isActive(p.gameId)) return;
-    const current = gameSlice().document.get({ noproxy: true }) as IGameDocument;
-    gameSlice().document.set(applyOpToDocument(current, p.op) as never);
+    const current = sceneStore().document.get({ noproxy: true }) as ISceneDocument;
+    sceneStore().document.set(applyOpToDocument(current, p.op) as never);
     getBridge()?.op(p.op);
   }
 }

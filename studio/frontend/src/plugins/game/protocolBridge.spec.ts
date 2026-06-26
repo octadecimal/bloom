@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ProtocolBridge } from './protocolBridge';
-import { emptyDocument } from './state';
+import { emptyDocument } from '../../scene/reducers';
 
 const ENGINE = 'http://localhost:4300';
 
