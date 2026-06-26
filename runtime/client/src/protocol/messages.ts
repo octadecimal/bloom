@@ -1,12 +1,14 @@
 import type { IGameDocument } from '../model/document';
 import type { Op } from '../model/ops';
+import type { IOutcome } from '../modules/module';
 
 export const PROTOCOL_VERSION = 1 as const;
 
 export type InboundMessage =
   | { v: 1; kind: 'init'; id: string; document?: IGameDocument }
   | { v: 1; kind: 'op'; id: string; op: Op }
-  | { v: 1; kind: 'batch'; id: string; ops: Op[] };
+  | { v: 1; kind: 'batch'; id: string; ops: Op[] }
+  | { v: 1; kind: 'spin'; id: string; outcome: IOutcome };
 
 export type OutboundMessage =
   | { v: 1; kind: 'ready'; protocolVersion: 1 }
