@@ -250,6 +250,63 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_regenerate_element_tool(ctx: ToolContext) -> BaseTool:
+    async def regenerate_element(ref: str, description: str = "") -> str:
+        document = await ctx.scene_store.get_document(ctx.game_id)
+        if not document or not document.get("nodes"):
+            return "The scene is empty; there's nothing placed to regenerate."
+        assets = await ctx.asset_store.list_assets(ctx.game_id)
+
+        matches = _resolve_placed_elements(document, assets, ref)
+        if not matches:
+            return (f"No placed element matches '{ref}'. "
+                    f"Placed: {_placed_summary(document, assets)}. "
+                    f"Use one of those, or add it with generate_and_place.")
+        if len(matches) > 1:
+            opts = ", ".join(
+                m.handle + (f" (role {m.role})" if m.role else "") for m in matches)
+            return (f"'{ref}' matches several placed elements: {opts}. "
+                    f"Call regenerate_element again with ref set to the exact one.")
+
+        el = matches[0]
+        if el.texture_id is None:
+            return (f"'{el.handle}' is placed but has no bound texture to repaint; "
+                    f"nothing regenerated.")
+        asset = el.asset
+        # slot-less elements are placed as spr.{asset_id}, so the handle may be a
+        # slot (get_by_slot) or an asset id (get_asset) — try both.
+        if asset is None:
+            asset = (await ctx.asset_store.get_by_slot(ctx.game_id, el.handle)
+                     or await ctx.asset_store.get_asset(el.handle))
+        if asset is None:
+            return (f"Matched '{el.handle}' in the scene, but its source asset isn't "
+                    f"on the board; can't regenerate.")
+
+        new_ref = await _regenerate_and_rebind(
+            ctx, asset=asset, texture_id=el.texture_id,
+            new_prompt=description or None)
+        if new_ref is None:
+            return (f"Regeneration for '{el.handle}' produced no image; "
+                    f"the scene is unchanged.")
+        return (f"Regenerated '{el.handle}' in place and re-rendered "
+                f"the game.")
+
+    return StructuredTool.from_function(
+        coroutine=regenerate_element, name="regenerate_element",
+        description=(
+            "Regenerate an element that is ALREADY placed in the scene and swap its "
+            "art IN PLACE — keeping its position, scale, and z-index. Use this for "
+            "'regenerate/redo/replace/fix the <thing>' on something already on "
+            "screen; do NOT use generate_and_place for that (it adds a duplicate). "
+            "`ref` is matched fuzzily against each placed element's slot, role, and "
+            "asset name. Pass a refined `description` to fix what was wrong (e.g. "
+            "'not cropped at the top'); omit it to just re-roll the art. If several "
+            "elements match, the tool returns the candidates — call again with the "
+            "exact one."
+        ),
+    )
+
+
 def build_delete_asset_tool(ctx: ToolContext) -> BaseTool:
     async def delete_asset(asset_id: str) -> str:
         asset = await ctx.asset_store.get_asset(asset_id)
@@ -510,6 +567,75 @@ def build_scene_apply_batch_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+@dataclass
+class PlacedElement:
+    """A sprite that is placed in the scene, joined to its texture and asset."""
+    sprite_id: str
+    texture_id: str | None
+    handle: str
+    role: str
+    asset: object | None
+    src: str | None
+
+
+def _texture_of(document: dict, sprite_id: str) -> str | None:
+    """The Texture node id bound to a sprite's `texture` port, or None."""
+    for e in document.get("edges", []):
+        to = e.get("to") or {}
+        if (e.get("type") == "data" and to.get("node") == sprite_id
+                and to.get("port") == "texture"):
+            return (e.get("from") or {}).get("node")
+    return None
+
+
+def _placed_elements(document: dict, assets: list) -> list[PlacedElement]:
+    """One PlacedElement per Sprite node, joined to its bound texture and (by the
+    handle derived from the `spr.{handle}` id, matched against asset slot or id)
+    to an asset on the board."""
+    nodes = document.get("nodes", {})
+    out: list[PlacedElement] = []
+    for nid, n in nodes.items():
+        if n.get("type") != "Sprite":
+            continue
+        props = n.get("props") or {}
+        handle = nid[len("spr."):] if nid.startswith("spr.") else nid
+        role = props.get("role") or ""
+        tex_id = _texture_of(document, nid)
+        tex_node = nodes.get(tex_id) or {}
+        src = (tex_node.get("props") or {}).get("src") if tex_id else None
+        asset = next(
+            (a for a in assets
+             if getattr(a, "slot", None) == handle or getattr(a, "id", None) == handle),
+            None,
+        )
+        out.append(PlacedElement(nid, tex_id, handle, role, asset, src))
+    return out
+
+
+def _resolve_placed_elements(document: dict, assets: list, ref: str) -> list[PlacedElement]:
+    """Placed elements whose handle, role, or asset name contains `ref`
+    (case-insensitive). An empty `ref` matches nothing."""
+    needle = ref.strip().lower()
+    if not needle:
+        return []
+    out = []
+    for el in _placed_elements(document, assets):
+        name = (getattr(el.asset, "name", "") or "").lower()
+        if needle in el.handle.lower() or needle in el.role.lower() or needle in name:
+            out.append(el)
+    return out
+
+
+def _placed_summary(document: dict, assets: list) -> str:
+    """A short comma list of what is placed, for a no-match message."""
+    els = _placed_elements(document, assets)
+    if not els:
+        return "(nothing placed)"
+    return ", ".join(
+        el.handle + (f" (role {el.role})" if el.role else "") for el in els
+    )
+
+
 def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
     """Resolve (sprite_id, texture_node_id) for a slot, or None.
 
@@ -530,6 +656,34 @@ def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
     return None
 
 
+async def _regenerate_and_rebind(
+    ctx: ToolContext, *, asset, texture_id: str | None, new_prompt: str | None,
+) -> str | None:
+    """Regenerate an asset's art and rewrite a bound Texture's src in place.
+
+    Updates the asset prompt (when ``new_prompt`` is truthy), regenerates and
+    selects the newest generation, then issues ONE ``setProp`` writing the new
+    ``image_ref`` into ``texture_id`` (skipped when ``texture_id is None``).
+    Returns the new ``image_ref``, or ``None`` if regeneration produced no image
+    — in which case the scene is left untouched.
+    """
+    if new_prompt:
+        await ctx.asset_store.update_asset(asset.id, prompt=new_prompt)
+    await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
+    refreshed = await ctx.asset_store.get_asset(asset.id)
+    if refreshed is None or not refreshed.generations:
+        return None
+    newest = refreshed.generations[-1]
+    await ctx.asset_store.select_generation(asset.id, newest.id)
+    if texture_id is not None:
+        await ctx.scene_hub.apply_op(
+            ctx.game_id,
+            {"kind": "setProp", "id": texture_id, "path": "src",
+             "value": newest.image_ref},
+        )
+    return newest.image_ref
+
+
 def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
     async def realize_symbol(slot: str) -> str:
         # 1. read the (already-updated) symbol art description from the GDD
@@ -540,29 +694,24 @@ def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
             return f"No symbol with slot '{slot}' in the GDD; nothing to realize."
         art_desc = row.get("art_desc") or row.get("name") or slot
 
-        # 2. resolve the slot's asset, update its prompt, regenerate, select newest gen
+        # 2. resolve the slot's asset
         asset = await ctx.asset_store.get_by_slot(ctx.game_id, slot)
         if asset is None:
             return f"No asset tagged slot '{slot}'; generate it first."
-        await ctx.asset_store.update_asset(asset.id, prompt=art_desc)
-        await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
-        refreshed = await ctx.asset_store.get_asset(asset.id)
-        if refreshed is None or not refreshed.generations:
-            return f"Regeneration for slot '{slot}' produced no image."
-        newest = refreshed.generations[-1]
-        await ctx.asset_store.select_generation(asset.id, newest.id)
 
-        # 3. rewrite the bound Texture's src — one atomic scene write
+        # 3. resolve the bound sprite/texture, then regenerate + rebind via the
+        #    shared core. texture_id=None still regenerates the board art but skips
+        #    the scene write, preserving the "regenerated but not placed" message.
         document = await ctx.scene_store.get_document(ctx.game_id)
         found = _find_symbol_sprite(document or {}, slot) if document else None
+        texture_id = found[1] if found else None
+        new_ref = await _regenerate_and_rebind(
+            ctx, asset=asset, texture_id=texture_id, new_prompt=art_desc)
+        if new_ref is None:
+            return f"Regeneration for slot '{slot}' produced no image."
         if found is None:
-            return (f"Regenerated slot '{slot}', but no scene Sprite is labeled with it; "
-                    f"the rendered game was not updated.")
-        _, texture_id = found
-        await ctx.scene_hub.apply_op(
-            ctx.game_id,
-            {"kind": "setProp", "id": texture_id, "path": "src", "value": newest.image_ref},
-        )
+            return (f"Regenerated slot '{slot}', but no scene Sprite is labeled "
+                    f"with it; the rendered game was not updated.")
         return f"Reshaped symbol '{slot}': regenerated its art and re-rendered the game."
 
     return StructuredTool.from_function(
@@ -786,6 +935,7 @@ class ToolFactory:
         "list_assets": build_list_assets_tool,
         "add_sprite": build_add_sprite_tool,
         "generate_and_place": build_generate_and_place_tool,
+        "regenerate_element": build_regenerate_element_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
         "read_gdd_doc": build_read_gdd_doc_tool,

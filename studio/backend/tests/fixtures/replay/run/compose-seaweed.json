@@ -1,0 +1,20 @@
+{
+  "prompt": "add a seaweed prop at the bottom of the scene",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "generate_and_place",
+        "args": {
+          "description": "a clump of green seaweed, prop, no text",
+          "slot": "seaweed",
+          "size": "512x512",
+          "transparent": true,
+          "role": "seaweed",
+          "y": 720,
+          "anchor_y": 1
+        }
+      }
+    ]
+  ],
+  "final": ["Added a seaweed prop at the bottom of the scene."]
+}

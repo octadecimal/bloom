@@ -45,3 +45,19 @@ def test_router_body_guides_backgrounds_to_be_text_free():
     low = build_design_router_spec().body.lower()
     assert "no text" in low
     assert "no words" in low or "no typography" in low or "no lettering" in low
+
+
+def test_router_binds_regenerate_element():
+    spec = build_design_router_spec()
+    assert "regenerate_element" in spec.tools
+    assert "regenerate_element" in spec.body
+
+
+def test_router_regenerate_branch_replaces_in_place_not_duplicate():
+    low = build_design_router_spec().body.lower()
+    # routes fix/redo/regenerate to the in-place tool
+    assert "regenerate_element" in low
+    assert "in place" in low
+    # explicitly steers away from adding a duplicate via generate_and_place
+    assert "already in the scene" in low or "already on screen" in low
+    assert "duplicate" in low

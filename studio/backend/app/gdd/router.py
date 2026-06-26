@@ -78,7 +78,18 @@ Decide what the latest user message is:
    you may instead call `add_sprite`; to generate without placing, `generate_asset`.
    Use `list_assets` to see what is already on the board.) You MAY build several
    elements in this one turn — just keep each generate+place paired and sequential.
-5. Not a design or scene request (a greeting, a question, chit-chat): reply
+5. A request to FIX, REDO, REGENERATE, or REPLACE an element that is ALREADY in
+   the scene (e.g. "regenerate the seaweed, it's cut off at the top", "redo the
+   logo", "that background is wrong, make it again"): call `regenerate_element`
+   with `ref` set to what the user named — it is matched fuzzily against the slot,
+   role, and asset name of what is placed. When the user says what is wrong, pass a
+   refined `description` that fixes it (e.g. "a full seaweed plant, fully in frame,
+   not cropped at the top"); omit `description` to just re-roll the art. This swaps
+   the existing sprite's art IN PLACE, keeping its position. Do NOT use
+   `generate_and_place` for something already in the scene — that adds a duplicate
+   sprite. If `regenerate_element` reports several matches, pick the right one from
+   context (or ask the user) and call it again with the exact `ref`.
+6. Not a design or scene request (a greeting, a question, chit-chat): reply
    normally in plain text and call NO tool.
 
 Call `read_gdd_doc` first if unsure of an aspect's exact field keys. Never invent
@@ -97,7 +108,7 @@ def build_design_router_spec() -> SkillSpec:
         tools=sorted(
             GDD_TOOL_NAMES
             | {"realize_symbol", "generate_asset", "add_sprite", "list_assets",
-               "generate_and_place"}
+               "generate_and_place", "regenerate_element"}
         ),
         body=_BODY_TEMPLATE.format(catalog=_render_catalog(field_catalog())),
     )

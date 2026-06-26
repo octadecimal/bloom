@@ -1,0 +1,15 @@
+{
+  "prompt": "regenerate the seaweed, it's cut off at the top",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "regenerate_element",
+        "args": {
+          "ref": "seaweed",
+          "description": "a full clump of green seaweed fully within frame, not cropped at the top, prop, no text"
+        }
+      }
+    ]
+  ],
+  "final": ["Regenerated the seaweed in place so it is no longer cut off at the top."]
+}

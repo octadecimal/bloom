@@ -28,6 +28,7 @@ async def test_known_tool_names():
         "set_tuner_params",
         "tune_slot_model",
         "apply_tuned_model",
+        "regenerate_element",
     }
 
 
