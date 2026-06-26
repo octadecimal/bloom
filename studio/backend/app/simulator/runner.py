@@ -9,9 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
 
-import psutil
-
 from app.simulator.models import CurationResult, MetricsWire
+from app.subprocess_guard import watch_proc_tree
 
 
 @dataclass
@@ -46,40 +45,6 @@ class CurationRunner(Protocol):
 
 # Repo root = .../app/simulator/runner.py -> parents[4]. Verify on first run.
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-
-
-def _proc_tree_rss_mb(pid: int) -> float:
-    """Resident memory of the whole process subtree rooted at `pid`, in MiB.
-    Sums the parent and all descendants because under `cargo run` the real
-    curate_json is a grandchild. Returns 0.0 if the tree has already gone."""
-    try:
-        root = psutil.Process(pid)
-        procs = [root, *root.children(recursive=True)]
-    except psutil.NoSuchProcess:
-        return 0.0
-    total = 0
-    for p in procs:
-        try:
-            total += p.memory_info().rss
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-    return total / (1024 * 1024)
-
-
-def _kill_proc_tree(pid: int) -> None:
-    """Hard-kill the process subtree rooted at `pid` (descendants first, then the
-    root) so a runaway curate_json can never outlive the guard or keep eating RAM."""
-    try:
-        root = psutil.Process(pid)
-        procs = [*root.children(recursive=True), root]
-    except psutil.NoSuchProcess:
-        return
-    for p in procs:
-        try:
-            p.kill()
-        except psutil.NoSuchProcess:
-            pass
-    psutil.wait_procs(procs, timeout=5)
 
 
 class SubprocessCurationRunner:
@@ -119,7 +84,6 @@ class SubprocessCurationRunner:
             result: CurationResult | None = None
             guard_trip: str | None = None
             done = asyncio.Event()
-            loop = asyncio.get_event_loop()
 
             async def _drain_stdout() -> None:
                 nonlocal result
@@ -140,35 +104,11 @@ class SubprocessCurationRunner:
                 done.set()
 
             async def _watchdog() -> None:
-                # Poll the subprocess tree; hard-kill it the instant resident
-                # memory or wall-clock crosses the configured cap. A fast runaway
-                # (the kernel can hit GBs in a fraction of a second) is caught by
-                # the memory cap; the timeout is a backstop for a stuck process.
                 nonlocal guard_trip
-                start = loop.time()
-                while not done.is_set():
-                    try:
-                        await asyncio.wait_for(done.wait(), timeout=self._poll_s)
-                        return  # process finished on its own
-                    except asyncio.TimeoutError:
-                        pass
-                    rss = _proc_tree_rss_mb(proc.pid)
-                    elapsed = loop.time() - start
-                    if rss > self._mem_cap_mb:
-                        guard_trip = (
-                            f"curation aborted: subprocess memory {rss:.0f}MiB exceeded "
-                            f"cap {self._mem_cap_mb:.0f}MiB (runaway model); process killed"
-                        )
-                    elif elapsed > self._timeout_s:
-                        guard_trip = (
-                            f"curation aborted: subprocess ran longer than "
-                            f"{self._timeout_s:.0f}s wall-clock; process killed"
-                        )
-                    else:
-                        continue
-                    _kill_proc_tree(proc.pid)
-                    done.set()
-                    return
+                guard_trip = await watch_proc_tree(
+                    proc, done, label="curation",
+                    mem_cap_mb=self._mem_cap_mb, timeout_s=self._timeout_s,
+                    poll_s=self._poll_s)
 
             assert proc.stderr is not None
             _, stderr_bytes, _ = await asyncio.gather(

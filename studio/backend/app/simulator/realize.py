@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from itertools import product
 
 MAX_PAYLINES = 4096
+MAX_REELS = 12
+MAX_ROWS = 12
 DEFAULT_STRIP_LEN = 30
 DEFAULT_REELS = 5
 DEFAULT_ROWS = 3
@@ -19,6 +21,7 @@ BONUS_MIN_COUNT = 3
 # supercritical loop. The kernel hard-caps that anyway (MAX_FREE_SPINS), but the
 # realizer should never emit such a degenerate model in the first place.
 SCATTER_STRIP_SPACING = 20
+MAX_STRIP_LEN = 1000  # absurdity ceiling for a single reel strip
 
 # GDD design-language `kind` -> kernel SymbolRole (serialized lowercase).
 _KIND_TO_ROLE = {
@@ -107,6 +110,12 @@ def _realize_reels(
         length = max(distinct_count, DEFAULT_STRIP_LEN)
         warnings.append(f"strip_length absent; defaulted strip length to {length}")
 
+    if length > MAX_STRIP_LEN:
+        warnings.append(
+            f"strip length {length} exceeds MAX_STRIP_LEN {MAX_STRIP_LEN}; clamped"
+        )
+        length = MAX_STRIP_LEN
+
     paying = [d["id"] for d in symbol_defs if d["role"] in ("normal", "wild")]
     scatters = [d["id"] for d in symbol_defs if d["role"] == "scatter"]
     if not paying:
@@ -138,6 +147,24 @@ def _all_patterns(rows: int, reel_count: int) -> list[list[int]]:
     constants = [list(c) for c in combos if len(set(c)) == 1]
     others = [list(c) for c in combos if len(set(c)) > 1]
     return constants + others
+
+
+def _first_n_patterns(rows: int, reel_count: int, n: int) -> list[list[int]]:
+    """The first `n` paylines in the same order as `_all_patterns` (constants
+    first, then lexicographic), generated LAZILY — never materializes more than
+    `n` patterns. "lines" mode uses this so a large rows^reel_count geometry can
+    never OOM when only `n` lines are kept."""
+    out: list[list[int]] = []
+    for r in range(rows):  # constants first
+        if len(out) >= n:
+            return out
+        out.append([r] * reel_count)
+    for combo in product(range(rows), repeat=reel_count):  # then non-constants
+        if len(out) >= n:
+            break
+        if len(set(combo)) > 1:
+            out.append(list(combo))
+    return out
 
 
 def _realize_paylines(
@@ -193,7 +220,7 @@ def _realize_paylines(
             f"({rows}^{reel_count})"
         )
         return [], errors, warnings
-    return _all_patterns(rows, reel_count)[:n], errors, warnings
+    return _first_n_patterns(rows, reel_count, n), errors, warnings
 
 
 _OAK_COLUMNS = {"3oak": 3, "4oak": 4, "5oak": 5}
@@ -288,6 +315,13 @@ def realize_slot_model(
     if math_model.get("rows") in (None, ""):
         warnings.append(f"rows absent; defaulted to {DEFAULT_ROWS}")
     rows = _to_int(math_model.get("rows"), DEFAULT_ROWS)
+
+    if reel_count > MAX_REELS:
+        errors.append(f"reels {reel_count} exceeds MAX_REELS {MAX_REELS}")
+    if rows > MAX_ROWS:
+        errors.append(f"rows {rows} exceeds MAX_ROWS {MAX_ROWS}")
+    if errors:
+        return RealizeResult(None, errors, warnings)
 
     reels, e, w = _realize_reels(symbols_reels, symbol_defs, reel_count)
     errors += e

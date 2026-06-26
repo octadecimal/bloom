@@ -113,6 +113,11 @@ fn main() {
         realized_correction_band: tj.realized_correction_band,
     };
 
+    if let Err(e) = bloom_simulator::validate_target(&target) {
+        eprintln!("invalid target: {e}");
+        std::process::exit(2);
+    }
+
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only (umbrella §9)
     let mut on_progress = |p: CurationProgress| emit(progress_line(&p));
     let s = run_curation_streamed(

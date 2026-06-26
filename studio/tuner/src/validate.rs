@@ -6,6 +6,13 @@ use crate::config::TunerConfig;
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::TargetSpec;
 
+/// Absurdity ceilings: far above any honest tune (defaults: population 24,
+/// generations 40, candidate counts ~10^4–10^5). Reject beyond these BEFORE the
+/// GA allocates `generate_seeds(count)` / a population vector and OOMs.
+pub const MAX_POPULATION: usize = 1_000_000;
+pub const MAX_GENERATIONS: usize = 1_000_000;
+pub const MAX_CANDIDATE_COUNT: usize = 100_000_000;
+
 /// Returns `Err(message)` if the inputs would cause a downstream panic or are
 /// nonsensical. Checks: one hit-rate band per model bonus; every gene bound has
 /// `min <= max`; non-zero population.
@@ -48,6 +55,30 @@ pub fn validate(
     }
     if cfg.population == 0 {
         return Err("population must be > 0".to_string());
+    }
+    if cfg.population > MAX_POPULATION {
+        return Err(format!(
+            "population {} exceeds MAX_POPULATION {}",
+            cfg.population, MAX_POPULATION
+        ));
+    }
+    if cfg.max_generations > MAX_GENERATIONS {
+        return Err(format!(
+            "max_generations {} exceeds MAX_GENERATIONS {}",
+            cfg.max_generations, MAX_GENERATIONS
+        ));
+    }
+    if cfg.search_candidate_count > MAX_CANDIDATE_COUNT {
+        return Err(format!(
+            "search_candidate_count {} exceeds MAX_CANDIDATE_COUNT {}",
+            cfg.search_candidate_count, MAX_CANDIDATE_COUNT
+        ));
+    }
+    if cfg.final_candidate_count > MAX_CANDIDATE_COUNT {
+        return Err(format!(
+            "final_candidate_count {} exceeds MAX_CANDIDATE_COUNT {}",
+            cfg.final_candidate_count, MAX_CANDIDATE_COUNT
+        ));
     }
     Ok(())
 }
@@ -160,5 +191,41 @@ mod tests {
         assert!(validate(&model(1), &target(1), &c)
             .unwrap_err()
             .contains("population"));
+    }
+
+    #[test]
+    fn rejects_oversized_population() {
+        let mut c = cfg();
+        c.population = MAX_POPULATION + 1;
+        assert!(validate(&model(1), &target(1), &c)
+            .unwrap_err()
+            .contains("population"));
+    }
+
+    #[test]
+    fn rejects_oversized_generations() {
+        let mut c = cfg();
+        c.max_generations = MAX_GENERATIONS + 1;
+        assert!(validate(&model(1), &target(1), &c)
+            .unwrap_err()
+            .contains("max_generations"));
+    }
+
+    #[test]
+    fn rejects_oversized_candidate_count() {
+        let mut c = cfg();
+        c.search_candidate_count = MAX_CANDIDATE_COUNT + 1;
+        assert!(validate(&model(1), &target(1), &c)
+            .unwrap_err()
+            .contains("search_candidate_count"));
+    }
+
+    #[test]
+    fn rejects_oversized_final_candidate_count() {
+        let mut c = cfg();
+        c.final_candidate_count = MAX_CANDIDATE_COUNT + 1;
+        assert!(validate(&model(1), &target(1), &c)
+            .unwrap_err()
+            .contains("final_candidate_count"));
     }
 }

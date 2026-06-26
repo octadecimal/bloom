@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from app.simulator.models import MetricsWire
+from app.subprocess_guard import watch_proc_tree
 from app.tuner.models import BandMissWire, GenSnapshotWire, TuneResult
 
 
@@ -58,6 +59,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 class SubprocessTunerRunner:
     def __init__(self, settings):
         self._bin = getattr(settings, "tuner_bin", "") or ""
+        # Runaway guard: the GA drives the same kernel evaluate() over mutated
+        # models. The watchdog polls the subprocess tree and hard-kills it if
+        # either bound is crossed (mirrors the simulator runner).
+        self._mem_cap_mb = float(getattr(settings, "tuner_mem_cap_mb", 1024.0) or 1024.0)
+        self._timeout_s = float(getattr(settings, "tuner_timeout_s", 120.0) or 120.0)
+        self._poll_s = 0.1
 
     def _command(self, seed_path: str, target_path: str, config_path: str) -> list[str]:
         if self._bin:
@@ -83,6 +90,8 @@ class SubprocessTunerRunner:
                 stderr=asyncio.subprocess.PIPE,
             )
             result: TuneResult | None = None
+            guard_trip: str | None = None
+            done = asyncio.Event()
 
             async def _drain_stdout() -> None:
                 nonlocal result
@@ -102,10 +111,25 @@ class SubprocessTunerRunner:
                             best_volatility=obj["bestVolatility"]))
                     elif obj.get("type") == "result":
                         result = parse_tune_result_line(line, ran_at=ran_at)
+                done.set()
+
+            async def _watchdog() -> None:
+                nonlocal guard_trip
+                guard_trip = await watch_proc_tree(
+                    proc, done, label="tuning",
+                    mem_cap_mb=self._mem_cap_mb, timeout_s=self._timeout_s,
+                    poll_s=self._poll_s)
 
             assert proc.stderr is not None
-            _, stderr_bytes = await asyncio.gather(_drain_stdout(), proc.stderr.read())
+            _, stderr_bytes, _ = await asyncio.gather(
+                _drain_stdout(), proc.stderr.read(), _watchdog())
             await proc.wait()
+
+            if guard_trip is not None:
+                return TuneResult(
+                    status="error", verdict=None, tuned_model=None, metrics=None,
+                    missed=[], trace=[], failure=guard_trip, ran_at=ran_at,
+                )
 
             if result is None:
                 return TuneResult(

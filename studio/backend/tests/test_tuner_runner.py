@@ -1,10 +1,54 @@
+import sys
+from types import SimpleNamespace
+
 import pytest
 from app.config import Settings
 from app.tuner.runner import (
-    TuneProgress, FakeTunerRunner, parse_tune_result_line,
+    TuneProgress, FakeTunerRunner, SubprocessTunerRunner, parse_tune_result_line,
 )
 from app.tuner.models import TuneResult
 from app.simulator.models import MetricsWire
+
+
+def _runner(*, mem_cap_mb=4096.0, timeout_s=600.0, poll_s=0.05):
+    r = SubprocessTunerRunner(SimpleNamespace(tuner_bin=""))
+    r._mem_cap_mb = mem_cap_mb
+    r._timeout_s = timeout_s
+    r._poll_s = poll_s
+    return r
+
+
+_MEM_HOG = (
+    "import time\n"
+    "buf = []\n"
+    "for _ in range(20):\n"
+    "    buf.append(bytearray(20 * 1024 * 1024))\n"
+    "    time.sleep(0.1)\n"
+    "time.sleep(2)\n"
+)
+_SLEEPER = "import time\ntime.sleep(60)\n"
+
+
+def _cmd_for(script: str):
+    return lambda *_a, **_k: [sys.executable, "-c", script]
+
+
+@pytest.mark.asyncio
+async def test_tuner_guard_kills_runaway_memory_and_returns_error():
+    runner = _runner(mem_cap_mb=120.0, timeout_s=30.0)
+    runner._command = _cmd_for(_MEM_HOG)
+    res = await runner.run({"m": 1}, {"t": 1}, {"c": 1}, on_progress=lambda _p: None)
+    assert res.status == "error"
+    assert "memory" in res.failure.lower()
+
+
+@pytest.mark.asyncio
+async def test_tuner_guard_kills_on_wall_clock_timeout():
+    runner = _runner(mem_cap_mb=8192.0, timeout_s=0.5)
+    runner._command = _cmd_for(_SLEEPER)
+    res = await runner.run({"m": 1}, {"t": 1}, {"c": 1}, on_progress=lambda _p: None)
+    assert res.status == "error"
+    assert "wall-clock" in res.failure.lower()
 
 
 def test_settings_has_tuner_bin():
