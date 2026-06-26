@@ -201,3 +201,25 @@ describe('AssetCard', () => {
     expect(screen.getByTestId('asset-generate')).toBeTruthy();
   });
 });
+
+describe('transient states surface in every view mode', () => {
+  const MODES = ['small', 'medium', 'large', 'list'] as const;
+
+  it.each(MODES)('renders the error state in %s mode', (mode) => {
+    assetsSlice().assets.set([mk({ status: 'error', error: 'boom', progress: null })]);
+    render(<AssetCard index={0} mode={mode} />);
+    expect(screen.getByTestId('asset-error').textContent).toContain('boom');
+  });
+
+  it.each(MODES)('renders the queued state in %s mode', (mode) => {
+    assetsSlice().assets.set([mk({ status: 'queued', progress: null })]);
+    render(<AssetCard index={0} mode={mode} />);
+    expect(screen.getByTestId('asset-queued')).toBeTruthy();
+  });
+
+  it.each(MODES)('renders the progress bar while generating in %s mode', (mode) => {
+    assetsSlice().assets.set([mk({ status: 'generating', progress: { value: 1, max: 4 } })]);
+    render(<AssetCard index={0} mode={mode} />);
+    expect(screen.getByTestId('asset-progress')).toBeTruthy();
+  });
+});

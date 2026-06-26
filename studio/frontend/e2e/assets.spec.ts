@@ -189,6 +189,7 @@ test('view-mode toggle changes density, reveals actions on hover, and persists',
   // Switch to Medium: card width shrinks vs Large (denser).
   const card = page.getByTestId(/^asset-card-/).first();
   await page.getByTestId('view-mode-large').click();
+  await expect(page.getByTestId('asset-grid')).toHaveAttribute('data-view-mode', 'large');
   const largeWidth = (await card.boundingBox())!.width;
   await page.getByTestId('view-mode-medium').click();
   await expect(page.getByTestId('asset-grid')).toHaveAttribute('data-view-mode', 'medium');
