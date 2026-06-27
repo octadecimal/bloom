@@ -58,6 +58,18 @@ describe('EditableValue', () => {
     expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'name', 'hero');
   });
 
+  it('on Escape, undoes a numeric edit back to the focus-time value', () => {
+    render(<EditableValue nodeId="s1" path="x" valueType="number" raw={120} />);
+    const input = screen.getByTestId('inspector-edit-x') as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '175' } });
+    expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'x', 175); // live edit committed
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(input.value).toBe('120');
+    // Escape re-commits the original number so the game reverts too.
+    expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'x', 120);
+  });
+
   it('syncs from a new raw value when not focused', () => {
     const { rerender } = render(<EditableValue nodeId="s1" path="x" valueType="number" raw={120} />);
     rerender(<EditableValue nodeId="s1" path="x" valueType="number" raw={200} />);
