@@ -47,13 +47,15 @@ describe('EditableValue', () => {
     expect(commit.commitSetProp).toHaveBeenCalledWith('s1', 'visible', false);
   });
 
-  it('reverts to raw on Escape', () => {
+  it('on Escape, restores the focus-time value to the field and re-commits it', () => {
     render(<EditableValue nodeId="s1" path="name" valueType="string" raw="hero" />);
     const input = screen.getByTestId('inspector-edit-name') as HTMLInputElement;
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'villain' } });
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(input.value).toBe('hero');
+    // Escape re-commits the focus-time value so the live game reverts too.
+    expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'name', 'hero');
   });
 
   it('syncs from a new raw value when not focused', () => {
