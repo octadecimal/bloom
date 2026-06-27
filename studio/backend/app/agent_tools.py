@@ -307,6 +307,36 @@ def build_regenerate_element_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_read_scene_tool(ctx: ToolContext) -> BaseTool:
+    async def read_scene() -> str:
+        document = await ctx.scene_store.get_document(ctx.game_id)
+        if not document or not document.get("nodes"):
+            return "The scene is empty; nothing is placed yet."
+        assets = await ctx.asset_store.list_assets(ctx.game_id)
+        els = _placed_elements(document, assets)
+        if not els:
+            return "The scene is empty; nothing is placed yet."
+        lines = []
+        for el in els:
+            name = getattr(el.asset, "name", None) or "(unbound)"
+            pos = f"({el.position[0]:g},{el.position[1]:g})" if el.position else "(?,?)"
+            size = f"{el.size[0]}x{el.size[1]}" if el.size else "?x?"
+            role = f" {el.role}" if el.role else ""
+            lines.append(f'- {el.handle}{role} "{name}" pos={pos} size={size} z={el.z_index}')
+        return "Placed in the scene:\n" + "\n".join(lines)
+
+    return StructuredTool.from_function(
+        coroutine=read_scene, name="read_scene",
+        description=(
+            "Read the current scene: every placed sprite with its handle, role, bound "
+            "asset name, position (x,y), size (WxH) and z-index. Use this to find which "
+            "element the user means — by name OR position, e.g. 'the flower on the left' "
+            "— before changing it, then call regenerate_element with that exact handle "
+            "as `ref`. Takes no arguments."
+        ),
+    )
+
+
 def build_delete_asset_tool(ctx: ToolContext) -> BaseTool:
     async def delete_asset(asset_id: str) -> str:
         asset = await ctx.asset_store.get_asset(asset_id)
@@ -576,6 +606,9 @@ class PlacedElement:
     role: str
     asset: object | None
     src: str | None
+    position: tuple[float, float] | None = None
+    size: tuple[int, int] | None = None
+    z_index: int = 0
 
 
 def _texture_of(document: dict, sprite_id: str) -> str | None:
@@ -608,7 +641,17 @@ def _placed_elements(document: dict, assets: list) -> list[PlacedElement]:
              if getattr(a, "slot", None) == handle or getattr(a, "id", None) == handle),
             None,
         )
-        out.append(PlacedElement(nid, tex_id, handle, role, asset, src))
+        pos = props.get("position") or {}
+        position = (pos["x"], pos["y"]) if ("x" in pos and "y" in pos) else None
+        z_index = int(props.get("zIndex", 0) or 0)
+        size = None
+        if asset is not None:
+            w = getattr(asset, "width", None)
+            h = getattr(asset, "height", None)
+            if w and h:
+                size = (int(w), int(h))
+        out.append(PlacedElement(nid, tex_id, handle, role, asset, src,
+                                 position=position, size=size, z_index=z_index))
     return out
 
 
@@ -936,6 +979,7 @@ class ToolFactory:
         "add_sprite": build_add_sprite_tool,
         "generate_and_place": build_generate_and_place_tool,
         "regenerate_element": build_regenerate_element_tool,
+        "read_scene": build_read_scene_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
         "read_gdd_doc": build_read_gdd_doc_tool,

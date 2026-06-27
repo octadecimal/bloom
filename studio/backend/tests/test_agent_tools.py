@@ -29,6 +29,7 @@ async def test_known_tool_names():
         "tune_slot_model",
         "apply_tuned_model",
         "regenerate_element",
+        "read_scene",
     }
 
 
