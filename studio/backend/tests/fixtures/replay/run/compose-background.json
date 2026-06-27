@@ -1,0 +1,20 @@
+{
+  "prompt": "add a misty mountain background",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "generate_and_place",
+        "args": {
+          "description": "a misty coastal mountain landscape, no text, no words, no letters",
+          "slot": "background",
+          "size": "1280x720",
+          "transparent": false,
+          "role": "background",
+          "fit": "cover",
+          "z_index": 0
+        }
+      }
+    ]
+  ],
+  "final": ["Added a misty mountain background."]
+}
