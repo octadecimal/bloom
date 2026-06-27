@@ -61,3 +61,21 @@ def test_router_regenerate_branch_replaces_in_place_not_duplicate():
     # explicitly steers away from adding a duplicate via generate_and_place
     assert "already in the scene" in low or "already on screen" in low
     assert "duplicate" in low
+
+
+def test_router_binds_read_scene():
+    spec = build_design_router_spec()
+    assert "read_scene" in spec.tools
+    assert "read_scene" in spec.body
+
+
+def test_router_replace_uses_read_scene_to_target_then_regenerates_in_place():
+    low = build_design_router_spec().body.lower()
+    # "replace … with a new look" is handled as an in-place regenerate
+    assert "replace" in low
+    assert "regenerate_element" in low
+    # the agent reads the scene to resolve which element (incl. a positional ref)
+    assert "read_scene" in low
+    assert "on the left" in low
+    # branch 4 still warns against duplicating something already placed
+    assert "duplicate" in low

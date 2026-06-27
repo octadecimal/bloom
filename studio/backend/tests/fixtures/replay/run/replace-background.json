@@ -1,0 +1,16 @@
+{
+  "prompt": "replace the background with something sunnier",
+  "tool_call_rounds": [
+    [{ "name": "read_scene", "args": {} }],
+    [
+      {
+        "name": "regenerate_element",
+        "args": {
+          "ref": "background",
+          "description": "a bright sunny coastal mountain landscape, warm light, no text, no words, no letters"
+        }
+      }
+    ]
+  ],
+  "final": ["Replaced the background with a sunnier version, in place."]
+}
