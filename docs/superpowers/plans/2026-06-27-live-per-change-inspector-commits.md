@@ -341,6 +341,159 @@ git commit -m "test(inspector): e2e asserts one scene_apply_op per change"
 
 ---
 
+### Task 3: Redefine Escape as undo-to-focus-value
+
+Discovered during Task 2's round-trip e2e: live per-change commits break the old Escape-to-cancel behavior, because the backend echo updates the field's `raw` while it is still focused, so Escape's `setText(raw)` no longer reverts. Per the spec addendum (user-approved), Escape becomes an explicit undo: capture the value at focus, and on Escape commit that value back so the live game reverts too.
+
+**Files:**
+
+- Modify: `studio/frontend/src/plugins/property-inspector/EditableValue.tsx`
+- Test: `studio/frontend/src/plugins/property-inspector/EditableValue.spec.tsx`
+- Modify (e2e): `studio/frontend/e2e/inspector-mutation-roundtrip.spec.ts`
+
+**Interfaces:**
+
+- Consumes: `commitSetProp(nodeId, path, value)` (already imported), `toInputText(valueType, raw)` (already imported), `JsonValue` (already imported as a type).
+- Produces: no API change. `EditableValue` keeps the same props; adds an internal `originalOnFocus` ref.
+
+- [ ] **Step 1: Update the Escape unit test (RED)**
+
+In `studio/frontend/src/plugins/property-inspector/EditableValue.spec.tsx`, replace the existing `it('reverts to raw on Escape', ...)` test with:
+
+```tsx
+it('on Escape, restores the focus-time value to the field and re-commits it', () => {
+  render(<EditableValue nodeId="s1" path="name" valueType="string" raw="hero" />);
+  const input = screen.getByTestId('inspector-edit-name') as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: 'villain' } });
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(input.value).toBe('hero');
+  // Escape re-commits the focus-time value so the live game reverts too.
+  expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'name', 'hero');
+});
+```
+
+- [ ] **Step 2: Run it, watch the new assertion fail (RED)**
+
+Run: `cd studio/frontend && npx vitest run src/plugins/property-inspector/EditableValue.spec.tsx`
+Expected: FAIL — current Escape handler calls `setText` only, never `commitSetProp`, so `toHaveBeenLastCalledWith('s1','name','hero')` fails (last call was the `'villain'` change, or no call). The `input.value` assertion still passes.
+
+- [ ] **Step 3: Implement Escape-undo in `EditableValue.tsx`**
+
+Add a focus-time ref and rewrite the Escape branch. The full file becomes:
+
+```tsx
+import { useState, useRef, useEffect } from 'react';
+import type { JsonValue } from '../../scene/types';
+import { type ScalarType, parseEditInput, toInputText } from './edit';
+import { commitSetProp } from './commit';
+
+interface IEditableValueProps {
+  nodeId: string;
+  path: string;
+  valueType: ScalarType;
+  raw: JsonValue;
+}
+
+export function EditableValue({ nodeId, path, valueType, raw }: IEditableValueProps) {
+  const [text, setText] = useState(() => toInputText(valueType, raw));
+  const focused = useRef(false);
+  // The committed value when editing began — Escape re-commits this (undo).
+  const originalOnFocus = useRef<JsonValue>(raw);
+
+  // Reconcile from the authoritative echo — but never while the user is editing
+  // this field (that would fight the cursor).
+  useEffect(() => {
+    if (!focused.current) setText(toInputText(valueType, raw));
+  }, [raw, valueType]);
+
+  if (valueType === 'boolean') {
+    return (
+      <input
+        type="checkbox"
+        data-testid={`inspector-edit-${path}`}
+        checked={raw === true}
+        onChange={(e) => commitSetProp(nodeId, path, e.currentTarget.checked)}
+      />
+    );
+  }
+
+  return (
+    <input
+      data-testid={`inspector-edit-${path}`}
+      className="w-full bg-transparent text-foreground outline-none focus:bg-elevated"
+      type={valueType === 'number' ? 'number' : 'text'}
+      value={text}
+      placeholder={valueType === 'null' ? 'null' : undefined}
+      onFocus={() => {
+        focused.current = true;
+        originalOnFocus.current = raw;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        setText(toInputText(valueType, raw));
+      }}
+      onChange={(e) => {
+        const next = e.currentTarget.value;
+        setText(next);
+        const parsed = parseEditInput(valueType, next);
+        if (parsed.ok) commitSetProp(nodeId, path, parsed.value as JsonValue);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          // Undo: re-commit the focus-time value so the live game reverts too.
+          commitSetProp(nodeId, path, originalOnFocus.current);
+          setText(toInputText(valueType, originalOnFocus.current));
+          e.currentTarget.blur();
+        } else if (e.key === 'Enter') {
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+```
+
+- [ ] **Step 4: Run the unit suite (GREEN)**
+
+Run: `npx nx test frontend` (from worktree root)
+Expected: PASS — the Escape test now sees `commitSetProp` last called with the focus-time value; all other property-inspector tests stay green.
+
+- [ ] **Step 5: Update the e2e round-trip step 8 to the new undo semantics**
+
+In `studio/frontend/e2e/inspector-mutation-roundtrip.spec.ts`, replace the final block (currently lines ~134–137, the `// 8. Esc on a fresh edit reverts…` comment through the end of the test) with:
+
+```ts
+  // 8. Esc is undo: typing a new value commits it live, then Escape re-commits
+  //    the focus-time value (newValue) — the field AND the persisted snapshot
+  //    both revert, proving the undo round-tripped through the backend.
+  await field.click(); // focus so originalOnFocus captures the committed newValue
+  await field.fill(String(newValue + 999));
+  await field.press('Escape');
+  await expect(field).toHaveValue(String(newValue));
+  await refreshSnapshot(page);
+  expect(await readPersisted(page, SELECTED_ID, path as string)).toBe(newValue);
+});
+```
+
+- [ ] **Step 6: Run the two e2e specs against the replay backend (GREEN)**
+
+The replay backend must be up on :8001 (`just backend-serve-replay`). From the worktree root:
+
+Run: `BLOOM_PORT_OFFSET=1 npx playwright test --config=studio/frontend/playwright.config.ts inspector-mutation-roundtrip mutable-inspector`
+Expected: PASS — round-trip step 8 now asserts the undo (field + snapshot revert to `newValue`); the `mutable-inspector` per-change `[1,10,100]` test still passes.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add studio/frontend/src/plugins/property-inspector/EditableValue.tsx \
+        studio/frontend/src/plugins/property-inspector/EditableValue.spec.tsx \
+        studio/frontend/e2e/inspector-mutation-roundtrip.spec.ts
+git commit -m "feat(inspector): redefine Escape as undo to the focus-time value"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage:**

@@ -61,7 +61,8 @@ debounce removal.
   - The focus-guarded reconciliation effect (lines ~26–28) — still prevents the
     incoming echo from fighting the caret mid-edit.
   - The boolean checkbox branch (already immediate).
-  - `onBlur` / `onKeyDown` (Escape revert, Enter blur) behavior.
+  - `onBlur` (accept) / Enter (blur, accept) behavior.
+- **Escape becomes an explicit undo** (see addendum below).
 
 ### `studio/frontend/src/plugins/property-inspector/edit.ts`
 
@@ -110,3 +111,40 @@ TDD — encode the new contract first, watch it fail, then implement.
   change instead of per settle. Accepted for single-user studio scale.
 - **Intermediate-value rendering** — the game briefly shows partial values
   (`1`, `10`) while typing `100`. Accepted and documented above as intended.
+
+## Addendum (2026-06-27): Escape becomes an explicit undo
+
+Discovered while running the `inspector-mutation-roundtrip` e2e during
+implementation: live per-change commits break the **old** Escape-to-cancel
+behavior. Previously the field's `raw` (its committed source of truth) only
+changed once an edit settled, so Escape's `setText(raw)` restored the pre-edit
+value. Now every keystroke commits and the backend echo updates `raw` *while the
+field is still focused* (the focus guard keeps the text from flickering). By the
+time Escape fires, `raw` already holds the just-typed value, so the old
+`setText(raw)` no longer reverts anything. There is no uncommitted state left to
+discard — it is an inherent consequence of committing on every change, not a bug.
+
+**Decision (user-approved):** Escape is redefined as an explicit *undo to the
+focus-time value*.
+
+- On focus, capture the field's current value into a ref
+  (`originalOnFocus.current = raw`).
+- On Escape, **commit that captured value back** via
+  `commitSetProp(nodeId, path, originalOnFocus.current)` (so the live game
+  reverts too), set the field text to it, and blur. The recommit is
+  unconditional — a redundant no-op write when nothing changed is harmless at
+  single-user scale, and conditioning on `raw` would be unsafe because a pending
+  echo may not have updated `raw` yet.
+- Enter (blur → accept) and plain blur (accept) are unchanged; the value is
+  already committed.
+
+**Testing impact:**
+
+- Unit `EditableValue.spec.tsx`: the "reverts to raw on Escape" case becomes
+  "on Escape, restores the focus-time value to the field **and** re-commits it"
+  — assert `commitSetProp` is last called with the original value. (The old unit
+  test passed only because it mocks `commitSetProp`, so no echo ever moved
+  `raw` — that mock hid the regression; the new assertion closes that gap.)
+- E2e `inspector-mutation-roundtrip.spec.ts` step 8: assert that after typing a
+  new value and pressing Escape, the field **and the persisted snapshot** both
+  revert to the focus-time value (not the typed one).
