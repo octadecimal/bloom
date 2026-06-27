@@ -36,8 +36,8 @@ describe('InspectorPane', () => {
     render(<InspectorPane {...fakeProps} />);
     expect(screen.getByTestId('inspector-type').textContent).toBe('Sprite');
     expect(screen.getByTestId('inspector-id').textContent).toBe('s1');
-    expect(screen.getByTestId('inspector-prop-name').textContent).toContain('hero');
-    expect(screen.getByTestId('inspector-prop-x').textContent).toContain('120');
+    expect((screen.getByTestId('inspector-edit-name') as HTMLInputElement).value).toBe('hero');
+    expect((screen.getByTestId('inspector-edit-x') as HTMLInputElement).value).toBe('120');
   });
 
   it('renders nested children and collapses them on caret click', () => {
