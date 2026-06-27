@@ -1,35 +1,41 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import * as commit from './commit';
 import { EditableValue } from './EditableValue';
 
 beforeEach(() => {
-  vi.useFakeTimers();
   vi.spyOn(commit, 'commitSetProp').mockImplementation(() => {});
 });
 afterEach(() => {
-  vi.runOnlyPendingTimers();
-  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe('EditableValue', () => {
-  it('renders the raw number and debounce-commits a parsed edit', () => {
+  it('renders the raw number and commits a parsed edit immediately', () => {
     render(<EditableValue nodeId="s1" path="x" valueType="number" raw={120} />);
     const input = screen.getByTestId('inspector-edit-x') as HTMLInputElement;
     expect(input.value).toBe('120');
 
     fireEvent.change(input, { target: { value: '130' } });
-    expect(commit.commitSetProp).not.toHaveBeenCalled(); // debounced
-    act(() => vi.advanceTimersByTime(80));
     expect(commit.commitSetProp).toHaveBeenCalledWith('s1', 'x', 130);
+  });
+
+  it('commits every change with no coalescing', () => {
+    render(<EditableValue nodeId="s1" path="x" valueType="number" raw={0} />);
+    const input = screen.getByTestId('inspector-edit-x');
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.change(input, { target: { value: '10' } });
+    fireEvent.change(input, { target: { value: '100' } });
+    expect(commit.commitSetProp).toHaveBeenCalledTimes(3);
+    expect(commit.commitSetProp).toHaveBeenNthCalledWith(1, 's1', 'x', 1);
+    expect(commit.commitSetProp).toHaveBeenNthCalledWith(2, 's1', 'x', 10);
+    expect(commit.commitSetProp).toHaveBeenNthCalledWith(3, 's1', 'x', 100);
   });
 
   it('does not commit an empty/NaN number', () => {
     render(<EditableValue nodeId="s1" path="x" valueType="number" raw={120} />);
     const input = screen.getByTestId('inspector-edit-x');
     fireEvent.change(input, { target: { value: '' } });
-    act(() => vi.advanceTimersByTime(80));
     expect(commit.commitSetProp).not.toHaveBeenCalled();
   });
 
@@ -41,13 +47,27 @@ describe('EditableValue', () => {
     expect(commit.commitSetProp).toHaveBeenCalledWith('s1', 'visible', false);
   });
 
-  it('reverts to raw on Escape', () => {
+  it('on Escape, restores the focus-time value to the field and re-commits it', () => {
     render(<EditableValue nodeId="s1" path="name" valueType="string" raw="hero" />);
     const input = screen.getByTestId('inspector-edit-name') as HTMLInputElement;
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'villain' } });
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(input.value).toBe('hero');
+    // Escape re-commits the focus-time value so the live game reverts too.
+    expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'name', 'hero');
+  });
+
+  it('on Escape, undoes a numeric edit back to the focus-time value', () => {
+    render(<EditableValue nodeId="s1" path="x" valueType="number" raw={120} />);
+    const input = screen.getByTestId('inspector-edit-x') as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '175' } });
+    expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'x', 175); // live edit committed
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(input.value).toBe('120');
+    // Escape re-commits the original number so the game reverts too.
+    expect(commit.commitSetProp).toHaveBeenLastCalledWith('s1', 'x', 120);
   });
 
   it('syncs from a new raw value when not focused', () => {

@@ -131,8 +131,13 @@ test('editing a scalar persists through the real socket round-trip and the field
   await refreshSnapshot(page);
   expect(await readPersisted(page, SELECTED_ID, path as string)).toBe(newValue);
 
-  // 8. Esc on a fresh edit reverts to the (now newValue) store value.
+  // 8. Esc is undo: typing a new value commits it live, then Escape re-commits
+  //    the focus-time value (newValue) — the field AND the persisted snapshot
+  //    both revert, proving the undo round-tripped through the backend.
+  await field.click(); // focus so originalOnFocus captures the committed newValue
   await field.fill(String(newValue + 999));
   await field.press('Escape');
   await expect(field).toHaveValue(String(newValue));
+  await refreshSnapshot(page);
+  expect(await readPersisted(page, SELECTED_ID, path as string)).toBe(newValue);
 });

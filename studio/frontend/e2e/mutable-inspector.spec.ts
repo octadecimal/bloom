@@ -56,7 +56,7 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   const xInput = page.getByTestId('inspector-edit-x');
   await expect(xInput).toHaveValue('120');
 
-  // Edit the number; assert the emitted op (debounced ~80ms).
+  // Edit the number; with no debounce the op fires immediately on change.
   await xInput.fill('175');
   await expect
     .poll(() => page.evaluate(() => (window as any).__gameLastApplyOp ?? null), { timeout: 5000 })
@@ -67,4 +67,61 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   await xInput.fill('999');
   await xInput.press('Escape');
   await expect(xInput).toHaveValue('120');
+});
+
+test('typing a multi-digit value emits one scene_apply_op per change', async ({ page }) => {
+  await openRoom(page);
+
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
+  expect(gameId).toBeTruthy();
+
+  await page.evaluate((gid) => {
+    const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
+    apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
+    apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 's1', type: 'Sprite', props: { x: 5, visible: true } } });
+    apply('scene_op', {
+      gameId: gid,
+      op: { kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 's1', port: 'parent' } },
+    });
+  }, gameId);
+
+  // Record EVERY emitted op (not just the last) by trapping assignments.
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__opLog = [];
+    let last: unknown;
+    Object.defineProperty(w, '__gameLastApplyOp', {
+      configurable: true,
+      get: () => last,
+      set: (v) => {
+        last = v;
+        w.__opLog.push(v);
+      },
+    });
+  });
+
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-scene-graph/tree').click();
+  await expect(page.getByTestId('scene-row-s1')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('scene-row-s1').click();
+
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-property-inspector/panel').click();
+  const xInput = page.getByTestId('inspector-edit-x');
+  await expect(xInput).toHaveValue('5');
+
+  // Clear, then type each digit. With no debounce, every keystroke that parses
+  // emits its own setProp — 1, then 10, then 100.
+  await xInput.fill('');
+  await xInput.pressSequentially('100', { delay: 30 });
+
+  await expect
+    .poll(
+      () => page.evaluate(() => ((window as any).__opLog ?? []).filter((o: any) => o?.op?.id === 's1' && o?.op?.path === 'x').map((o: any) => o.op.value)),
+      { timeout: 5000 },
+    )
+    .toEqual([1, 10, 100]);
 });

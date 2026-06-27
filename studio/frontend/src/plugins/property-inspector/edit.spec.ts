@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { valueTypeOf, toInputText, parseEditInput, makeDebounced } from './edit';
+import { describe, it, expect } from 'vitest';
+import { valueTypeOf, toInputText, parseEditInput } from './edit';
 
 describe('valueTypeOf', () => {
   it('classifies each scalar', () => {
@@ -36,22 +36,5 @@ describe('parseEditInput', () => {
   it('keeps null empty, otherwise becomes a string', () => {
     expect(parseEditInput('null', '')).toEqual({ ok: true, value: null });
     expect(parseEditInput('null', 'x')).toEqual({ ok: true, value: 'x' });
-  });
-});
-
-describe('makeDebounced', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  it('coalesces rapid calls into one, last args win', () => {
-    const fn = vi.fn();
-    const d = makeDebounced(fn, 80);
-    d(1);
-    d(2);
-    d(3);
-    expect(fn).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(80);
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenCalledWith(3);
   });
 });
