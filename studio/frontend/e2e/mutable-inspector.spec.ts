@@ -56,7 +56,7 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   const xInput = page.getByTestId('inspector-edit-x');
   await expect(xInput).toHaveValue('120');
 
-  // Edit the number; assert the emitted op (debounced ~80ms).
+  // Edit the number; with no debounce the op fires immediately on change.
   await xInput.fill('175');
   await expect
     .poll(() => page.evaluate(() => (window as any).__gameLastApplyOp ?? null), { timeout: 5000 })
