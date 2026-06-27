@@ -23,6 +23,15 @@ def register_scene_handlers(sio, hub):
                 to=sid,
             )
             return
+        # Validate required keys are present; value: null is legitimate so check key
+        # presence, not truthiness.
+        if any(k not in op for k in ("id", "path", "value")):
+            await sio.emit(
+                "scene_op_rejected",
+                {"gameId": game_id, "code": "bad_op", "op": op},
+                to=sid,
+            )
+            return
         try:
             await hub.apply_op(game_id, op)
         except OpError as e:
