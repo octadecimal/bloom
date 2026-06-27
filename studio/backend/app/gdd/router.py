@@ -1,4 +1,4 @@
-from app.gdd.models import GDD_TOOL_NAMES
+﻿from app.gdd.models import GDD_TOOL_NAMES
 from app.gdd.schemas import field_catalog
 from app.skills import SkillSpec
 
@@ -78,17 +78,25 @@ Decide what the latest user message is:
    you may instead call `add_sprite`; to generate without placing, `generate_asset`.
    Use `list_assets` to see what is already on the board.) You MAY build several
    elements in this one turn — just keep each generate+place paired and sequential.
-5. A request to FIX, REDO, REGENERATE, or REPLACE an element that is ALREADY in
-   the scene (e.g. "regenerate the seaweed, it's cut off at the top", "redo the
-   logo", "that background is wrong, make it again"): call `regenerate_element`
-   with `ref` set to what the user named — it is matched fuzzily against the slot,
-   role, and asset name of what is placed. When the user says what is wrong, pass a
-   refined `description` that fixes it (e.g. "a full seaweed plant, fully in frame,
-   not cropped at the top"); omit `description` to just re-roll the art. This swaps
-   the existing sprite's art IN PLACE, keeping its position. Do NOT use
-   `generate_and_place` for something already in the scene — that adds a duplicate
-   sprite. If `regenerate_element` reports several matches, pick the right one from
-   context (or ask the user) and call it again with the exact `ref`.
+   If the user is CHANGING or REPLACING something that is ALREADY in the scene
+   rather than adding a brand-new element, do NOT generate_and_place it — that
+   stacks a duplicate sprite. Handle it as a regenerate (point 5); call
+   `read_scene` first if you are unsure whether the element is already placed.
+5. A request to FIX, REDO, REGENERATE, REPLACE, or CHANGE an element that is
+   ALREADY in the scene — addressed by name OR position (e.g. "regenerate the
+   seaweed, it's cut off at the top", "redo the logo", "that background is wrong,
+   make it again", "replace the background with something sunnier", "replace the
+   flower on the left with a red rose"): swap that element's art IN PLACE with
+   `regenerate_element`. When the reference is not an obvious exact handle — a
+   positional cue like "on the left", or one of several similar elements — FIRST
+   call `read_scene` (it lists every placed sprite with its handle, role, bound
+   asset name, position and size), pick the element the user means, THEN call
+   `regenerate_element` with that element's EXACT handle as `ref`. Pass a refined
+   `description` for the new look (e.g. "a bright sunny coastal landscape, no
+   text"); omit `description` to just re-roll the current art. This keeps the
+   element's position and z-index. Do NOT use `generate_and_place` for something
+   already in the scene — that adds a duplicate sprite. If `regenerate_element`
+   reports several matches, call it again with the exact `ref` from `read_scene`.
 6. Not a design or scene request (a greeting, a question, chit-chat): reply
    normally in plain text and call NO tool.
 
@@ -108,7 +116,7 @@ def build_design_router_spec() -> SkillSpec:
         tools=sorted(
             GDD_TOOL_NAMES
             | {"realize_symbol", "generate_asset", "add_sprite", "list_assets",
-               "generate_and_place", "regenerate_element"}
+               "generate_and_place", "regenerate_element", "read_scene"}
         ),
         body=_BODY_TEMPLATE.format(catalog=_render_catalog(field_catalog())),
     )
