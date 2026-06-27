@@ -17,10 +17,7 @@ export function EditableValue({ nodeId, path, valueType, raw }: IEditableValuePr
   // Note: a pending debounced commit is intentionally NOT cancelled on nodeId/path change —
   // the stale closure captures the prior node's context, so the in-flight edit commits to
   // the node it was made on (correct behavior). Do not "fix" this by cancelling on remount.
-  const commit = useMemo(
-    () => makeDebounced((v: JsonValue) => commitSetProp(nodeId, path, v), DEBOUNCE_MS),
-    [nodeId, path],
-  );
+  const commit = useMemo(() => makeDebounced((v: JsonValue) => commitSetProp(nodeId, path, v), DEBOUNCE_MS), [nodeId, path]);
   const [text, setText] = useState(() => toInputText(valueType, raw));
   const focused = useRef(false);
 

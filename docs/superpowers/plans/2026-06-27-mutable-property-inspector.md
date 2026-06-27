@@ -23,11 +23,13 @@
 ## File Structure
 
 **Backend**
+
 - Modify `studio/backend/app/scene/sockets.py` — add the `scene_apply_op` handler (Task 1).
 - Create `studio/backend/tests/test_scene_apply_op_handler.py` — handler unit test (Task 1).
 - Create `studio/backend/tests/e2e/test_scene_mutate.py` — full socket round-trip (Task 2).
 
 **Frontend**
+
 - Modify `studio/frontend/src/plugins/game/socketClient.ts` — add `emitSceneApplyOp` (Task 3).
 - Create `studio/frontend/src/plugins/property-inspector/commit.ts` — the impure write seam (Task 3).
 - Create `studio/frontend/src/plugins/property-inspector/commit.spec.ts` (Task 3).
@@ -46,10 +48,12 @@
 ## Task 1: Backend `scene_apply_op` handler
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/sockets.py`
 - Test: `studio/backend/tests/test_scene_apply_op_handler.py`
 
 **Interfaces:**
+
 - Consumes: `GameSceneHub.apply_op(game_id, op) -> dict` (raises `OpError(code, message)` from `app.scene.document`).
 - Produces: a `scene_apply_op` socket handler. On a `setProp` op → calls `hub.apply_op` (which broadcasts `scene_op` to the room). On a non-`setProp` kind → emits `scene_op_rejected` `{gameId, code: "forbidden_kind", op}` to the sender only, without calling the hub. On `OpError` → emits `scene_op_rejected` `{gameId, code: e.code, op}` to the sender only.
 
@@ -217,9 +221,11 @@ git commit -m "feat(scene): accept client setProp via scene_apply_op socket even
 ## Task 2: Backend e2e — full socket round-trip
 
 **Files:**
+
 - Test: `studio/backend/tests/e2e/test_scene_mutate.py`
 
 **Interfaces:**
+
 - Consumes: the live replay server (`live_server` fixture), the `design-scene` skill (seeds a real persisted scene deterministically in replay), and the `scene_apply_op` handler from Task 1.
 - Produces: proof that a client-emitted `setProp` is broadcast back as `scene_op` and persisted.
 
@@ -323,11 +329,13 @@ git commit -m "test(scene): e2e round-trip for client-emitted setProp"
 ## Task 3: Client write seam (`emitSceneApplyOp` + `commit.ts`)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/game/socketClient.ts`
 - Create: `studio/frontend/src/plugins/property-inspector/commit.ts`
 - Test: `studio/frontend/src/plugins/property-inspector/commit.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `gameSlice().activeGameId` (from `../game/state`), `ISceneOp` (from `../../scene/reducers`), `JsonValue` (from `../../scene/types`).
 - Produces:
   - `emitSceneApplyOp(gameId: string, op: ISceneOp): void` (exported from `socketClient.ts`) — emits `scene_apply_op` `{gameId, op}` on the game socket; in dev also stores `window.__gameLastApplyOp = {gameId, op}` for e2e capture.
@@ -426,10 +434,12 @@ git commit -m "feat(inspector): client write seam for setProp over the game sock
 ## Task 4: Pure edit helpers (`edit.ts`)
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/property-inspector/edit.ts`
 - Test: `studio/frontend/src/plugins/property-inspector/edit.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `JsonValue` (from `../../scene/types`).
 - Produces:
   - `type ScalarType = 'number' | 'string' | 'boolean' | 'null'`
@@ -581,10 +591,12 @@ git commit -m "feat(inspector): pure type-aware edit helpers"
 ## Task 5: Carry `raw` + `valueType` on scalar rows (`inspect.ts`)
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/property-inspector/inspect.ts`
 - Test: `studio/frontend/src/plugins/property-inspector/inspect.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `valueTypeOf`, `ScalarType` (from `./edit`); existing `inspectSelection`.
 - Produces: scalar `IPropRow`s additionally carry `valueType: ScalarType` and `raw: JsonValue`. Branch (array/object) rows are unchanged (no `raw`/`valueType`).
 
@@ -664,16 +676,16 @@ export interface IPropRow {
 (c) In `walk`, update the scalar `rows.push` (the final `return`-less push) to include `valueType` + `raw`:
 
 ```typescript
-    rows.push({
-      path,
-      key,
-      depth,
-      kind: 'scalar',
-      display: formatScalar(value),
-      hasChildren: false,
-      valueType: valueTypeOf(value),
-      raw: value,
-    });
+rows.push({
+  path,
+  key,
+  depth,
+  kind: 'scalar',
+  display: formatScalar(value),
+  hasChildren: false,
+  valueType: valueTypeOf(value),
+  raw: value,
+});
 ```
 
 - [ ] **Step 4: Run tests to verify they pass (new + existing)**
@@ -693,10 +705,12 @@ git commit -m "feat(inspector): carry raw value and scalar type on prop rows"
 ## Task 6: The `EditableValue` widget
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/property-inspector/EditableValue.tsx`
 - Test: `studio/frontend/src/plugins/property-inspector/EditableValue.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `ScalarType`, `parseEditInput`, `toInputText`, `makeDebounced` (from `./edit`); `commitSetProp` (from `./commit`); `JsonValue` (from `../../scene/types`).
 - Produces: `EditableValue({ nodeId, path, valueType, raw }): JSX.Element` rendering `data-testid={`inspector-edit-${path}`}`. Number/string/null → a text input with local state that debounce-commits on change, reconciles to `raw` on blur, reverts on Esc, blurs on Enter, and does not clobber the field from an incoming `raw` change while focused. Boolean → a checkbox that commits immediately on toggle.
 
@@ -874,10 +888,12 @@ git commit -m "feat(inspector): type-aware EditableValue widget"
 ## Task 7: Wire `EditableValue` into `InspectorPane`
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/property-inspector/InspectorPane.tsx`
 - Test: `studio/frontend/src/plugins/property-inspector/InspectorPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `EditableValue` (from `./EditableValue`); `view.id` (the selected node id) is threaded down to each `PropRow`.
 - Produces: scalar rows render an `EditableValue` instead of a static value span; branch rows (summary) and empty-branch rows (`[]`/`{}`) are unchanged.
 
@@ -886,15 +902,15 @@ git commit -m "feat(inspector): type-aware EditableValue widget"
 In `studio/frontend/src/plugins/property-inspector/InspectorPane.spec.tsx`, the two scalar assertions in the "shows the selected node type, id, and scalar props" test must change — a scalar value now lives in an input, not the row's text. Replace those two lines:
 
 ```typescript
-    expect(screen.getByTestId('inspector-prop-name').textContent).toContain('hero');
-    expect(screen.getByTestId('inspector-prop-x').textContent).toContain('120');
+expect(screen.getByTestId('inspector-prop-name').textContent).toContain('hero');
+expect(screen.getByTestId('inspector-prop-x').textContent).toContain('120');
 ```
 
 with:
 
 ```typescript
-    expect((screen.getByTestId('inspector-edit-name') as HTMLInputElement).value).toBe('hero');
-    expect((screen.getByTestId('inspector-edit-x') as HTMLInputElement).value).toBe('120');
+expect((screen.getByTestId('inspector-edit-name') as HTMLInputElement).value).toBe('hero');
+expect((screen.getByTestId('inspector-edit-x') as HTMLInputElement).value).toBe('120');
 ```
 
 Leave the empty-state test and the nested/collapse test unchanged (the `inspector-prop-tint.r` row container and `inspector-toggle-tint` still exist).
@@ -964,9 +980,11 @@ git commit -m "feat(inspector): render editable widgets for scalar props"
 ## Task 8: Frontend Playwright e2e — edit a prop, observe the emitted op
 
 **Files:**
+
 - Create: `studio/frontend/e2e/mutable-inspector.spec.ts`
 
 **Interfaces:**
+
 - Consumes: dev hooks `window.__gameApplyInbound` (seed a local node), `window.__gameActiveId` (the active game id), `window.__gameLastApplyOp` (capture the emitted `scene_apply_op`); the View menu (`view-open-*`), scene-graph rows (`scene-row-<id>`), and inspector edit inputs (`inspector-edit-<path>`).
 - Produces: proof the UI emits the right `scene_apply_op` `setProp` and the widget reverts on Esc. (The backend round-trip/persistence is proven by Task 2.)
 

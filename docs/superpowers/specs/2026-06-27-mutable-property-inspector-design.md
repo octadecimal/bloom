@@ -25,7 +25,7 @@ pipeline rather than a parallel write path.
   `{"kind": "setProp", "id", "path", "value"}` and calls `apply_op`. `apply_op`
   raises a typed `OpError` (with a `code`) on validation failure.
 - **The frontend is a pure read-only mirror.** `studio/frontend/src/plugins/game/socketClient.ts`
-  only *listens* for `scene_op` / `scene_snapshot` and forwards them to the iframe
+  only _listens_ for `scene_op` / `scene_snapshot` and forwards them to the iframe
   bridge and the shared scene store. The only client→server emits today are
   `join_scene` / `leave_scene` (`studio/backend/app/scene/sockets.py`). **There is no
   client→backend channel for scene ops.**
@@ -107,7 +107,7 @@ Pure change; branch/array/object rows are unaffected. Easy to TDD.
 - **Type-aware input:** number → numeric field, boolean → toggle, string → text,
   null → text field (parses to keep or replace the null).
 - **Owns local state while focused** so an incoming echo never fights the cursor.
-  The component reads the store value only when *not* focused/dirty.
+  The component reads the store value only when _not_ focused/dirty.
 - Fires `emitSetProp` **debounced (~80ms)** on change → live updates.
 - **On blur:** reconcile local state to the authoritative store value.
 - **Esc:** revert to the store value and blur.
