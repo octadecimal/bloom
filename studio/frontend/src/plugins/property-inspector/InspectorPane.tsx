@@ -7,6 +7,7 @@ import { sceneGraphHooks } from '../scene-graph/state';
 import { propertyInspectorHooks } from './state';
 import { inspectSelection, type IPropRow } from './inspect';
 import { bumpRenderCount } from '../../app/renderCount';
+import { EditableValue } from './EditableValue';
 
 export function InspectorPane(_props: IDockviewPanelProps) {
   const scene = sceneHooks.usePluginState();
@@ -47,7 +48,7 @@ export function InspectorPane(_props: IDockviewPanelProps) {
       </div>
       <div className="py-1">
         {view.rows.map((row) => (
-          <PropRow key={row.path} row={row} collapsed={collapsed[row.path] === true} onToggle={toggle} />
+          <PropRow key={row.path} nodeId={view.id} row={row} collapsed={collapsed[row.path] === true} onToggle={toggle} />
         ))}
       </div>
     </div>
@@ -55,12 +56,13 @@ export function InspectorPane(_props: IDockviewPanelProps) {
 }
 
 interface IPropRowProps {
+  nodeId: string;
   row: IPropRow;
   collapsed: boolean;
   onToggle: (path: string) => void;
 }
 
-const PropRow = memo(function PropRow({ row, collapsed, onToggle }: IPropRowProps) {
+const PropRow = memo(function PropRow({ nodeId, row, collapsed, onToggle }: IPropRowProps) {
   const summary = row.kind === 'array' ? `[${row.count ?? 0}]` : `{${row.count ?? 0}}`;
   return (
     <div
@@ -81,7 +83,13 @@ const PropRow = memo(function PropRow({ row, collapsed, onToggle }: IPropRowProp
         <span className="inline-block h-4 w-4" />
       )}
       <span className="text-muted-foreground">{row.key}</span>
-      {row.hasChildren && row.count ? <span className="text-faint">{summary}</span> : <span className="truncate">{row.display}</span>}
+      {row.hasChildren && row.count ? (
+        <span className="text-faint">{summary}</span>
+      ) : row.kind === 'scalar' ? (
+        <EditableValue nodeId={nodeId} path={row.path} valueType={row.valueType!} raw={row.raw!} />
+      ) : (
+        <span className="truncate">{row.display}</span>
+      )}
     </div>
   );
 });

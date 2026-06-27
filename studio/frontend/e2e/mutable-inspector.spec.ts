@@ -1,0 +1,70 @@
+import { test, expect, type Page } from '@playwright/test';
+import { seedLocalStorage } from './helpers';
+
+// Local-only (browser e2e is never in CI). Requires the full stack on the
+// worktree offset: engine :4301, backend :8001 (replay), studio :4201.
+//
+// Proves the Inspector's UI→wire contract: editing a scalar emits the right
+// scene_apply_op (captured via window.__gameLastApplyOp). The backend
+// round-trip + persistence is covered by the pytest e2e (test_scene_mutate.py).
+
+async function openRoom(page: Page): Promise<void> {
+  await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username: 'ada' } }));
+  await page.goto('/');
+  await page.getByPlaceholder(/new room/i).fill(`Inspector E2E ${Date.now()}`);
+  await page.getByRole('button', { name: /create/i }).click();
+  await expect(page).toHaveURL(/\/room\//);
+  await expect(page.getByTestId('workbench')).toBeVisible();
+}
+
+test('editing a scalar in the Inspector emits a setProp scene_apply_op', async ({ page }) => {
+  await openRoom(page);
+
+  // Open the Game Scene pane so activeGameId is set and the socket joins.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
+  expect(gameId).toBeTruthy();
+
+  // Seed a local node into the mirror (scene-graph reads the same store). The
+  // sprite MUST be parented under Root via a `child` edge — the scene-graph tree
+  // only shows nodes reachable from Root (buildTree), so an orphan sprite would
+  // never render a `scene-row-*` to select.
+  await page.evaluate((gid) => {
+    const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
+    apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
+    apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 's1', type: 'Sprite', props: { x: 120, visible: true } } });
+    apply('scene_op', {
+      gameId: gid,
+      op: { kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 's1', port: 'parent' } },
+    });
+  }, gameId);
+
+  // Open the Scene Graph pane and select the sprite FIRST — selection lives in
+  // shared state (sceneGraphSlice.selectedId), so it survives opening the
+  // Inspector next. (Opening the Inspector last would stack it on top of the
+  // Scene Graph in the same Dockview group, hiding the rows we need to click.)
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-scene-graph/tree').click();
+  await expect(page.getByTestId('scene-row-s1')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('scene-row-s1').click();
+
+  // Now open the Inspector; it reads the selection from state and shows props.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-property-inspector/panel').click();
+  const xInput = page.getByTestId('inspector-edit-x');
+  await expect(xInput).toHaveValue('120');
+
+  // Edit the number; assert the emitted op (debounced ~80ms).
+  await xInput.fill('175');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__gameLastApplyOp ?? null), { timeout: 5000 })
+    .toMatchObject({ gameId, op: { kind: 'setProp', id: 's1', path: 'x', value: 175 } });
+
+  // Esc reverts the field to the store value.
+  await xInput.focus();
+  await xInput.fill('999');
+  await xInput.press('Escape');
+  await expect(xInput).toHaveValue('120');
+});
