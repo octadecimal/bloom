@@ -21,12 +21,14 @@
 ### Task 1: Remove the debounce so every parsed change commits immediately
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/property-inspector/EditableValue.tsx`
 - Modify: `studio/frontend/src/plugins/property-inspector/edit.ts` (remove `makeDebounced`)
 - Test: `studio/frontend/src/plugins/property-inspector/EditableValue.spec.tsx`
 - Test: `studio/frontend/src/plugins/property-inspector/edit.spec.ts` (remove `makeDebounced` block)
 
 **Interfaces:**
+
 - Consumes: `commitSetProp(nodeId: string, path: string, value: JsonValue): void` (from `./commit`), `parseEditInput(type: ScalarType, text: string): IParseResult`, `toInputText(type: ScalarType, raw: JsonValue): string` (from `./edit`).
 - Produces: no API changes. `EditableValue` keeps the same props. `makeDebounced` is **deleted** from `edit.ts` (was exported, used only by this widget + its own test).
 
@@ -222,6 +224,7 @@ Expected: PASS — `EditableValue.spec.tsx`, `edit.spec.ts`, `commit.spec.ts`, `
 - [ ] **Step 7: Run the remaining CI gates**
 
 Run, from the worktree root:
+
 - `npx nx typecheck frontend` — Expected: PASS (no unused-import/type errors from the removed `useMemo`/`makeDebounced`).
 - `npx nx build frontend` — Expected: PASS.
 - `npx prettier --check .` — Expected: "All matched files use Prettier code style!". If it flags markdown due to a newer prettier, rerun `./node_modules/.bin/prettier --check .`.
@@ -241,9 +244,11 @@ git commit -m "feat(inspector): commit every property change live (drop debounce
 ### Task 2: Prove per-change emission end-to-end
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/mutable-inspector.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the dev hooks already exposed by the studio — `window.__gameApplyInbound`, `window.__gameActiveId`, `window.__gameLastApplyOp` (each assignment is the latest emitted `{ gameId, op }`). The new test installs a setter trap on `window.__gameLastApplyOp` to record every assignment into `window.__opLog`.
 - Produces: nothing consumed downstream.
 
@@ -303,13 +308,7 @@ test('typing a multi-digit value emits one scene_apply_op per change', async ({ 
 
   await expect
     .poll(
-      () =>
-        page.evaluate(
-          () =>
-            ((window as any).__opLog ?? [])
-              .filter((o: any) => o?.op?.id === 's1' && o?.op?.path === 'x')
-              .map((o: any) => o.op.value),
-        ),
+      () => page.evaluate(() => ((window as any).__opLog ?? []).filter((o: any) => o?.op?.id === 's1' && o?.op?.path === 'x').map((o: any) => o.op.value)),
       { timeout: 5000 },
     )
     .toEqual([1, 10, 100]);
@@ -345,6 +344,7 @@ git commit -m "test(inspector): e2e asserts one scene_apply_op per change"
 ## Self-Review
 
 **Spec coverage:**
+
 - "Remove the debounce; each parsed change emits immediately" → Task 1, Steps 3.
 - "Mirror the boolean checkbox path" → Task 1, Step 3 (number `onChange` now calls `commitSetProp` directly like the checkbox).
 - "Remove `makeDebounced` (verified only used here)" → Task 1, Step 5.

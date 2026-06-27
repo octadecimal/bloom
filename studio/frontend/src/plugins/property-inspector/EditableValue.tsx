@@ -1,9 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { JsonValue } from '../../scene/types';
-import { type ScalarType, parseEditInput, toInputText, makeDebounced } from './edit';
+import { type ScalarType, parseEditInput, toInputText } from './edit';
 import { commitSetProp } from './commit';
-
-const DEBOUNCE_MS = 80;
 
 interface IEditableValueProps {
   nodeId: string;
@@ -13,11 +11,6 @@ interface IEditableValueProps {
 }
 
 export function EditableValue({ nodeId, path, valueType, raw }: IEditableValueProps) {
-  // Debounced live commit; re-created if the target node/path changes.
-  // Note: a pending debounced commit is intentionally NOT cancelled on nodeId/path change —
-  // the stale closure captures the prior node's context, so the in-flight edit commits to
-  // the node it was made on (correct behavior). Do not "fix" this by cancelling on remount.
-  const commit = useMemo(() => makeDebounced((v: JsonValue) => commitSetProp(nodeId, path, v), DEBOUNCE_MS), [nodeId, path]);
   const [text, setText] = useState(() => toInputText(valueType, raw));
   const focused = useRef(false);
 
@@ -56,7 +49,7 @@ export function EditableValue({ nodeId, path, valueType, raw }: IEditableValuePr
         const next = e.currentTarget.value;
         setText(next);
         const parsed = parseEditInput(valueType, next);
-        if (parsed.ok) commit(parsed.value as JsonValue);
+        if (parsed.ok) commitSetProp(nodeId, path, parsed.value as JsonValue);
       }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {

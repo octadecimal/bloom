@@ -38,12 +38,3 @@ export function parseEditInput(type: ScalarType, text: string): IParseResult {
       return { ok: true, value: text };
   }
 }
-
-// Trailing-edge debounce; mirrors makeDebouncedSaver in state/persistence.ts.
-export function makeDebounced<A extends unknown[]>(fn: (...args: A) => void, delayMs: number): (...args: A) => void {
-  let handle: ReturnType<typeof setTimeout> | undefined;
-  return (...args: A) => {
-    if (handle) clearTimeout(handle);
-    handle = setTimeout(() => fn(...args), delayMs);
-  };
-}
