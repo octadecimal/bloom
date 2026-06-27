@@ -105,11 +105,29 @@ First probe health (PowerShell):
 Invoke-RestMethod http://localhost:8000/health
 ```
 
-- **Already live?** If it answers `providerMode: live`, the stack is up — skip
-  start and just re-report URLs.
-- **Replay holding the port?** If it answers `providerMode: replay`, WARN that the
-  live stack is one-session-at-a-time and STOP — another session owns the port;
-  do not fight it.
+- **Already live? RESTART it — do NOT skip, because we just merged.** A
+  long-running `uvicorn --reload` backend does **not** reload a `git pull`/merge:
+  the atomic rename slips the file watcher, so a backend that was up _before_ the
+  step-3 merge is now serving **stale code without this PR's changes**. `/health`
+  saying `live` only proves a process is up, not that it has the merged code —
+  skipping here is exactly how a just-merged change appears "broken" in the live
+  app while every test passed. So when `/health` reports `providerMode: live`,
+  **restart the backend** so the merged code is actually served:
+  - From `C:\code\bloom` (PowerShell, offset 0), kill the **whole** :8000 process
+    tree — the listener PID **and** its parent (the `--reload` supervisor) **and**
+    its child (the worker that inherited the :8000 socket; killing only the
+    listener leaves the socket held and the next bind fails). Confirm :8000 is
+    free, then `just backend-serve` in the background and poll `/health` until it
+    answers `live` again.
+  - The Vite frontend and engine **hot-reload from disk**, so they pick up the
+    merge automatically — only restart them if they're down or visibly stale.
+  - Verify the restart actually loaded the new code (a fresh `/health`, and where
+    practical a quick check that this PR's change is now served) before reporting
+    success.
+- **Replay holding the port?** If it answers `providerMode: replay`, another
+  session owns the live port in replay mode — WARN that the live stack is
+  one-session-at-a-time and STOP. Do **not** restart or fight it (that would
+  clobber their stack); the merged code can't be served live until they free it.
 - **Down / not answering?** Bring it up as background processes (run each with your
   background-run option so they persist for the session), polling between:
   ```
