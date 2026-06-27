@@ -71,3 +71,10 @@ export function gameSock() {
   if (!client) client = createGameSocket();
   return client;
 }
+
+export function emitSceneApplyOp(gameId: string, op: ISceneOp): void {
+  sock?.emit('scene_apply_op', { gameId, op });
+  if (!import.meta.env.PROD) {
+    (window as unknown as { __gameLastApplyOp?: unknown }).__gameLastApplyOp = { gameId, op };
+  }
+}
