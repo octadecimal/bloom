@@ -1,4 +1,4 @@
-﻿from app.gdd.models import GDD_TOOL_NAMES
+from app.gdd.models import GDD_TOOL_NAMES
 from app.gdd.schemas import field_catalog
 from app.skills import SkillSpec
 
