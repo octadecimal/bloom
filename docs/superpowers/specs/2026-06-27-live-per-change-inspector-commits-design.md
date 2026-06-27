@@ -118,14 +118,14 @@ Discovered while running the `inspector-mutation-roundtrip` e2e during
 implementation: live per-change commits break the **old** Escape-to-cancel
 behavior. Previously the field's `raw` (its committed source of truth) only
 changed once an edit settled, so Escape's `setText(raw)` restored the pre-edit
-value. Now every keystroke commits and the backend echo updates `raw` *while the
-field is still focused* (the focus guard keeps the text from flickering). By the
+value. Now every keystroke commits and the backend echo updates `raw` _while the
+field is still focused_ (the focus guard keeps the text from flickering). By the
 time Escape fires, `raw` already holds the just-typed value, so the old
 `setText(raw)` no longer reverts anything. There is no uncommitted state left to
 discard — it is an inherent consequence of committing on every change, not a bug.
 
-**Decision (user-approved):** Escape is redefined as an explicit *undo to the
-focus-time value*.
+**Decision (user-approved):** Escape is redefined as an explicit _undo to the
+focus-time value_.
 
 - On focus, capture the field's current value into a ref
   (`originalOnFocus.current = raw`).
