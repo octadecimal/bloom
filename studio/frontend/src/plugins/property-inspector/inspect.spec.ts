@@ -2,6 +2,38 @@ import { describe, it, expect } from 'vitest';
 import { inspectSelection } from './inspect';
 import type { ISceneDocument } from '../../scene/types';
 
+const docRaw: ISceneDocument = {
+  version: 1,
+  nodes: {
+    s1: {
+      id: 's1',
+      type: 'Sprite',
+      props: { name: 'hero', x: 120, visible: true, gap: null, tint: { r: 255 } },
+    },
+  },
+  edges: [],
+};
+
+describe('inspectSelection raw + valueType', () => {
+  it('tags each scalar row with its raw value and type', () => {
+    const view = inspectSelection(docRaw, 's1')!;
+    const byPath = Object.fromEntries(view.rows.map((r) => [r.path, r]));
+    expect(byPath['name']).toMatchObject({ kind: 'scalar', valueType: 'string', raw: 'hero' });
+    expect(byPath['x']).toMatchObject({ kind: 'scalar', valueType: 'number', raw: 120 });
+    expect(byPath['visible']).toMatchObject({ kind: 'scalar', valueType: 'boolean', raw: true });
+    expect(byPath['gap']).toMatchObject({ kind: 'scalar', valueType: 'null', raw: null });
+    expect(byPath['tint.r']).toMatchObject({ kind: 'scalar', valueType: 'number', raw: 255 });
+  });
+
+  it('leaves branch rows without raw/valueType', () => {
+    const view = inspectSelection(docRaw, 's1')!;
+    const tint = view.rows.find((r) => r.path === 'tint')!;
+    expect(tint.kind).toBe('object');
+    expect(tint.raw).toBeUndefined();
+    expect(tint.valueType).toBeUndefined();
+  });
+});
+
 const doc: ISceneDocument = {
   version: 1,
   nodes: {

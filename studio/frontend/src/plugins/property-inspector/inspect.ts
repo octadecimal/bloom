@@ -1,4 +1,5 @@
 import type { ISceneDocument, JsonValue, NodeType } from '../../scene/types';
+import { valueTypeOf, type ScalarType } from './edit';
 
 export interface IPropRow {
   path: string; // unique, stable: 'name' | 'tint.r' | 'frames.0' — React key + collapse key
@@ -8,6 +9,8 @@ export interface IPropRow {
   display?: string; // formatted scalar, or '{}' / '[]' for an empty branch
   hasChildren: boolean;
   count?: number; // entry count for a non-empty branch
+  valueType?: ScalarType; // scalar rows only — drives the editable widget
+  raw?: JsonValue; // scalar rows only — the unformatted value the widget binds to
 }
 
 export interface IInspectorView {
@@ -62,7 +65,16 @@ export function inspectSelection(doc: ISceneDocument, selectedId: string | null,
       }
       return;
     }
-    rows.push({ path, key, depth, kind: 'scalar', display: formatScalar(value), hasChildren: false });
+    rows.push({
+      path,
+      key,
+      depth,
+      kind: 'scalar',
+      display: formatScalar(value),
+      hasChildren: false,
+      valueType: valueTypeOf(value),
+      raw: value,
+    });
   };
 
   for (const [key, value] of Object.entries(node.props)) {
