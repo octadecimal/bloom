@@ -27,21 +27,32 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
 
-  // Seed a local node into the mirror (scene-graph reads the same store).
+  // Seed a local node into the mirror (scene-graph reads the same store). The
+  // sprite MUST be parented under Root via a `child` edge — the scene-graph tree
+  // only shows nodes reachable from Root (buildTree), so an orphan sprite would
+  // never render a `scene-row-*` to select.
   await page.evaluate((gid) => {
     const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
     apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
     apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 's1', type: 'Sprite', props: { x: 120, visible: true } } });
+    apply('scene_op', {
+      gameId: gid,
+      op: { kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 's1', port: 'parent' } },
+    });
   }, gameId);
 
-  // Open Scene Graph + Inspector panes.
+  // Open the Scene Graph pane and select the sprite FIRST — selection lives in
+  // shared state (sceneGraphSlice.selectedId), so it survives opening the
+  // Inspector next. (Opening the Inspector last would stack it on top of the
+  // Scene Graph in the same Dockview group, hiding the rows we need to click.)
   await page.getByTestId('menu-view').click();
   await page.getByTestId('view-open-scene-graph/tree').click();
+  await expect(page.getByTestId('scene-row-s1')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('scene-row-s1').click();
+
+  // Now open the Inspector; it reads the selection from state and shows props.
   await page.getByTestId('menu-view').click();
   await page.getByTestId('view-open-property-inspector/panel').click();
-
-  // Select the sprite; the Inspector shows its props.
-  await page.getByTestId('scene-row-s1').click();
   const xInput = page.getByTestId('inspector-edit-x');
   await expect(xInput).toHaveValue('120');
 
