@@ -29,8 +29,12 @@ test('create a room, send a prompt, and watch the assistant stream', async ({ pa
   await page.getByTestId('chat-send').click();
 
   await expect(page.getByTestId('chat-messages')).toContainText('Reply with exactly: PONG');
+  // Game-room plain chat runs the design-router agent, so a chit-chat prompt streams
+  // its plain-text final into an assistant run-turn block ([data-role="assistant"]).
+  // Wait for the reply, then for the run to finish (AI status returns to idle).
   const assistant = page.locator('[data-role="assistant"]').last();
-  await expect(assistant).toHaveAttribute('data-status', 'complete', { timeout: 15_000 });
+  await expect(assistant).toContainText('PONG', { timeout: 15_000 });
+  await expect(page.getByTestId('chat-ai-status')).toHaveAttribute('data-state', 'idle', { timeout: 15_000 });
   const text = (await assistant.textContent())?.toLowerCase() ?? '';
   expect(text).not.toContain('echo:'); // would catch the degenerate fake
   expect(text).toContain('pong'); // real (or recorded-real) answer
@@ -57,10 +61,12 @@ test('chat pane renders the premium author-labeled feed with a styled composer',
   const userBubble = page.locator('[data-role="user"]').last();
   await expect(userBubble).toContainText('alice');
 
-  // While the assistant streams, a caret is present; once complete it is gone.
+  // The reply renders as an assistant run-turn block (design-router plain-text final).
+  // Once the run finishes, AI status is idle and no streaming step caret remains.
   const assistant = page.locator('[data-role="assistant"]').last();
-  await expect(assistant).toHaveAttribute('data-status', 'complete', { timeout: 15_000 });
-  await expect(assistant.getByTestId('chat-caret')).toHaveCount(0);
+  await expect(assistant).toContainText('PONG', { timeout: 15_000 });
+  await expect(page.getByTestId('chat-ai-status')).toHaveAttribute('data-state', 'idle', { timeout: 15_000 });
+  await expect(assistant.locator('[data-testid^="run-step-caret-"]')).toHaveCount(0);
 });
 
 test('two clients in one room both see the stream and each other in presence', async ({ browser }) => {

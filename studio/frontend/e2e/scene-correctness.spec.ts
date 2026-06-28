@@ -46,6 +46,10 @@ async function openRoom(page: Page): Promise<string> {
  * Must be called while the Asset Board pane is visible (before openGamePane).
  */
 async function generateAsset(page: Page, gid: string): Promise<string> {
+  // Default board view is `medium`, where the card's Generate footer (asset-generate)
+  // is hover-mounted only. Switch to `large` (actions:'always') so asset-generate is
+  // reliably in the DOM before we click it — otherwise the click hangs for 30s.
+  await page.getByTestId('view-mode-large').click();
   await page.getByTestId('asset-name').fill('Sym');
   await page.getByTestId('asset-prompt').fill('a glowing symbol');
   await page.getByTestId('asset-workflow').selectOption('schnell-transparent');

@@ -1,0 +1,7 @@
+{
+  "prompt": "/generate-background description=\"a misty forest at dawn\", mood=\"neutral\", aspect=\"wide\"",
+  "tool_calls": [
+    { "name": "generate_asset", "args": { "description": "a misty forest at dawn", "size": "1024x576", "transparent": false } }
+  ],
+  "final": ["All set — ", "I generated a misty forest background and added it to the Asset Board."]
+}

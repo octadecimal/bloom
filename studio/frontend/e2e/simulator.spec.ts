@@ -87,6 +87,12 @@ async function openSimulator(page: Page) {
 }
 
 test('author a model and curate to PASS against GDD intent', async ({ page, request }) => {
+  // The backend curates via `cargo run --release` by default, so the FIRST curation
+  // in a session pays a cold Rust build that can far exceed Playwright's default 30s
+  // per-test cap (which would otherwise make the 90s `expect` below unreachable).
+  // Build it ahead of time for speed (`just sim-build`); this headroom covers the
+  // cold path on a fresh checkout.
+  test.setTimeout(120_000);
   await setupGame(page, request, 'alice', `sim ${Date.now()}`, { rtp: '90%', volatility: 'low' });
   await openSimulator(page);
 
@@ -105,6 +111,8 @@ test('author a model and curate to PASS against GDD intent', async ({ page, requ
 });
 
 test('a mismatched RTP intent curates to FAIL', async ({ page, request }) => {
+  // Same cold-build headroom as the PASS case above (curation may build on first run).
+  test.setTimeout(120_000);
   await setupGame(page, request, 'bob', `sim ${Date.now()}`, { rtp: '50%', volatility: 'low' });
   await openSimulator(page);
 
