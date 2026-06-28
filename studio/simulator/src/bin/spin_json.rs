@@ -50,7 +50,10 @@ mod tests {
     fn tiny_model() -> SlotModel {
         // 3 reels, each strip [0], 3 rows -> every cell is symbol 0, deterministic.
         SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 3,
             paylines: vec![],
@@ -80,6 +83,9 @@ mod tests {
 
     #[test]
     fn is_deterministic() {
-        assert_eq!(spin_result_json(&tiny_model(), 123), spin_result_json(&tiny_model(), 123));
+        assert_eq!(
+            spin_result_json(&tiny_model(), 123),
+            spin_result_json(&tiny_model(), 123)
+        );
     }
 }

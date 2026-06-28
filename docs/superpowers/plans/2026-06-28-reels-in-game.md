@@ -15,7 +15,7 @@
 - **TDD is mandatory:** write the failing test, run it red, implement minimally, run it green, commit.
 - **Ports follow `BLOOM_PORT_OFFSET`.** This worktree is offset **1** → backend `8001`, studio `4201`, runtime `4301`. Never hardcode `localhost` in browser-facing URLs.
 - **Browser e2e (Playwright) is NEVER in CI** — run locally (`just e2e` against a replay backend on the offset port). Unit + non-browser (pytest, Rust) suites are CI-affordable.
-- **Studio UI follows `docs/design-language.md`** — no raw colors in components; use the existing token classes (`bg-surface`, `text-text-2`, etc.). Reel-cell *fill* colors are runtime-canvas (Pixi), not studio DOM, so the design-language color guard does not apply to them.
+- **Studio UI follows `docs/design-language.md`** — no raw colors in components; use the existing token classes (`bg-surface`, `text-text-2`, etc.). Reel-cell _fill_ colors are runtime-canvas (Pixi), not studio DOM, so the design-language color guard does not apply to them.
 - **Frontend gates before any push:** `node_modules/.bin/prettier --check .`, `nx typecheck`, `nx test`, `nx build`. Vitest passing ≠ types valid — run all four.
 - **Symbol grid orientation is fixed:** the kernel returns `base_grid[reel][row]`; the reels module consumes `grid[col][row]` with `col == reel`. No transpose anywhere.
 
@@ -24,9 +24,11 @@
 ## File structure
 
 **Rust (new):**
+
 - `studio/simulator/src/bin/spin_json.rs` — single-round `evaluate()` → one JSON line.
 
 **Backend (modify):**
+
 - `studio/backend/app/scene/document.py` — `empty_document()` carries `modules`.
 - `studio/backend/app/scene/store.py` — persist + preserve `modules`; `set_modules()`.
 - `studio/backend/app/scene/hub.py` — `set_modules()` (persist + broadcast snapshot).
@@ -35,6 +37,7 @@
 - `studio/backend/app/main.py` — pass `sim_store` + a spin runner into `register_scene_handlers`.
 
 **Runtime client (modify/new):**
+
 - `runtime/client/src/model/document.ts` — `IModuleDecl`, `IGameDocument.modules?`.
 - `runtime/client/src/protocol/protocolHost.ts` — `onModules` callback on `init`.
 - `runtime/client/src/modules/moduleManager.ts` (new) — declaration-driven instantiate/project/mount.
@@ -46,6 +49,7 @@
 - `runtime/client/src/render/pixiRenderer.ts` — rectangle fill/size + label child.
 
 **Studio frontend (modify):**
+
 - `studio/frontend/src/scene/types.ts` — `IModuleDecl`, `ISceneDocument.modules?`.
 - `studio/frontend/src/scene/reducers.ts` — `loadDocument` preserves `modules`.
 - `studio/frontend/src/plugins/game/protocolBridge.ts` — `spin()` + `spin` message.
@@ -53,6 +57,7 @@
 - `studio/frontend/src/plugins/game/GamePreviewPane.tsx` — Add Reels + Spin buttons.
 
 **e2e (new):**
+
 - `studio/frontend/e2e/reels.spec.ts` — authoritative add → grid → spin → landed-outcome.
 
 ---
@@ -60,9 +65,11 @@
 ## Task 1: Rust `spin_json` — single-round evaluate → JSON
 
 **Files:**
+
 - Create: `studio/simulator/src/bin/spin_json.rs`
 
 **Interfaces:**
+
 - Produces (CLI): `spin_json <model.json> <seed>` prints one JSON line `{"grid": number[][], "basePayout": number, "totalPayout": number}` where `grid[reel][row]` is the symbol id. Exit 2 on bad input.
 - Produces (testable fn): `spin_result_json(model: &SlotModel, seed: u64) -> String`.
 
@@ -171,6 +178,7 @@ Expected: compiles and all three tests PASS. (If any `slots` name fails to impor
 echo '{"symbols":[{"id":0,"role":"normal"}],"reels":[[0],[0],[0]],"rows":3,"paylines":[],"paytable":{"entries":[]},"bonuses":[]}' > /tmp/m.json
 cargo run -q -p bloom-simulator --bin spin_json -- /tmp/m.json 7
 ```
+
 Expected: `{"basePayout":0,"grid":[[0,0,0],[0,0,0],[0,0,0]],"totalPayout":0}`
 
 - [ ] **Step 4: Commit**
@@ -185,12 +193,14 @@ git commit -m "feat(reels): single-round spin_json kernel binary"
 ## Task 2: Backend — persist `modules` on the scene document
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/document.py`
 - Modify: `studio/backend/app/scene/store.py`
 - Modify: `studio/backend/app/scene/hub.py`
 - Test: `studio/backend/tests/test_scene_modules.py` (new)
 
 **Interfaces:**
+
 - Produces: `empty_document()` returns `{"version":1,"nodes":{},"edges":[],"modules":[]}`.
 - Produces: `GameSceneStore.set_modules(game_id, modules: list[dict]) -> dict` — persists and returns the full document with `modules` set.
 - Produces: `GameSceneStore.apply_op` / `apply_batch` preserve the existing `modules` (node/edge ops never wipe them).
@@ -327,10 +337,12 @@ git commit -m "feat(reels): persist modules declaration on the scene document"
 ## Task 3: Backend — demo model, config derivation, symbol mapping, spin runner
 
 **Files:**
+
 - Create: `studio/backend/app/scene/reels_spin.py`
 - Test: `studio/backend/tests/test_reels_spin.py` (new)
 
 **Interfaces:**
+
 - Produces: `DEMO_SLOT_MODEL: dict` — a valid `slots@1` model (3 reels × 3 rows, symbols `0,1,2,9`).
 - Produces: `derive_reels_config(model: dict) -> dict` → `{"cols","rows","symbols","parentId":"root"}`.
 - Produces: `map_grid(numeric_grid: list[list[int]]) -> list[list[str]]` — ids → strings, no transpose.
@@ -536,11 +548,13 @@ git commit -m "feat(reels): demo model, config derivation, and spin runner"
 ## Task 4: Backend — `scene_add_module` + `scene_spin` socket handlers
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/sockets.py`
 - Modify: `studio/backend/app/main.py:150`
 - Test: `studio/backend/tests/test_reels_sockets.py` (new)
 
 **Interfaces:**
+
 - Consumes: `GameSceneHub.set_modules`, `GameSceneHub.ensure_root` (Task 2 + existing), `SlotModelStore.get` (existing), `reels_spin.*` (Task 3).
 - Produces (wire): client emits `scene_add_module {gameId, type?}` → server ensures a root, derives config, sets the `modules` declaration (broadcasts a snapshot). Client emits `scene_spin {gameId, seed?}` → server evaluates one round → emits `scene_spin_outcome {gameId, outcome: {grid: string[][]}}` to the room.
 - Produces (signature): `register_scene_handlers(sio, hub, broker, model_store, spin_runner)`.
@@ -744,6 +758,7 @@ git commit -m "feat(reels): scene_add_module + scene_spin socket handlers"
 ## Task 5: Runtime — declaration-driven `ModuleManager` + engine refactor
 
 **Files:**
+
 - Modify: `runtime/client/src/model/document.ts`
 - Modify: `runtime/client/src/protocol/protocolHost.ts`
 - Create: `runtime/client/src/modules/moduleManager.ts`
@@ -754,6 +769,7 @@ git commit -m "feat(reels): scene_add_module + scene_spin socket handlers"
 - Test: `runtime/client/src/modules/moduleManager.spec.ts` (new)
 
 **Interfaces:**
+
 - Produces: `interface IModuleDecl { id: string; type: string; config?: Record<string, JsonValue>; }` and `IGameDocument.modules?: IModuleDecl[]`.
 - Produces: `ProtocolHost` deps gain `onModules?: (decls: IModuleDecl[]) => void`, invoked during `init` with `document.modules ?? []`.
 - Produces: `class ModuleManager` with `sync(decls: IModuleDecl[]): void` and `byType(type: string): IGameModule | undefined`.
@@ -1091,6 +1107,7 @@ git commit -m "feat(reels): declaration-driven ModuleManager + engine wiring"
 ## Task 6: Runtime — symbol colors, rectangle props, land colors on settle
 
 **Files:**
+
 - Create: `runtime/client/src/modules/reels/symbolColor.ts`
 - Modify: `runtime/client/src/modules/reels/reelsModule.ts`
 - Test: `runtime/client/src/modules/reels/symbolColor.spec.ts` (new)
@@ -1098,6 +1115,7 @@ git commit -m "feat(reels): declaration-driven ModuleManager + engine wiring"
 - Modify: `runtime/client/src/modules/reels/reelsModule.behavior.spec.ts`
 
 **Interfaces:**
+
 - Produces: `colorForSymbol(symbol: string): string` — pure, deterministic, returns a `#rrggbb` from a fixed palette.
 - Produces: each reel cell node now carries props `fill: string`, `size: { width, height }`, `label: string` (in addition to `position`, `symbol`).
 - Produces: on settle, `finishSettle` emits `setProp` `fill`/`label` ops for each visible cell so the landed grid shows the outcome symbols' colors/labels.
@@ -1136,10 +1154,7 @@ Create `runtime/client/src/modules/reels/symbolColor.ts`:
 // A fixed, high-contrast palette indexed by a stable string hash. Pure and
 // deterministic so the same symbol always renders the same color (placeholder
 // art: real symbol textures are a later slice).
-const PALETTE = [
-  '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-  '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
-];
+const PALETTE = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
 
 export function colorForSymbol(symbol: string): string {
   let h = 0;
@@ -1202,36 +1217,36 @@ import { colorForSymbol } from './symbolColor';
 In `buildDesired`, set the cell props (replace the inner cell `nodes.push`):
 
 ```typescript
-      for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
-        const sym = cfg.symbols[r % cfg.symbols.length];
-        nodes.push({
-          id: cellId(moduleId, c, r),
-          type: 'Sprite',
-          props: {
-            position: { x: 0, y: r * span },
-            symbol: sym,
-            fill: colorForSymbol(sym),
-            size: { width: cfg.cellSize, height: cfg.cellSize },
-            label: sym,
-          },
-          parent: containerId(moduleId, c),
-        });
-      }
+for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
+  const sym = cfg.symbols[r % cfg.symbols.length];
+  nodes.push({
+    id: cellId(moduleId, c, r),
+    type: 'Sprite',
+    props: {
+      position: { x: 0, y: r * span },
+      symbol: sym,
+      fill: colorForSymbol(sym),
+      size: { width: cfg.cellSize, height: cfg.cellSize },
+      label: sym,
+    },
+    parent: containerId(moduleId, c),
+  });
+}
 ```
 
 In `finishSettle`, after building `grid` and resetting positions, emit the landed colors/labels. Insert before `this.settledGrid = grid;`:
 
 ```typescript
-    const ops: Op[] = [];
-    for (let c = 0; c < cfg.cols; c++) {
-      for (let r = 0; r < cfg.rows; r++) {
-        const sym = grid[c]?.[r];
-        if (sym === undefined) continue;
-        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'fill', value: colorForSymbol(sym) });
-        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'label', value: sym });
-      }
-    }
-    if (ops.length) this.host.emit(ops);
+const ops: Op[] = [];
+for (let c = 0; c < cfg.cols; c++) {
+  for (let r = 0; r < cfg.rows; r++) {
+    const sym = grid[c]?.[r];
+    if (sym === undefined) continue;
+    ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'fill', value: colorForSymbol(sym) });
+    ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'label', value: sym });
+  }
+}
+if (ops.length) this.host.emit(ops);
 ```
 
 - [ ] **Step 8: Run them — expect GREEN**
@@ -1251,10 +1266,12 @@ git commit -m "feat(reels): color-coded labeled cells + land outcome colors on s
 ## Task 7: Runtime renderer — draw `fill`/`size` rectangles + `label` text
 
 **Files:**
+
 - Modify: `runtime/client/src/render/pixiRenderer.ts`
 - Test: `runtime/client/src/render/pixiRenderer.rect.spec.ts` (new)
 
 **Interfaces:**
+
 - Consumes: cell props `fill: string`, `size: { width, height }`, `label: string` (Task 6).
 - Produces: `applyPixiProp(sprite, 'fill', '#rrggbb')` sets `texture = Texture.WHITE` and `tint`; `applyPixiProp(sprite, 'size', {width,height})` sizes it. `PixiRenderer.setProp(id, 'label', value)` creates/updates a centered child `Text`; `destroyObject` cleans the label up.
 
@@ -1356,7 +1373,7 @@ Replace `setProp`:
 And clean up in `destroyObject` — add before `this.objects.delete(id);`:
 
 ```typescript
-    this.labels.delete(id);
+this.labels.delete(id);
 ```
 
 - [ ] **Step 5: Run it — expect GREEN**
@@ -1376,6 +1393,7 @@ git commit -m "feat(reels): render fill/size rectangles + label text in the engi
 ## Task 8: Studio frontend — bridge.spin, socket wiring, Game-pane buttons
 
 **Files:**
+
 - Modify: `studio/frontend/src/scene/types.ts`
 - Modify: `studio/frontend/src/scene/reducers.ts`
 - Modify: `studio/frontend/src/plugins/game/protocolBridge.ts`
@@ -1385,6 +1403,7 @@ git commit -m "feat(reels): render fill/size rectangles + label text in the engi
 - Modify: `studio/frontend/src/plugins/game/GamePreviewPane.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: backend `scene_spin_outcome {gameId, outcome:{grid}}` (Task 4); emits `scene_add_module` / `scene_spin` (Task 4).
 - Produces: `ProtocolBridge.spin(outcome: { grid: string[][] })` sends `{ v:1, kind:'spin', id, outcome }` to the engine (queued before ready, like other messages).
 - Produces: `emitSceneAddModule(gameId)`, `emitSceneSpin(gameId, seed?)`; socket handler for `scene_spin_outcome` → `getBridge()?.spin(outcome)` (+ dev hook `window.__gameLastSpinOutcome`).
@@ -1400,10 +1419,7 @@ it('queues a spin before ready, then posts it on ready', () => {
   bridge.spin({ grid: [['0', '1']] });
   expect(post).not.toHaveBeenCalled();
   bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
-  expect(post).toHaveBeenCalledWith(
-    expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1']] } }),
-    ENGINE,
-  );
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1']] } }), ENGINE);
 });
 ```
 
@@ -1480,14 +1496,14 @@ export function loadDocument(doc: ISceneDocument): ISceneDocument {
 In `studio/frontend/src/plugins/game/socketClient.ts`, inside `createGameSocket` after the `scene_op` handler, add:
 
 ```typescript
-    sock.on('scene_spin_outcome', (p) => {
-      const payload = p as { gameId: string; outcome: { grid: string[][] } };
-      if (!isActive(payload.gameId)) return;
-      if (!import.meta.env.PROD) {
-        (window as unknown as { __gameLastSpinOutcome?: unknown }).__gameLastSpinOutcome = payload.outcome;
-      }
-      getBridge()?.spin(payload.outcome);
-    });
+sock.on('scene_spin_outcome', (p) => {
+  const payload = p as { gameId: string; outcome: { grid: string[][] } };
+  if (!isActive(payload.gameId)) return;
+  if (!import.meta.env.PROD) {
+    (window as unknown as { __gameLastSpinOutcome?: unknown }).__gameLastSpinOutcome = payload.outcome;
+  }
+  getBridge()?.spin(payload.outcome);
+});
 ```
 
 and add two emitters at the bottom of the file (next to `emitSceneApplyOp`):
@@ -1528,29 +1544,29 @@ import { emitSceneAddModule, emitSceneSpin } from './socketClient';
 ```
 
 ```tsx
-  return (
-    <div className="flex h-full flex-col bg-surface">
-      <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
-        <button
-          type="button"
-          data-testid="game-add-reels"
-          onClick={() => emitSceneAddModule(activeGameId)}
-          className="rounded bg-surface-2 px-2 py-1 text-text-1 hover:bg-surface-3"
-        >
-          Add Reels
-        </button>
-        <button
-          type="button"
-          data-testid="game-spin"
-          onClick={() => emitSceneSpin(activeGameId)}
-          className="rounded bg-surface-2 px-2 py-1 text-text-1 hover:bg-surface-3"
-        >
-          Spin
-        </button>
-      </div>
-      <iframe ref={frameRef} data-testid="game-engine-frame" title="Game scene preview" src={src} className="h-full w-full flex-1 border-0" />
+return (
+  <div className="flex h-full flex-col bg-surface">
+    <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
+      <button
+        type="button"
+        data-testid="game-add-reels"
+        onClick={() => emitSceneAddModule(activeGameId)}
+        className="rounded bg-surface-2 px-2 py-1 text-text-1 hover:bg-surface-3"
+      >
+        Add Reels
+      </button>
+      <button
+        type="button"
+        data-testid="game-spin"
+        onClick={() => emitSceneSpin(activeGameId)}
+        className="rounded bg-surface-2 px-2 py-1 text-text-1 hover:bg-surface-3"
+      >
+        Spin
+      </button>
     </div>
-  );
+    <iframe ref={frameRef} data-testid="game-engine-frame" title="Game scene preview" src={src} className="h-full w-full flex-1 border-0" />
+  </div>
+);
 ```
 
 > Use only token classes that already exist in `studio/frontend/src/styles.css` /
@@ -1575,9 +1591,11 @@ git commit -m "feat(reels): studio bridge.spin, socket wiring, and Game-pane con
 ## Task 9: Authoritative e2e — add reels, render grid, spin to server outcome
 
 **Files:**
+
 - Create: `studio/frontend/e2e/reels.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the full live-ish stack (replay backend `8000+offset`, studio `4200+offset`, engine `4300+offset`); the dev hooks `window.__gameActiveId`, `window.__gameLastSpinOutcome`, and the cross-origin frame globals `__engineModel` / `__engineModules`.
 
 This is the behavioral contract (per `AGENTS.md`): assert the **observable end-state** — the rendered grid reconciles to the server's outcome — never merely that a spin was dispatched.
@@ -1636,9 +1654,7 @@ test('Add Reels projects a color-coded grid; Spin lands on the server outcome', 
 
   // 1. Add Reels -> the declaration projects cells into the engine model.
   await page.getByTestId('game-add-reels').click();
-  await expect
-    .poll(() => frame.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:cell:0:0'] != null), { timeout: 20000 })
-    .toBe(true);
+  await expect.poll(() => frame.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:cell:0:0'] != null), { timeout: 20000 }).toBe(true);
 
   // The grid is color-coded + labeled: cell carries a hex fill and a label.
   const cell = await frame.evaluate(() => (window as any).__engineModel.toDocument().nodes['reels:cell:0:0'].props);

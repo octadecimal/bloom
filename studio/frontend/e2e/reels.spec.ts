@@ -47,9 +47,7 @@ test('Add Reels projects a color-coded grid; Spin lands on the server outcome', 
 
   // 1. Add Reels -> the declaration projects cells into the engine model.
   await page.getByTestId('game-add-reels').click();
-  await expect
-    .poll(() => frame.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:cell:0:0'] != null), { timeout: 20000 })
-    .toBe(true);
+  await expect.poll(() => frame.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:cell:0:0'] != null), { timeout: 20000 }).toBe(true);
 
   // The grid is color-coded + labeled: cell carries a hex fill and a label.
   const cell = await frame.evaluate(() => (window as any).__engineModel.toDocument().nodes['reels:cell:0:0'].props);

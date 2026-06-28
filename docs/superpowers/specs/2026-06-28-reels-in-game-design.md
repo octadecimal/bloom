@@ -27,13 +27,13 @@ persisting the last landed grid across reloads, multi-module orchestration, payo
 
 ## 2. Key decisions (resolved in brainstorming)
 
-| # | Decision | Choice |
-|---|----------|--------|
-| 1 | How reels attach to a game | **Declarative** — a `modules` declaration on the scene document |
-| 2 | Where the round outcome comes from | **Trusted math kernel** — single-round `evaluate()` of the game's `SlotModel` |
-| 3 | How cells render | **Color-coded per symbol + label** (legible outcome) |
-| 4 | Spin trigger & motion | **Spin button** + keep the existing #103 settle animation |
-| 5 | Button placement | **Studio Game pane** (defer the in-game Preact overlay) |
+| #   | Decision                           | Choice                                                                        |
+| --- | ---------------------------------- | ----------------------------------------------------------------------------- |
+| 1   | How reels attach to a game         | **Declarative** — a `modules` declaration on the scene document               |
+| 2   | Where the round outcome comes from | **Trusted math kernel** — single-round `evaluate()` of the game's `SlotModel` |
+| 3   | How cells render                   | **Color-coded per symbol + label** (legible outcome)                          |
+| 4   | Spin trigger & motion              | **Spin button** + keep the existing #103 settle animation                     |
+| 5   | Button placement                   | **Studio Game pane** (defer the in-game Preact overlay)                       |
 
 ## 3. The architectural pivot: declaration persists, cells are derived
 

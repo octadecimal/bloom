@@ -33,7 +33,9 @@ function recordingFakeHost(): { host: IModuleHost; handles: Map<string, IDisplay
   const emitted: Op[][] = [];
   const host: IModuleHost = {
     snapshot: () => ({ version: 1, nodes: {}, edges: [] }),
-    emit: (ops) => { emitted.push(ops); },
+    emit: (ops) => {
+      emitted.push(ops);
+    },
     resolve: (id) => {
       if (!handles.has(id)) handles.set(id, fakeHandle());
       return handles.get(id)!;
@@ -117,7 +119,11 @@ describe('ReelsModule behavior', () => {
 
   it('lands the outcome symbols colors+labels via setProp on settle', () => {
     const { host, emitted } = recordingFakeHost();
-    const m = new ReelsModule({ id: 'm', host, config: { rows: 1, cols: 1, symbols: ['A'], cellSize: 100, spacing: 0, originX: 0, originY: 0, parentId: 'root', buffer: 1 } });
+    const m = new ReelsModule({
+      id: 'm',
+      host,
+      config: { rows: 1, cols: 1, symbols: ['A'], cellSize: 100, spacing: 0, originX: 0, originY: 0, parentId: 'root', buffer: 1 },
+    });
     m.startSpinning();
     m.stopSpinning({ grid: [['9']] });
     for (let i = 0; i < 240; i++) m.update(16);

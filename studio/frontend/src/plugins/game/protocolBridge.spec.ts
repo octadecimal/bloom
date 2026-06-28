@@ -81,9 +81,6 @@ describe('ProtocolBridge', () => {
     bridge.spin({ grid: [['0', '1']] });
     expect(post).not.toHaveBeenCalled();
     bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
-    expect(post).toHaveBeenCalledWith(
-      expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1']] } }),
-      ENGINE,
-    );
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1']] } }), ENGINE);
   });
 });

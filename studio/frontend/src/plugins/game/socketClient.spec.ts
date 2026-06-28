@@ -80,10 +80,7 @@ describe('game socket spin outcome', () => {
 
     applySpinOutcome({ gameId: 'g1', outcome: { grid: [['0', '1', '2']] } });
 
-    expect(post).toHaveBeenCalledWith(
-      expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1', '2']] } }),
-      'http://localhost:4300',
-    );
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1', '2']] } }), 'http://localhost:4300');
   });
 
   it('ignores a spin outcome for an inactive game', () => {
