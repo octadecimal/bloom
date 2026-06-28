@@ -21,6 +21,7 @@ from app.gdd.hub import GddHub
 from app.gdd.sockets import register_gdd_handlers
 from app.gdd.store import GddStore
 from app.scene.hub import GameSceneHub
+from app.scene.capture import SceneCaptureBroker
 from app.scene.sockets import register_scene_handlers
 from app.scene.store import GameSceneStore
 from app.simulator.store import SlotModelStore
@@ -138,7 +139,9 @@ def build(settings: Settings) -> AppContext:
 
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
-    register_scene_handlers(sio, scene_hub)
+    capture_broker = SceneCaptureBroker(sio)
+    fastapi_app.state.capture_broker = capture_broker
+    register_scene_handlers(sio, scene_hub, capture_broker)
     register_sim_handlers(sio, sim_hub)
     register_tuner_handlers(sio, tuner_hub)
 

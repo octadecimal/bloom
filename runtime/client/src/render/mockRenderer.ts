@@ -46,4 +46,9 @@ export class MockRenderer implements IRenderer {
       this.tickCbs = this.tickCbs.filter((f) => f !== cb);
     };
   }
+
+  async capture(): Promise<string> {
+    this.calls.push(['capture']);
+    return 'data:image/png;base64,MOCK';
+  }
 }

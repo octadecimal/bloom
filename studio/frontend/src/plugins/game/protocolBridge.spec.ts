@@ -54,4 +54,25 @@ describe('ProtocolBridge', () => {
     bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
     expect(post).toHaveBeenCalledTimes(1);
   });
+
+  it('sends a capture request carrying the given id', () => {
+    const { bridge, post } = setup();
+    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
+    bridge.capture('cap1');
+    expect(post).toHaveBeenCalledWith({ v: 1, kind: 'capture', id: 'cap1' }, ENGINE);
+  });
+
+  it('surfaces a captured png via onCaptured', () => {
+    const onCaptured = vi.fn();
+    const bridge = new ProtocolBridge({ post: vi.fn(), engineOrigin: ENGINE, onCaptured });
+    bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'data:image/png;base64,AAAA' }, ENGINE);
+    expect(onCaptured).toHaveBeenCalledWith({ id: 'cap1', png: 'data:image/png;base64,AAAA' });
+  });
+
+  it('ignores a captured message from a foreign origin', () => {
+    const onCaptured = vi.fn();
+    const bridge = new ProtocolBridge({ post: vi.fn(), engineOrigin: ENGINE, onCaptured });
+    bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'x' }, 'http://evil:9999');
+    expect(onCaptured).not.toHaveBeenCalled();
+  });
 });

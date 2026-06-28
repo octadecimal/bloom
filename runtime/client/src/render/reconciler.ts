@@ -16,6 +16,11 @@ export class Reconciler {
     for (const change of changes) await this.applyOne(change);
   }
 
+  /** Capture the current rendered frame as a PNG data URL (render-settled). */
+  capture(): Promise<string> {
+    return this.renderer.capture();
+  }
+
   private async applyOne(change: IChange): Promise<void> {
     switch (change.kind) {
       case 'nodeCreated':

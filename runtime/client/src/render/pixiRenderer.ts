@@ -6,6 +6,10 @@ import type { IViewport } from './viewport';
 type DisplayObject = Container | Sprite;
 type Vec2 = { x?: number; y?: number };
 
+/** Canvas background — used both at init and as the capture clearColor so an
+ *  extracted frame matches what the user sees. */
+const BACKGROUND_COLOR = '#0b0b0c';
+
 export function applyPixiProp(obj: DisplayObject, path: string, value: JsonValue): void {
   switch (path) {
     case 'position':
@@ -72,7 +76,7 @@ export class PixiRenderer implements IRenderer {
     await app.init({
       width,
       height,
-      background: '#0b0b0c',
+      background: BACKGROUND_COLOR,
       antialias: true,
       resolution: Math.min(globalThis.devicePixelRatio ?? 1, 2),
       autoDensity: true,
@@ -195,6 +199,25 @@ export class PixiRenderer implements IRenderer {
         }
       },
     };
+  }
+
+  async capture(): Promise<string> {
+    const app = this.app;
+    if (!app) return '';
+    // Render-settled barrier (spec §2): the protocol acks a change after the
+    // reconciler mutates the scene graph but BEFORE Pixi paints it. Wait one
+    // animation frame so the just-applied ops (texture uploads, new bounds) are
+    // drawn, then extract — otherwise the critic would grade a stale frame.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    // Capture the full visible canvas as the user sees it (framing + negative
+    // space + background), not just the content bounding box — composition
+    // critique needs the framed scene, and a sparse/early scene must still
+    // yield a full frame rather than a near-empty crop.
+    return app.renderer.extract.base64({
+      target: app.stage,
+      frame: app.renderer.screen,
+      clearColor: BACKGROUND_COLOR,
+    });
   }
 
   onTick(cb: (dtMs: number) => void): () => void {

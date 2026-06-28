@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../../state/rootStore';
 import { GAME_PLUGIN_ID, gameSlice, makeInitialState } from './state';
 import { SCENE_STORE_ID, sceneStore, makeInitialSceneState } from '../../scene/sceneStore';
-import { applyInbound } from './socketClient';
+import { applyInbound, applyCaptureRequest } from './socketClient';
 import { setBridge, ProtocolBridge } from './protocolBridge';
 
 beforeEach(() => {
@@ -44,5 +44,29 @@ describe('game socket inbound', () => {
     setBridge(new ProtocolBridge({ post, engineOrigin: 'http://localhost:4300' }));
     applyInbound('scene_op', { gameId: 'other', op: { kind: 'addNode', id: 's', type: 'Sprite' } });
     expect(sceneStore().document.nodes.get({ noproxy: true })).not.toHaveProperty('s');
+  });
+});
+
+describe('game socket capture relay', () => {
+  it('scene_capture_request forwards a capture to the active bridge', () => {
+    const post = vi.fn();
+    const bridge = new ProtocolBridge({ post, engineOrigin: 'http://localhost:4300' });
+    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, 'http://localhost:4300');
+    setBridge(bridge);
+
+    applyCaptureRequest({ gameId: 'g1', captureId: 'cap1' });
+
+    expect(post).toHaveBeenCalledWith({ v: 1, kind: 'capture', id: 'cap1' }, 'http://localhost:4300');
+  });
+
+  it('ignores a capture request for an inactive game', () => {
+    const post = vi.fn();
+    const bridge = new ProtocolBridge({ post, engineOrigin: 'http://localhost:4300' });
+    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, 'http://localhost:4300');
+    setBridge(bridge);
+
+    applyCaptureRequest({ gameId: 'other', captureId: 'cap1' });
+
+    expect(post).not.toHaveBeenCalled();
   });
 });

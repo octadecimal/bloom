@@ -1,7 +1,7 @@
 from app.scene.document import OpError
 
 
-def register_scene_handlers(sio, hub):
+def register_scene_handlers(sio, hub, broker):
     @sio.on("join_scene")
     async def join_scene(sid, data):
         await hub.attach(data["gameId"], sid)
@@ -40,3 +40,9 @@ def register_scene_handlers(sio, hub):
                 {"gameId": game_id, "code": e.code, "op": op},
                 to=sid,
             )
+
+    @sio.on("scene_capture_result")
+    async def scene_capture_result(sid, data):
+        png = data.get("png")
+        if broker is not None and png:
+            broker.resolve_capture(data.get("captureId"), png)
