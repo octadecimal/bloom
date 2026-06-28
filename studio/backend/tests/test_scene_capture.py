@@ -84,3 +84,46 @@ async def test_scene_capture_result_handler_resolves_the_broker():
     raw = b"PNGpayload"
     await sio.handlers["scene_capture_result"]("sid", {"captureId": capture_id, "png": _url(raw)})
     assert await task == raw
+
+
+@pytest.mark.asyncio
+async def test_scene_capture_result_handler_broker_none_does_not_raise():
+    """broker=None must not raise AttributeError even if the event fires."""
+    sio = _FakeSio()
+
+    class _Hub:
+        async def attach(self, *a, **k): ...
+        async def apply_op(self, *a, **k): ...
+
+    register_scene_handlers(sio, _Hub(), None)
+    # Should complete without raising
+    await sio.handlers["scene_capture_result"](
+        "sid", {"captureId": "cap1", "png": "data:image/png;base64,QUJD"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_scene_capture_result_handler_missing_png_is_a_no_op():
+    """A scene_capture_result event without a png key must not resolve the future."""
+    sio = _FakeSio()
+    broker = SceneCaptureBroker(sio)
+
+    class _Hub:
+        async def attach(self, *a, **k): ...
+        async def apply_op(self, *a, **k): ...
+
+    register_scene_handlers(sio, _Hub(), broker)
+
+    task = asyncio.create_task(broker.request_capture("g1", timeout=5))
+    await asyncio.sleep(0)
+    capture_id = sio.emits[-1][1]["captureId"]
+
+    # Fire the event with no png key — must be a no-op
+    await sio.handlers["scene_capture_result"]("sid", {"captureId": capture_id})
+    await asyncio.sleep(0)
+    assert not task.done(), "future must remain pending when png is missing"
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        pass
