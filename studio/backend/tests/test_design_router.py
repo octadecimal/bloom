@@ -79,3 +79,12 @@ def test_router_replace_uses_read_scene_to_target_then_regenerates_in_place():
     assert "on the left" in low
     # branch 4 still warns against duplicating something already placed
     assert "duplicate" in low
+
+
+def test_router_binds_adjust_element_for_layout_edits():
+    spec = build_design_router_spec()
+    assert "adjust_element" in spec.tools
+    body = spec.body.lower()
+    assert "adjust_element" in body
+    # branch 5 must distinguish a pure layout change from an art regenerate
+    assert "move" in body or "reposition" in body or "resize" in body
