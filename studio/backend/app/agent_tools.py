@@ -957,13 +957,12 @@ def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
 async def _regenerate_and_rebind(
     ctx: ToolContext, *, asset, texture_id: str | None, new_prompt: str | None,
 ) -> str | None:
-    """Regenerate an asset's art and rewrite a bound Texture's src in place.
+    """Regenerate an asset's art, select the newest generation, and rebind any
+    bound scene Texture to it via the canonical rebinder.
 
-    Updates the asset prompt (when ``new_prompt`` is truthy), regenerates and
-    selects the newest generation, then issues ONE ``setProp`` writing the new
-    ``image_ref`` into ``texture_id`` (skipped when ``texture_id is None``).
-    Returns the new ``image_ref``, or ``None`` if regeneration produced no image
-    — in which case the scene is left untouched.
+    ``texture_id`` is a presence signal: ``None`` regenerates the board art but
+    skips the scene write (preserving the "regenerated but not placed" message).
+    Returns the new ``image_ref``, or ``None`` if regeneration produced no image.
     """
     if new_prompt:
         await ctx.asset_store.update_asset(asset.id, prompt=new_prompt)
@@ -974,11 +973,11 @@ async def _regenerate_and_rebind(
     newest = refreshed.generations[-1]
     await ctx.asset_store.select_generation(asset.id, newest.id)
     if texture_id is not None:
-        await ctx.scene_hub.apply_op(
-            ctx.game_id,
-            {"kind": "setProp", "id": texture_id, "path": "src",
-             "value": newest.image_ref},
-        )
+        refreshed = await ctx.asset_store.get_asset(asset.id)
+        # Hydrate the selection so selected_image_ref resolves correctly even
+        # when the store's re-read doesn't propagate it synchronously.
+        refreshed.selected_generation_id = newest.id
+        await rebind_asset_textures(ctx.scene_store, ctx.scene_hub, ctx.game_id, refreshed)
     return newest.image_ref
 
 
