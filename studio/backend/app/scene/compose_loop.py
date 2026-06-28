@@ -87,6 +87,7 @@ async def run_compose(
     """Drive the bounded compose loop. Returns a tally + per-step notes."""
     result = ComposeResult()
     regen_left = bounds.regen_budget
+    edit_history: dict[str, list[dict]] = {}
 
     for element in elements:
         await deps.place(element)
@@ -136,10 +137,11 @@ async def run_compose(
                 break
 
             scene = await deps.scene_context()
+            window_history = {h: edit_history[h] for h in window if h in edit_history}
             critique = await deps.critique(CritiqueRequest(
                 frame_png=frame, scene=scene, target_handle=target,
                 window=window, theme=theme, regen_budget_left=regen_left,
-                pass_index=pass_index,
+                pass_index=pass_index, edit_history=window_history,
             ))
             result.passes += 1
             if critique.done or not critique.edits:
@@ -151,6 +153,11 @@ async def run_compose(
                     result.notes.append(
                         f"rejected {edit.action} on {edit.target_handle} "
                         f"(outside window {window})")
+                    continue
+                if len(edit_history.get(edit.target_handle, [])) >= bounds.max_edits_per_element:
+                    result.rejected += 1
+                    result.notes.append(
+                        f"refused {edit.action} {edit.target_handle} (edit cap reached)")
                     continue
                 if edit.action == "regenerate":
                     if regen_left <= 0:
@@ -169,5 +176,10 @@ async def run_compose(
                     result.notes.append(
                         f"{edit.action} {edit.target_handle}: {edit.why}")
                 result.edits_applied += 1
+                edit_history.setdefault(edit.target_handle, []).append({
+                    "action": edit.action,
+                    "params": edit.params.model_dump(exclude_none=True),
+                    "why": edit.why,
+                })
 
     return result

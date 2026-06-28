@@ -11,7 +11,7 @@ critic has its own seam (this module) and its own cassette format
 
 import base64
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -68,6 +68,7 @@ class CritiqueRequest:
     theme: str = ""
     regen_budget_left: int = 0
     pass_index: int = 0
+    edit_history: dict = field(default_factory=dict)
 
 
 class SceneCritic(Protocol):
@@ -121,7 +122,11 @@ CRITIC_SYSTEM_PROMPT = (
     "- Edit ONLY elements inside the provided editable look-behind WINDOW. Never "
     "target a handle that is not in the window.\n"
     "- When the composition is acceptable, return done=true with an empty edit "
-    "list. Do not invent busywork edits.\n\n"
+    "list. Do not invent busywork edits.\n"
+    "- CONVERGE. You are shown 'edit_history' — your prior edits to each element "
+    "this build. Do NOT undo a move you already made, and do not oscillate an "
+    "element back and forth. If an element has already been adjusted a few times, "
+    "leave it unless it is clearly still wrong; prefer to return done=true.\n\n"
     "Return: {done, edits:[{target_handle, action, params, why}]} where action is "
     "one of move|scale|reorder|regenerate and params carries x, y (move), scale "
     "(scale), or z (reorder)."
@@ -143,6 +148,7 @@ def build_critic_messages(request: CritiqueRequest) -> list[BaseMessage]:
         "just_added": request.target_handle,
         "editable_window": request.window,
         "regen_budget_left": request.regen_budget_left,
+        "edit_history": request.edit_history,
         "scene": request.scene,
     }
     text = (

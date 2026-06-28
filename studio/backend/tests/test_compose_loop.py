@@ -231,3 +231,38 @@ def test_bounds_and_result_have_new_quality_fields():
     # still the established defaults
     assert (b.look_behind, b.max_passes, b.regen_budget) == (3, 3, 5)
     assert ComposeResult().corrections_applied == 0
+
+
+@pytest.mark.asyncio
+async def test_edit_history_is_passed_to_the_critic():
+    seen = {}
+
+    class HistoryDeps(FakeDeps):
+        async def critique(self, request):
+            seen[request.pass_index] = dict(request.edit_history)
+            return await super().critique(request)
+
+    script = {"logo": [
+        Critique(edits=[CritiqueEdit(target_handle="logo", action="move",
+                                     params=EditParams(x=10, y=10), why="nudge")]),
+        Critique(done=True),
+    ]}
+    deps = HistoryDeps(script)
+    await run_compose([_el("logo")], "pirate", deps)
+    assert seen[0] == {}                       # nothing applied yet on pass 0
+    assert "logo" in seen[1]                    # pass 1 sees the pass-0 edit
+    assert seen[1]["logo"][0]["action"] == "move"
+
+
+@pytest.mark.asyncio
+async def test_per_element_edit_cap_refuses_further_edits():
+    forever = [Critique(edits=[CritiqueEdit(
+        target_handle="logo", action="move",
+        params=EditParams(x=1, y=1), why="churn")]) for _ in range(10)]
+    deps = FakeDeps({"logo": forever})
+    result = await run_compose(
+        [_el("logo")], "pirate", deps,
+        ComposeBounds(max_passes=5, max_edits_per_element=2))
+    assert result.edits_applied == 2           # capped
+    assert result.rejected >= 1
+    assert any("edit cap" in n for n in result.notes)
