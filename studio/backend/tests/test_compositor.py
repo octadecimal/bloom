@@ -2,7 +2,7 @@ from io import BytesIO
 
 from PIL import Image
 
-from app.scene.compositor import collect_scene_images, composite_scene, _texture_of
+from app.scene.compositor import collect_scene_images, composite_scene, sprite_box, _texture_of
 
 
 def _png(w: int, h: int, color) -> bytes:
@@ -68,6 +68,19 @@ def test_composite_skips_unbound_or_missing_images():
     # only bg image present; logo image missing => logo skipped, no crash
     img = Image.open(BytesIO(composite_scene(doc, {"tex.bg": _png(200, 100, (255, 0, 0, 255))}))).convert("RGBA")
     assert img.getpixel((150, 50))[:3] == (255, 0, 0)
+
+
+def test_sprite_box_anchors_and_scales():
+    # 40x40 sprite, anchor centre, scale 2 => 80x80, centred at (150,50)
+    props = {"position": {"x": 150, "y": 50}, "anchor": {"x": 0.5, "y": 0.5},
+             "scale": {"x": 2.0, "y": 2.0}}
+    assert sprite_box(props, (40, 40), (200, 100)) == (110, 10, 80, 80)
+
+
+def test_sprite_box_top_left_anchor():
+    props = {"position": {"x": 10, "y": 20}, "anchor": {"x": 0.0, "y": 0.0},
+             "scale": {"x": 1.0, "y": 1.0}}
+    assert sprite_box(props, (30, 30), (200, 100)) == (10, 20, 30, 30)
 
 
 def test_collect_scene_images_reads_media(tmp_path):

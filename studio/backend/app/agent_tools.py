@@ -8,9 +8,9 @@ from app.config import get_settings
 from app.gdd.store import GddEditError
 from app.scene.document import OpError, unreachable_nodes, empty_document
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
-from app.scene.compose_loop import BuildElement, run_compose
+from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.critic import CritiqueRequest, EditParams
-from app.scene.compositor import collect_scene_images, composite_scene
+from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
 from app.simulator.targets import derive_target, TargetGap
 from app.tuner.models import TuningParams
@@ -446,6 +446,46 @@ class _SceneComposeDeps:
         images = collect_scene_images(document, media_dir)
         return composite_scene(document, images)
 
+    async def out_of_frame(self) -> list[FrameCorrection]:
+        document = await self._ctx.scene_store.get_document(self._ctx.game_id)
+        if not document:
+            return []
+        media_dir = get_settings().media_dir
+        images = collect_scene_images(document, media_dir)
+        nodes = document.get("nodes") or {}
+        root = next((n for n in nodes.values() if n.get("type") == "Root"), None)
+        rp = (root or {}).get("props") or {}
+        cw = int(rp.get("width", 1280) or 1280)
+        ch = int(rp.get("height", 720) or 720)
+        out: list[FrameCorrection] = []
+        for nid, n in nodes.items():
+            if n.get("type") != "Sprite":
+                continue
+            tex_id = _texture_of(document, nid)
+            if tex_id is None or tex_id not in images:
+                continue
+            try:
+                from io import BytesIO
+                from PIL import Image
+                im = Image.open(BytesIO(images[tex_id]))
+                sw, sh = im.width, im.height
+            except Exception:
+                continue
+            props = n.get("props") or {}
+            tlx, tly, rw, rh = sprite_box(props, (sw, sh), (cw, ch))
+            ntlx = min(max(tlx, 0), max(0, cw - rw))
+            ntly = min(max(tly, 0), max(0, ch - rh))
+            if (ntlx, ntly) == (tlx, tly):
+                continue
+            anchor = props.get("anchor") or {}
+            ax = float(anchor.get("x", 0.5))
+            ay = float(anchor.get("y", 0.5))
+            handle = nid[len("spr."):] if nid.startswith("spr.") else nid
+            out.append(FrameCorrection(
+                handle=handle, x=ntlx + ax * rw, y=ntly + ay * rh,
+                reason="spilled off the canvas edge"))
+        return out
+
     async def critique_asset(self, target_handle: str, attempt: int = 0):
         document = await self._ctx.scene_store.get_document(self._ctx.game_id)
         media_dir = get_settings().media_dir
@@ -485,6 +525,7 @@ def format_compose_summary(result) -> str:
             f"{result.passes} critique pass(es): {result.edits_applied} edit(s) "
             f"applied, {result.regens_spent} regeneration(s) "
             f"({result.assets_regenerated} asset regeneration(s)), "
+            f"{result.corrections_applied} in-frame correction(s), "
             f"{result.rejected} edit(s) refused.")
     body = "\n".join(f"- {n}" for n in result.notes)
     return head + ("\n" + body if body else "")

@@ -33,6 +33,15 @@ class ComposeBounds:
     max_edits_per_element: int = 4  # deterministic per-element critic-edit cap
 
 
+class FrameCorrection(BaseModel):
+    """A deterministic clamp that brings an off-canvas sprite back in frame."""
+
+    handle: str
+    x: float
+    y: float
+    reason: str
+
+
 class BuildElement(BaseModel):
     """One element of a build list — mirrors `generate_and_place` args 1:1 so the
     orchestrator can forward it straight to the placement verb."""
@@ -76,6 +85,7 @@ class ComposeDeps(Protocol):
     async def critique(self, request: CritiqueRequest) -> Critique: ...
     async def adjust(self, handle: str, params: EditParams) -> str: ...
     async def regenerate(self, handle: str) -> str: ...
+    async def out_of_frame(self) -> list[FrameCorrection]: ...
 
 
 async def run_compose(
@@ -128,6 +138,11 @@ async def run_compose(
 
         # Composition passes: critique the composited scene and apply edits.
         for pass_index in range(bounds.max_passes):
+            for corr in await deps.out_of_frame():
+                if corr.handle in window:
+                    await deps.adjust(corr.handle, EditParams(x=corr.x, y=corr.y))
+                    result.corrections_applied += 1
+                    result.notes.append(f"{corr.handle}: {corr.reason}, nudged into frame")
             try:
                 frame = await deps.render_scene()
             except Exception as exc:

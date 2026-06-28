@@ -59,6 +59,27 @@ def collect_scene_images(document: dict, media_dir: str) -> dict[str, bytes]:
     return out
 
 
+def sprite_box(
+    props: dict, sprite_size: tuple[int, int], canvas: tuple[int, int]
+) -> tuple[int, int, int, int]:
+    """(left, top, width, height) of a sprite in canvas pixels — the single source
+    of box math for both the compositor and the keep-in-frame guard."""
+    sw, sh = sprite_size
+    cw, ch = canvas
+    scale = props.get("scale") or {}
+    sx = float(scale.get("x", 1.0))
+    sy = float(scale.get("y", 1.0))
+    rw = max(1, round(sw * sx))
+    rh = max(1, round(sh * sy))
+    anchor = props.get("anchor") or {}
+    ax = float(anchor.get("x", 0.5))
+    ay = float(anchor.get("y", 0.5))
+    pos = props.get("position") or {}
+    px = float(pos.get("x", cw / 2))
+    py = float(pos.get("y", ch / 2))
+    return (round(px - ax * rw), round(py - ay * rh), rw, rh)
+
+
 def composite_scene(
     document: dict,
     images: dict[str, bytes],
@@ -91,21 +112,9 @@ def composite_scene(
         except Exception:
             continue
         props = n.get("props") or {}
-        scale = props.get("scale") or {}
-        sx = float(scale.get("x", 1.0))
-        sy = float(scale.get("y", 1.0))
-        rw = max(1, round(sprite.width * sx))
-        rh = max(1, round(sprite.height * sy))
+        tlx, tly, rw, rh = sprite_box(props, (sprite.width, sprite.height), (cw, ch))
         if (rw, rh) != (sprite.width, sprite.height):
             sprite = sprite.resize((rw, rh))
-        anchor = props.get("anchor") or {}
-        ax = float(anchor.get("x", 0.5))
-        ay = float(anchor.get("y", 0.5))
-        pos = props.get("position") or {}
-        px = float(pos.get("x", cw / 2))
-        py = float(pos.get("y", ch / 2))
-        tlx = round(px - ax * rw)
-        tly = round(py - ay * rh)
         # Paste onto a full-canvas transparent layer (clips off-canvas regions),
         # then alpha-composite so partial transparency blends correctly.
         layer = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))

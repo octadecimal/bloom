@@ -26,6 +26,7 @@ class FakeDeps:
         self.adjusts: list[tuple[str, EditParams]] = []
         self.regens: list[str] = []
         self.renders = 0
+        self.corrections = []
         raw = asset_verdicts or {}
         self.asset_verdicts = {
             h: (v if isinstance(v, list) else [v]) for h, v in raw.items()
@@ -68,6 +69,9 @@ class FakeDeps:
     async def regenerate(self, handle: str) -> str:
         self.regens.append(handle)
         return f"regenerated {handle}"
+
+    async def out_of_frame(self):
+        return list(getattr(self, "corrections", []))
 
 
 def _el(slot: str) -> BuildElement:
@@ -252,6 +256,21 @@ async def test_edit_history_is_passed_to_the_critic():
     assert seen[0] == {}                       # nothing applied yet on pass 0
     assert "logo" in seen[1]                    # pass 1 sees the pass-0 edit
     assert seen[1]["logo"][0]["action"] == "move"
+
+
+@pytest.mark.asyncio
+async def test_in_frame_guard_clamps_and_counts_separately():
+    from app.scene.compose_loop import FrameCorrection
+    deps = FakeDeps({"logo": [Critique(done=True)]})
+    deps.corrections = [FrameCorrection(handle="logo", x=600, y=340,
+                                        reason="logo spilled off the right edge")]
+    result = await run_compose(
+        [_el("logo")], "pirate", deps, ComposeBounds(max_edits_per_element=0))
+    # applied via adjust, counted as a correction, NOT as a critic edit
+    assert ("logo", EditParams(x=600, y=340)) in deps.adjusts
+    assert result.corrections_applied == 1
+    assert result.edits_applied == 0
+    assert any("into frame" in n for n in result.notes)
 
 
 @pytest.mark.asyncio
