@@ -1,0 +1,4 @@
+[
+  { "role": "logo", "ok": false, "action": "regenerate", "reason": "wordmark text is garbled" },
+  { "role": "logo", "ok": true, "action": "keep", "reason": "wordmark now reads correctly" }
+]
