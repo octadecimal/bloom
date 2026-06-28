@@ -131,6 +131,7 @@ export class PixiRenderer implements IRenderer {
     if (!obj || id === this.rootId) return;
     obj.removeFromParent();
     obj.destroy();
+    this.labels.get(id)?.destroy();
     this.labels.delete(id);
     this.objects.delete(id);
   }

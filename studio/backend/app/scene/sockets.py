@@ -7,7 +7,7 @@ from app.scene.reels_spin import DEMO_SLOT_MODEL, derive_reels_config, map_grid
 _DEFAULT_CANVAS = (1080, 1920)
 
 
-def register_scene_handlers(sio, hub, broker, model_store=None, spin_runner=None):
+def register_scene_handlers(sio, hub, broker, model_store, spin_runner):
     @sio.on("join_scene")
     async def join_scene(sid, data):
         await hub.attach(data["gameId"], sid)

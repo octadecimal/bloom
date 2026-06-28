@@ -21,18 +21,34 @@ describe('createModuleHost', () => {
     expect(model.getNode('root')).toBeTruthy();
   });
 
-  it('emit is best-effort: a rejected batch does not throw and leaves model unchanged', () => {
+  it('emit is best-effort for unknown_node: a missing-parent connect does not throw and leaves model unchanged', () => {
     const { model, host } = setup();
-    host.emit([{ kind: 'addNode', id: 'root', type: 'Root', props: {} }]);
-    // batch with duplicate id — GraphModel rejects atomically; emit must swallow the error
+    // 'ghost' does not exist → connect throws unknown_node, which is the only swallowed transient
     expect(() =>
       host.emit([
-        { kind: 'addNode', id: 'a', type: 'Container', props: {} },
-        { kind: 'addNode', id: 'a', type: 'Container', props: {} },
+        {
+          kind: 'connect',
+          edgeId: 'e',
+          type: 'child',
+          from: { node: 'ghost', port: 'children' },
+          to: { node: 'realChild', port: 'parent' },
+        },
       ]),
     ).not.toThrow();
-    // model is unchanged — neither 'a' was added
-    expect(model.getNode('a')).toBeUndefined();
+    // model is unchanged — no edge was added
+    expect(model.toDocument().edges).toHaveLength(0);
+  });
+
+  it('emit rethrows on genuine op bugs (duplicate_id is not swallowed)', () => {
+    const { host } = setup();
+    host.emit([{ kind: 'addNode', id: 'root', type: 'Root', props: {} }]);
+    // duplicate_id is a real bug, not a transient; emit must rethrow
+    expect(() =>
+      host.emit([
+        { kind: 'addNode', id: 'dup', type: 'Sprite', props: {} },
+        { kind: 'addNode', id: 'dup', type: 'Sprite', props: {} },
+      ]),
+    ).toThrow();
   });
 
   it('snapshot reflects the current model document', () => {
