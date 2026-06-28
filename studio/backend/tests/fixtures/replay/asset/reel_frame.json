@@ -1,1 +1,4 @@
-{ "role": "reel frame", "ok": false, "action": "regenerate", "reason": "reel frame reads empty for its role" }
+[
+  { "role": "reel frame", "ok": false, "action": "regenerate", "reason": "reel frame reads empty for its role" },
+  { "role": "reel frame", "ok": true, "action": "keep", "reason": "reel frame now reads correctly" }
+]

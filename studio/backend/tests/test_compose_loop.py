@@ -26,7 +26,11 @@ class FakeDeps:
         self.adjusts: list[tuple[str, EditParams]] = []
         self.regens: list[str] = []
         self.renders = 0
-        self.asset_verdicts = asset_verdicts or {}
+        self.corrections = []
+        raw = asset_verdicts or {}
+        self.asset_verdicts = {
+            h: (v if isinstance(v, list) else [v]) for h, v in raw.items()
+        }
 
     async def place(self, element: BuildElement) -> str:
         self.placements.append(element.slot)
@@ -45,9 +49,12 @@ class FakeDeps:
             raise RuntimeError("render failed")
         return b"\x89PNG-fake-frame"
 
-    async def critique_asset(self, target_handle: str):
+    async def critique_asset(self, target_handle: str, attempt: int = 0):
         from app.scene.asset_critic import AssetVerdict
-        return self.asset_verdicts.get(target_handle, AssetVerdict())
+        seq = self.asset_verdicts.get(target_handle)
+        if not seq:
+            return AssetVerdict()
+        return seq[min(attempt, len(seq) - 1)]
 
     async def critique(self, request) -> Critique:
         passes = self._script.get(request.target_handle, [])
@@ -62,6 +69,9 @@ class FakeDeps:
     async def regenerate(self, handle: str) -> str:
         self.regens.append(handle)
         return f"regenerated {handle}"
+
+    async def out_of_frame(self):
+        return list(getattr(self, "corrections", []))
 
 
 def _el(slot: str) -> BuildElement:
@@ -158,33 +168,50 @@ async def test_render_failure_skips_critique_with_visible_note():
 
 
 @pytest.mark.asyncio
-async def test_bad_asset_is_regenerated_before_composition():
+async def test_bad_asset_regenerates_then_converges_on_rejudge():
     from app.scene.asset_critic import AssetVerdict
     deps = FakeDeps(
         {"logo": [Critique(done=True)]},
-        asset_verdicts={"logo": AssetVerdict(ok=False, action="regenerate", reason="empty")},
+        asset_verdicts={"logo": [
+            AssetVerdict(ok=False, action="regenerate", reason="garbled text"),
+            AssetVerdict(ok=True, action="keep", reason="fixed"),
+        ]},
     )
     result = await run_compose([_el("logo")], "pirate", deps)
-    assert deps.regens == ["logo"]                 # asset gate regenerated it
+    assert deps.regens == ["logo"]              # regenerated exactly once
     assert result.assets_regenerated == 1
-    assert result.regens_spent == 1                # shared budget
-    assert any("empty" in n for n in result.notes)
+    assert any("asset ok" in n for n in result.notes)   # converged
 
 
 @pytest.mark.asyncio
-async def test_bad_asset_regenerate_respects_shared_budget():
+async def test_bad_asset_rejudge_is_bounded_by_retries():
+    from app.scene.asset_critic import AssetVerdict
+    deps = FakeDeps(
+        {"logo": [Critique(done=True)]},
+        asset_verdicts={"logo": [AssetVerdict(ok=False, action="regenerate", reason="still bad")]},
+    )  # single verdict => always regenerate
+    result = await run_compose(
+        [_el("logo")], "pirate", deps, ComposeBounds(asset_regen_retries=2, regen_budget=5))
+    assert deps.regens == ["logo", "logo"]      # capped at asset_regen_retries
+    assert result.assets_regenerated == 2
+    assert any("retries exhausted" in n for n in result.notes)
+
+
+@pytest.mark.asyncio
+async def test_bad_asset_rejudge_respects_shared_budget():
     from app.scene.asset_critic import AssetVerdict
     deps = FakeDeps(
         {"a": [Critique(done=True)], "b": [Critique(done=True)]},
         asset_verdicts={
-            "a": AssetVerdict(ok=False, action="regenerate", reason="empty a"),
-            "b": AssetVerdict(ok=False, action="regenerate", reason="empty b"),
+            "a": [AssetVerdict(ok=False, action="regenerate", reason="bad a")],
+            "b": [AssetVerdict(ok=False, action="regenerate", reason="bad b")],
         },
     )
-    result = await run_compose([_el("a"), _el("b")], "pirate", deps, ComposeBounds(regen_budget=1))
-    assert deps.regens == ["a"]                     # only the first is funded
+    result = await run_compose(
+        [_el("a"), _el("b")], "pirate", deps, ComposeBounds(regen_budget=1))
+    assert deps.regens == ["a"]                 # only the first regen is funded
     assert result.assets_regenerated == 1
-    assert any("budget" in n for n in result.notes) # b's regen refused, noted
+    assert any("budget exhausted" in n for n in result.notes)
 
 
 @pytest.mark.asyncio
@@ -199,3 +226,62 @@ async def test_unloadable_asset_surfaces_visible_note_not_asset_ok():
     assert deps.regens == []
     assert any("couldn't load asset image for review" in n for n in result.notes)
     assert not any("logo: asset ok" in n for n in result.notes)
+
+
+def test_bounds_and_result_have_new_quality_fields():
+    b = ComposeBounds()
+    assert b.asset_regen_retries == 2
+    assert b.max_edits_per_element == 4
+    # still the established defaults
+    assert (b.look_behind, b.max_passes, b.regen_budget) == (3, 3, 5)
+    assert ComposeResult().corrections_applied == 0
+
+
+@pytest.mark.asyncio
+async def test_edit_history_is_passed_to_the_critic():
+    seen = {}
+
+    class HistoryDeps(FakeDeps):
+        async def critique(self, request):
+            seen[request.pass_index] = dict(request.edit_history)
+            return await super().critique(request)
+
+    script = {"logo": [
+        Critique(edits=[CritiqueEdit(target_handle="logo", action="move",
+                                     params=EditParams(x=10, y=10), why="nudge")]),
+        Critique(done=True),
+    ]}
+    deps = HistoryDeps(script)
+    await run_compose([_el("logo")], "pirate", deps)
+    assert seen[0] == {}                       # nothing applied yet on pass 0
+    assert "logo" in seen[1]                    # pass 1 sees the pass-0 edit
+    assert seen[1]["logo"][0]["action"] == "move"
+
+
+@pytest.mark.asyncio
+async def test_in_frame_guard_clamps_and_counts_separately():
+    from app.scene.compose_loop import FrameCorrection
+    deps = FakeDeps({"logo": [Critique(done=True)]})
+    deps.corrections = [FrameCorrection(handle="logo", x=600, y=340,
+                                        reason="logo spilled off the right edge")]
+    result = await run_compose(
+        [_el("logo")], "pirate", deps, ComposeBounds(max_edits_per_element=0))
+    # applied via adjust, counted as a correction, NOT as a critic edit
+    assert ("logo", EditParams(x=600, y=340)) in deps.adjusts
+    assert result.corrections_applied == 1
+    assert result.edits_applied == 0
+    assert any("into frame" in n for n in result.notes)
+
+
+@pytest.mark.asyncio
+async def test_per_element_edit_cap_refuses_further_edits():
+    forever = [Critique(edits=[CritiqueEdit(
+        target_handle="logo", action="move",
+        params=EditParams(x=1, y=1), why="churn")]) for _ in range(10)]
+    deps = FakeDeps({"logo": forever})
+    result = await run_compose(
+        [_el("logo")], "pirate", deps,
+        ComposeBounds(max_passes=5, max_edits_per_element=2))
+    assert result.edits_applied == 2           # capped
+    assert result.rejected >= 1
+    assert any("edit cap" in n for n in result.notes)

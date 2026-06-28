@@ -193,3 +193,28 @@ def test_critic_system_prompt_is_slot_aware():
     assert "reel" in low  # slot anatomy
     assert "transform" in low  # transform-first discipline
     assert "window" in low  # look-behind constraint
+
+
+def test_critique_request_carries_edit_history_default_empty():
+    req = CritiqueRequest(frame_png=b"", scene={}, target_handle="logo", window=["logo"])
+    assert req.edit_history == {}
+
+
+def test_message_builder_embeds_edit_history():
+    req = CritiqueRequest(
+        frame_png=b"x", scene={"nodes": []},
+        target_handle="reel_frame", window=["reel_frame"],
+        edit_history={"reel_frame": [{"action": "move", "params": {"y": 430}, "why": "down"}]},
+    )
+    text = next(
+        p["text"] for p in build_critic_messages(req)[1].content if p["type"] == "text"
+    )
+    assert "edit_history" in text
+    assert "430" in text
+
+
+def test_critic_prompt_has_convergence_discipline():
+    from app.scene.critic import CRITIC_SYSTEM_PROMPT
+    low = CRITIC_SYSTEM_PROMPT.lower()
+    assert "history" in low
+    assert "undo" in low or "converge" in low

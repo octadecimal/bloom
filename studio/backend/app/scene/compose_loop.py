@@ -29,6 +29,17 @@ class ComposeBounds:
     look_behind: int = 3        # editable window = [K-look_behind .. K]
     max_passes: int = 3         # re-look passes per element
     regen_budget: int = 5       # hard ceiling on regenerations per build
+    asset_regen_retries: int = 2    # max regenerate->re-judge cycles per asset
+    max_edits_per_element: int = 4  # deterministic per-element critic-edit cap
+
+
+class FrameCorrection(BaseModel):
+    """A deterministic clamp that brings an off-canvas sprite back in frame."""
+
+    handle: str
+    x: float
+    y: float
+    reason: str
 
 
 class BuildElement(BaseModel):
@@ -58,6 +69,7 @@ class ComposeResult:
     assets_regenerated: int = 0
     rejected: int = 0
     elements_placed: int = 0
+    corrections_applied: int = 0
     notes: list[str] = field(default_factory=list)
 
 
@@ -69,10 +81,11 @@ class ComposeDeps(Protocol):
     async def placed_handles(self) -> list[str]: ...
     async def scene_context(self) -> dict: ...
     async def render_scene(self) -> bytes: ...
-    async def critique_asset(self, target_handle: str) -> AssetVerdict: ...
+    async def critique_asset(self, target_handle: str, attempt: int = 0) -> AssetVerdict: ...
     async def critique(self, request: CritiqueRequest) -> Critique: ...
     async def adjust(self, handle: str, params: EditParams) -> str: ...
     async def regenerate(self, handle: str) -> str: ...
+    async def out_of_frame(self) -> list[FrameCorrection]: ...
 
 
 async def run_compose(
@@ -84,6 +97,7 @@ async def run_compose(
     """Drive the bounded compose loop. Returns a tally + per-step notes."""
     result = ComposeResult()
     regen_left = bounds.regen_budget
+    edit_history: dict[str, list[dict]] = {}
 
     for element in elements:
         await deps.place(element)
@@ -96,26 +110,39 @@ async def run_compose(
         window = handles[max(0, k - bounds.look_behind):k + 1]
         result.notes.append(f"placed {target} (window={window})")
 
-        # Per-asset quality gate (before composition): regenerate degenerate art.
-        verdict = await deps.critique_asset(target)
+        # Per-asset quality gate (before composition): regenerate degenerate art,
+        # then RE-JUDGE so a regeneration converges instead of silently swapping
+        # one bad asset for another. Bounded by asset_regen_retries and the shared
+        # regen budget.
+        verdict = await deps.critique_asset(target, attempt=0)
+        attempt = 0
+        while (verdict.action == "regenerate" and regen_left > 0
+               and attempt < bounds.asset_regen_retries):
+            regen_left -= 1
+            result.regens_spent += 1
+            result.assets_regenerated += 1
+            await deps.regenerate(target)
+            attempt += 1
+            result.notes.append(
+                f"{target}: {verdict.reason} -> regenerated (attempt {attempt})")
+            verdict = await deps.critique_asset(target, attempt=attempt)
+
         if verdict.action == "regenerate":
-            if regen_left > 0:
-                regen_left -= 1
-                result.regens_spent += 1
-                result.assets_regenerated += 1
-                await deps.regenerate(target)
-                result.notes.append(f"{target}: {verdict.reason} -> regenerated")
-            else:
-                result.notes.append(
-                    f"{target}: {verdict.reason} (regen budget exhausted, kept)")
+            cause = "regen budget exhausted" if regen_left <= 0 else "retries exhausted"
+            result.notes.append(
+                f"{target}: {verdict.reason} (could not fix: {cause}, kept)")
+        elif verdict.ok:
+            result.notes.append(f"{target}: asset ok")
         else:
-            if verdict.ok:
-                result.notes.append(f"{target}: asset ok")
-            else:
-                result.notes.append(f"{target}: {verdict.reason}")
+            result.notes.append(f"{target}: {verdict.reason}")
 
         # Composition passes: critique the composited scene and apply edits.
         for pass_index in range(bounds.max_passes):
+            for corr in await deps.out_of_frame():
+                if corr.handle in window:
+                    await deps.adjust(corr.handle, EditParams(x=corr.x, y=corr.y))
+                    result.corrections_applied += 1
+                    result.notes.append(f"{corr.handle}: {corr.reason}, nudged into frame")
             try:
                 frame = await deps.render_scene()
             except Exception as exc:
@@ -125,10 +152,11 @@ async def run_compose(
                 break
 
             scene = await deps.scene_context()
+            window_history = {h: edit_history[h] for h in window if h in edit_history}
             critique = await deps.critique(CritiqueRequest(
                 frame_png=frame, scene=scene, target_handle=target,
                 window=window, theme=theme, regen_budget_left=regen_left,
-                pass_index=pass_index,
+                pass_index=pass_index, edit_history=window_history,
             ))
             result.passes += 1
             if critique.done or not critique.edits:
@@ -140,6 +168,11 @@ async def run_compose(
                     result.notes.append(
                         f"rejected {edit.action} on {edit.target_handle} "
                         f"(outside window {window})")
+                    continue
+                if len(edit_history.get(edit.target_handle, [])) >= bounds.max_edits_per_element:
+                    result.rejected += 1
+                    result.notes.append(
+                        f"refused {edit.action} {edit.target_handle} (edit cap reached)")
                     continue
                 if edit.action == "regenerate":
                     if regen_left <= 0:
@@ -158,5 +191,10 @@ async def run_compose(
                     result.notes.append(
                         f"{edit.action} {edit.target_handle}: {edit.why}")
                 result.edits_applied += 1
+                edit_history.setdefault(edit.target_handle, []).append({
+                    "action": edit.action,
+                    "params": edit.params.model_dump(exclude_none=True),
+                    "why": edit.why,
+                })
 
     return result
