@@ -112,6 +112,8 @@ export class PixiRenderer implements IRenderer {
    *  the next projection rebuilds on the single canvas (no duplicate canvas). */
   private resetScene(rootId: string): void {
     const stage = this.app!.stage as unknown as Container;
+    // Flat-destroy is safe for nested trees: Pixi v8 detaches children from their
+    // parent on destroy, so a child destroyed after its parent is already a no-op.
     for (const [id, obj] of this.objects) {
       if (id === this.rootId) continue;
       obj.destroy();

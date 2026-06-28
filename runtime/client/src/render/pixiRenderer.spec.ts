@@ -239,4 +239,40 @@ describe('PixiRenderer.mount idempotency', () => {
     expect(internals.objects.size).toBe(1); // only root remains
     expect(internals.objects.get('root')).toBe(stage);
   });
+
+  it('resetScene tears down a nested reel tree (root → reel Container → cell Sprite + label) without throwing', async () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    const stage = new Container();
+    stage.sortableChildren = true;
+    const fakeApp = { stage, canvas: document.createElement('canvas'), ticker: { add() {}, remove() {} } };
+    const internals = r as unknown as {
+      app: unknown;
+      rootId: string;
+      objects: Map<string, Container>;
+      labels: Map<string, Text>;
+    };
+    internals.app = fakeApp;
+    internals.rootId = 'root';
+    internals.objects.set('root', stage);
+
+    // Build nested tree: root → reel Container → cell Sprite + sibling label Text
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    r.setProp('cell', 'label', 'A'); // label sits as a sibling in reel, tracked in labels map
+
+    // Pre-state: reel is the only direct child of stage; label is tracked
+    expect(stage.children.length).toBe(1); // the reel Container
+    expect(internals.labels.size).toBe(1); // the label Text for 'cell'
+
+    // Re-init — must NOT throw even when destroying nested objects
+    await r.mount('root');
+
+    expect(internals.app).toBe(fakeApp); // same Application reused — no second canvas
+    expect(stage.children.length).toBe(0); // entire hierarchy torn down
+    expect(internals.objects.size).toBe(1); // only root remains
+    expect(internals.objects.get('root')).toBe(stage);
+    expect(internals.labels.size).toBe(0); // labels map cleared
+  });
 });
