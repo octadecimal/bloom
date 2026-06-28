@@ -7,6 +7,7 @@ from langgraph.types import interrupt
 from app.config import get_settings
 from app.gdd.store import GddEditError
 from app.scene.document import OpError, unreachable_nodes, empty_document
+from app.scene.rebind import rebind_asset_textures, selected_image_ref
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.critic import CritiqueRequest, EditParams
@@ -67,14 +68,9 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
-def _selected_media_ref(asset) -> str | None:
-    sel = getattr(asset, "selected_generation_id", None)
-    if not sel:
-        return None
-    for g in getattr(asset, "generations", []) or []:
-        if getattr(g, "id", None) == sel:
-            return getattr(g, "image_ref", None)
-    return None
+# Backed by the shared rebinder helper so the board, REST, and agent paths
+# resolve "selected generation -> image_ref" identically.
+_selected_media_ref = selected_image_ref
 
 
 def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
