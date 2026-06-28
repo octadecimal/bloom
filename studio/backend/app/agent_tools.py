@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.gdd.store import GddEditError
 from app.scene.document import OpError, unreachable_nodes, empty_document
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
-from app.scene.compose_loop import BuildElement, ComposeBounds, run_compose
+from app.scene.compose_loop import BuildElement, run_compose
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
@@ -388,6 +388,17 @@ def build_adjust_element_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def _image_has_transparency(image_png: bytes) -> bool:
+    """True iff the PNG has an alpha channel with any non-opaque pixel."""
+    from io import BytesIO
+    from PIL import Image
+    try:
+        img = Image.open(BytesIO(image_png)).convert("RGBA")
+    except Exception:
+        return True  # unreadable -> treat as a cutout (alpha-coverage path)
+    return min(img.getchannel("A").getextrema()) < 255
+
+
 class _SceneComposeDeps:
     """Real `ComposeDeps` for `run_compose`: reuses the existing placement,
     listing, transform, regenerate, capture, and critic seams. No new node
@@ -451,7 +462,7 @@ class _SceneComposeDeps:
         asset = await self._ctx.asset_store.get_by_slot(self._ctx.game_id, target_handle)
         role = sprite_role or getattr(asset, "role", None) or target_handle
         description = getattr(asset, "description", "") or ""
-        transparent = bool(getattr(asset, "transparent", True))
+        transparent = _image_has_transparency(image_png)
         return await self._ctx.asset_critic.critique(AssetCritiqueRequest(
             image_png=image_png, role=role, description=description,
             theme="", transparent=transparent))
