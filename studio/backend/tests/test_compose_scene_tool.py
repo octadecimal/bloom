@@ -202,3 +202,22 @@ def test_tool_context_carries_asset_critic():
     sentinel = object()
     ctx = ToolContext("r1", "g1", None, None, asset_critic=sentinel)
     assert ctx.asset_critic is sentinel
+
+
+# ---------------------------------------------------------------------------
+# Task 5: format_compose_summary — surfaces asset + composition verdicts
+# ---------------------------------------------------------------------------
+
+from app.agent_tools import format_compose_summary
+from app.scene.compose_loop import ComposeResult
+
+
+def test_compose_summary_reports_asset_regenerations_and_notes():
+    r = ComposeResult(elements_placed=2, passes=3, edits_applied=1,
+                      regens_spent=2, assets_regenerated=1,
+                      notes=["reel_frame: near-empty image (7600 bytes) -> regenerated",
+                             "logo: asset ok", "scale logo: too big"])
+    s = format_compose_summary(r)
+    assert "2 element(s)" in s and "3 critique pass(es)" in s
+    assert "1 asset regeneration(s)" in s
+    assert "reel_frame: near-empty" in s and "logo: asset ok" in s

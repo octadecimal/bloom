@@ -479,6 +479,16 @@ class _SceneComposeDeps:
         return await self._regen_tool.ainvoke({"ref": handle})
 
 
+def format_compose_summary(result) -> str:
+    head = (f"Composed {result.elements_placed} element(s) over "
+            f"{result.passes} critique pass(es): {result.edits_applied} edit(s) "
+            f"applied, {result.regens_spent} regeneration(s) "
+            f"({result.assets_regenerated} asset regeneration(s)), "
+            f"{result.rejected} edit(s) refused.")
+    body = "\n".join(f"- {n}" for n in result.notes)
+    return head + ("\n" + body if body else "")
+
+
 def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
     async def compose_scene(elements: list[dict], theme: str = "") -> str:
         if not elements:
@@ -489,12 +499,7 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
         build = [BuildElement(**e) for e in elements]
         deps = _SceneComposeDeps(ctx)
         result = await run_compose(build, theme, deps)
-        head = (f"Composed {result.elements_placed} element(s) over "
-                f"{result.passes} critique pass(es): {result.edits_applied} "
-                f"edit(s) applied, {result.regens_spent} regeneration(s), "
-                f"{result.rejected} edit(s) refused.")
-        body = "\n".join(f"- {n}" for n in result.notes)
-        return head + ("\n" + body if body else "")
+        return format_compose_summary(result)
 
     return StructuredTool.from_function(
         coroutine=compose_scene, name="compose_scene",
