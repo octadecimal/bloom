@@ -106,7 +106,7 @@ def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
 async def _place_in_scene(
     ctx: ToolContext, *, handle: str, src: str, role: str, parent: str,
     x: float | None, y: float | None, anchor_x: float, anchor_y: float,
-    fit: str, z_index: int, tex_size: tuple[int, int],
+    fit: str, z_index: int, tex_size: tuple[int, int], asset_id: str = "",
 ) -> str:
     """Place an already-resolved asset image into the live scene as one atomic batch.
 
@@ -133,6 +133,7 @@ async def _place_in_scene(
         handle=handle, src=src, role=role, parent_id=parent_id,
         ensure_root=False, canvas=canvas, tex_size=tex_size,
         x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
+        asset_id=asset_id,
     )
     try:
         doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
@@ -172,6 +173,7 @@ def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
             ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+            asset_id=asset.id,
         )
 
     return StructuredTool.from_function(
@@ -239,6 +241,7 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+            asset_id=asset.id,
         )
         if placement.startswith("Rejected"):
             return placement
