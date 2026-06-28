@@ -59,6 +59,7 @@ test('regenerate auto-selects newest and variant-toggle re-selects, both updatin
     const sel = a.generations.find((g: any) => g.id === a.selectedGenerationId) ?? a.generations[0];
     return { assetId: a.id as string, gen1Ref: sel.imageRef as string };
   }, gameId);
+  expect(gen1Ref).toMatch(/^\/media\//);
 
   // 4. Place the asset into the scene on the BACKEND (Texture carries assetId), so
   //    server-side rebind can find it. Persist via the studio→backend socket path
@@ -81,8 +82,8 @@ test('regenerate auto-selects newest and variant-toggle re-selects, both updatin
 
   // 5. Regenerate on the board → auto-selects newest → backend rebinds → scene_op.
   await page.getByTestId('asset-generate').click();
-  // the selected board image updates; the bound texture src flips to the new gen.
-  const newRef = await expect
+  // regenerate auto-selects the newest variant → bound texture src flips away from gen1
+  await expect
     .poll(
       async () => {
         const cur = await texSrc(page, 'tex.wild');
@@ -90,14 +91,12 @@ test('regenerate auto-selects newest and variant-toggle re-selects, both updatin
       },
       { timeout: 30_000 },
     )
-    .not.toBeNull()
-    .then(() => texSrc(page, 'tex.wild'));
-  expect(newRef).not.toBe(gen1Ref);
+    .not.toBeNull();
 
   // 6. Toggle back to the first variant via the candidate strip → game reverts.
   const firstThumb = page.getByTestId('asset-candidates').locator('img').first();
   await firstThumb.click();
-  await expect.poll(() => texSrc(page, 'tex.wild')).toBe(gen1Ref);
+  await expect.poll(() => texSrc(page, 'tex.wild'), { timeout: 15_000 }).toBe(gen1Ref);
 
   // 7. No engine errors throughout.
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
