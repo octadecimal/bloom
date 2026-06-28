@@ -1283,9 +1283,7 @@ test('one build prompt composes a scene through the critic loop, rendered live',
   await expect(page.getByTestId('view-open-game/preview')).toBeVisible();
   await page.getByTestId('view-open-game/preview').click();
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__engineMsgs?.some((m: any) => m.kind === 'ready')), { timeout: 25_000 })
-    .toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs?.some((m: any) => m.kind === 'ready')), { timeout: 25_000 }).toBe(true);
 
   // Send the build prompt.
   await page.getByTestId('chat-composer').fill(PROMPT);
@@ -1400,4 +1398,7 @@ gh pr create --fill
 - **Placeholder scan:** no TBDs; every code step shows complete code, every run step an exact command + expected result. The two "copy the exact selector/helper from the sibling file" notes (Tasks 5–6) are deliberate guards against guessing route/testid shapes, not placeholders — the referenced files exist and are authoritative. ✓
 - **Type consistency:** `ComposeBounds`/`ComposeResult`/`BuildElement`/`ComposeDeps`/`run_compose` names are identical across Task 2 (definition), Task 3 (`_SceneComposeDeps` implements `ComposeDeps`; `build_compose_scene_tool` calls `run_compose`), and the tests. `compose_scene` is the tool name registered in `_BUILDERS` (Task 3), asserted by `ToolFactory().build(["compose_scene"], …)` (Task 3), and added to the router tools set + body (Task 4). `EditParams` fields (`x/y/scale/z`) flow unchanged from the critic (Plan 2) through `deps.adjust` into `adjust_element`'s `ref/x/y/scale/z` args. `request_capture(game_id, *, timeout)` and `critique(request) -> Critique` signatures match the merged Plan 2/3 source. `ToolContext.scene_critic` / `.capture_broker` are the names added in Task 1 and read in Task 3. ✓
 - **Reuse check:** placement (`build_generate_and_place_tool`), transforms (`build_adjust_element_tool`), regeneration (`build_regenerate_element_tool`), element listing (`_placed_elements`), capture (`SceneCaptureBroker.request_capture`), and critique (`SceneCritic.critique` / `build_scene_critic`) all go through existing merged seams — no duplicated node-walking, Mongo writes, capture path, or critic call. The one shared `capture_broker` instance (Task 1) is deliberately singletonized so the orchestrator awaits the same broker the socket handler resolves. ✓
+
+```
+
 ```
