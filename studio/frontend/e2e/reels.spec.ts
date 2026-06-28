@@ -54,6 +54,16 @@ test('Add Reels projects a color-coded grid; Spin lands on the server outcome', 
   expect(String(cell.fill)).toMatch(/^#[0-9a-f]{6}$/i);
   expect(cell.label).toBeDefined();
 
+  // Rendering fixes — assert the RENDERED end-state, not just the model:
+  // (a) live Add Reels rebuilds on a SINGLE canvas (idempotent re-init, no duplicate mount).
+  expect(await frame.evaluate(() => document.querySelectorAll('#stage canvas').length)).toBe(1);
+  // (b) the grid is centered, not pinned to the stage corner.
+  const reelX = await frame.evaluate(() => (window as any).__engineModel.toDocument().nodes['reels:reel:0'].props.position.x);
+  expect(reelX).toBeGreaterThan(0);
+  // (c) the label is a sibling Text, never a child of the cell Sprite (Pixi v8 forbids Sprite children).
+  expect(await frame.evaluate(() => (window as any).__engineRenderer.objects.get('reels:cell:0:0').children.length)).toBe(0);
+  expect(await frame.evaluate(() => (window as any).__engineRenderer.labels.has('reels:cell:0:0'))).toBe(true);
+
   // 2. Spin -> the backend evaluates a round and broadcasts an outcome.
   await page.getByTestId('game-spin').click();
   await expect.poll(() => page.evaluate(() => (window as any).__gameLastSpinOutcome ?? null), { timeout: 20000 }).not.toBeNull();
