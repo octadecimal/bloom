@@ -98,27 +98,27 @@ The protocol can request a frame and get a PNG back through the render seam, pro
 Append to `runtime/client/src/protocol/protocolHost.spec.ts` (inside the `describe('ProtocolHost', …)` block):
 
 ```typescript
-  it('captures the rendered frame and replies with captured (not ack)', async () => {
-    const { host, sent } = setup();
-    await host.handle({ v: 1, kind: 'capture', id: 'c1' });
-    expect(sent).toContainEqual({ v: 1, kind: 'captured', id: 'c1', png: 'data:image/png;base64,MOCK' });
-    expect(sent.some((m) => m.kind === 'ack' && m.id === 'c1')).toBe(false);
-  });
+it('captures the rendered frame and replies with captured (not ack)', async () => {
+  const { host, sent } = setup();
+  await host.handle({ v: 1, kind: 'capture', id: 'c1' });
+  expect(sent).toContainEqual({ v: 1, kind: 'captured', id: 'c1', png: 'data:image/png;base64,MOCK' });
+  expect(sent.some((m) => m.kind === 'ack' && m.id === 'c1')).toBe(false);
+});
 
-  it('reports an error (not captured) when capture throws', async () => {
-    const model = new GraphModel();
-    const fakeReconciler = {
-      applyChanges: async () => {},
-      capture: async () => {
-        throw new Error('extract failed');
-      },
-    } as unknown as import('../render/reconciler').Reconciler;
-    const sent: OutboundMessage[] = [];
-    const host = new ProtocolHost({ model, reconciler: fakeReconciler, post: (m) => sent.push(m) });
-    await host.handle({ v: 1, kind: 'capture', id: 'c2' });
-    expect(sent.some((m) => m.kind === 'error' && m.id === 'c2' && m.code === 'internal')).toBe(true);
-    expect(sent.some((m) => m.kind === 'captured')).toBe(false);
-  });
+it('reports an error (not captured) when capture throws', async () => {
+  const model = new GraphModel();
+  const fakeReconciler = {
+    applyChanges: async () => {},
+    capture: async () => {
+      throw new Error('extract failed');
+    },
+  } as unknown as import('../render/reconciler').Reconciler;
+  const sent: OutboundMessage[] = [];
+  const host = new ProtocolHost({ model, reconciler: fakeReconciler, post: (m) => sent.push(m) });
+  await host.handle({ v: 1, kind: 'capture', id: 'c2' });
+  expect(sent.some((m) => m.kind === 'error' && m.id === 'c2' && m.code === 'internal')).toBe(true);
+  expect(sent.some((m) => m.kind === 'captured')).toBe(false);
+});
 ```
 
 Create `runtime/client/src/render/reconciler.capture.spec.ts`:
@@ -333,26 +333,26 @@ The studio half of the postMessage protocol: send a `capture` request into the i
 Append to `studio/frontend/src/plugins/game/protocolBridge.spec.ts` (inside the `describe('ProtocolBridge', …)` block):
 
 ```typescript
-  it('sends a capture request carrying the given id', () => {
-    const { bridge, post } = setup();
-    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
-    bridge.capture('cap1');
-    expect(post).toHaveBeenCalledWith({ v: 1, kind: 'capture', id: 'cap1' }, ENGINE);
-  });
+it('sends a capture request carrying the given id', () => {
+  const { bridge, post } = setup();
+  bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
+  bridge.capture('cap1');
+  expect(post).toHaveBeenCalledWith({ v: 1, kind: 'capture', id: 'cap1' }, ENGINE);
+});
 
-  it('surfaces a captured png via onCaptured', () => {
-    const onCaptured = vi.fn();
-    const bridge = new ProtocolBridge({ post: vi.fn(), engineOrigin: ENGINE, onCaptured });
-    bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'data:image/png;base64,AAAA' }, ENGINE);
-    expect(onCaptured).toHaveBeenCalledWith({ id: 'cap1', png: 'data:image/png;base64,AAAA' });
-  });
+it('surfaces a captured png via onCaptured', () => {
+  const onCaptured = vi.fn();
+  const bridge = new ProtocolBridge({ post: vi.fn(), engineOrigin: ENGINE, onCaptured });
+  bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'data:image/png;base64,AAAA' }, ENGINE);
+  expect(onCaptured).toHaveBeenCalledWith({ id: 'cap1', png: 'data:image/png;base64,AAAA' });
+});
 
-  it('ignores a captured message from a foreign origin', () => {
-    const onCaptured = vi.fn();
-    const bridge = new ProtocolBridge({ post: vi.fn(), engineOrigin: ENGINE, onCaptured });
-    bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'x' }, 'http://evil:9999');
-    expect(onCaptured).not.toHaveBeenCalled();
-  });
+it('ignores a captured message from a foreign origin', () => {
+  const onCaptured = vi.fn();
+  const bridge = new ProtocolBridge({ post: vi.fn(), engineOrigin: ENGINE, onCaptured });
+  bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'x' }, 'http://evil:9999');
+  expect(onCaptured).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -746,20 +746,17 @@ export function applyCaptureRequest(payload: { gameId: string; captureId: string
 Inside `connect()`, register the socket listener next to the existing `scene_op` listener:
 
 ```typescript
-    sock.on('scene_capture_request', (p) => applyCaptureRequest(p as { gameId: string; captureId: string }));
+sock.on('scene_capture_request', (p) => applyCaptureRequest(p as { gameId: string; captureId: string }));
 ```
 
 Extend the existing non-PROD dev-hook block in `connect()` to expose a capture trigger:
 
 ```typescript
-    if (!import.meta.env.PROD) {
-      (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
-      (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) =>
-        sock?.emit('join_scene', { gameId });
-      (window as unknown as { __gameRequestCapture?: (captureId: string) => void }).__gameRequestCapture = (
-        captureId: string,
-      ) => getBridge()?.capture(captureId);
-    }
+if (!import.meta.env.PROD) {
+  (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
+  (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) => sock?.emit('join_scene', { gameId });
+  (window as unknown as { __gameRequestCapture?: (captureId: string) => void }).__gameRequestCapture = (captureId: string) => getBridge()?.capture(captureId);
+}
 ```
 
 Add the emit function (next to `emitSceneApplyOp`):
@@ -781,11 +778,11 @@ import { emitSceneCaptureResult } from './socketClient';
 Then pass `onCaptured` when constructing the bridge (inside the `useEffect`):
 
 ```typescript
-    const bridge = new ProtocolBridge({
-      engineOrigin: origin,
-      post: (m, targetOrigin) => frame.contentWindow?.postMessage(m, targetOrigin),
-      onCaptured: ({ id, png }) => emitSceneCaptureResult(activeGameId, id, png),
-    });
+const bridge = new ProtocolBridge({
+  engineOrigin: origin,
+  post: (m, targetOrigin) => frame.contentWindow?.postMessage(m, targetOrigin),
+  onCaptured: ({ id, png }) => emitSceneCaptureResult(activeGameId, id, png),
+});
 ```
 
 (`activeGameId` is already in scope from `const activeGameId = s.activeGameId.get();` and the effect's guard guarantees it is non-null.)
@@ -946,4 +943,7 @@ git commit -m "test(e2e): render-settled frame-capture round-trip"
 - **Placeholder scan:** no TBDs; every code step shows complete code, every run step an exact command + expected result. ✓
 - **Type consistency:** `capture`/`captured` shapes are byte-identical across `messages.ts` and `protocolBridge.ts`; `capture(id: string)` / `onCaptured({id, png})` names match between bridge (Task 3) and pane/socket wiring (Task 5); `IRenderer.capture` (Task 1) is implemented by both `MockRenderer` (Task 1) and `PixiRenderer` (Task 2); the socket event names `scene_capture_request` / `scene_capture_result` and the payload keys `gameId` / `captureId` / `png` are identical in the broker (Task 4), the socket handler (Task 4), and the frontend relay (Task 5); `captureId` issued by the broker is the same `id` echoed by `captured` and emitted back, closing the correlation loop. ✓
 - **Reuse check:** capture rides the existing postMessage channel (`ProtocolHost`/`ProtocolBridge`), the existing Socket.IO room model (`hub`/`sio.emit(room=…)`), the existing dev-hook pattern (`__game*`, `import.meta.env.PROD`), and the existing e2e harness (`game-scene.spec.ts`). No new transport, no forked message-dispatch, no direct `contentWindow` access in tests. ✓
+
+```
+
 ```
