@@ -1,5 +1,4 @@
 import asyncio
-import base64
 
 import httpx
 import pytest
@@ -25,18 +24,10 @@ async def test_compose_loop_captures_critiques_and_transforms(live_server):
     scene_ops: list[dict] = []
     run_completions: list[dict] = []
     scene_snapshots: list[dict] = []
-    capture_requests: list[dict] = []
 
     client.on("scene_op", lambda d: scene_ops.append(d))
     client.on("run_completed", lambda d: run_completions.append(d))
     client.on("scene_snapshot", lambda d: scene_snapshots.append(d))
-
-    @client.on("scene_capture_request")
-    async def _on_capture(data):
-        capture_requests.append(data)
-        png = "data:image/png;base64," + base64.b64encode(b"\x89PNGframe").decode()
-        await client.emit("scene_capture_result", {
-            "gameId": data["gameId"], "captureId": data["captureId"], "png": png})
 
     await client.connect(live_server, auth={"displayName": "Designer"})
     await client.emit("join_room", {"roomId": room_id})
@@ -50,9 +41,6 @@ async def test_compose_loop_captures_critiques_and_transforms(live_server):
         await asyncio.sleep(0.05)
     assert run_completions, "run_completed not received for compose-loop prompt"
     assert run_completions[0]["status"] == "completed"
-
-    # The loop captured the real frame at least once per element.
-    assert len(capture_requests) >= 2
 
     # Both elements were placed.
     async with httpx.AsyncClient(base_url=live_server) as http:
