@@ -4,7 +4,7 @@
 
 **Goal:** Tie Plans 1–3 together into a **bounded, deterministic compose loop** — for each element the user names, `generate_and_place` it, then repeatedly _capture the real rendered frame → critique its composition → apply transform/regenerate edits_ until the critic says `done` or the caps are hit — and route design-router branch 4 ("build a scene") into it so the loop discipline lives in code, not skippable router prose.
 
-**Architecture:** A new pure orchestration core `app/scene/compose.py` (`run_compose`) owns the loop and its bounds (look-behind N=3, max-passes=3, regen budget K=5, transform-first) against an injected `ComposeDeps` Protocol, so the loop logic is unit-testable with fakes. A new `compose_scene` agent tool (`build_compose_scene_tool` in `agent_tools.py`) wires real deps — `generate_and_place` for placement, `SceneCaptureBroker.request_capture` for the frame (Plan 3), `SceneCritic.critique` for the judgment (Plan 2), `adjust_element` / `regenerate_element` for the edits (Plan 1) — and runs `run_compose`. The critic + capture broker reach the tool through two new optional `ToolContext` fields. Design-router branch 4 calls `compose_scene` once with the extracted build list instead of emitting bare `generate_and_place` calls.
+**Architecture:** A new pure orchestration core `app/scene/compose_loop.py` (`run_compose`) owns the loop and its bounds (look-behind N=3, max-passes=3, regen budget K=5, transform-first) against an injected `ComposeDeps` Protocol, so the loop logic is unit-testable with fakes. A new `compose_scene` agent tool (`build_compose_scene_tool` in `agent_tools.py`) wires real deps — `generate_and_place` for placement, `SceneCaptureBroker.request_capture` for the frame (Plan 3), `SceneCritic.critique` for the judgment (Plan 2), `adjust_element` / `regenerate_element` for the edits (Plan 1) — and runs `run_compose`. The critic + capture broker reach the tool through two new optional `ToolContext` fields. Design-router branch 4 calls `compose_scene` once with the extracted build list instead of emitting bare `generate_and_place` calls.
 
 **Tech Stack:** Python 3 / FastAPI backend, LangChain `StructuredTool`, LangGraph `create_react_agent`, Pydantic v2, MongoDB (motor), python-socketio, pytest + pytest-asyncio, Playwright (local-only). Backend-only source changes (no frontend — Plan 3 already wired the capture relay end-to-end); plus a backend replay e2e and a Playwright spec. This is plan #4 of 4 and completes the effort.
 
@@ -49,7 +49,7 @@ These resolve the spec's "Open decisions for the plan" (§ Open decisions) and t
 
 ## File Structure
 
-- `studio/backend/app/scene/compose.py` — **create.** The pure orchestration core: `ComposeBounds`, `ComposeResult`, `BuildElement`, the `ComposeDeps` Protocol, and `run_compose(...)`. No Mongo, no network, no LLM — all I/O is behind `ComposeDeps`.
+- `studio/backend/app/scene/compose_loop.py` — **create.** The pure orchestration core: `ComposeBounds`, `ComposeResult`, `BuildElement`, the `ComposeDeps` Protocol, and `run_compose(...)`. No Mongo, no network, no LLM — all I/O is behind `ComposeDeps`. (Note: `app/scene/compose.py` already exists as the sprite-op builder `build_sprite_ops`/`DEFAULT_CANVAS` imported by `agent_tools.py`; it is a different responsibility and is left untouched — the orchestrator gets its own module.)
 - `studio/backend/app/agent_tools.py` — **modify.** Add two optional `ToolContext` fields (`scene_critic`, `capture_broker`); add `_SceneComposeDeps` + `build_compose_scene_tool(ctx)` after `build_adjust_element_tool`; register `"compose_scene"` in `_BUILDERS`.
 - `studio/backend/app/room_hub.py` — **modify.** Accept `scene_critic` + `capture_broker` in `RoomHub.__init__`; pass them into the `ToolContext` built in `_run_skill`.
 - `studio/backend/app/main.py` — **modify.** Build the critic (`build_scene_critic(settings)`), move `SceneCaptureBroker` construction above `RoomHub`, and pass both into `RoomHub`.
@@ -241,7 +241,7 @@ The heart of the feature, with **zero I/O** so the bounds/window/budget/stop log
 
 **Files:**
 
-- Create: `studio/backend/app/scene/compose.py`
+- Create: `studio/backend/app/scene/compose_loop.py`
 - Create: `studio/backend/tests/test_compose_loop.py`
 
 **Interfaces:**
@@ -263,7 +263,7 @@ import asyncio
 
 import pytest
 
-from app.scene.compose import (
+from app.scene.compose_loop import (
     BuildElement,
     ComposeBounds,
     ComposeResult,
@@ -418,9 +418,9 @@ async def test_capture_failure_skips_critique_for_that_element():
 Run: `cd studio/backend && uv run pytest tests/test_compose_loop.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.scene.compose'`.
 
-- [ ] **Step 3: Write `app/scene/compose.py`**
+- [ ] **Step 3: Write `app/scene/compose_loop.py`**
 
-Create `studio/backend/app/scene/compose.py`:
+Create `studio/backend/app/scene/compose_loop.py`:
 
 ```python
 """Vision-in-the-loop scene composition — compose-loop orchestrator core.
@@ -574,7 +574,7 @@ Expected: PASS (all six tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add studio/backend/app/scene/compose.py studio/backend/tests/test_compose_loop.py
+git add studio/backend/app/scene/compose_loop.py studio/backend/tests/test_compose_loop.py
 git commit -m "feat(scene): compose-loop core with bounds, window, regen budget"
 ```
 
@@ -607,7 +607,7 @@ from app.agent_tools import (
     _SceneComposeDeps,
     build_compose_scene_tool,
 )
-from app.scene.compose import BuildElement
+from app.scene.compose_loop import BuildElement
 from app.scene.critic import EditParams
 from app.scene.hub import GameSceneHub
 from app.scene.store import GameSceneStore
@@ -705,7 +705,7 @@ Expected: FAIL — `ImportError: cannot import name '_SceneComposeDeps'` / `buil
 In `studio/backend/app/agent_tools.py`, add the imports near the top of the file (next to the existing scene imports — verify the exact existing import lines and add only what's missing):
 
 ```python
-from app.scene.compose import BuildElement, ComposeBounds, run_compose
+from app.scene.compose_loop import BuildElement, ComposeBounds, run_compose
 from app.scene.critic import CritiqueRequest, EditParams
 ```
 
