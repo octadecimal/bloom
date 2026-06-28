@@ -9,11 +9,11 @@ docs/superpowers/specs/2026-06-28-compose-critique-rework-design.md.
 """
 
 import base64
-import json
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Literal, Protocol
 
+from langchain_core.messages import BaseMessage
 from PIL import Image
 from pydantic import BaseModel
 
@@ -25,7 +25,6 @@ from app.replay.cassette import (
 )
 
 # Heuristic thresholds (constants so they're greppable / tunable).
-EMPTY_BYTE_FLOOR = 12_000          # PNGs smaller than this are almost always degenerate
 MIN_ALPHA_COVERAGE = 0.02          # transparent cutout must cover >2% of the frame
 MIN_OPAQUE_ENTROPY = 1.5           # flat/near-single-colour opaque image is degenerate
 _ALPHA_VISIBLE = 16                # alpha above this counts as "visible"
@@ -52,11 +51,10 @@ def asset_heuristic(image_png: bytes, *, transparent: bool) -> AssetVerdict | No
     Returns a ``regenerate`` verdict for an empty / near-empty / flat image, or
     ``None`` to defer to the vision stage.
 
-    Note: ``EMPTY_BYTE_FLOOR`` is defined as the threshold below which
-    production-sized PNGs are almost always degenerate, but it is not applied
-    as an early-exit here because test fixtures are small 64x64 PNGs (< 200 B)
-    that would all be incorrectly flagged. The alpha-coverage and entropy checks
-    below are the actual discriminating signal for both test and production images.
+    Byte size is intentionally NOT used as a signal: PNG compression makes it
+    resolution/content-dependent (a valid flat or highly-transparent asset can be
+    tiny), so alpha-coverage and entropy — which read the actual pixel distribution
+    — are the discriminating checks.
     """
     try:
         img = Image.open(BytesIO(image_png)).convert("RGBA")
@@ -114,7 +112,7 @@ def _data_url(image_png: bytes) -> str:
     return f"data:image/png;base64,{base64.b64encode(image_png).decode('ascii')}"
 
 
-def build_asset_messages(request: AssetCritiqueRequest):
+def build_asset_messages(request: AssetCritiqueRequest) -> list[BaseMessage]:
     from langchain_core.messages import HumanMessage, SystemMessage
 
     text = (
