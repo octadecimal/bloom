@@ -13,19 +13,21 @@ def test_router_binds_visual_compose_tools():
         assert name in spec.tools
 
 
-def test_router_compose_branch_interleaves_via_generate_and_place():
-    """Branch 4 (build/compose the scene) must drive the model to generate AND place
-    each element together, one at a time, so the scene visibly builds element-by-element
-    in a demo — not all-generate-then-all-place. The combined `generate_and_place` tool
-    is the verb; the prose forbids generating every asset up front."""
-    body = build_design_router_spec().body
-    assert "generate_and_place" in body
+def test_router_compose_branch_routes_to_compose_scene():
+    """Branch 4 (build/compose the scene) routes the whole build into the
+    deterministic compose_scene orchestrator with an ordered `elements` list —
+    NOT a series of bare generate_and_place calls (the loop discipline lives in
+    code, not skippable prose)."""
+    spec = build_design_router_spec()
+    assert "compose_scene" in spec.tools
+    body = spec.body
     low = body.lower()
-    # strict per-element sequencing guidance
-    assert "each visual element" in low or "one element" in low
-    assert "do not generate all" in low or "not generate all the assets" in low
-    # it must immediately place after generating (interleave), not defer placement
-    assert "immediately" in low
+    assert "compose_scene" in body
+    # it hands the whole build list to the orchestrator, one entry per element
+    assert "elements" in low
+    assert "single `compose_scene` call" in body or "a single `compose_scene`" in body.lower()
+    # still steers builds element-by-element (the orchestrator owns the loop)
+    assert "one entry per element" in low or "in order" in low
 
 
 def test_router_body_documents_visual_compose_branch():

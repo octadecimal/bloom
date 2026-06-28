@@ -30,6 +30,8 @@ class RoomHub:
         sim_store=None,
         tuner_store=None,
         tuner_hub=None,
+        scene_critic=None,
+        capture_broker=None,
     ):
         self._sio = sio
         self._store = store
@@ -47,6 +49,8 @@ class RoomHub:
         self._sim_store = sim_store
         self._tuner_store = tuner_store
         self._tuner_hub = tuner_hub
+        self._scene_critic = scene_critic
+        self._capture_broker = capture_broker
         self._router_spec = None
         # queues hold turn descriptors: {"kind": "prompt"} (no-tool plain chat)
         # or {"kind": "skill", "author": …, "skillName": …, "args": …,
@@ -289,7 +293,9 @@ class RoomHub:
                          gdd_store=self._gdd_store, gdd_hub=self._gdd_hub,
                          scene_store=self._scene_store, scene_hub=self._scene_hub,
                          sim_store=self._sim_store, tuner_store=self._tuner_store,
-                         tuner_hub=self._tuner_hub)
+                         tuner_hub=self._tuner_hub,
+                         scene_critic=self._scene_critic,
+                         capture_broker=self._capture_broker)
         status = "completed"
         try:
             async for ev in self._runner.run(
