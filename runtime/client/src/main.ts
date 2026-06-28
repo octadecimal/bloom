@@ -5,6 +5,7 @@ import type { InboundMessage, OutboundMessage } from './protocol/messages';
 import { parseParentOrigin, originAllowed } from './protocol/origin';
 import { createSerializer } from './serialize';
 import { domHostSurface, type IViewport } from './render/viewportController';
+import { ReelsModule } from './modules/reels/reelsModule';
 
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
@@ -28,16 +29,28 @@ const { host, model, modules, viewport } = createEngine({ renderer, post, surfac
 (window as unknown as { __engineModel: typeof model }).__engineModel = model;
 (window as unknown as { __engineRenderer: typeof renderer }).__engineRenderer = renderer;
 
+// Standalone (no studio parent) keeps a default reels module so the runtime is
+// usable on its own; embedded studio mode instead instantiates from the
+// document's `modules` declaration on init.
+if (!expectedOrigin) {
+  modules.manager.sync([{ id: 'reels', type: 'reels', config: { parentId: 'root' } }]);
+}
+
+const reels = () => modules.manager.byType('reels') as ReelsModule | undefined;
+
 const settledEvents: Array<{ grid: string[][] }> = [];
 modules.bus.on<{ grid: string[][] }>('reels:settled', (e) => settledEvents.push(e));
 (window as unknown as { __engineModules: unknown }).__engineModules = {
   spin: (outcome: { grid: string[][] }) => modules.orchestrator.spin(outcome),
   setConfig: (partial: Record<string, unknown>) => {
-    modules.reels.setConfig(partial as Record<string, never>);
-    modules.reels.project();
+    const r = reels();
+    if (r) {
+      r.setConfig(partial as Record<string, never>);
+      r.project();
+    }
   },
-  project: () => modules.reels.project(),
-  state: () => modules.reels.debugState(),
+  project: () => reels()?.project(),
+  state: () => reels()?.debugState() ?? { phase: 'idle', grid: [] },
   settled: () => settledEvents,
 };
 

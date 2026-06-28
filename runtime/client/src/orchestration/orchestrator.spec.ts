@@ -10,7 +10,7 @@ describe('Orchestrator', () => {
   it('spin() ensures projection then starts + hands the outcome to the module', () => {
     const bus = createBus();
     const reels = fakeReels();
-    const orch = new Orchestrator({ bus, reels });
+    const orch = new Orchestrator({ bus, reels: () => reels });
     const outcome = { grid: [['A']] };
     orch.spin(outcome);
     expect(reels.project).toHaveBeenCalled();
@@ -21,7 +21,7 @@ describe('Orchestrator', () => {
   it('re-emits round:complete when the module reports reels:settled', () => {
     const bus = createBus();
     const reels = fakeReels();
-    new Orchestrator({ bus, reels });
+    new Orchestrator({ bus, reels: () => reels });
     const done = vi.fn();
     bus.on('round:complete', done);
     bus.emit('reels:settled', { grid: [['A'], ['B']] });
@@ -31,11 +31,18 @@ describe('Orchestrator', () => {
   it('dispose() stops it from reacting to further reels:settled events', () => {
     const bus = createBus();
     const reels = fakeReels();
-    const orch = new Orchestrator({ bus, reels });
+    const orch = new Orchestrator({ bus, reels: () => reels });
     const done = vi.fn();
     bus.on('round:complete', done);
     orch.dispose();
     bus.emit('reels:settled', { grid: [] });
     expect(done).not.toHaveBeenCalled();
+  });
+
+  it('spin() is a no-op when the reels resolver returns null', () => {
+    const bus = createBus();
+    const orch = new Orchestrator({ bus, reels: () => null });
+    // should not throw
+    expect(() => orch.spin({ grid: [['A']] })).not.toThrow();
   });
 });
