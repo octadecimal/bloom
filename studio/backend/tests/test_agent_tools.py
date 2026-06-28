@@ -31,6 +31,7 @@ async def test_known_tool_names():
         "regenerate_element",
         "read_scene",
         "adjust_element",
+        "compose_scene",
     }
 
 

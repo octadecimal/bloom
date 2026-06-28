@@ -7,6 +7,8 @@ from langgraph.types import interrupt
 from app.gdd.store import GddEditError
 from app.scene.document import OpError, unreachable_nodes, empty_document
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
+from app.scene.compose_loop import BuildElement, ComposeBounds, run_compose
+from app.scene.critic import CritiqueRequest, EditParams
 from app.simulator.targets import derive_target, TargetGap
 from app.tuner.models import TuningParams
 
@@ -378,6 +380,98 @@ def build_adjust_element_tool(ctx: ToolContext) -> BaseTool:
             "top). Omit a field to leave it unchanged. Prefer this over "
             "regenerate_element for anything that's just mispositioned or mis-sized — "
             "regeneration makes a different image, this keeps the same art."
+        ),
+    )
+
+
+class _SceneComposeDeps:
+    """Real `ComposeDeps` for `run_compose`: reuses the existing placement,
+    listing, transform, regenerate, capture, and critic seams. No new node
+    walking or Mongo writes — every method delegates to a merged seam."""
+
+    def __init__(self, ctx: ToolContext):
+        self._ctx = ctx
+        # Build the sub-verbs once; each is a StructuredTool we ainvoke.
+        self._place_tool = build_generate_and_place_tool(ctx)
+        self._adjust_tool = build_adjust_element_tool(ctx)
+        self._regen_tool = build_regenerate_element_tool(ctx)
+
+    async def _elements(self) -> list:
+        document = await self._ctx.scene_store.get_document(self._ctx.game_id)
+        if not document or not document.get("nodes"):
+            return []
+        assets = await self._ctx.asset_store.list_assets(self._ctx.game_id)
+        return _placed_elements(document, assets)
+
+    async def place(self, element: BuildElement) -> str:
+        return await self._place_tool.ainvoke(element.model_dump())
+
+    async def placed_handles(self) -> list[str]:
+        return [el.handle for el in await self._elements()]
+
+    async def scene_context(self) -> dict:
+        out = []
+        for el in await self._elements():
+            name = getattr(el.asset, "name", None) or "(unbound)"
+            out.append({
+                "handle": el.handle, "role": el.role, "asset": name,
+                "x": el.position[0] if el.position else None,
+                "y": el.position[1] if el.position else None,
+                "w": el.size[0] if el.size else None,
+                "h": el.size[1] if el.size else None,
+                "z": el.z_index,
+            })
+        return {"elements": out}
+
+    async def capture(self) -> bytes:
+        return await self._ctx.capture_broker.request_capture(
+            self._ctx.game_id, timeout=ComposeBounds().capture_timeout)
+
+    async def critique(self, request: CritiqueRequest):
+        return await self._ctx.scene_critic.critique(request)
+
+    async def adjust(self, handle: str, params: EditParams) -> str:
+        return await self._adjust_tool.ainvoke({
+            "ref": handle, "x": params.x, "y": params.y,
+            "scale": params.scale, "z": params.z})
+
+    async def regenerate(self, handle: str) -> str:
+        return await self._regen_tool.ainvoke({"ref": handle})
+
+
+def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
+    async def compose_scene(elements: list[dict], theme: str = "") -> str:
+        if not elements:
+            return "Pass at least one element to build."
+        if ctx.scene_critic is None or ctx.capture_broker is None:
+            return ("Compose loop unavailable: no critic/capture wired. "
+                    "Place elements individually with generate_and_place.")
+        build = [BuildElement(**e) for e in elements]
+        deps = _SceneComposeDeps(ctx)
+        result = await run_compose(build, theme, deps)
+        head = (f"Composed {result.elements_placed} element(s) over "
+                f"{result.passes} critique pass(es): {result.edits_applied} "
+                f"edit(s) applied, {result.regens_spent} regeneration(s), "
+                f"{result.rejected} edit(s) refused.")
+        body = "\n".join(f"- {n}" for n in result.notes)
+        return head + ("\n" + body if body else "")
+
+    return StructuredTool.from_function(
+        coroutine=compose_scene, name="compose_scene",
+        description=(
+            "BUILD a slot-game scene from a list of elements, composing them with "
+            "a vision critic in the loop. Pass `elements` — an ordered list, one "
+            "dict per visual element with the SAME fields as generate_and_place "
+            "(description, slot, role, size 'WxH', transparent, x, y, anchor_x, "
+            "anchor_y, fit, z_index) — and `theme` (the user's intent, e.g. "
+            "'premium pirate slot'). For EACH element this generates+places it, "
+            "then captures the real rendered frame and lets the critic move/scale/"
+            "reorder (and, sparingly, regenerate) elements until the composition "
+            "settles. Use this for ANY request to create or place new scene art — "
+            "a whole build ('make a pirate game with a background and a logo') or a "
+            "single add ('add a treasure chest bottom-right'). Do NOT use it to "
+            "change something already on screen — that is adjust_element / "
+            "regenerate_element."
         ),
     )
 
@@ -1055,6 +1149,7 @@ class ToolFactory:
         "generate_and_place": build_generate_and_place_tool,
         "regenerate_element": build_regenerate_element_tool,
         "adjust_element": build_adjust_element_tool,
+        "compose_scene": build_compose_scene_tool,
         "read_scene": build_read_scene_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
