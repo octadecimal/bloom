@@ -16,17 +16,19 @@ class FakeDeps:
 
     `placements` is the running list of placed handles (placement order).
     `script` maps a placed handle -> list of Critique (one per pass).
-    `capture_fail` is a set of handles whose capture() raises (no-frame path).
+    `capture_fail` is a set of handles whose render_scene() raises (render-fail path).
+    `asset_verdicts` maps a handle -> AssetVerdict (default: ok=True keep).
     Records adjust/regenerate calls for assertions.
     """
 
-    def __init__(self, script, *, capture_fail=frozenset()):
+    def __init__(self, script, *, capture_fail=frozenset(), asset_verdicts=None):
         self._script = script
         self._capture_fail = capture_fail
         self.placements: list[str] = []
         self.adjusts: list[tuple[str, EditParams]] = []
         self.regens: list[str] = []
-        self.captures = 0
+        self.renders = 0
+        self.asset_verdicts = asset_verdicts or {}
 
     async def place(self, element: BuildElement) -> str:
         self.placements.append(element.slot)
@@ -38,12 +40,16 @@ class FakeDeps:
     async def scene_context(self) -> dict:
         return {"elements": list(self.placements)}
 
-    async def capture(self) -> bytes:
-        self.captures += 1
+    async def render_scene(self) -> bytes:
+        self.renders += 1
         target = self.placements[-1]
-        if target in self._capture_fail:
-            raise asyncio.TimeoutError()
+        if target in self._capture_fail:   # reuse the set, now "render fail"
+            raise RuntimeError("render failed")
         return b"\x89PNG-fake-frame"
+
+    async def critique_asset(self, target_handle: str):
+        from app.scene.asset_critic import AssetVerdict
+        return self.asset_verdicts.get(target_handle, AssetVerdict())
 
     async def critique(self, request) -> Critique:
         passes = self._script.get(request.target_handle, [])
@@ -141,12 +147,43 @@ async def test_regenerate_edits_are_capped_by_the_budget():
 
 
 @pytest.mark.asyncio
-async def test_capture_failure_skips_critique_for_that_element():
+async def test_render_failure_skips_critique_with_visible_note():
     script = {"logo": [Critique(edits=[CritiqueEdit(
         target_handle="logo", action="scale",
         params=EditParams(scale=0.5), why="x")])]}
     deps = FakeDeps(script, capture_fail={"logo"})
     result = await run_compose([_el("logo")], "pirate", deps)
-    assert deps.adjusts == []          # never critiqued — no frame
+    assert deps.adjusts == []          # never critiqued — render failed
     assert result.passes == 0
-    assert deps.captures == 1          # tried once, failed, moved on
+    assert deps.renders == 1           # tried once, failed, moved on
+    assert any("could not render" in n for n in result.notes)  # fail-loud
+
+
+@pytest.mark.asyncio
+async def test_bad_asset_is_regenerated_before_composition():
+    from app.scene.asset_critic import AssetVerdict
+    deps = FakeDeps(
+        {"logo": [Critique(done=True)]},
+        asset_verdicts={"logo": AssetVerdict(ok=False, action="regenerate", reason="empty")},
+    )
+    result = await run_compose([_el("logo")], "pirate", deps)
+    assert deps.regens == ["logo"]                 # asset gate regenerated it
+    assert result.assets_regenerated == 1
+    assert result.regens_spent == 1                # shared budget
+    assert any("empty" in n for n in result.notes)
+
+
+@pytest.mark.asyncio
+async def test_bad_asset_regenerate_respects_shared_budget():
+    from app.scene.asset_critic import AssetVerdict
+    deps = FakeDeps(
+        {"a": [Critique(done=True)], "b": [Critique(done=True)]},
+        asset_verdicts={
+            "a": AssetVerdict(ok=False, action="regenerate", reason="empty a"),
+            "b": AssetVerdict(ok=False, action="regenerate", reason="empty b"),
+        },
+    )
+    result = await run_compose([_el("a"), _el("b")], "pirate", deps, ComposeBounds(regen_budget=1))
+    assert deps.regens == ["a"]                     # only the first is funded
+    assert result.assets_regenerated == 1
+    assert any("budget" in n for n in result.notes) # b's regen refused, noted
