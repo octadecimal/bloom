@@ -29,7 +29,7 @@ two live builds (a pirate slot and an Egyptian slot, ~28–29 critique passes an
 5. **Strange transparency over solids.** Generated "transparent" assets sometimes
    come back with a **semi-transparent (ghosted) solid subject**, or with
    **transparency holes** punched through areas that should be opaque, so the
-   background bleeds through when composited. The asset critic has an *empty*-cutout
+   background bleeds through when composited. The asset critic has an _empty_-cutout
    heuristic but nothing for this inverse failure.
 
 These are all element-quality / convergence problems. None of them is about the
@@ -114,7 +114,7 @@ while verdict.action == "regenerate" and regen_left > 0 \
   draw down the single shared `regen_budget`, so a runaway build is impossible.
 - If the asset is still `regenerate` when retries or budget exhaust, it is **kept**
   with a visible note distinguishing the cause (`"… could not fix: retries
-  exhausted, kept"` vs `"… regen budget exhausted, kept"`).
+exhausted, kept"` vs `"… regen budget exhausted, kept"`).
 - **Scope:** this re-judge loop covers the **per-asset gate** only. The composition
   critic's own `regenerate` edits stay single-shot — they are rarer and already
   budget-bounded, and re-judging them would entangle the asset and composition
@@ -133,9 +133,9 @@ edit_history: dict[str, list[dict]]   # handle -> [{action, params, why}, ...]
 `run_compose` accumulates, per build, the edits it has applied per handle and passes
 the window-scoped slice into each `CritiqueRequest`. `build_critic_messages` threads
 it into the JSON context (`"edit_history": …`), and `CRITIC_SYSTEM_PROMPT` gains a
-**convergence-discipline** paragraph: *you are shown your prior edits to each
+**convergence-discipline** paragraph: _you are shown your prior edits to each
 element; do not undo a move you already made; if an element has been adjusted
-several times, leave it unless it is clearly wrong; prefer to declare `done`.* The
+several times, leave it unless it is clearly wrong; prefer to declare `done`._ The
 `ReplaySceneCritic` ignores the new field (it keys on target + `pass_index`), so
 cassette-based tests stay deterministic.
 
@@ -160,7 +160,7 @@ def sprite_box(props, sprite_size, canvas) -> tuple[int, int, int, int]:
 ```
 
 `composite_scene` calls it (no behaviour change — covered by existing golden tests),
-and the guard calls the *same* helper, so the renderer and the guard can never
+and the guard calls the _same_ helper, so the renderer and the guard can never
 disagree about where a sprite sits.
 
 **Guard.** Add one additive method to the `ComposeDeps` Protocol:
@@ -192,10 +192,10 @@ empty/flat-plus-vision pattern already in `asset_critic.py`.
 
 **Conservative deterministic guard** in `asset_heuristic` (transparent assets only),
 tuned for **near-zero false positives** so legitimately translucent art (glass,
-smoke, glow, soft shadows) is *not* flagged. It fires only on egregious, unambiguous
+smoke, glow, soft shadows) is _not_ flagged. It fires only on egregious, unambiguous
 cases:
 
-- **Ghosted solid:** among *visible* pixels (alpha > `_ALPHA_VISIBLE`), the fraction
+- **Ghosted solid:** among _visible_ pixels (alpha > `_ALPHA_VISIBLE`), the fraction
   with **partial** alpha (`_ALPHA_VISIBLE < a < SOLID_ALPHA`, e.g. `SOLID_ALPHA=240`)
   is very high (≥ `MAX_PARTIAL_ALPHA_FRACTION`, e.g. **0.85**) **and** there is no
   substantial fully-opaque core (fully-opaque fraction < `MIN_OPAQUE_CORE`, e.g.
@@ -273,7 +273,7 @@ Backend replay e2e (authoritative — no fakes in the path):
    transparent asset. Confirm it is acceptable inline (assets are ≤512×512 here) vs.
    a downscaled mask for the flood-fill.
 3. **Edit-cap counting:** does a refused-edit (outside window, or budget) count toward
-   `max_edits_per_element`? Leaning **no** — only *applied* critic edits count, so the
+   `max_edits_per_element`? Leaning **no** — only _applied_ critic edits count, so the
    cap measures real churn, not rejected attempts.
 4. **`edit_history` window scope:** pass history for the whole build, or only the
    current look-behind window? Leaning **window-scoped** (the critic can only edit the
