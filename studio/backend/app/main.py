@@ -25,6 +25,7 @@ from app.scene.capture import SceneCaptureBroker
 from app.scene.critic import build_scene_critic
 from app.scene.asset_critic import build_asset_critic
 from app.scene.sockets import register_scene_handlers
+from app.scene.reels_spin import build_spin_runner
 from app.scene.store import GameSceneStore
 from app.simulator.store import SlotModelStore
 from app.simulator.hub import CurationHub
@@ -147,7 +148,8 @@ def build(settings: Settings) -> AppContext:
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
     fastapi_app.state.capture_broker = capture_broker
-    register_scene_handlers(sio, scene_hub, capture_broker)
+    spin_runner = build_spin_runner(settings)
+    register_scene_handlers(sio, scene_hub, capture_broker, sim_store, spin_runner)
     register_sim_handlers(sio, sim_hub)
     register_tuner_handlers(sio, tuner_hub)
 

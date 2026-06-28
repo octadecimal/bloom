@@ -1,7 +1,13 @@
+import secrets
 from app.scene.document import OpError
+from app.scene.reels_spin import DEMO_SLOT_MODEL, derive_reels_config, map_grid
+
+# Default canvas used when a game has no Root yet (idempotent: ensure_root keeps
+# an existing Root's canvas).
+_DEFAULT_CANVAS = (1080, 1920)
 
 
-def register_scene_handlers(sio, hub, broker):
+def register_scene_handlers(sio, hub, broker, model_store=None, spin_runner=None):
     @sio.on("join_scene")
     async def join_scene(sid, data):
         await hub.attach(data["gameId"], sid)
@@ -46,3 +52,27 @@ def register_scene_handlers(sio, hub, broker):
         png = data.get("png")
         if broker is not None and png:
             broker.resolve_capture(data.get("captureId"), png)
+
+    async def _model_for(game_id: str) -> dict:
+        doc = await model_store.get(game_id)
+        model = doc.model if doc is not None else None
+        return model if model else DEMO_SLOT_MODEL
+
+    @sio.on("scene_add_module")
+    async def scene_add_module(sid, data):
+        game_id = data.get("gameId")
+        mtype = data.get("type", "reels")
+        await hub.ensure_root(game_id, _DEFAULT_CANVAS)
+        config = derive_reels_config(await _model_for(game_id))
+        await hub.set_modules(game_id, [{"id": "reels", "type": mtype, "config": config}])
+
+    @sio.on("scene_spin")
+    async def scene_spin(sid, data):
+        game_id = data.get("gameId")
+        seed = data.get("seed")
+        if seed is None:
+            seed = secrets.randbelow(2 ** 63)
+        result = await spin_runner.run(await _model_for(game_id), int(seed))
+        grid = map_grid(result["grid"])
+        await sio.emit("scene_spin_outcome",
+                       {"gameId": game_id, "outcome": {"grid": grid}}, room=game_id)
