@@ -242,7 +242,14 @@ map** that the critic reconciles each element against — turning open-ended
 ## Open decisions for the plan
 
 1. `adjust_element` semantic wrapper vs. raw `scene_set_prop` (recommend wrapper).
-2. Vision model choice behind the swappable seam (vision-capable model via
-   OpenRouter; cassette-recorded for replay).
+2. **Vision model — decided: `claude-sonnet-4-6`** (via OpenRouter), behind the
+   swappable critic seam and cassette-recorded for replay. Rationale: composition
+   critique is demanding spatial reasoning (relative scale, overlap, alignment,
+   z-order) where the cheapest tier (`claude-haiku-4-5`, $1/$5 per 1M) gets
+   unreliable; Sonnet 4.6 ($3/$15) is the strong-but-affordable tier with vision +
+   structured outputs, and cost is trivial at author-time volumes. `claude-haiku-4-5`
+   is the cost-floor A/B fallback once the loop works; `claude-opus-4-8` ($5/$25)
+   is the escalation for judgments Sonnet can't make. The seam makes this a config
+   string, not a lock-in.
 3. Exact wire shape of the render-settled ack + capture message on the postMessage
    protocol.
