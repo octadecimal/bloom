@@ -164,7 +164,7 @@ scene context and returns a **structured edit list**.
 
 - **Transform (liberal):** `move` / `scale` / `reorder(z)` an existing placed
   sprite. Reuses the existing low-level `scene_set_prop(node_id, path,
-  value_json)` (sets `position.x`, `scale`, `zIndex`) and `scene_apply_batch`
+value_json)` (sets `position.x`, `scale`, `zIndex`) and `scene_apply_batch`
   (agent_tools.py:508 / :577). A thin semantic wrapper
   `adjust_element(ref, x?, y?, scale?, z?)` — handle-resolved exactly like
   `regenerate_element` — gives the critic a clean verb; it composes the
@@ -230,8 +230,8 @@ map** that the critic reconciles each element against — turning open-ended
 ## Files (anticipated — finalized in the plan)
 
 - `studio/backend/app/` — new compose-loop orchestrator graph; vision-critic seam
-  + structured-output schema; `adjust_element` tool; register in
-  `ToolFactory._BUILDERS`.
+  - structured-output schema; `adjust_element` tool; register in
+    `ToolFactory._BUILDERS`.
 - `studio/backend/app/gdd/router.py` — branch 4 routes "build a scene" into the
   orchestrator.
 - Frontend/runtime client — canvas capture + render-settled ack over the

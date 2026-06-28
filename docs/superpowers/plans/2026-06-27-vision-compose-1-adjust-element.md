@@ -13,8 +13,8 @@
 The approved spec (`docs/superpowers/specs/2026-06-27-vision-in-the-loop-scene-composition-design.md`) decomposes into four sequential, independently-shippable plans. Author each at its sub-project boundary (commit + `/clear` + fresh resume between them):
 
 1. **`adjust_element` transform actuator (THIS PLAN)** — the cheap layout lever. Backend, no frontend, no LLM. Independently useful: the agent can now "move the logo up / make the captain smaller / bring the chest to the front."
-2. **`SceneCritic` seam** — a swappable critic (live `claude-sonnet-4-6` vision call + replay impl), structured-output schema `{done, edits:[{target_handle, action, params, why}]}`, mirroring `build_chat_model` in `providers.py`. Backend, replay-cassette tested. **Note:** the critic is a *direct structured+image LLM call*, NOT a bound tool — it cannot ride the existing `ReplayToolCallingChatModel` (which only replays recorded tool calls). It needs its own seam.
-3. **Real-frame capture handshake** — extend the runtime-client postMessage protocol (`messages.ts`) with a `capture` request + a render-settled `captured` reply carrying a PNG (the existing `ack` fires after `reconciler.applyChanges()`, *before* the Pixi frame is painted — a `requestAnimationFrame`/ticker wait + `renderer.extract` is net-new). Relay studio→backend over the socket. Frontend + Playwright.
+2. **`SceneCritic` seam** — a swappable critic (live `claude-sonnet-4-6` vision call + replay impl), structured-output schema `{done, edits:[{target_handle, action, params, why}]}`, mirroring `build_chat_model` in `providers.py`. Backend, replay-cassette tested. **Note:** the critic is a _direct structured+image LLM call_, NOT a bound tool — it cannot ride the existing `ReplayToolCallingChatModel` (which only replays recorded tool calls). It needs its own seam.
+3. **Real-frame capture handshake** — extend the runtime-client postMessage protocol (`messages.ts`) with a `capture` request + a render-settled `captured` reply carrying a PNG (the existing `ack` fires after `reconciler.applyChanges()`, _before_ the Pixi frame is painted — a `requestAnimationFrame`/ticker wait + `renderer.extract` is net-new). Relay studio→backend over the socket. Frontend + Playwright.
 4. **Compose-loop orchestrator** — ties 1–3 together with the bounds (look-behind N=3, max-passes=3, regen budget K=5, transform-first), streams each critique/edit into the chat feed, and routes design-router branch 4 ("build a scene") into it. Backend integration + replay e2e + Playwright.
 
 ---
@@ -44,10 +44,12 @@ Copied from the spec and repo standards (`AGENTS.md`, `docs/coding-standards.md`
 ### Task 1: `adjust_element` tool — happy path (move / scale / reorder)
 
 **Files:**
+
 - Create: `studio/backend/tests/test_adjust_element_tool.py`
 - Modify: `studio/backend/app/agent_tools.py` (add `build_adjust_element_tool` after `build_regenerate_element_tool` ~line 308; register in `_BUILDERS` ~line 976)
 
 **Interfaces:**
+
 - Consumes (existing, already in `agent_tools.py`):
   - `ToolContext(room_id, game_id, asset_store, asset_hub, *, scene_store, scene_hub)` — dataclass.
   - `_resolve_placed_elements(document: dict, assets: list, ref: str) -> list[PlacedElement]` — substring match on handle/role/asset-name (line 658).
@@ -240,9 +242,11 @@ git commit -m "feat(scene): add adjust_element transform actuator (move/scale/re
 ### Task 2: `adjust_element` error paths (no fields / no match / ambiguous match)
 
 **Files:**
+
 - Modify: `studio/backend/tests/test_adjust_element_tool.py` (add three tests)
 
 **Interfaces:**
+
 - Consumes: the `build_adjust_element_tool`, `_seed_sprite`, `_SilentSio`, `_NoAssets` from Task 1.
 - Produces: nothing new — these tests lock the guard clauses already written in Task 1 (no-op when no fields; friendly no-match and multi-match messages).
 
@@ -323,11 +327,13 @@ git commit -m "test(scene): lock adjust_element no-op / no-match / ambiguous gua
 ### Task 3: Register `adjust_element` in `ToolFactory` and bind it into the design-router
 
 **Files:**
+
 - Modify: `studio/backend/app/gdd/router.py` (add `"adjust_element"` to the tools set in `build_design_router_spec`; add a branch-5 sentence to `_BODY_TEMPLATE`)
 - Modify: `studio/backend/tests/test_adjust_element_tool.py` (ToolFactory registry assertion)
 - Modify: `studio/backend/tests/test_design_router.py` (router binds + mentions `adjust_element`)
 
 **Interfaces:**
+
 - Consumes: `from app.agent_tools import ToolFactory`; `ToolFactory().build(allowlist: list[str], ctx) -> list[BaseTool]` (line ~1018). `from app.gdd.router import build_design_router_spec`; the returned `SkillSpec` has `.tools` (set/list of names) and `.body` (str).
 - Produces: `adjust_element` is in `build_design_router_spec().tools` and named in `.body`, so the live agent can call it.
 
