@@ -29,6 +29,13 @@ MIN_ALPHA_COVERAGE = 0.02          # transparent cutout must cover >2% of the fr
 MIN_OPAQUE_ENTROPY = 1.5           # flat/near-single-colour opaque image is degenerate
 _ALPHA_VISIBLE = 16                # alpha above this counts as "visible"
 
+# Transparency-integrity thresholds (item 5) — conservative, near-zero false
+# positives so legit translucent art (glow/smoke) is left to the vision stage.
+SOLID_ALPHA = 240                  # alpha at/above this counts as "fully opaque"
+MAX_PARTIAL_ALPHA_FRACTION = 0.85  # >this share of visible px partial AND no core
+MIN_OPAQUE_CORE = 0.05             # a real solid has at least this opaque fraction
+MAX_INTERIOR_HOLE_FRACTION = 0.04  # interior (non-edge-connected) transparency cap
+
 
 class AssetVerdict(BaseModel):
     ok: bool = True
@@ -43,6 +50,39 @@ class AssetCritiqueRequest:
     description: str = ""
     theme: str = ""
     transparent: bool = True
+
+
+def _interior_hole_fraction(alpha) -> float:
+    """Fraction of pixels that are transparent but NOT reachable from the border
+    through transparent pixels — i.e. holes punched inside an opaque mass.
+
+    Flood-fills 'outside' transparency inward from the image edge; any remaining
+    transparent pixel is an interior hole. O(pixels); assets here are <=512x512.
+    """
+    w, h = alpha.size
+    px = alpha.load()
+    transparent = [[px[x, y] <= _ALPHA_VISIBLE for x in range(w)] for y in range(h)]
+    outside = [[False] * w for _ in range(h)]
+    stack = []
+    for x in range(w):
+        for y in (0, h - 1):
+            if transparent[y][x]:
+                stack.append((x, y))
+    for y in range(h):
+        for x in (0, w - 1):
+            if transparent[y][x]:
+                stack.append((x, y))
+    while stack:
+        x, y = stack.pop()
+        if x < 0 or y < 0 or x >= w or y >= h or outside[y][x] or not transparent[y][x]:
+            continue
+        outside[y][x] = True
+        stack.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+    interior = sum(
+        1 for y in range(h) for x in range(w)
+        if transparent[y][x] and not outside[y][x]
+    )
+    return interior / max(1, w * h)
 
 
 def asset_heuristic(image_png: bytes, *, transparent: bool) -> AssetVerdict | None:
@@ -69,6 +109,19 @@ def asset_heuristic(image_png: bytes, *, transparent: bool) -> AssetVerdict | No
             return AssetVerdict(ok=False, action="regenerate",
                                 reason=f"transparent asset almost fully empty "
                                        f"({frac:.1%} covered)")
+        alpha = img.getchannel("A")
+        opaque = sum(alpha.histogram()[SOLID_ALPHA:])
+        opaque_frac = opaque / total
+        partial = visible - opaque  # visible but not fully opaque
+        partial_frac_of_visible = partial / max(1, visible)
+        if partial_frac_of_visible >= MAX_PARTIAL_ALPHA_FRACTION \
+                and opaque_frac < MIN_OPAQUE_CORE:
+            return AssetVerdict(ok=False, action="regenerate",
+                                reason="solid subject is see-through "
+                                       "(semi-transparent, no opaque core)")
+        if _interior_hole_fraction(alpha) > MAX_INTERIOR_HOLE_FRACTION:
+            return AssetVerdict(ok=False, action="regenerate",
+                                reason="holes punched in solid area")
     else:
         entropy = img.convert("L").entropy()
         if entropy < MIN_OPAQUE_ENTROPY:

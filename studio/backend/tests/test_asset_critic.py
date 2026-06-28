@@ -63,6 +63,26 @@ async def test_replay_asset_critic_defaults_to_keep_when_no_cassette():
     assert v.action == "keep"
 
 
+def test_heuristic_flags_ghosted_solid():
+    img = Path("tests/fixtures/ghosted_solid.png").read_bytes()
+    v = asset_heuristic(img, transparent=True)
+    assert v is not None and v.action == "regenerate"
+    assert "see-through" in v.reason.lower() or "transparent" in v.reason.lower()
+
+
+def test_heuristic_flags_hole_punched_solid():
+    img = Path("tests/fixtures/holed_solid.png").read_bytes()
+    v = asset_heuristic(img, transparent=True)
+    assert v is not None and v.action == "regenerate"
+    assert "hole" in v.reason.lower()
+
+
+def test_heuristic_passes_legit_translucent_glow():
+    # has an opaque core => NOT a ghosted solid; must defer to vision (return None)
+    img = Path("tests/fixtures/translucent_glow.png").read_bytes()
+    assert asset_heuristic(img, transparent=True) is None
+
+
 def test_asset_prompt_checks_text_and_ghosted_solids():
     from app.scene.asset_critic import ASSET_SYSTEM_PROMPT
 
