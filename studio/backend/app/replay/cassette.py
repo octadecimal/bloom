@@ -61,6 +61,28 @@ def load_run_cassettes(fixtures_dir: Path) -> dict[str, dict]:
     return out
 
 
+def load_asset_cassettes(fixtures_dir: Path) -> dict[str, dict]:
+    """Recorded per-role asset verdicts from ``tests/fixtures/replay/asset/``.
+
+    ``default.json`` becomes ``"__default__"``. Files with a ``role`` (or
+    ``target``) key are also keyed by ``normalize_prompt(role)``. Each value is
+    an ``AssetVerdict`` dict ``{ok, action, reason}``.
+    """
+    out: dict[str, dict] = {}
+    base = fixtures_dir / "asset"
+    if not base.is_dir():
+        return out
+    for path in sorted(base.glob("*.json")):
+        data = json.loads(path.read_text())
+        verdict = {k: v for k, v in data.items() if k not in ("role", "target")}
+        if path.stem == "default":
+            out["__default__"] = verdict
+        key = data.get("role") or data.get("target")
+        if key:
+            out[normalize_prompt(key)] = verdict
+    return out
+
+
 def load_critic_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
     """Load vision-critic cassettes keyed by normalized target handle.
 
