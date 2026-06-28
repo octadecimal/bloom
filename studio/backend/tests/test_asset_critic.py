@@ -40,20 +40,39 @@ def test_heuristic_passes_a_rich_transparent_asset():
 
 
 async def test_replay_asset_critic_returns_keyed_verdict():
-    critic = ReplayAssetCritic({"reel_frame": {"ok": False, "action": "regenerate", "reason": "empty frame"}})
+    critic = ReplayAssetCritic({"reel_frame": [{"ok": False, "action": "regenerate", "reason": "empty frame"}]})
     req = AssetCritiqueRequest(image_png=_png((5, 6, 7, 255), (64, 64)), role="reel_frame", transparent=True)
-    # a rich image passes the heuristic, so the cassette decides
     v = await critic.critique(req)
     assert v.action == "regenerate" and v.reason == "empty frame"
 
 
 async def test_replay_asset_critic_heuristic_short_circuits_before_cassette():
-    # degenerate image => heuristic flags it even with a "keep" cassette
     empty = Path("tests/fixtures/empty_reel_frame.png").read_bytes()
-    critic = ReplayAssetCritic({"reel_frame": {"ok": True, "action": "keep", "reason": "fine"}})
+    critic = ReplayAssetCritic({"reel_frame": [{"ok": True, "action": "keep", "reason": "fine"}]})
     req = AssetCritiqueRequest(image_png=empty, role="reel_frame", transparent=True)
     v = await critic.critique(req)
     assert v.action == "regenerate"
+
+
+async def test_replay_asset_critic_sequences_by_attempt():
+    critic = ReplayAssetCritic({"logo": [
+        {"ok": False, "action": "regenerate", "reason": "garbled text"},
+        {"ok": True, "action": "keep", "reason": "fixed"},
+    ]})
+    img = _png((5, 6, 7, 255), (64, 64))  # passes heuristic => cassette decides
+    first = await critic.critique(AssetCritiqueRequest(image_png=img, role="logo", attempt=0, transparent=True))
+    second = await critic.critique(AssetCritiqueRequest(image_png=img, role="logo", attempt=1, transparent=True))
+    assert first.action == "regenerate"
+    assert second.action == "keep"
+
+
+async def test_replay_asset_critic_clamps_attempt_to_last():
+    critic = ReplayAssetCritic({"logo": [
+        {"ok": False, "action": "regenerate", "reason": "still bad"},
+    ]})
+    img = _png((5, 6, 7, 255), (64, 64))
+    v = await critic.critique(AssetCritiqueRequest(image_png=img, role="logo", attempt=9, transparent=True))
+    assert v.action == "regenerate"  # index clamped to the single entry
 
 
 async def test_replay_asset_critic_defaults_to_keep_when_no_cassette():

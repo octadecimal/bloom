@@ -85,23 +85,31 @@ def load_critic_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
     return out
 
 
-def load_asset_cassettes(fixtures_dir: Path) -> dict[str, dict]:
+def load_asset_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
     """Recorded per-role asset verdicts from ``tests/fixtures/replay/asset/``.
 
-    ``default.json`` becomes ``"__default__"``. Files with a ``role`` (or
-    ``target``) key are also keyed by ``normalize_prompt(role)``. Each value is
-    an ``AssetVerdict`` dict ``{ok, action, reason}``.
+    Each file is EITHER a single verdict dict (returned for every attempt) OR a
+    JSON list of verdict dicts (one per regenerate->re-judge attempt; the asset
+    critic clamps the attempt index to the last entry). ``default.json`` becomes
+    ``"__default__"``. Files with a ``role``/``target`` key are also keyed by
+    ``normalize_prompt(role)``.
     """
-    out: dict[str, dict] = {}
+    out: dict[str, list[dict]] = {}
     base = fixtures_dir / "asset"
     if not base.is_dir():
         return out
     for path in sorted(base.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
-        verdict = {k: v for k, v in data.items() if k not in ("role", "target")}
+        if isinstance(data, list):
+            verdicts = [{k: v for k, v in d.items() if k not in ("role", "target")} for d in data]
+            key = None
+            for d in data:
+                key = d.get("role") or d.get("target") or key
+        else:
+            verdicts = [{k: v for k, v in data.items() if k not in ("role", "target")}]
+            key = data.get("role") or data.get("target")
         if path.name == "default.json":
-            out["__default__"] = verdict
-        key = data.get("role") or data.get("target")
+            out["__default__"] = verdicts
         if key:
-            out[normalize_prompt(key)] = verdict
+            out[normalize_prompt(key)] = verdicts
     return out

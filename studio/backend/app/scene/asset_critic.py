@@ -50,6 +50,7 @@ class AssetCritiqueRequest:
     description: str = ""
     theme: str = ""
     transparent: bool = True
+    attempt: int = 0
 
 
 def _interior_hole_fraction(alpha) -> float:
@@ -135,18 +136,22 @@ class AssetCritic(Protocol):
 
 
 class ReplayAssetCritic:
-    """Offline asset critic: heuristic first, then a recorded per-role verdict."""
+    """Offline asset critic: heuristic first, then a recorded verdict keyed by
+    role and (statelessly) by re-judge attempt."""
 
-    def __init__(self, cassettes: dict[str, dict]):
+    def __init__(self, cassettes: dict[str, list[dict]]):
         self._cassettes = cassettes
 
     async def critique(self, request: AssetCritiqueRequest) -> AssetVerdict:
         flagged = asset_heuristic(request.image_png, transparent=request.transparent)
         if flagged is not None:
             return flagged
-        data = (self._cassettes.get(normalize_prompt(request.role))
-                or self._cassettes.get("__default__"))
-        return AssetVerdict(**data) if data else AssetVerdict()
+        seq = (self._cassettes.get(normalize_prompt(request.role))
+               or self._cassettes.get("__default__"))
+        if not seq:
+            return AssetVerdict()
+        data = seq[min(request.attempt, len(seq) - 1)]
+        return AssetVerdict(**data)
 
 
 ASSET_SYSTEM_PROMPT = (
