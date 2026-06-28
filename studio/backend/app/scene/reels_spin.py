@@ -50,7 +50,7 @@ def derive_reels_config(model: dict) -> dict:
 
 
 def map_grid(numeric_grid: list[list[int]]) -> list[list[str]]:
-    return [[str(s) for s in col] for col in numeric_grid]
+    return [[str(s) for s in reel] for reel in numeric_grid]
 
 
 class SpinRunner(Protocol):
@@ -81,6 +81,7 @@ class SubprocessSpinRunner:
                 stderr=asyncio.subprocess.PIPE,
             )
             result: dict | None = None
+            guard_trip: str | None = None
             done = asyncio.Event()
 
             async def _drain() -> None:
@@ -99,13 +100,18 @@ class SubprocessSpinRunner:
                 done.set()
 
             async def _watchdog() -> None:
-                await watch_proc_tree(proc, done, label="spin",
-                                      mem_cap_mb=self._mem_cap_mb,
-                                      timeout_s=self._timeout_s, poll_s=0.1)
+                nonlocal guard_trip
+                guard_trip = await watch_proc_tree(
+                    proc, done, label="spin",
+                    mem_cap_mb=self._mem_cap_mb,
+                    timeout_s=self._timeout_s, poll_s=0.1)
 
             assert proc.stderr is not None
             _, stderr_bytes, _ = await asyncio.gather(_drain(), proc.stderr.read(), _watchdog())
             await proc.wait()
+
+            if guard_trip is not None:
+                raise RuntimeError(f"spin killed by watchdog: {guard_trip}")
             if result is None:
                 raise RuntimeError(
                     f"spin produced no result (exit {proc.returncode}): {stderr_bytes.decode()[:300]}")
