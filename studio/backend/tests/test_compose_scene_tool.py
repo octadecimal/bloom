@@ -210,6 +210,24 @@ def test_tool_context_carries_asset_critic():
 
 from app.agent_tools import format_compose_summary
 from app.scene.compose_loop import ComposeResult
+from app.scene.compose import build_sprite_ops
+
+
+def _texture_op(ops):
+    return next(o for o in ops if o["kind"] == "addNode" and o["type"] == "Texture")
+
+
+def test_build_sprite_ops_writes_asset_id_on_texture():
+    ops = build_sprite_ops(handle="wild", src="/media/g1/a1/x.png", asset_id="a1")
+    tex = _texture_op(ops)
+    assert tex["props"]["src"] == "/media/g1/a1/x.png"
+    assert tex["props"]["assetId"] == "a1"
+
+
+def test_build_sprite_ops_omits_asset_id_when_absent():
+    ops = build_sprite_ops(handle="wild", src="/media/g1/a1/x.png")
+    tex = _texture_op(ops)
+    assert "assetId" not in tex["props"]
 
 
 def test_compose_summary_reports_asset_regenerations_and_notes():

@@ -79,6 +79,10 @@ test('a generated asset renders as a real sprite texture in the engine iframe (l
   await openAppAtRoom(page, 'ada');
 
   // 1. Author + generate one asset (replay produces a real >64px image on disk).
+  // Default board view is `medium`, where the card's Generate footer (asset-generate)
+  // is hover-mounted only; switch to `large` (actions:'always') so the click below
+  // doesn't hang waiting for a button that is never in the DOM.
+  await page.getByTestId('view-mode-large').click();
   await page.getByTestId('asset-name').fill('Wild');
   await page.getByTestId('asset-prompt').fill('a glowing wild symbol');
   await page.getByTestId('asset-workflow').selectOption('schnell-transparent');

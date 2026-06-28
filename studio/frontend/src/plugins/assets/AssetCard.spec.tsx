@@ -176,7 +176,7 @@ describe('AssetCard', () => {
       }),
     ]);
     render(<AssetCard index={0} mode="medium" />);
-    expect(screen.queryByTestId('asset-candidates')).toBeNull();
+    expect(screen.getByTestId('asset-candidates')).toBeTruthy();
     expect(screen.queryByText('schnell-opaque')).toBeNull();
     expect(screen.queryByTestId('asset-generate')).toBeNull();
     fireEvent.mouseEnter(screen.getByTestId('asset-card-a1'));
@@ -199,6 +199,29 @@ describe('AssetCard', () => {
     expect(screen.getByText('Wild')).toBeTruthy();
     expect(screen.getByText('schnell-opaque')).toBeTruthy();
     expect(screen.getByTestId('asset-generate')).toBeTruthy();
+  });
+});
+
+describe('variant toggle is reachable in every view mode', () => {
+  const MODES = ['small', 'medium', 'large', 'list'] as const;
+  const twoGen = () =>
+    mk({
+      status: 'done',
+      generations: [
+        { id: 'gen1', seed: 1, imageRef: '/media/g1/a1/gen1.png', createdAt: '' },
+        { id: 'gen2', seed: 2, imageRef: '/media/g1/a1/gen2.png', createdAt: '' },
+      ],
+      selectedGenerationId: 'gen1',
+      progress: null,
+    });
+
+  it.each(MODES)('renders the candidate strip and selects a variant in %s mode', (mode) => {
+    assetsSlice().assets.set([twoGen()]);
+    render(<AssetCard index={0} mode={mode} />);
+    const strip = screen.getByTestId('asset-candidates');
+    const thumb = strip.querySelectorAll('img')[1];
+    fireEvent.click(thumb);
+    expect(selectGeneration).toHaveBeenCalledWith('a1', 'gen2');
   });
 });
 

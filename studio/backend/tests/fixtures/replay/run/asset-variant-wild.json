@@ -1,0 +1,18 @@
+{
+  "prompt": "add a glowing wild symbol",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "generate_and_place",
+        "args": {
+          "description": "a glowing wild slot symbol, prop, no text, no words, no letters",
+          "slot": "wild",
+          "size": "512x512",
+          "transparent": true,
+          "role": "wild"
+        }
+      }
+    ]
+  ],
+  "final": ["Added a glowing wild symbol to the scene."]
+}

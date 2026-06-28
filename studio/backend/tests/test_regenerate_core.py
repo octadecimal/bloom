@@ -31,7 +31,28 @@ class _AssetStore:
         return self._asset
     async def select_generation(self, asset_id, gen_id):
         self.selected = gen_id
+        self._asset.selected_generation_id = gen_id  # re-read reflects selection
+        return self._asset
+
+
+class _SceneStore:
+    def __init__(self, document):
+        self._document = document
+    async def get_document(self, game_id):
+        return self._document
+
+
+class _SceneHub:
+    def __init__(self):
+        self.ops = []
+    async def apply_op(self, game_id, op):
+        self.ops.append(op)
         return None
+
+
+def _doc(tex_id="tex.seaweed", asset_id="a1"):
+    return {"version": 1, "nodes": {tex_id: {"id": tex_id, "type": "Texture",
+            "props": {"src": "/media/g1/a1/old.png", "assetId": asset_id}}}, "edges": []}
 
 
 class _NoImageStore(_AssetStore):
@@ -46,38 +67,28 @@ class _AssetHub:
         self.calls.append(asset_id)
 
 
-class _SceneHub:
-    def __init__(self):
-        self.ops = []
-    async def apply_op(self, game_id, op):
-        self.ops.append(op)
-        return None
-
-
 @pytest.mark.asyncio
 async def test_core_regenerates_selects_newest_and_rewrites_texture():
     asset = _asset_with_two_gens()
     store, hub, shub = _AssetStore(asset), _AssetHub(), _SceneHub()
-    ctx = ToolContext("r1", "g1", store, hub, scene_hub=shub)
+    ctx = ToolContext("r1", "g1", store, hub, scene_store=_SceneStore(_doc()), scene_hub=shub)
 
     ref = await _regenerate_and_rebind(
         ctx, asset=asset, texture_id="tex.seaweed", new_prompt="fresh seaweed")
 
-    assert ref == "/media/g1/a1/new.png"          # newest generation
+    assert ref == "/media/g1/a1/new.png"
     assert store.updated == {"prompt": "fresh seaweed"}
     assert hub.calls == ["a1"]
     assert store.selected == "gen2"
-    assert shub.ops == [{                           # exactly one in-place setProp
-        "kind": "setProp", "id": "tex.seaweed", "path": "src",
-        "value": "/media/g1/a1/new.png",
-    }]
+    assert shub.ops == [{"kind": "setProp", "id": "tex.seaweed", "path": "src",
+                         "value": "/media/g1/a1/new.png"}]
 
 
 @pytest.mark.asyncio
 async def test_core_skips_setprop_when_texture_is_none():
     asset = _asset_with_two_gens()
     store, hub, shub = _AssetStore(asset), _AssetHub(), _SceneHub()
-    ctx = ToolContext("r1", "g1", store, hub, scene_hub=shub)
+    ctx = ToolContext("r1", "g1", store, hub, scene_store=_SceneStore(_doc()), scene_hub=shub)
 
     ref = await _regenerate_and_rebind(
         ctx, asset=asset, texture_id=None, new_prompt=None)
@@ -92,7 +103,7 @@ async def test_core_skips_setprop_when_texture_is_none():
 async def test_core_returns_none_when_no_image():
     asset = _asset_with_two_gens()
     store, hub, shub = _NoImageStore(asset), _AssetHub(), _SceneHub()
-    ctx = ToolContext("r1", "g1", store, hub, scene_hub=shub)
+    ctx = ToolContext("r1", "g1", store, hub, scene_store=_SceneStore(_doc()), scene_hub=shub)
 
     ref = await _regenerate_and_rebind(
         ctx, asset=asset, texture_id="tex.seaweed", new_prompt="x")

@@ -320,6 +320,16 @@ class RoomHub:
             entry = self._pending_approvals.pop(run.id, None)
             if entry is not None and not entry["future"].done():
                 entry["future"].cancel()
+            # Surface a failed run as a visible chat error. The runner swallows the
+            # model error and reports it via RunFinished(status="error") (no raise),
+            # so condition on the final status — not just the except path. The run
+            # block alone may have no steps if the model failed on the first call.
+            if status == "error":
+                await self._sio.emit(
+                    "error",
+                    {"roomId": room_id, "message": "generation failed"},
+                    room=room_id,
+                )
             await self._run_store.complete_run(run.id, status)
             await self._sio.emit(
                 "run_completed", {"roomId": room_id, "runId": run.id, "status": status}, room=room_id
