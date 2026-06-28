@@ -1356,11 +1356,12 @@ Expected: PASS — `test_compose_loop.py`, `test_compose_scene_tool.py`, `test_d
 Run: `cd studio/backend && uv run pytest -m e2e -q`
 Expected: PASS — `test_compose_loop.py` and the migrated `test_scene_compose.py`.
 
-- [ ] **Step 3: Backend formatting gate**
+- [ ] **Step 3: Markdown/prettier gate**
 
-Run: `cd studio/backend && uv run ruff format --check . && uv run ruff check .`
-(If the repo uses a different backend formatter/linter, run that — match `just`'s backend lint recipe. Fix any findings, then re-run.)
-Expected: PASS / no changes.
+The backend has no Python linter/formatter gate (`just backend-test` is pytest only; `just fmt`/`just lint` are Rust). The repo-wide gate that touches this branch's non-Python files is the **pinned** prettier (the new plan doc + any `.md`/`.ts` you added). From the worktree root:
+Run: `node_modules/.bin/prettier --check "docs/**/*.md" "studio/frontend/e2e/compose-loop.spec.ts"`
+(Use the PINNED prettier in `node_modules/.bin`, NOT `npx prettier` — a fresh npx pulls a newer version that disagrees on markdown; see memory `pinned-prettier-not-npx`.)
+If it reports the plan doc or spec is unformatted, run `node_modules/.bin/prettier --write` on those files and commit the reformat. Expected after: all matched files formatted.
 
 - [ ] **Step 4: Browser e2e (replay backend up at :8001)**
 
