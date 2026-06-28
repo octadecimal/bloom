@@ -446,7 +446,7 @@ class _SceneComposeDeps:
         images = collect_scene_images(document, media_dir)
         return composite_scene(document, images)
 
-    async def critique_asset(self, target_handle: str):
+    async def critique_asset(self, target_handle: str, attempt: int = 0):
         document = await self._ctx.scene_store.get_document(self._ctx.game_id)
         media_dir = get_settings().media_dir
         images = collect_scene_images(document or {}, media_dir)
@@ -466,7 +466,7 @@ class _SceneComposeDeps:
         transparent = _image_has_transparency(image_png)
         return await self._ctx.asset_critic.critique(AssetCritiqueRequest(
             image_png=image_png, role=role, description=description,
-            theme="", transparent=transparent))
+            theme="", transparent=transparent, attempt=attempt))
 
     async def critique(self, request: CritiqueRequest):
         return await self._ctx.scene_critic.critique(request)

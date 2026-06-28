@@ -26,7 +26,10 @@ class FakeDeps:
         self.adjusts: list[tuple[str, EditParams]] = []
         self.regens: list[str] = []
         self.renders = 0
-        self.asset_verdicts = asset_verdicts or {}
+        raw = asset_verdicts or {}
+        self.asset_verdicts = {
+            h: (v if isinstance(v, list) else [v]) for h, v in raw.items()
+        }
 
     async def place(self, element: BuildElement) -> str:
         self.placements.append(element.slot)
@@ -45,9 +48,12 @@ class FakeDeps:
             raise RuntimeError("render failed")
         return b"\x89PNG-fake-frame"
 
-    async def critique_asset(self, target_handle: str):
+    async def critique_asset(self, target_handle: str, attempt: int = 0):
         from app.scene.asset_critic import AssetVerdict
-        return self.asset_verdicts.get(target_handle, AssetVerdict())
+        seq = self.asset_verdicts.get(target_handle)
+        if not seq:
+            return AssetVerdict()
+        return seq[min(attempt, len(seq) - 1)]
 
     async def critique(self, request) -> Critique:
         passes = self._script.get(request.target_handle, [])
@@ -158,33 +164,50 @@ async def test_render_failure_skips_critique_with_visible_note():
 
 
 @pytest.mark.asyncio
-async def test_bad_asset_is_regenerated_before_composition():
+async def test_bad_asset_regenerates_then_converges_on_rejudge():
     from app.scene.asset_critic import AssetVerdict
     deps = FakeDeps(
         {"logo": [Critique(done=True)]},
-        asset_verdicts={"logo": AssetVerdict(ok=False, action="regenerate", reason="empty")},
+        asset_verdicts={"logo": [
+            AssetVerdict(ok=False, action="regenerate", reason="garbled text"),
+            AssetVerdict(ok=True, action="keep", reason="fixed"),
+        ]},
     )
     result = await run_compose([_el("logo")], "pirate", deps)
-    assert deps.regens == ["logo"]                 # asset gate regenerated it
+    assert deps.regens == ["logo"]              # regenerated exactly once
     assert result.assets_regenerated == 1
-    assert result.regens_spent == 1                # shared budget
-    assert any("empty" in n for n in result.notes)
+    assert any("asset ok" in n for n in result.notes)   # converged
 
 
 @pytest.mark.asyncio
-async def test_bad_asset_regenerate_respects_shared_budget():
+async def test_bad_asset_rejudge_is_bounded_by_retries():
+    from app.scene.asset_critic import AssetVerdict
+    deps = FakeDeps(
+        {"logo": [Critique(done=True)]},
+        asset_verdicts={"logo": [AssetVerdict(ok=False, action="regenerate", reason="still bad")]},
+    )  # single verdict => always regenerate
+    result = await run_compose(
+        [_el("logo")], "pirate", deps, ComposeBounds(asset_regen_retries=2, regen_budget=5))
+    assert deps.regens == ["logo", "logo"]      # capped at asset_regen_retries
+    assert result.assets_regenerated == 2
+    assert any("retries exhausted" in n for n in result.notes)
+
+
+@pytest.mark.asyncio
+async def test_bad_asset_rejudge_respects_shared_budget():
     from app.scene.asset_critic import AssetVerdict
     deps = FakeDeps(
         {"a": [Critique(done=True)], "b": [Critique(done=True)]},
         asset_verdicts={
-            "a": AssetVerdict(ok=False, action="regenerate", reason="empty a"),
-            "b": AssetVerdict(ok=False, action="regenerate", reason="empty b"),
+            "a": [AssetVerdict(ok=False, action="regenerate", reason="bad a")],
+            "b": [AssetVerdict(ok=False, action="regenerate", reason="bad b")],
         },
     )
-    result = await run_compose([_el("a"), _el("b")], "pirate", deps, ComposeBounds(regen_budget=1))
-    assert deps.regens == ["a"]                     # only the first is funded
+    result = await run_compose(
+        [_el("a"), _el("b")], "pirate", deps, ComposeBounds(regen_budget=1))
+    assert deps.regens == ["a"]                 # only the first regen is funded
     assert result.assets_regenerated == 1
-    assert any("budget" in n for n in result.notes) # b's regen refused, noted
+    assert any("budget exhausted" in n for n in result.notes)
 
 
 @pytest.mark.asyncio

@@ -72,7 +72,7 @@ class ComposeDeps(Protocol):
     async def placed_handles(self) -> list[str]: ...
     async def scene_context(self) -> dict: ...
     async def render_scene(self) -> bytes: ...
-    async def critique_asset(self, target_handle: str) -> AssetVerdict: ...
+    async def critique_asset(self, target_handle: str, attempt: int = 0) -> AssetVerdict: ...
     async def critique(self, request: CritiqueRequest) -> Critique: ...
     async def adjust(self, handle: str, params: EditParams) -> str: ...
     async def regenerate(self, handle: str) -> str: ...
@@ -99,23 +99,31 @@ async def run_compose(
         window = handles[max(0, k - bounds.look_behind):k + 1]
         result.notes.append(f"placed {target} (window={window})")
 
-        # Per-asset quality gate (before composition): regenerate degenerate art.
-        verdict = await deps.critique_asset(target)
+        # Per-asset quality gate (before composition): regenerate degenerate art,
+        # then RE-JUDGE so a regeneration converges instead of silently swapping
+        # one bad asset for another. Bounded by asset_regen_retries and the shared
+        # regen budget.
+        verdict = await deps.critique_asset(target, attempt=0)
+        attempt = 0
+        while (verdict.action == "regenerate" and regen_left > 0
+               and attempt < bounds.asset_regen_retries):
+            regen_left -= 1
+            result.regens_spent += 1
+            result.assets_regenerated += 1
+            await deps.regenerate(target)
+            attempt += 1
+            result.notes.append(
+                f"{target}: {verdict.reason} -> regenerated (attempt {attempt})")
+            verdict = await deps.critique_asset(target, attempt=attempt)
+
         if verdict.action == "regenerate":
-            if regen_left > 0:
-                regen_left -= 1
-                result.regens_spent += 1
-                result.assets_regenerated += 1
-                await deps.regenerate(target)
-                result.notes.append(f"{target}: {verdict.reason} -> regenerated")
-            else:
-                result.notes.append(
-                    f"{target}: {verdict.reason} (regen budget exhausted, kept)")
+            cause = "regen budget exhausted" if regen_left <= 0 else "retries exhausted"
+            result.notes.append(
+                f"{target}: {verdict.reason} (could not fix: {cause}, kept)")
+        elif verdict.ok:
+            result.notes.append(f"{target}: asset ok")
         else:
-            if verdict.ok:
-                result.notes.append(f"{target}: asset ok")
-            else:
-                result.notes.append(f"{target}: {verdict.reason}")
+            result.notes.append(f"{target}: {verdict.reason}")
 
         # Composition passes: critique the composited scene and apply edits.
         for pass_index in range(bounds.max_passes):
