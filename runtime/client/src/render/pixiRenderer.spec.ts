@@ -111,7 +111,7 @@ describe('PixiRenderer.applyLabel', () => {
     r.setParent('cell', 'reel');
 
     const reel = internals.objects.get('reel')! as Container;
-    const cell = internals.objects.get('cell')! as unknown as Container;
+    const cell = internals.objects.get('cell')! as unknown as Sprite;
     const label = internals.labels.get('cell')!;
     expect(label.text).toBe('A');
     expect(label.parent).toBe(reel); // a real Container child — no deprecation
@@ -131,6 +131,57 @@ describe('PixiRenderer.applyLabel', () => {
     r.setProp('cell', 'label', 'B');
     expect(internals.labels.get('cell')).toBe(first);
     expect(first.text).toBe('B');
+  });
+
+  it('keeps the label glued when the cell position changes via setProp', () => {
+    const { r, internals } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    r.setProp('cell', 'label', 'A');
+
+    r.setProp('cell', 'position', { x: 5, y: 200 });
+    const label = internals.labels.get('cell')!;
+    expect(label.position.x).toBe(5);
+    expect(label.position.y).toBe(200);
+
+    r.setProp('cell', 'position.y', 264);
+    expect(label.position.y).toBe(264);
+  });
+
+  it('re-homes the label when the cell is moved to a different reel', () => {
+    const { r, internals } = rendererWithStage();
+    r.createObject('reel1', 'Container');
+    r.setParent('reel1', 'root');
+    r.createObject('reel2', 'Container');
+    r.setParent('reel2', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel1');
+    r.setProp('cell', 'label', 'A');
+
+    r.setParent('cell', 'reel2');
+    const reel2 = internals.objects.get('reel2')! as Container;
+    const label = internals.labels.get('cell')!;
+    const cell = internals.objects.get('cell')! as unknown as Sprite;
+    expect(label.parent).toBe(reel2);
+    expect(label.position.x).toBe(cell.position.x);
+    expect(label.position.y).toBe(cell.position.y);
+  });
+
+  it('removes the label from its parent when the cell is orphaned via setParent(null)', () => {
+    const { r, internals } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    r.setProp('cell', 'label', 'A');
+
+    const label = internals.labels.get('cell')!;
+    expect(label.parent).not.toBeNull();
+
+    r.setParent('cell', null);
+    expect(label.parent).toBeNull();
   });
 });
 

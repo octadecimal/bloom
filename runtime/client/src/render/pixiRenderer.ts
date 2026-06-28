@@ -156,7 +156,13 @@ export class PixiRenderer implements IRenderer {
       return;
     }
     const obj = this.objects.get(id);
-    if (obj) applyPixiProp(obj, path, value);
+    if (!obj) return;
+    applyPixiProp(obj, path, value);
+    // Keep a sibling label glued to its cell when the cell's position changes via setProp.
+    if (obj instanceof Sprite && path.startsWith('position')) {
+      const label = this.labels.get(id);
+      if (label) this.placeLabel(obj, label);
+    }
   }
 
   private applyLabel(id: string, value: JsonValue): void {
