@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Container } from 'pixi.js';
+import { Container, Sprite, Text } from 'pixi.js';
 import { applyPixiProp, PixiRenderer } from './pixiRenderer';
 
 function fakeObj() {
@@ -81,6 +81,56 @@ describe('PixiRenderer.createObject', () => {
     r.createObject('s', 'Sprite');
     r.setProp('s', 'anchor', { x: 0, y: 0 });
     expect(r.anchorOf('s')).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('PixiRenderer.applyLabel', () => {
+  function rendererWithStage() {
+    const r = new PixiRenderer(document.createElement('div'));
+    const stage = new Container();
+    stage.sortableChildren = true;
+    const internals = r as unknown as {
+      app: { stage: Container };
+      rootId: string;
+      objects: Map<string, Container>;
+      labels: Map<string, Text>;
+    };
+    internals.app = { stage };
+    internals.rootId = 'root';
+    internals.objects.set('root', stage);
+    return { r, internals };
+  }
+
+  it('places the label as a sibling in the cell parent (never Sprite.addChild), tracking the cell position', () => {
+    const { r, internals } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setProp('cell', 'position', { x: 0, y: 108 });
+    r.setProp('cell', 'label', 'A');
+    r.setParent('cell', 'reel');
+
+    const reel = internals.objects.get('reel')! as Container;
+    const cell = internals.objects.get('cell')! as unknown as Container;
+    const label = internals.labels.get('cell')!;
+    expect(label.text).toBe('A');
+    expect(label.parent).toBe(reel); // a real Container child — no deprecation
+    expect(cell.children.length).toBe(0); // nothing added to the Sprite itself
+    expect(label.position.x).toBe(0);
+    expect(label.position.y).toBe(108);
+  });
+
+  it('updates an existing label in place without re-adding', () => {
+    const { r, internals } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    r.setProp('cell', 'label', 'A');
+    const first = internals.labels.get('cell')!;
+    r.setProp('cell', 'label', 'B');
+    expect(internals.labels.get('cell')).toBe(first);
+    expect(first.text).toBe('B');
   });
 });
 

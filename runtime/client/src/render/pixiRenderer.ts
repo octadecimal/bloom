@@ -140,9 +140,14 @@ export class PixiRenderer implements IRenderer {
     const child = this.objects.get(childId);
     if (!child) return;
     child.removeFromParent();
+    const label = this.labels.get(childId);
+    label?.removeFromParent();
     if (parentId === null) return;
     const parent = this.objects.get(parentId);
-    if (parent) (parent as Container).addChild(child);
+    if (parent) {
+      (parent as Container).addChild(child);
+      if (label && child instanceof Sprite) this.placeLabel(child, label);
+    }
   }
 
   setProp(id: string, path: string, value: JsonValue): void {
@@ -161,12 +166,21 @@ export class PixiRenderer implements IRenderer {
     let text = this.labels.get(id);
     if (!text) {
       text = new Text({ text: str, style: { fill: '#0b0b0c', fontSize: 28, fontWeight: 'bold' } });
-      text.anchor.set(0.5); // centered on the sprite's origin (cells are anchor-0.5)
-      obj.addChild(text);
+      text.anchor.set(0.5);
+      text.zIndex = 1; // render above the cell background within the reel container
       this.labels.set(id, text);
     } else {
       text.text = str;
     }
+    this.placeLabel(obj, text);
+  }
+
+  /** Labels live beside their cell in the cell's parent container — never as a child
+   *  of the Sprite (Pixi v8 forbids Sprite children) — and track the cell's position. */
+  private placeLabel(sprite: Sprite, text: Text): void {
+    text.position.set(sprite.position.x, sprite.position.y);
+    const parent = sprite.parent as Container | null;
+    if (parent && text.parent !== parent) parent.addChild(text);
   }
 
   async loadTexture(src: string): Promise<ITextureHandle> {
