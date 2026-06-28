@@ -22,6 +22,7 @@ from app.gdd.sockets import register_gdd_handlers
 from app.gdd.store import GddStore
 from app.scene.hub import GameSceneHub
 from app.scene.capture import SceneCaptureBroker
+from app.scene.critic import build_scene_critic
 from app.scene.sockets import register_scene_handlers
 from app.scene.store import GameSceneStore
 from app.simulator.store import SlotModelStore
@@ -113,6 +114,8 @@ def build(settings: Settings) -> AppContext:
     turn_runner = TurnRunner(lambda model: build_chat_model(settings, model), tool_factory)
 
     presence = PresenceRegistry()
+    capture_broker = SceneCaptureBroker(sio)
+    scene_critic = build_scene_critic(settings)
     hub = RoomHub(
         sio, store, chat_service,
         run_store=run_store, turn_runner=turn_runner,
@@ -121,6 +124,7 @@ def build(settings: Settings) -> AppContext:
         gdd_store=gdd_store, gdd_hub=gdd_hub,
         scene_store=scene_store, scene_hub=scene_hub,
         sim_store=sim_store, tuner_store=tuner_store, tuner_hub=tuner_hub,
+        scene_critic=scene_critic, capture_broker=capture_broker,
     )
     register_socket_handlers(sio, hub, presence)
 
@@ -139,7 +143,6 @@ def build(settings: Settings) -> AppContext:
 
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
-    capture_broker = SceneCaptureBroker(sio)
     fastapi_app.state.capture_broker = capture_broker
     register_scene_handlers(sio, scene_hub, capture_broker)
     register_sim_handlers(sio, sim_hub)

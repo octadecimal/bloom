@@ -24,6 +24,11 @@ class ToolContext:
     sim_store: object = None
     tuner_store: object = None
     tuner_hub: object = None
+    # Vision-compose Plan 4: the compose-loop orchestrator (compose_scene tool)
+    # grades the rendered frame and edits placement. The critic judges; the
+    # capture broker fetches the real engine frame (Plans 2 & 3).
+    scene_critic: object = None
+    capture_broker: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
