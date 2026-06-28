@@ -197,6 +197,17 @@ export class PixiRenderer implements IRenderer {
     };
   }
 
+  async capture(): Promise<string> {
+    const app = this.app;
+    if (!app) return '';
+    // Render-settled barrier (spec §2): the protocol acks a change after the
+    // reconciler mutates the scene graph but BEFORE Pixi paints it. Wait one
+    // animation frame so the just-applied ops (texture uploads, new bounds) are
+    // drawn, then extract — otherwise the critic would grade a stale frame.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    return app.renderer.extract.base64(app.stage);
+  }
+
   onTick(cb: (dtMs: number) => void): () => void {
     const fn = (ticker: Ticker) => cb(ticker.deltaMS);
     if (this.app) {
