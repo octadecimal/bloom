@@ -247,8 +247,32 @@ export class PixiRenderer implements IRenderer {
   getHandle(id: string): IDisplayHandle | null {
     const obj = this.objects.get(id);
     if (!obj) return null;
+    const labels = this.labels;
+    const position = {
+      get x(): number {
+        return obj.position.x;
+      },
+      set x(v: number) {
+        obj.position.x = v;
+        const lbl = labels.get(id);
+        if (lbl) lbl.position.x = v;
+      },
+      get y(): number {
+        return obj.position.y;
+      },
+      set y(v: number) {
+        obj.position.y = v;
+        const lbl = labels.get(id);
+        if (lbl) lbl.position.y = v;
+      },
+      set(x: number, y: number) {
+        obj.position.set(x, y);
+        const lbl = labels.get(id);
+        if (lbl) lbl.position.set(x, y);
+      },
+    };
     return {
-      position: obj.position,
+      position,
       scale: obj.scale,
       get alpha() {
         return obj.alpha;
