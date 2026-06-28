@@ -48,6 +48,7 @@ def test_composite_places_sprites_by_anchor_and_zorder():
     assert img.getpixel((10, 50))[:3] == (255, 0, 0)
     # logo (40x40 centered at 150,50) => spans x 130..170, y 30..70 => blue at its center
     assert img.getpixel((150, 50))[:3] == (0, 0, 255)
+    assert img.getpixel((135, 50))[:3] == (0, 0, 255)  # inside anchored box; fails if position used as top-left
     # just outside the logo box stays background
     assert img.getpixel((128, 50))[:3] == (255, 0, 0)
 

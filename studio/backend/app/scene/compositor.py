@@ -75,7 +75,7 @@ def composite_scene(
     canvas = Image.new("RGBA", (cw, ch), background)
 
     sprites = [(nid, n) for nid, n in nodes.items() if n.get("type") == "Sprite"]
-    sprites.sort(key=lambda it: int((it[1].get("props") or {}).get("zIndex", 0) or 0))
+    sprites.sort(key=lambda it: float((it[1].get("props") or {}).get("zIndex", 0) or 0))
 
     for nid, n in sprites:
         tex_id = _texture_of(document, nid)
@@ -87,8 +87,8 @@ def composite_scene(
             continue
         props = n.get("props") or {}
         scale = props.get("scale") or {}
-        sx = float(scale.get("x", 1.0) or 1.0)
-        sy = float(scale.get("y", 1.0) or 1.0)
+        sx = float(scale.get("x", 1.0))
+        sy = float(scale.get("y", 1.0))
         rw = max(1, round(sprite.width * sx))
         rh = max(1, round(sprite.height * sy))
         if (rw, rh) != (sprite.width, sprite.height):
