@@ -32,18 +32,19 @@ function texSrc(page: Page, texId: string) {
   }, texId);
 }
 
+// Drives a chat run (generate_and_place) + two board generations + engine renders;
+// allow for first-run Vite compile and the agent round-trip.
+test.setTimeout(180_000);
+
 test('regenerate auto-selects newest and variant-toggle re-selects, both updating the live game', async ({ page }) => {
   await openAppAtRoom(page, 'ada');
 
-  // 1. Author + generate one asset (replay produces a real image; gen1 selected).
-  await page.getByTestId('asset-name').fill('Wild');
-  await page.getByTestId('asset-prompt').fill('a glowing wild symbol');
-  await page.getByTestId('asset-workflow').selectOption('schnell-transparent');
-  await page.getByRole('button', { name: 'Add asset' }).click();
-  await page.getByTestId('asset-generate').click();
-  await expect(page.getByTestId('asset-selected-image')).toBeVisible({ timeout: 30_000 });
+  // Use large view so the Generate action is always visible (not hover-gated in
+  // medium/small) and the candidate strip is reliably present for the toggle below.
+  await page.getByTestId('view-mode-large').click();
 
-  // 2. Open the Game Scene pane; wait for engine handshake.
+  // 1. Open the Game Scene pane FIRST and wait for the engine handshake, so the
+  //    placement scene_op (step 2) is observed live as it arrives.
   await page.getByTestId('menu-view').click();
   await page.getByTestId('view-open-game/preview').click();
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
@@ -52,35 +53,39 @@ test('regenerate auto-selects newest and variant-toggle re-selects, both updatin
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string);
   expect(gameId).toBeTruthy();
 
-  // 3. Read the asset id + gen1 image_ref from the backend wire.
-  const { assetId, gen1Ref } = await page.evaluate(async (gid) => {
+  // 2. Place the wild symbol via CHAT → generate_and_place(slot=wild). The agent
+  //    path is the only one that writes structural nodes to the BACKEND scene — the
+  //    client socket (scene_apply_op) accepts setProp only (forbidden_kind otherwise).
+  //    This creates the asset, generates gen1, and places spr.wild/tex.wild carrying
+  //    props.assetId — exactly the bound-Texture precondition server-side rebind needs.
+  const composer = page.getByTestId('chat-composer');
+  await expect(composer).toBeVisible({ timeout: 15_000 });
+  await composer.fill('add a glowing wild symbol');
+  await page.getByTestId('chat-send').click();
+  const feed = page.getByTestId('chat-messages');
+  await expect(feed).toContainText('generate_and_place', { timeout: 60_000 });
+  await expect(feed).toContainText('Added a glowing wild symbol', { timeout: 60_000 });
+
+  // 3. Read the wild asset's gen1 image_ref from the backend wire.
+  const gen1Ref = await page.evaluate(async (gid) => {
     const assets = await (await fetch(`/games/${gid}/assets`)).json();
-    const a = assets[0];
+    const a = assets.find((x: any) => x.slot === 'wild') ?? assets[0];
     const sel = a.generations.find((g: any) => g.id === a.selectedGenerationId) ?? a.generations[0];
-    return { assetId: a.id as string, gen1Ref: sel.imageRef as string };
+    return sel.imageRef as string;
   }, gameId);
   expect(gen1Ref).toMatch(/^\/media\//);
-
-  // 4. Place the asset into the scene on the BACKEND (Texture carries assetId), so
-  //    server-side rebind can find it. Persist via the studio→backend socket path
-  //    (__gameEmitApplyOp); the backend applies each op and broadcasts scene_op back
-  //    to the room, which updates __gameSceneDocument and re-renders the engine.
-  await page.evaluate(
-    ({ gid, aid, ref }) => {
-      const send = (window as any).__gameEmitApplyOp as (gid: string, op: unknown) => void;
-      send(gid, { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
-      send(gid, { kind: 'addNode', id: 'spr.wild', type: 'Sprite' });
-      send(gid, { kind: 'addNode', id: 'tex.wild', type: 'Texture', props: { src: ref, assetId: aid } });
-      send(gid, { kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'spr.wild', port: 'parent' } });
-      send(gid, { kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex.wild', port: 'data' }, to: { node: 'spr.wild', port: 'texture' } });
-    },
-    { gid: gameId, aid: assetId, ref: gen1Ref },
-  );
 
   // baseline: the studio-synced document shows the bound texture at gen1
   await expect.poll(() => texSrc(page, 'tex.wild'), { timeout: 10000 }).toBe(gen1Ref);
 
-  // 5. Regenerate on the board → auto-selects newest → backend rebinds → scene_op.
+  // Bring the Asset Board back to the front — opening the Game Preview stacked over
+  // it in the same Dockview group (the preview stays mounted, so tex.wild updates
+  // keep flowing). The board card for the agent-placed 'wild' asset lives here.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-assets/board').click();
+  await expect(page.getByTestId('asset-generate')).toBeVisible({ timeout: 15_000 });
+
+  // 4. Regenerate on the board → auto-selects newest → backend rebinds → scene_op.
   await page.getByTestId('asset-generate').click();
   // regenerate auto-selects the newest variant → bound texture src flips away from gen1
   await expect
@@ -93,11 +98,11 @@ test('regenerate auto-selects newest and variant-toggle re-selects, both updatin
     )
     .not.toBeNull();
 
-  // 6. Toggle back to the first variant via the candidate strip → game reverts.
+  // 5. Toggle back to the first variant via the candidate strip → game reverts.
   const firstThumb = page.getByTestId('asset-candidates').locator('img').first();
   await firstThumb.click();
   await expect.poll(() => texSrc(page, 'tex.wild'), { timeout: 15_000 }).toBe(gen1Ref);
 
-  // 7. No engine errors throughout.
+  // 6. No engine errors throughout.
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
 });
