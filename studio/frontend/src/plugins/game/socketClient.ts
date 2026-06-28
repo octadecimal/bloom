@@ -23,6 +23,9 @@ export function applyInbound(event: 'scene_snapshot' | 'scene_op', payload: unkn
     if (!isActive(p.gameId)) return;
     const doc = loadDocument(p.document);
     sceneStore().document.set(doc as never);
+    if (!import.meta.env.PROD) {
+      (window as unknown as { __gameSceneDocument?: unknown }).__gameSceneDocument = sceneStore().document.get({ noproxy: true });
+    }
     const bridge = getBridge();
     bridge?.init(doc);
   } else {
@@ -30,6 +33,9 @@ export function applyInbound(event: 'scene_snapshot' | 'scene_op', payload: unkn
     if (!isActive(p.gameId)) return;
     const current = sceneStore().document.get({ noproxy: true }) as ISceneDocument;
     sceneStore().document.set(applyOpToDocument(current, p.op) as never);
+    if (!import.meta.env.PROD) {
+      (window as unknown as { __gameSceneDocument?: unknown }).__gameSceneDocument = sceneStore().document.get({ noproxy: true });
+    }
     getBridge()?.op(p.op);
   }
 }
@@ -59,6 +65,7 @@ export function createGameSocket() {
       (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) => sock?.emit('join_scene', { gameId });
       (window as unknown as { __gameRequestCapture?: (captureId: string) => void }).__gameRequestCapture = (captureId: string) =>
         getBridge()?.capture(captureId);
+      (window as unknown as { __gameEmitApplyOp?: (gameId: string, op: ISceneOp) => void }).__gameEmitApplyOp = (gameId, op) => emitSceneApplyOp(gameId, op);
     }
   }
   function disconnect(): void {

@@ -7,6 +7,7 @@ from langgraph.types import interrupt
 from app.config import get_settings
 from app.gdd.store import GddEditError
 from app.scene.document import OpError, unreachable_nodes, empty_document
+from app.scene.rebind import rebind_asset_textures, selected_image_ref
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.critic import CritiqueRequest, EditParams
@@ -67,14 +68,9 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
-def _selected_media_ref(asset) -> str | None:
-    sel = getattr(asset, "selected_generation_id", None)
-    if not sel:
-        return None
-    for g in getattr(asset, "generations", []) or []:
-        if getattr(g, "id", None) == sel:
-            return getattr(g, "image_ref", None)
-    return None
+# Backed by the shared rebinder helper so the board, REST, and agent paths
+# resolve "selected generation -> image_ref" identically.
+_selected_media_ref = selected_image_ref
 
 
 def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
@@ -106,7 +102,7 @@ def build_list_assets_tool(ctx: ToolContext) -> BaseTool:
 async def _place_in_scene(
     ctx: ToolContext, *, handle: str, src: str, role: str, parent: str,
     x: float | None, y: float | None, anchor_x: float, anchor_y: float,
-    fit: str, z_index: int, tex_size: tuple[int, int],
+    fit: str, z_index: int, tex_size: tuple[int, int], asset_id: str = "",
 ) -> str:
     """Place an already-resolved asset image into the live scene as one atomic batch.
 
@@ -133,6 +129,7 @@ async def _place_in_scene(
         handle=handle, src=src, role=role, parent_id=parent_id,
         ensure_root=False, canvas=canvas, tex_size=tex_size,
         x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
+        asset_id=asset_id,
     )
     try:
         doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
@@ -172,6 +169,7 @@ def build_add_sprite_tool(ctx: ToolContext) -> BaseTool:
             ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+            asset_id=asset.id,
         )
 
     return StructuredTool.from_function(
@@ -239,6 +237,7 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
+            asset_id=asset.id,
         )
         if placement.startswith("Rejected"):
             return placement
@@ -958,13 +957,12 @@ def _find_symbol_sprite(document: dict, slot: str) -> tuple[str, str] | None:
 async def _regenerate_and_rebind(
     ctx: ToolContext, *, asset, texture_id: str | None, new_prompt: str | None,
 ) -> str | None:
-    """Regenerate an asset's art and rewrite a bound Texture's src in place.
+    """Regenerate an asset's art, select the newest generation, and rebind any
+    bound scene Texture to it via the canonical rebinder.
 
-    Updates the asset prompt (when ``new_prompt`` is truthy), regenerates and
-    selects the newest generation, then issues ONE ``setProp`` writing the new
-    ``image_ref`` into ``texture_id`` (skipped when ``texture_id is None``).
-    Returns the new ``image_ref``, or ``None`` if regeneration produced no image
-    — in which case the scene is left untouched.
+    ``texture_id`` is a presence signal: ``None`` regenerates the board art but
+    skips the scene write (preserving the "regenerated but not placed" message).
+    Returns the new ``image_ref``, or ``None`` if regeneration produced no image.
     """
     if new_prompt:
         await ctx.asset_store.update_asset(asset.id, prompt=new_prompt)
@@ -973,13 +971,9 @@ async def _regenerate_and_rebind(
     if refreshed is None or not refreshed.generations:
         return None
     newest = refreshed.generations[-1]
-    await ctx.asset_store.select_generation(asset.id, newest.id)
+    refreshed = await ctx.asset_store.select_generation(asset.id, newest.id)
     if texture_id is not None:
-        await ctx.scene_hub.apply_op(
-            ctx.game_id,
-            {"kind": "setProp", "id": texture_id, "path": "src",
-             "value": newest.image_ref},
-        )
+        await rebind_asset_textures(ctx.scene_store, ctx.scene_hub, ctx.game_id, refreshed)
     return newest.image_ref
 
 

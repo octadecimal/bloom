@@ -53,7 +53,8 @@ class _Assets:
         return None
     async def select_generation(self, asset_id, gen_id):
         self.selected = gen_id
-        return None
+        self._asset.selected_generation_id = gen_id
+        return self._asset
 
 
 class _Hub:

@@ -15,15 +15,17 @@ describe('viewConfig', () => {
       expect(typeof cfg.image).toBe('string');
       expect(typeof cfg.showWorkflow).toBe('boolean');
       expect(typeof cfg.showCandidates).toBe('boolean');
+      expect(typeof cfg.candidateSize).toBe('number');
       expect(['always', 'hover']).toContain(cfg.actions);
       expect(typeof cfg.row).toBe('boolean');
     }
   });
 
-  it('only Large shows full chrome (workflow + candidates + always-on actions)', () => {
+  it('only Large shows full chrome (workflow + always-on actions); all modes show candidates', () => {
     expect(VIEW_CONFIG.large).toMatchObject({ showWorkflow: true, showCandidates: true, actions: 'always', row: false });
-    expect(VIEW_CONFIG.small).toMatchObject({ showWorkflow: false, showCandidates: false, actions: 'hover' });
-    expect(VIEW_CONFIG.medium).toMatchObject({ showWorkflow: false, showCandidates: false, actions: 'hover' });
+    expect(VIEW_CONFIG.small).toMatchObject({ showWorkflow: false, showCandidates: true, actions: 'hover' });
+    expect(VIEW_CONFIG.medium).toMatchObject({ showWorkflow: false, showCandidates: true, actions: 'hover' });
+    expect(VIEW_CONFIG.list).toMatchObject({ showCandidates: true });
   });
 
   it('only List uses a row layout', () => {

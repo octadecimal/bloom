@@ -36,6 +36,7 @@ def build_sprite_ops(
     anchor_y: float = 0.5,
     fit: str = "none",
     z_index: int = 0,
+    asset_id: str = "",
 ) -> list[dict]:
     """Ops to place an image asset as a Sprite bound to a Texture.
 
@@ -65,7 +66,10 @@ def build_sprite_ops(
         ops.append({"kind": "addNode", "id": "root", "type": "Root",
                     "props": {"width": cw, "height": ch}})
     ops.append({"kind": "addNode", "id": sprite_id, "type": "Sprite", "props": sprite_props})
-    ops.append({"kind": "addNode", "id": texture_id, "type": "Texture", "props": {"src": src}})
+    tex_props: dict = {"src": src}
+    if asset_id:
+        tex_props["assetId"] = asset_id
+    ops.append({"kind": "addNode", "id": texture_id, "type": "Texture", "props": tex_props})
     ops.append({"kind": "connect", "edgeId": f"e.data.{handle}", "type": "data",
                 "from": {"node": texture_id, "port": "data"},
                 "to": {"node": sprite_id, "port": "texture"}})

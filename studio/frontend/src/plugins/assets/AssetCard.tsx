@@ -72,6 +72,23 @@ export function AssetCard({ index, mode }: { index: number; mode: AssetViewMode 
   );
   const lightbox = selected && <ImageLightbox src={`${BACKEND_URL}${selected.imageRef}`} alt={a.name.get()} open={zoomed} onOpenChange={setZoomed} />;
 
+  const candidateStrip = cfg.showCandidates && generations.length > 0 && (
+    <div className="flex flex-wrap gap-1" data-testid="asset-candidates">
+      {generations.map((g) => (
+        <img
+          key={g.id}
+          src={`${BACKEND_URL}${g.imageRef}`}
+          alt={`seed ${g.seed}`}
+          width={cfg.candidateSize}
+          height={cfg.candidateSize}
+          onClick={() => void selectGeneration(id, g.id)}
+          className="cursor-pointer rounded"
+          style={{ outline: g.id === selectedId ? '2px solid currentColor' : 'none' }}
+        />
+      ))}
+    </div>
+  );
+
   // LIST MODE — one compact horizontal row: thumb · name · workflow · status · actions.
   if (cfg.row) {
     return (
@@ -90,6 +107,7 @@ export function AssetCard({ index, mode }: { index: number; mode: AssetViewMode 
         <strong className="flex-1 truncate">{a.name.get()}</strong>
         <span className="font-mono text-[11px] text-muted-foreground">{a.workflow.get()}</span>
         <div className="flex justify-end">{statusBlock}</div>
+        {candidateStrip}
         {generateButton}
         {deleteButton}
         {lightbox}
@@ -131,22 +149,7 @@ export function AssetCard({ index, mode }: { index: number; mode: AssetViewMode 
         {statusBlock}
         {!selected && status === 'idle' && <span className="text-xs text-muted-foreground">No image yet</span>}
 
-        {cfg.showCandidates && generations.length > 0 && (
-          <div className="flex flex-wrap gap-1" data-testid="asset-candidates">
-            {generations.map((g) => (
-              <img
-                key={g.id}
-                src={`${BACKEND_URL}${g.imageRef}`}
-                alt={`seed ${g.seed}`}
-                width={48}
-                height={48}
-                onClick={() => void selectGeneration(id, g.id)}
-                className="cursor-pointer rounded"
-                style={{ outline: g.id === selectedId ? '2px solid currentColor' : 'none' }}
-              />
-            ))}
-          </div>
-        )}
+        {candidateStrip}
       </CardContent>
 
       {showActions && (

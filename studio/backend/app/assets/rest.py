@@ -4,6 +4,7 @@ from pydantic.alias_generators import to_camel
 
 from app.assets.models import asset_wire
 from app.games import game_wire
+from app.scene.rebind import rebind_asset_textures
 
 router = APIRouter()
 
@@ -101,4 +102,7 @@ async def select_generation(asset_id: str, body: SelectBody, request: Request) -
     asset = await request.app.state.asset_store.select_generation(asset_id, body.generation_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
+    await rebind_asset_textures(
+        request.app.state.scene_store, request.app.state.scene_hub, asset.game_id, asset
+    )
     return asset_wire(asset)
