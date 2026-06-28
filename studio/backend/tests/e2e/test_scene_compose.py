@@ -37,6 +37,17 @@ async def test_one_prompt_generates_and_places_background_and_logo(live_server):
     client.on("run_completed", lambda d: run_completions.append(d))
     client.on("scene_snapshot", lambda d: scene_snapshots.append(d))
 
+    import base64
+
+    async def _on_capture_request(data):
+        png = "data:image/png;base64," + base64.b64encode(b"\x89PNGtest").decode()
+        await client.emit(
+            "scene_capture_result",
+            {"gameId": data["gameId"], "captureId": data["captureId"], "png": png},
+        )
+
+    client.on("scene_capture_request", _on_capture_request)
+
     await client.connect(live_server, auth={"displayName": "Designer"})
     await client.emit("join_room", {"roomId": room_id})
     await client.emit("join_scene", {"gameId": game_id})

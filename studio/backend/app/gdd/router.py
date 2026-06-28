@@ -52,13 +52,13 @@ Decide what the latest user message is:
    arrives.
 4. A request to CREATE or PLACE visual art, or to build/compose the scene
    (e.g. "make a pirate game with a background and a logo at the top", "add a
-   treasure chest bottom-right"): treat it as a short build list. Work through it
-   ONE element at a time, in order. For EACH visual element the user names, make a
-   SINGLE `generate_and_place` call that generates that element's art and
-   immediately places it in the scene — then move to the next element.
-   Do not generate all the assets up front and place them at the end: complete one
-   element fully (generate + place) before you start the next, so the scene visibly
-   builds up element-by-element. Each call:
+   treasure chest bottom-right"): make a SINGLE `compose_scene` call. Extract the
+   visual elements the user named into the `elements` list — one entry per
+   element, IN ORDER — and pass the user's overall `theme` (e.g. "premium pirate
+   slot"). `compose_scene` generates and places each element AND runs a vision
+   critic in the loop that nudges placement (move/scale/reorder, and sparingly
+   regenerate) so the composition reads as a real slot machine. Each `elements`
+   entry takes the same fields you would pass to generate_and_place:
      - description: a vivid, concrete description; choose a stable `slot` handle
        (e.g. slot="background", slot="logo"). set transparent=false for a
        full-bleed background, true for logos and props; pass size like "1280x720"
@@ -66,22 +66,18 @@ Decide what the latest user message is:
        For a BACKGROUND, describe it as pure scenery/environment art and END the
        description with "no text, no words, no letters, no title, no logo, no UI".
        Do NOT call a background a "slot game", "title screen", or "game logo" and
-       do NOT put the game's name in it — the image model bakes garbled titles
-       into backgrounds otherwise. Keep all wordmarks and lettering on the LOGO
-       asset, never the background.
+       do NOT put the game's name in it. Keep all wordmarks on the LOGO asset.
      - placement: a short `role` plus the position. A background uses fit="cover"
        and z_index=0; for "centered at the top" pass y=0 and anchor_y=0 and omit x
        (x defaults to centred).
-   `generate_and_place` reuses a fitting asset for a slot instead of regenerating
-   it, and wires the Texture + Sprite edges for you — you do NOT add Texture nodes
-   or edges by hand. (To place an asset that already exists without regenerating,
-   you may instead call `add_sprite`; to generate without placing, `generate_asset`.
-   Use `list_assets` to see what is already on the board.) You MAY build several
-   elements in this one turn — just keep each generate+place paired and sequential.
-   If the user is CHANGING or REPLACING something that is ALREADY in the scene
-   rather than adding a brand-new element, do NOT generate_and_place it — that
-   stacks a duplicate sprite. Handle it as a regenerate (point 5); call
-   `read_scene` first if you are unsure whether the element is already placed.
+   Do NOT emit individual generate_and_place calls for a build — `compose_scene`
+   owns the whole element-by-element loop. (To place an asset that already exists
+   without regenerating you may instead call `add_sprite`; to generate without
+   placing, `generate_asset`; use `list_assets` to see what is already on the
+   board.) If the user is CHANGING or REPLACING something ALREADY in the scene
+   rather than adding new art, do NOT use `compose_scene` — handle it as a layout
+   edit or regenerate (point 5); call `read_scene` first if unsure whether the
+   element is already placed.
 5. A request to FIX, REDO, REGENERATE, REPLACE, or CHANGE an element that is
    ALREADY in the scene — addressed by name OR position (e.g. "regenerate the
    seaweed, it's cut off at the top", "redo the logo", "that background is wrong,
@@ -122,7 +118,8 @@ def build_design_router_spec() -> SkillSpec:
         tools=sorted(
             GDD_TOOL_NAMES
             | {"realize_symbol", "generate_asset", "add_sprite", "list_assets",
-               "generate_and_place", "regenerate_element", "read_scene", "adjust_element"}
+               "generate_and_place", "regenerate_element", "read_scene",
+               "adjust_element", "compose_scene"}
         ),
         body=_BODY_TEMPLATE.format(catalog=_render_catalog(field_catalog())),
     )
