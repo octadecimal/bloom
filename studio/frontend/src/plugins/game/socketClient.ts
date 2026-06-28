@@ -17,6 +17,14 @@ export function applyCaptureRequest(payload: { gameId: string; captureId: string
   getBridge()?.capture(payload.captureId);
 }
 
+export function applySpinOutcome(payload: { gameId: string; outcome: { grid: string[][] } }): void {
+  if (!isActive(payload.gameId)) return;
+  if (!import.meta.env.PROD) {
+    (window as unknown as { __gameLastSpinOutcome?: unknown }).__gameLastSpinOutcome = payload.outcome;
+  }
+  getBridge()?.spin(payload.outcome);
+}
+
 export function applyInbound(event: 'scene_snapshot' | 'scene_op', payload: unknown): void {
   if (event === 'scene_snapshot') {
     const p = payload as { gameId: string; document: ISceneDocument };
@@ -60,6 +68,7 @@ export function createGameSocket() {
     });
     sock.on('scene_op', (p) => applyInbound('scene_op', p));
     sock.on('scene_capture_request', (p) => applyCaptureRequest(p as { gameId: string; captureId: string }));
+    sock.on('scene_spin_outcome', (p) => applySpinOutcome(p as { gameId: string; outcome: { grid: string[][] } }));
     if (!import.meta.env.PROD) {
       (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
       (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) => sock?.emit('join_scene', { gameId });
@@ -96,4 +105,12 @@ export function emitSceneApplyOp(gameId: string, op: ISceneOp): void {
 
 export function emitSceneCaptureResult(gameId: string, captureId: string, png: string): void {
   sock?.emit('scene_capture_result', { gameId, captureId, png });
+}
+
+export function emitSceneAddModule(gameId: string, type = 'reels'): void {
+  sock?.emit('scene_add_module', { gameId, type });
+}
+
+export function emitSceneSpin(gameId: string, seed?: number): void {
+  sock?.emit('scene_spin', seed === undefined ? { gameId } : { gameId, seed });
 }

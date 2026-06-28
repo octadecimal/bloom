@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emptyDocument, applyOpToDocument } from './reducers';
+import { emptyDocument, applyOpToDocument, loadDocument } from './reducers';
 
 describe('applyOpToDocument', () => {
   it('adds a node', () => {
@@ -60,6 +60,29 @@ describe('applyOpToDocument', () => {
     expect(d.nodes.s.props).toEqual({});
   });
 
+  it('ignores unknown ops gracefully', () => {
+    const d = applyOpToDocument(emptyDocument(), { kind: 'removeNode', id: 'nonexistent' });
+    expect(d.nodes).toEqual({});
+  });
+});
+
+describe('loadDocument', () => {
+  it('preserves modules when present', () => {
+    const doc = { version: 1, nodes: {}, edges: [], modules: [{ id: 'reels', type: 'reels', config: { rows: 3 } }] };
+    const loaded = loadDocument(doc);
+    expect(loaded.modules).toEqual([{ id: 'reels', type: 'reels', config: { rows: 3 } }]);
+    // deep copy — mutating original must not affect loaded
+    doc.modules![0].id = 'changed';
+    expect(loaded.modules![0].id).toBe('reels');
+  });
+
+  it('omits modules when absent', () => {
+    const loaded = loadDocument(emptyDocument());
+    expect(loaded.modules).toBeUndefined();
+  });
+});
+
+describe('applyOpToDocument (continued)', () => {
   it('removeNode cascades incident edges', () => {
     let d = emptyDocument();
     for (const id of ['root', 's', 'tex'])

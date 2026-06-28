@@ -10,6 +10,7 @@ export interface IProtocolDeps {
   reconciler: Reconciler;
   post: (msg: OutboundMessage) => void;
   onSpin?: (outcome: IOutcome) => void;
+  onModules?: (decls: import('../model/document').IModuleDecl[]) => void;
 }
 
 export class ProtocolHost {
@@ -23,8 +24,10 @@ export class ProtocolHost {
     if (!msg || msg.v !== PROTOCOL_VERSION || typeof msg.kind !== 'string') return;
     try {
       if (msg.kind === 'init') {
-        const changes = this.deps.model.load(msg.document ?? emptyDocument());
+        const document = msg.document ?? emptyDocument();
+        const changes = this.deps.model.load(document);
         await this.deps.reconciler.applyChanges(changes);
+        this.deps.onModules?.(document.modules ?? []);
       } else if (msg.kind === 'op') {
         const changes = this.deps.model.apply(msg.op);
         await this.deps.reconciler.applyChanges(changes);

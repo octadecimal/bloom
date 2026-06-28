@@ -10,6 +10,7 @@ def _to_mongo(game_id: str, document: dict) -> dict:
         "version": document["version"],
         "nodes": list(document["nodes"].values()),
         "edges": document["edges"],
+        "modules": document.get("modules", []),
     }
 
 
@@ -18,6 +19,7 @@ def _from_mongo(raw: dict) -> dict:
         "version": raw["version"],
         "nodes": {n["id"]: n for n in raw["nodes"]},
         "edges": raw["edges"],
+        "modules": raw.get("modules", []),
     }
 
 
@@ -38,17 +40,27 @@ class GameSceneStore:
         return _from_mongo(raw) if raw else None
 
     async def apply_op(self, game_id: str, op: dict) -> dict:
+        current = await self.get_or_create(game_id)
         model = GraphModel()
-        model.load(await self.get_or_create(game_id))
+        model.load(current)
         model.apply(op)  # raises OpError; nothing persisted
         doc = model.to_document()
+        doc["modules"] = current.get("modules", [])
         await self._scenes.replace_one({"_id": game_id}, _to_mongo(game_id, doc), upsert=True)
         return doc
 
     async def apply_batch(self, game_id: str, ops: list[dict]) -> dict:
+        current = await self.get_or_create(game_id)
         model = GraphModel()
-        model.load(await self.get_or_create(game_id))
+        model.load(current)
         model.apply_batch(ops)  # raises OpError, transactional
         doc = model.to_document()
+        doc["modules"] = current.get("modules", [])
+        await self._scenes.replace_one({"_id": game_id}, _to_mongo(game_id, doc), upsert=True)
+        return doc
+
+    async def set_modules(self, game_id: str, modules: list[dict]) -> dict:
+        doc = await self.get_or_create(game_id)
+        doc["modules"] = modules
         await self._scenes.replace_one({"_id": game_id}, _to_mongo(game_id, doc), upsert=True)
         return doc

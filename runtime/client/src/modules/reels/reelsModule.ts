@@ -1,10 +1,12 @@
 // runtime/client/src/modules/reels/reelsModule.ts
-import type { JsonValue } from '../../model/document';
+import type { IGameDocument, JsonValue } from '../../model/document';
 import type { IGameModule, IModuleHost, IOutcome } from '../module';
 import { validateConfig, type IConfigSchema } from '../schema';
 import { reconcileOps, type IDesiredNode, type IDesiredScene } from '../reconcile';
 import type { IDisplayHandle } from '../../render/renderer';
 import { advance, blurFor, easeOutCubic, reelDelay, settleT, symbolAt, wrap } from './reelsMath';
+import type { Op } from '../../model/ops';
+import { colorForSymbol } from './symbolColor';
 
 export const REELS_SCHEMA: IConfigSchema = {
   rows: { type: 'integer', default: 3, min: 1, max: 8 },
@@ -24,6 +26,19 @@ export function containerId(moduleId: string, col: number): string {
 
 export function cellId(moduleId: string, col: number, row: number): string {
   return `${moduleId}:cell:${col}:${row}`;
+}
+
+/** Centered origin so the visible rows×cols block sits in the middle of the safe area.
+ *  (Buffer rows extend below, as today.) span = cellSize + spacing. */
+export function centeredOrigin(
+  grid: { cols: number; rows: number; cellSize: number; spacing: number },
+  safe: { width: number; height: number },
+): { originX: number; originY: number } {
+  const span = grid.cellSize + grid.spacing;
+  return {
+    originX: safe.width / 2 - ((grid.cols - 1) * span) / 2,
+    originY: safe.height / 2 - ((grid.rows - 1) * span) / 2,
+  };
 }
 
 interface IReelsConfig {
@@ -57,10 +72,17 @@ export function buildDesired(moduleId: string, raw: Record<string, JsonValue>): 
       parent: cfg.parentId,
     });
     for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
+      const sym = cfg.symbols[r % cfg.symbols.length];
       nodes.push({
         id: cellId(moduleId, c, r),
         type: 'Sprite',
-        props: { position: { x: 0, y: r * span }, symbol: cfg.symbols[r % cfg.symbols.length] },
+        props: {
+          position: { x: 0, y: r * span },
+          symbol: sym,
+          fill: colorForSymbol(sym),
+          size: { width: cfg.cellSize, height: cfg.cellSize },
+          label: sym,
+        },
         parent: containerId(moduleId, c),
       });
     }
@@ -103,9 +125,27 @@ export class ReelsModule implements IGameModule {
   }
 
   project(): void {
-    const desired = buildDesired(this.id, this.config);
+    const snap = this.host.snapshot();
+    const desired = buildDesired(this.id, this.withCenteredOrigin(this.config, snap));
     const owns = (nodeId: string) => nodeId.startsWith(`${this.id}:`);
-    this.host.emit(reconcileOps(this.host.snapshot(), desired, owns));
+    this.host.emit(reconcileOps(snap, desired, owns));
+  }
+
+  /** Fill a centered origin from the Root's landscape safe area when the config
+   *  leaves originX/originY unset; explicit origins pass through unchanged. */
+  private withCenteredOrigin(raw: Record<string, JsonValue>, doc: IGameDocument): Record<string, JsonValue> {
+    if (raw.originX !== undefined && raw.originY !== undefined) return raw;
+    const cfg = resolveConfig(raw);
+    const { originX, originY } = centeredOrigin(cfg, this.landscapeSafeArea(doc));
+    return { ...raw, originX: raw.originX ?? originX, originY: raw.originY ?? originY };
+  }
+
+  private landscapeSafeArea(doc: IGameDocument): { width: number; height: number } {
+    const root = Object.values(doc.nodes).find((n) => n.type === 'Root');
+    const land = (root?.props?.safeArea as { landscape?: { width?: number; height?: number } } | undefined)?.landscape;
+    const w = typeof land?.width === 'number' && land.width > 0 ? land.width : 1280;
+    const h = typeof land?.height === 'number' && land.height > 0 ? land.height : 720;
+    return { width: w, height: h };
   }
 
   mount(): void {
@@ -193,6 +233,16 @@ export class ReelsModule implements IGameModule {
         handle.position.y = r * (cfg.cellSize + cfg.spacing);
       }
     }
+    const ops: Op[] = [];
+    for (let c = 0; c < cfg.cols; c++) {
+      for (let r = 0; r < cfg.rows; r++) {
+        const sym = grid[c]?.[r];
+        if (sym === undefined) continue;
+        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'fill', value: colorForSymbol(sym) });
+        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'label', value: sym });
+      }
+    }
+    if (ops.length) this.host.emit(ops);
     this.settledGrid = grid;
     this.phase = 'idle';
     this.host.bus.emit('reels:settled', { grid });

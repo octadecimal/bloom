@@ -5,7 +5,7 @@ import { sceneStore } from '../../scene/sceneStore';
 import type { ISceneDocument } from '../../scene/types';
 import { engineOrigin, backendOrigin } from './config';
 import { ProtocolBridge, setBridge, clearBridge } from './protocolBridge';
-import { emitSceneCaptureResult } from './socketClient';
+import { emitSceneCaptureResult, emitSceneAddModule, emitSceneSpin } from './socketClient';
 
 export function GamePreviewPane(_props: IDockviewPanelProps) {
   const s = gameHooks.usePluginState();
@@ -50,6 +50,24 @@ export function GamePreviewPane(_props: IDockviewPanelProps) {
   const src = `${engineOrigin()}/?parentOrigin=${encodeURIComponent(window.location.origin)}&mediaBase=${encodeURIComponent(backendOrigin())}`;
   return (
     <div className="flex h-full flex-col bg-surface">
+      <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
+        <button
+          type="button"
+          data-testid="game-add-reels"
+          onClick={() => emitSceneAddModule(activeGameId)}
+          className="rounded bg-raised px-2 py-1 text-text-1 hover:bg-raised-hover"
+        >
+          Add Reels
+        </button>
+        <button
+          type="button"
+          data-testid="game-spin"
+          onClick={() => emitSceneSpin(activeGameId)}
+          className="rounded bg-raised px-2 py-1 text-text-1 hover:bg-raised-hover"
+        >
+          Spin
+        </button>
+      </div>
       <iframe ref={frameRef} data-testid="game-engine-frame" title="Game scene preview" src={src} className="h-full w-full flex-1 border-0" />
     </div>
   );

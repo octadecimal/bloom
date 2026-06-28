@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { rootStore } from '../../state/rootStore';
 import { GAME_PLUGIN_ID, gameSlice, makeInitialState } from './state';
 import { SCENE_STORE_ID, sceneStore, makeInitialSceneState } from '../../scene/sceneStore';
-import { applyInbound, applyCaptureRequest } from './socketClient';
+import { applyInbound, applyCaptureRequest, applySpinOutcome } from './socketClient';
 import { setBridge, ProtocolBridge } from './protocolBridge';
 
 beforeEach(() => {
@@ -66,6 +66,30 @@ describe('game socket capture relay', () => {
     setBridge(bridge);
 
     applyCaptureRequest({ gameId: 'other', captureId: 'cap1' });
+
+    expect(post).not.toHaveBeenCalled();
+  });
+});
+
+describe('game socket spin outcome', () => {
+  it('applySpinOutcome forwards to the active bridge', () => {
+    const post = vi.fn();
+    const bridge = new ProtocolBridge({ post, engineOrigin: 'http://localhost:4300' });
+    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, 'http://localhost:4300');
+    setBridge(bridge);
+
+    applySpinOutcome({ gameId: 'g1', outcome: { grid: [['0', '1', '2']] } });
+
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1', '2']] } }), 'http://localhost:4300');
+  });
+
+  it('ignores a spin outcome for an inactive game', () => {
+    const post = vi.fn();
+    const bridge = new ProtocolBridge({ post, engineOrigin: 'http://localhost:4300' });
+    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, 'http://localhost:4300');
+    setBridge(bridge);
+
+    applySpinOutcome({ gameId: 'other', outcome: { grid: [['0']] } });
 
     expect(post).not.toHaveBeenCalled();
   });

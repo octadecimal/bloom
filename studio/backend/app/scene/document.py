@@ -17,7 +17,7 @@ class OpError(Exception):
 
 
 def empty_document() -> dict:
-    return {"version": 1, "nodes": {}, "edges": []}
+    return {"version": 1, "nodes": {}, "edges": [], "modules": []}
 
 
 def unreachable_nodes(document: dict) -> list[str]:

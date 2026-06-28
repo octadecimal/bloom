@@ -21,10 +21,17 @@ export interface IEdge {
   to: IPortRef;
 }
 
+export interface IModuleDecl {
+  id: string;
+  type: string;
+  config?: Record<string, JsonValue>;
+}
+
 export interface IGameDocument {
   version: number;
   nodes: Record<string, INode>;
   edges: IEdge[];
+  modules?: IModuleDecl[];
 }
 
 export function emptyDocument(): IGameDocument {

@@ -74,7 +74,7 @@ async def test_scene_capture_result_handler_resolves_the_broker():
         async def attach(self, *a, **k): ...
         async def apply_op(self, *a, **k): ...
 
-    register_scene_handlers(sio, _Hub(), broker)
+    register_scene_handlers(sio, _Hub(), broker, None, None)
     assert "scene_capture_result" in sio.handlers
 
     task = asyncio.create_task(broker.request_capture("g1", timeout=5))
@@ -95,7 +95,7 @@ async def test_scene_capture_result_handler_broker_none_does_not_raise():
         async def attach(self, *a, **k): ...
         async def apply_op(self, *a, **k): ...
 
-    register_scene_handlers(sio, _Hub(), None)
+    register_scene_handlers(sio, _Hub(), None, None, None)
     # Should complete without raising
     await sio.handlers["scene_capture_result"](
         "sid", {"captureId": "cap1", "png": "data:image/png;base64,QUJD"}
@@ -112,7 +112,7 @@ async def test_scene_capture_result_handler_missing_png_is_a_no_op():
         async def attach(self, *a, **k): ...
         async def apply_op(self, *a, **k): ...
 
-    register_scene_handlers(sio, _Hub(), broker)
+    register_scene_handlers(sio, _Hub(), broker, None, None)
 
     task = asyncio.create_task(broker.request_capture("g1", timeout=5))
     await asyncio.sleep(0)
@@ -144,7 +144,7 @@ async def test_scene_capture_result_handler_empty_png_is_a_no_op():
         async def attach(self, *a, **k): ...
         async def apply_op(self, *a, **k): ...
 
-    register_scene_handlers(sio, _Hub(), broker)
+    register_scene_handlers(sio, _Hub(), broker, None, None)
 
     task = asyncio.create_task(broker.request_capture("g1", timeout=5))
     await asyncio.sleep(0)

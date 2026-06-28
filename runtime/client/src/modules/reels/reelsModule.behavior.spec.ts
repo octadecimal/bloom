@@ -3,7 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { createBus } from '../../orchestration/bus';
 import type { IDisplayHandle } from '../../render/renderer';
 import type { IModuleHost } from '../module';
+import type { Op } from '../../model/ops';
 import { ReelsModule, cellId } from './reelsModule';
+import { colorForSymbol } from './symbolColor';
 
 function fakeHandle(): IDisplayHandle {
   return { position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, alpha: 1, visible: true, setBlur: vi.fn() };
@@ -23,6 +25,25 @@ function fakeHost(): { host: IModuleHost; handles: Map<string, IDisplayHandle> }
     bus,
   };
   return { host, handles };
+}
+
+function recordingFakeHost(): { host: IModuleHost; handles: Map<string, IDisplayHandle>; emitted: Op[][] } {
+  const handles = new Map<string, IDisplayHandle>();
+  const bus = createBus();
+  const emitted: Op[][] = [];
+  const host: IModuleHost = {
+    snapshot: () => ({ version: 1, nodes: {}, edges: [] }),
+    emit: (ops) => {
+      emitted.push(ops);
+    },
+    resolve: (id) => {
+      if (!handles.has(id)) handles.set(id, fakeHandle());
+      return handles.get(id)!;
+    },
+    onTick: () => () => {},
+    bus,
+  };
+  return { host, handles, emitted };
 }
 
 const cfg = { rows: 1, cols: 2, symbols: ['A', 'B', 'C'], cellSize: 100, spacing: 0, originX: 0, originY: 0, parentId: 'root', buffer: 1 };
@@ -94,5 +115,22 @@ describe('ReelsModule behavior', () => {
     m.mount();
     m.dispose();
     expect(off).toHaveBeenCalled();
+  });
+
+  it('lands the outcome symbols colors+labels via setProp on settle', () => {
+    const { host, emitted } = recordingFakeHost();
+    const m = new ReelsModule({
+      id: 'm',
+      host,
+      config: { rows: 1, cols: 1, symbols: ['A'], cellSize: 100, spacing: 0, originX: 0, originY: 0, parentId: 'root', buffer: 1 },
+    });
+    m.startSpinning();
+    m.stopSpinning({ grid: [['9']] });
+    for (let i = 0; i < 240; i++) m.update(16);
+    const allOps = emitted.flat();
+    const fillOps = allOps.filter((o) => o.kind === 'setProp' && (o as { path: string }).path === 'fill');
+    const labelOps = allOps.filter((o) => o.kind === 'setProp' && (o as { path: string }).path === 'label');
+    expect(fillOps).toContainEqual({ kind: 'setProp', id: 'm:cell:0:0', path: 'fill', value: colorForSymbol('9') });
+    expect(labelOps).toContainEqual({ kind: 'setProp', id: 'm:cell:0:0', path: 'label', value: '9' });
   });
 });

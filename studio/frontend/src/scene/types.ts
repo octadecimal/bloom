@@ -20,8 +20,14 @@ export interface IEdge {
   from: IPortRef;
   to: IPortRef;
 }
+export interface IModuleDecl {
+  id: string;
+  type: string;
+  config?: Record<string, JsonValue>;
+}
 export interface ISceneDocument {
   version: number;
   nodes: Record<string, INode>;
   edges: IEdge[];
+  modules?: IModuleDecl[];
 }

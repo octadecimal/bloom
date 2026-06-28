@@ -1,4 +1,4 @@
-import { Application, Assets, BlurFilter, Container, Sprite, Texture, type Filter, type Ticker } from 'pixi.js';
+import { Application, Assets, BlurFilter, Container, Sprite, Text, Texture, type Filter, type Ticker } from 'pixi.js';
 import type { JsonValue, NodeType } from '../model/document';
 import type { IDisplayHandle, IRenderer, ITextureHandle } from './renderer';
 import type { IViewport } from './viewport';
@@ -51,6 +51,20 @@ export function applyPixiProp(obj: DisplayObject, path: string, value: JsonValue
     case 'zIndex':
       (obj as { zIndex: number }).zIndex = value as number;
       return;
+    case 'fill': {
+      if (obj instanceof Sprite) {
+        obj.texture = Texture.WHITE;
+        obj.tint = (value as string) ?? 0xffffff;
+      }
+      return;
+    }
+    case 'size': {
+      if (obj instanceof Sprite) {
+        const s = (value ?? {}) as { width?: number; height?: number };
+        obj.setSize(s.width ?? 0, s.height ?? 0);
+      }
+      return;
+    }
     default:
       return; // unknown props are ignored (forward-compatible)
   }
@@ -62,6 +76,7 @@ export class PixiRenderer implements IRenderer {
   private app: Application | null = null;
   private rootId: string | null = null;
   private objects = new Map<string, DisplayObject>();
+  private labels = new Map<string, Text>();
   private pendingTicks: Array<(ticker: Ticker) => void> = [];
 
   constructor(
@@ -70,6 +85,10 @@ export class PixiRenderer implements IRenderer {
   ) {}
 
   async mount(rootId: string): Promise<void> {
+    if (this.app) {
+      this.resetScene(rootId); // re-init reuses the one Application/canvas (no second mount)
+      return;
+    }
     const app = new Application();
     const width = Math.max(1, this.host.clientWidth);
     const height = Math.max(1, this.host.clientHeight);
@@ -87,6 +106,24 @@ export class PixiRenderer implements IRenderer {
     this.flushPendingTicks();
     this.rootId = rootId;
     this.objects.set(rootId, app.stage as unknown as Container);
+  }
+
+  /** A re-init reuses the existing Application: tear the scene down to bare root so
+   *  the next projection rebuilds on the single canvas (no duplicate canvas). */
+  private resetScene(rootId: string): void {
+    const stage = this.app!.stage as unknown as Container;
+    // Flat-destroy is safe for nested trees: Pixi v8 detaches children from their
+    // parent on destroy, so a child destroyed after its parent is already a no-op.
+    for (const [id, obj] of this.objects) {
+      if (id === this.rootId) continue;
+      obj.destroy();
+    }
+    for (const text of this.labels.values()) text.destroy();
+    this.objects.clear();
+    this.labels.clear();
+    stage.removeChildren();
+    this.rootId = rootId;
+    this.objects.set(rootId, stage);
   }
 
   applyViewport(vp: IViewport): void {
@@ -116,6 +153,8 @@ export class PixiRenderer implements IRenderer {
     if (!obj || id === this.rootId) return;
     obj.removeFromParent();
     obj.destroy();
+    this.labels.get(id)?.destroy();
+    this.labels.delete(id);
     this.objects.delete(id);
   }
 
@@ -123,14 +162,53 @@ export class PixiRenderer implements IRenderer {
     const child = this.objects.get(childId);
     if (!child) return;
     child.removeFromParent();
+    const label = this.labels.get(childId);
+    label?.removeFromParent();
     if (parentId === null) return;
     const parent = this.objects.get(parentId);
-    if (parent) (parent as Container).addChild(child);
+    if (parent) {
+      (parent as Container).addChild(child);
+      if (label && child instanceof Sprite) this.placeLabel(child, label);
+    }
   }
 
   setProp(id: string, path: string, value: JsonValue): void {
+    if (path === 'label') {
+      this.applyLabel(id, value);
+      return;
+    }
     const obj = this.objects.get(id);
-    if (obj) applyPixiProp(obj, path, value);
+    if (!obj) return;
+    applyPixiProp(obj, path, value);
+    // Keep a sibling label glued to its cell when the cell's position changes via setProp.
+    if (obj instanceof Sprite && path.startsWith('position')) {
+      const label = this.labels.get(id);
+      if (label) this.placeLabel(obj, label);
+    }
+  }
+
+  private applyLabel(id: string, value: JsonValue): void {
+    const obj = this.objects.get(id);
+    if (!(obj instanceof Sprite)) return;
+    const str = value == null ? '' : String(value);
+    let text = this.labels.get(id);
+    if (!text) {
+      text = new Text({ text: str, style: { fill: '#0b0b0c', fontSize: 28, fontWeight: 'bold' } });
+      text.anchor.set(0.5);
+      text.zIndex = 1; // render above the cell background within the reel container
+      this.labels.set(id, text);
+    } else {
+      text.text = str;
+    }
+    this.placeLabel(obj, text);
+  }
+
+  /** Labels live beside their cell in the cell's parent container — never as a child
+   *  of the Sprite (Pixi v8 forbids Sprite children) — and track the cell's position. */
+  private placeLabel(sprite: Sprite, text: Text): void {
+    text.position.set(sprite.position.x, sprite.position.y);
+    const parent = sprite.parent as Container | null;
+    if (parent && text.parent !== parent) parent.addChild(text);
   }
 
   async loadTexture(src: string): Promise<ITextureHandle> {
@@ -169,8 +247,32 @@ export class PixiRenderer implements IRenderer {
   getHandle(id: string): IDisplayHandle | null {
     const obj = this.objects.get(id);
     if (!obj) return null;
+    const labels = this.labels;
+    const position = {
+      get x(): number {
+        return obj.position.x;
+      },
+      set x(v: number) {
+        obj.position.x = v;
+        const lbl = labels.get(id);
+        if (lbl) lbl.position.x = v;
+      },
+      get y(): number {
+        return obj.position.y;
+      },
+      set y(v: number) {
+        obj.position.y = v;
+        const lbl = labels.get(id);
+        if (lbl) lbl.position.y = v;
+      },
+      set(x: number, y: number) {
+        obj.position.set(x, y);
+        const lbl = labels.get(id);
+        if (lbl) lbl.position.set(x, y);
+      },
+    };
     return {
-      position: obj.position,
+      position,
       scale: obj.scale,
       get alpha() {
         return obj.alpha;

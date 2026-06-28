@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BlurFilter } from 'pixi.js';
+import { BlurFilter, Container, Sprite, Text } from 'pixi.js';
 import { PixiRenderer } from './pixiRenderer';
 
 function rendererWithSprite(id: string): PixiRenderer {
@@ -69,6 +69,76 @@ describe('PixiRenderer.getHandle', () => {
     expect(added).toHaveLength(1);
     added[0]({ deltaMS: 16 }); // simulate a ticker frame
     expect(cb).toHaveBeenCalledWith(16);
+  });
+});
+
+describe('PixiRenderer.getHandle label tracking', () => {
+  function rendererWithStage() {
+    const r = new PixiRenderer(document.createElement('div'));
+    const stage = new Container();
+    stage.sortableChildren = true;
+    const internals = r as unknown as {
+      app: { stage: Container };
+      rootId: string;
+      objects: Map<string, Container>;
+      labels: Map<string, Text>;
+    };
+    internals.app = { stage };
+    internals.rootId = 'root';
+    internals.objects.set('root', stage);
+    return { r, internals };
+  }
+
+  it('mirrors handle.position.y and .x writes to the sibling label', () => {
+    const { r, internals } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    r.setProp('cell', 'label', 'A');
+
+    const handle = r.getHandle('cell')!;
+    handle.position.y = 250;
+    handle.position.x = 30;
+
+    const cell = internals.objects.get('cell')! as unknown as Sprite;
+    const label = internals.labels.get('cell')!;
+
+    expect(cell.position.y).toBe(250);
+    expect(cell.position.x).toBe(30);
+    expect(label.position.y).toBe(250);
+    expect(label.position.x).toBe(30);
+  });
+
+  it('a position write through the handle is reflected by a fresh getHandle', () => {
+    const { r } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    r.setProp('cell', 'label', 'A');
+
+    const handle = r.getHandle('cell')!;
+    handle.position.y = 99;
+    expect(r.getHandle('cell')!.position.y).toBe(99);
+  });
+
+  it('does not throw when writing handle.position without a label', () => {
+    const { r } = rendererWithStage();
+    r.createObject('reel', 'Container');
+    r.setParent('reel', 'root');
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'reel');
+    // No label set
+
+    const handle = r.getHandle('cell')!;
+    expect(() => {
+      handle.position.y = 150;
+      handle.position.x = 20;
+    }).not.toThrow();
+    const cell = (r as unknown as { objects: Map<string, { position: { x: number; y: number } }> }).objects.get('cell')!;
+    expect(cell.position.y).toBe(150);
+    expect(cell.position.x).toBe(20);
   });
 });
 

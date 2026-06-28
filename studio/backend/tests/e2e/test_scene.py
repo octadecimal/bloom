@@ -35,7 +35,7 @@ async def test_join_scene_delivers_empty_snapshot(live_server):
     assert seen["snapshots"], "expected a scene_snapshot on join"
     snap = seen["snapshots"][0]
     assert snap["gameId"] == game_id
-    assert snap["document"] == {"version": 1, "nodes": {}, "edges": []}
+    assert snap["document"] == {"version": 1, "nodes": {}, "edges": [], "modules": []}
 
     await client.disconnect()
 

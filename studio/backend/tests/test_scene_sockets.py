@@ -28,7 +28,7 @@ class FakeHub:
 @pytest.mark.asyncio
 async def test_join_scene_attaches_and_leave_leaves():
     sio, hub = FakeSio(), FakeHub()
-    register_scene_handlers(sio, hub, None)
+    register_scene_handlers(sio, hub, None, None, None)
     await sio.handlers["join_scene"]("sid-1", {"gameId": "g1"})
     assert hub.attached == [("g1", "sid-1")]
     await sio.handlers["leave_scene"]("sid-1", {"gameId": "g1"})

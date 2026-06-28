@@ -15,7 +15,7 @@ async def _clean_scenes(mongo_db):
 async def test_get_or_create_returns_empty_document(mongo_db):
     store = GameSceneStore(mongo_db)
     doc = await store.get_or_create("g1")
-    assert doc == {"version": 1, "nodes": {}, "edges": []}
+    assert doc == {"version": 1, "nodes": {}, "edges": [], "modules": []}
 
 
 @pytest.mark.asyncio

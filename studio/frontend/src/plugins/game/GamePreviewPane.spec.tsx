@@ -5,6 +5,12 @@ import { GAME_PLUGIN_ID, gameSlice, makeInitialState } from './state';
 import { GamePreviewPane } from './GamePreviewPane';
 
 vi.mock('./actions', () => ({ openGame: vi.fn(), closeGame: vi.fn(), initGame: vi.fn() }));
+vi.mock('./socketClient', () => ({
+  gameSock: vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn(), joinScene: vi.fn(), leaveScene: vi.fn() })),
+  emitSceneCaptureResult: vi.fn(),
+  emitSceneAddModule: vi.fn(),
+  emitSceneSpin: vi.fn(),
+}));
 
 const fakeProps = {} as Parameters<typeof GamePreviewPane>[0];
 
@@ -26,5 +32,12 @@ describe('GamePreviewPane', () => {
     expect(frame.getAttribute('src')).toContain(encodeURIComponent(window.location.origin));
     expect(frame.getAttribute('src')).toContain('mediaBase=');
     expect(frame.getAttribute('src')).toContain(encodeURIComponent(`http://localhost:8000`));
+  });
+
+  it('renders Add Reels + Spin controls when a game is open', () => {
+    act(() => gameSlice().activeGameId.set('g1'));
+    render(<GamePreviewPane {...fakeProps} />);
+    expect(screen.getByTestId('game-add-reels')).toBeInTheDocument();
+    expect(screen.getByTestId('game-spin')).toBeInTheDocument();
   });
 });
