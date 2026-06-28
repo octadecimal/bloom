@@ -9,12 +9,20 @@ critic has its own seam (this module) and its own cassette format
 ``docs/superpowers/specs/2026-06-27-vision-in-the-loop-scene-composition-design.md`` §3.
 """
 
+import base64
+import json
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from app.replay.cassette import normalize_prompt
+from app.config import Settings
+from app.replay.cassette import (
+    DEFAULT_FIXTURES_DIR,
+    load_critic_cassettes,
+    normalize_prompt,
+)
 
 
 class EditParams(BaseModel):
@@ -88,3 +96,104 @@ class ReplaySceneCritic:
             # Over-iterated past the recorded passes: report done so a loop ends.
             return Critique(done=True, edits=[])
         return Critique(**passes[request.pass_index])
+
+
+CRITIC_SYSTEM_PROMPT = (
+    "You are a slot-game composition critic. You are shown a RENDERED frame of a "
+    "slot game scene being assembled element-by-element, plus structured context "
+    "for every placed element. Judge the COMPOSITION of the assembled frame — not "
+    "the quality of any single asset — and return corrective edits as structured "
+    "output.\n\n"
+    "Canonical slot anatomy (aesthetic guidance, NOT a hard region map — content "
+    "and style stay free):\n"
+    "- Background fills the frame (full-bleed), sits at the back.\n"
+    "- The reel grid is centered and is the visual focus; symbols sit INSIDE the "
+    "grid, never spilling outside it.\n"
+    "- The logo sits in the top band, clear of the play area.\n"
+    "- The spin button sits bottom-center.\n"
+    "- Foreground flourishes FRAME the play area, they do not cover it.\n\n"
+    "Discipline:\n"
+    "- TRANSFORM-FIRST. Prefer move / scale / reorder. Reach for 'regenerate' "
+    "only when no transform can fix the element because the asset is wrong FOR "
+    "ITS ROLE (e.g. a dense rectangular blob that cannot be salvaged by "
+    "moving/scaling). A 'regenerate' edit MUST justify in 'why' that no transform "
+    "fixes it, and is refused once the regeneration budget is exhausted.\n"
+    "- Edit ONLY elements inside the provided editable look-behind WINDOW. Never "
+    "target a handle that is not in the window.\n"
+    "- When the composition is acceptable, return done=true with an empty edit "
+    "list. Do not invent busywork edits.\n\n"
+    "Return: {done, edits:[{target_handle, action, params, why}]} where action is "
+    "one of move|scale|reorder|regenerate and params carries x, y (move), scale "
+    "(scale), or z (reorder)."
+)
+
+
+def _data_url(frame_png: bytes) -> str:
+    b64 = base64.b64encode(frame_png).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
+def build_critic_messages(request: CritiqueRequest) -> list[BaseMessage]:
+    """Pure builder: render a CritiqueRequest into the LLM message list (system
+    prompt + a multimodal human turn carrying the scene context and the frame
+    PNG as a base64 data URL). Kept pure so it is unit-testable without a network
+    call."""
+    context = {
+        "theme": request.theme,
+        "just_added": request.target_handle,
+        "editable_window": request.window,
+        "regen_budget_left": request.regen_budget_left,
+        "scene": request.scene,
+    }
+    text = (
+        "Critique the rendered slot scene shown in the image and return corrective "
+        "edits.\n"
+        f"Just-added element (judge it hardest): {request.target_handle}\n"
+        f"Editable look-behind window (you may ONLY target these handles): "
+        f"{request.window}\n"
+        f"Regenerations left in budget: {request.regen_budget_left}\n"
+        f"Theme/intent: {request.theme}\n\n"
+        f"Scene context (JSON):\n{json.dumps(context, indent=2)}"
+    )
+    return [
+        SystemMessage(CRITIC_SYSTEM_PROMPT),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": text},
+                {"type": "image_url", "image_url": {"url": _data_url(request.frame_png)}},
+            ]
+        ),
+    ]
+
+
+class LiveSceneCritic:
+    """Live vision critic: a DIRECT structured+image completion via OpenRouter.
+
+    NOT a bound tool — it calls ``ChatOpenAI.with_structured_output(Critique)``
+    with a multimodal message and returns the validated ``Critique`` directly.
+    """
+
+    def __init__(self, api_key: str, base_url: str, model: str):
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+
+    async def critique(self, request: CritiqueRequest) -> Critique:
+        from langchain_openai import ChatOpenAI
+
+        llm = ChatOpenAI(
+            model=self._model, api_key=self._api_key, base_url=self._base_url
+        )
+        structured = llm.with_structured_output(Critique)
+        return await structured.ainvoke(build_critic_messages(request))
+
+
+def build_scene_critic(settings: Settings) -> SceneCritic:
+    """Select the critic impl by provider mode — mirrors ``build_chat_model``."""
+    if settings.provider_mode == "replay":
+        return ReplaySceneCritic(load_critic_cassettes(DEFAULT_FIXTURES_DIR))
+    return LiveSceneCritic(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+        model=settings.critic_model,
+    )

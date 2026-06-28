@@ -131,3 +131,65 @@ async def test_replay_critic_raises_when_no_cassette_and_no_default():
     critic = ReplaySceneCritic({})  # neither keyed nor __default__
     with pytest.raises(RuntimeError, match="critic cassette"):
         await critic.critique(_req("captain"))
+
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from app.config import Settings
+from app.scene.critic import (
+    LiveSceneCritic,
+    build_critic_messages,
+    build_scene_critic,
+)
+
+
+def test_critic_model_config_default():
+    assert Settings().critic_model == "anthropic/claude-sonnet-4-6"
+
+
+def test_factory_selects_replay_critic():
+    critic = build_scene_critic(Settings(provider_mode="replay"))
+    assert isinstance(critic, ReplaySceneCritic)
+
+
+def test_factory_selects_live_critic():
+    critic = build_scene_critic(Settings(provider_mode="live"))
+    assert isinstance(critic, LiveSceneCritic)
+
+
+def test_message_builder_embeds_png_as_data_url():
+    req = CritiqueRequest(
+        frame_png=b"\x89PNG\r\n\x1a\n", scene={"nodes": []},
+        target_handle="captain", window=["background", "logo", "captain"],
+        theme="premium pirate slot", regen_budget_left=3,
+    )
+    msgs = build_critic_messages(req)
+    assert isinstance(msgs[0], SystemMessage)
+    assert isinstance(msgs[1], HumanMessage)
+    parts = msgs[1].content
+    image_part = next(p for p in parts if p["type"] == "image_url")
+    assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_message_builder_text_carries_window_target_and_budget():
+    req = CritiqueRequest(
+        frame_png=b"x", scene={"nodes": [{"handle": "logo"}]},
+        target_handle="captain", window=["background", "logo", "captain"],
+        theme="premium pirate slot", regen_budget_left=3,
+    )
+    text = next(
+        p["text"] for p in build_critic_messages(req)[1].content if p["type"] == "text"
+    )
+    assert "captain" in text  # just-added target
+    assert "logo" in text  # window member
+    assert "3" in text  # regen budget left
+    assert "premium pirate slot" in text  # theme
+
+
+def test_critic_system_prompt_is_slot_aware():
+    from app.scene.critic import CRITIC_SYSTEM_PROMPT
+
+    low = CRITIC_SYSTEM_PROMPT.lower()
+    assert "reel" in low  # slot anatomy
+    assert "transform" in low  # transform-first discipline
+    assert "window" in low  # look-behind constraint
