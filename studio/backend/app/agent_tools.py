@@ -369,7 +369,7 @@ def build_adjust_element_tool(ctx: ToolContext) -> BaseTool:
             "logo up', 'make the captain smaller', 'bring the chest to the front'. "
             "`ref` is matched against each placed element's slot/role/asset name. "
             "Pass any of: x, y (Root pixel position of the element's anchor), scale "
-            "(uniform multiplier, e.g. 0.4 to shrink), z (z-index; higher draws on "
+            "(absolute uniform scale: 1.0 = the asset's native size, 0.4 = 40% of native; omit to keep current scale), z (z-index; higher draws on "
             "top). Omit a field to leave it unchanged. Prefer this over "
             "regenerate_element for anything that's just mispositioned or mis-sized — "
             "regeneration makes a different image, this keeps the same art."
