@@ -63,3 +63,9 @@ class GameSceneHub:
         for op in ops:
             await self._sio.emit("scene_op", {"gameId": game_id, "op": op}, room=game_id)
         return doc
+
+    async def set_modules(self, game_id: str, modules: list[dict]) -> dict:
+        async with self._lock(game_id):
+            doc = await self._store.set_modules(game_id, modules)
+        await self._sio.emit("scene_snapshot", {"gameId": game_id, "document": doc}, room=game_id)
+        return doc

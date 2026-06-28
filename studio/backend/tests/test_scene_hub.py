@@ -31,7 +31,7 @@ async def test_attach_enters_room_and_sends_snapshot(mongo_db):
     assert ("sid-1", "g1") in sio.rooms
     snap = [e for e in sio.emitted if e[0] == "scene_snapshot"][-1]
     assert snap[1]["gameId"] == "g1"
-    assert snap[1]["document"] == {"version": 1, "nodes": {}, "edges": []}
+    assert snap[1]["document"] == {"version": 1, "nodes": {}, "edges": [], "modules": []}
     assert snap[3] == "sid-1"  # to=sid
 
 
