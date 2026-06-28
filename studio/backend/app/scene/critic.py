@@ -10,9 +10,11 @@ critic has its own seam (this module) and its own cassette format
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
+
+from app.replay.cassette import normalize_prompt
 
 
 class EditParams(BaseModel):
@@ -58,3 +60,31 @@ class CritiqueRequest:
     theme: str = ""
     regen_budget_left: int = 0
     pass_index: int = 0
+
+
+class SceneCritic(Protocol):
+    async def critique(self, request: CritiqueRequest) -> Critique: ...
+
+
+class ReplaySceneCritic:
+    """Deterministic, offline critic. Returns recorded per-target, per-pass
+    critiques from ``tests/fixtures/replay/critic/`` (loaded by
+    ``load_critic_cassettes``)."""
+
+    def __init__(self, cassettes: dict[str, list[dict]]):
+        self._cassettes = cassettes
+
+    async def critique(self, request: CritiqueRequest) -> Critique:
+        passes = self._cassettes.get(normalize_prompt(request.target_handle))
+        if passes is None:
+            passes = self._cassettes.get("__default__")
+        if passes is None:
+            raise RuntimeError(
+                f"No critic cassette for target '{request.target_handle}' and no "
+                f"default.json under tests/fixtures/replay/critic/. Add a keyed "
+                f"cassette (target='{request.target_handle}') or a default."
+            )
+        if request.pass_index >= len(passes):
+            # Over-iterated past the recorded passes: report done so a loop ends.
+            return Critique(done=True, edits=[])
+        return Critique(**passes[request.pass_index])

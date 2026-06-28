@@ -59,3 +59,27 @@ def load_run_cassettes(fixtures_dir: Path) -> dict[str, dict]:
         if "prompt" in data:
             out[normalize_prompt(data["prompt"])] = cassette
     return out
+
+
+def load_critic_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
+    """Load vision-critic cassettes keyed by normalized target handle.
+
+    Each ``critic/*.json`` is ``{passes: [<Critique-shaped dict>, ...]}`` with an
+    optional ``target``. ``default.json`` becomes ``"__default__"`` (the
+    fallback). Files with a ``target`` are also keyed by
+    ``normalize_prompt(target)``. Mirrors ``load_run_cassettes`` — the critic is
+    a direct structured+image call with its OWN cassette format (per-pass
+    critiques), distinct from the tool-call run cassettes.
+    """
+    out: dict[str, list[dict]] = {}
+    critic_dir = Path(fixtures_dir) / "critic"
+    if not critic_dir.is_dir():
+        return out
+    for path in sorted(critic_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        passes = list(data.get("passes", []))
+        if path.name == "default.json":
+            out["__default__"] = passes
+        if "target" in data:
+            out[normalize_prompt(data["target"])] = passes
+    return out

@@ -70,3 +70,64 @@ def test_critique_request_defaults():
     assert req.theme == ""
     assert req.regen_budget_left == 0
     assert req.pass_index == 0
+
+
+from app.replay.cassette import DEFAULT_FIXTURES_DIR, load_critic_cassettes
+from app.scene.critic import ReplaySceneCritic
+
+
+def _req(target, pass_index=0):
+    return CritiqueRequest(
+        frame_png=b"\x89PNG",
+        scene={"nodes": []},
+        target_handle=target,
+        window=[target],
+        pass_index=pass_index,
+    )
+
+
+def test_load_critic_cassettes_keys_by_target_and_default():
+    cassettes = load_critic_cassettes(DEFAULT_FIXTURES_DIR)
+    assert "captain" in cassettes  # from shrink-captain.json (target "captain")
+    assert "__default__" in cassettes  # from default.json
+    assert cassettes["captain"][0]["edits"][0]["action"] == "scale"
+
+
+@pytest.mark.asyncio
+async def test_replay_critic_returns_recorded_pass_zero():
+    critic = ReplaySceneCritic(load_critic_cassettes(DEFAULT_FIXTURES_DIR))
+    out = await critic.critique(_req("captain", pass_index=0))
+    assert out.done is False
+    assert out.edits[0].action == "scale"
+    assert out.edits[0].params.scale == 0.6
+
+
+@pytest.mark.asyncio
+async def test_replay_critic_advances_to_pass_one_done():
+    critic = ReplaySceneCritic(load_critic_cassettes(DEFAULT_FIXTURES_DIR))
+    out = await critic.critique(_req("captain", pass_index=1))
+    assert out.done is True
+    assert out.edits == []
+
+
+@pytest.mark.asyncio
+async def test_replay_critic_out_of_range_pass_is_done():
+    critic = ReplaySceneCritic(load_critic_cassettes(DEFAULT_FIXTURES_DIR))
+    out = await critic.critique(_req("captain", pass_index=99))
+    assert out.done is True
+    assert out.edits == []
+
+
+@pytest.mark.asyncio
+async def test_replay_critic_unknown_target_falls_back_to_default():
+    critic = ReplaySceneCritic(load_critic_cassettes(DEFAULT_FIXTURES_DIR))
+    out = await critic.critique(_req("no-such-handle", pass_index=0))
+    assert out.done is True  # default.json: single done pass
+    assert out.edits == []
+
+
+@pytest.mark.asyncio
+async def test_replay_critic_raises_when_no_cassette_and_no_default():
+    critic = ReplaySceneCritic({})  # neither keyed nor __default__
+    with pytest.raises(RuntimeError, match="critic cassette"):
+        await critic.critique(_req("captain"))

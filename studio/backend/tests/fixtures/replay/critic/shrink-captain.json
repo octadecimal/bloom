@@ -1,0 +1,17 @@
+{
+  "target": "captain",
+  "passes": [
+    {
+      "done": false,
+      "edits": [
+        {
+          "target_handle": "captain",
+          "action": "scale",
+          "params": { "scale": 0.6 },
+          "why": "The captain overwhelms the reel grid; shrinking him keeps the figure readable while clearing the play area. No move alone fixes the scale."
+        }
+      ]
+    },
+    { "done": true, "edits": [] }
+  ]
+}
