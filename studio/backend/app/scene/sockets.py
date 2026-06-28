@@ -44,5 +44,5 @@ def register_scene_handlers(sio, hub, broker):
     @sio.on("scene_capture_result")
     async def scene_capture_result(sid, data):
         png = data.get("png")
-        if broker is not None and png is not None:
+        if broker is not None and png:
             broker.resolve_capture(data.get("captureId"), png)

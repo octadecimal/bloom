@@ -6,6 +6,10 @@ import type { IViewport } from './viewport';
 type DisplayObject = Container | Sprite;
 type Vec2 = { x?: number; y?: number };
 
+/** Canvas background — used both at init and as the capture clearColor so an
+ *  extracted frame matches what the user sees. */
+const BACKGROUND_COLOR = '#0b0b0c';
+
 export function applyPixiProp(obj: DisplayObject, path: string, value: JsonValue): void {
   switch (path) {
     case 'position':
@@ -72,7 +76,7 @@ export class PixiRenderer implements IRenderer {
     await app.init({
       width,
       height,
-      background: '#0b0b0c',
+      background: BACKGROUND_COLOR,
       antialias: true,
       resolution: Math.min(globalThis.devicePixelRatio ?? 1, 2),
       autoDensity: true,
@@ -212,7 +216,7 @@ export class PixiRenderer implements IRenderer {
     return app.renderer.extract.base64({
       target: app.stage,
       frame: app.renderer.screen,
-      clearColor: '#0b0b0c',
+      clearColor: BACKGROUND_COLOR,
     });
   }
 

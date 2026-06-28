@@ -127,3 +127,35 @@ async def test_scene_capture_result_handler_missing_png_is_a_no_op():
         await task
     except (asyncio.CancelledError, asyncio.TimeoutError):
         pass
+
+
+@pytest.mark.asyncio
+async def test_scene_capture_result_handler_empty_png_is_a_no_op():
+    """A scene_capture_result event with an empty-string png must not resolve the future.
+
+    An unmounted engine returns png='' rather than omitting the key; a truthiness
+    guard (``if png:``) must treat that the same as a missing key so the pending
+    request_capture future stays unresolved and eventually times out naturally.
+    """
+    sio = _FakeSio()
+    broker = SceneCaptureBroker(sio)
+
+    class _Hub:
+        async def attach(self, *a, **k): ...
+        async def apply_op(self, *a, **k): ...
+
+    register_scene_handlers(sio, _Hub(), broker)
+
+    task = asyncio.create_task(broker.request_capture("g1", timeout=5))
+    await asyncio.sleep(0)
+    capture_id = sio.emits[-1][1]["captureId"]
+
+    # Fire the event with an explicit empty-string png — must be a no-op
+    await sio.handlers["scene_capture_result"]("sid", {"captureId": capture_id, "png": ""})
+    await asyncio.sleep(0)
+    assert not task.done(), "future must remain pending when png is an empty string"
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        pass

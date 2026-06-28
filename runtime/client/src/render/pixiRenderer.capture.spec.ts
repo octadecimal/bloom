@@ -19,9 +19,12 @@ describe('PixiRenderer.capture', () => {
 
     const png = await r.capture();
 
-    expect(raf).toHaveBeenCalledTimes(1); // render-settled barrier
-    expect(base64).toHaveBeenCalledWith({ target: stage, frame: screen, clearColor: '#0b0b0c' });
-    expect(png).toBe('data:image/png;base64,AAAA');
-    raf.mockRestore();
+    try {
+      expect(raf).toHaveBeenCalledTimes(1); // render-settled barrier
+      expect(base64).toHaveBeenCalledWith({ target: stage, frame: screen, clearColor: '#0b0b0c' });
+      expect(png).toBe('data:image/png;base64,AAAA');
+    } finally {
+      raf.mockRestore();
+    }
   });
 });
