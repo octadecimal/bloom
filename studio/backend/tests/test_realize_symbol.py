@@ -37,6 +37,10 @@ class _AssetStore:
     def __init__(self):
         self.updated = None
         self.selected = None
+        self._asset = Asset(id="a1", game_id="g1", name="High", prompt="a fierce dragon",
+                            width=512, height=512, workflow="schnell-transparent", slot="high1",
+                            generations=[Generation(id="genNEW", seed=2, image_ref="/media/g/a1/new.png",
+                                                    created_at=datetime.now(timezone.utc))])
     async def get_by_slot(self, game_id, slot):
         return Asset(id="a1", game_id=game_id, name="High", prompt="raven",
                      width=512, height=512, workflow="schnell-transparent", slot=slot)
@@ -44,13 +48,11 @@ class _AssetStore:
         self.updated = fields
         return None
     async def get_asset(self, asset_id):
-        return Asset(id="a1", game_id="g1", name="High", prompt="a fierce dragon",
-                     width=512, height=512, workflow="schnell-transparent", slot="high1",
-                     generations=[Generation(id="genNEW", seed=2, image_ref="/media/g/a1/new.png",
-                                             created_at=datetime.now(timezone.utc))])
+        return self._asset
     async def select_generation(self, asset_id, gen_id):
         self.selected = gen_id
-        return None
+        self._asset.selected_generation_id = gen_id
+        return self._asset
 
 
 class _AssetHub:

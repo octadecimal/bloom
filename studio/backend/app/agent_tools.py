@@ -971,12 +971,8 @@ async def _regenerate_and_rebind(
     if refreshed is None or not refreshed.generations:
         return None
     newest = refreshed.generations[-1]
-    await ctx.asset_store.select_generation(asset.id, newest.id)
+    refreshed = await ctx.asset_store.select_generation(asset.id, newest.id)
     if texture_id is not None:
-        refreshed = await ctx.asset_store.get_asset(asset.id)
-        # Hydrate the selection so selected_image_ref resolves correctly even
-        # when the store's re-read doesn't propagate it synchronously.
-        refreshed.selected_generation_id = newest.id
         await rebind_asset_textures(ctx.scene_store, ctx.scene_hub, ctx.game_id, refreshed)
     return newest.image_ref
 
