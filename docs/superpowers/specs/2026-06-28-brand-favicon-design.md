@@ -46,8 +46,7 @@ Pure static assets — **no** runtime code, bundler, or build-pipeline changes.
 3. **`studio/frontend/index.html`** — replace the single icon link with two:
 
    ```html
-   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-   <link rel="icon" sizes="any" href="/favicon.ico" />
+   <link rel="icon" type="image/svg+xml" href="/favicon.svg" /> <link rel="icon" sizes="any" href="/favicon.ico" />
    ```
 
    SVG-capable browsers prefer the first; older browsers fall back to the `.ico`.
