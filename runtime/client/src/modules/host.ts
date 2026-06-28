@@ -11,7 +11,16 @@ export function createModuleHost(deps: { model: GraphModel; reconciler: Reconcil
     snapshot: () => deps.model.toDocument(),
     emit: (ops) => {
       if (ops.length === 0) return;
-      const changes = deps.model.applyBatch(ops); // atomic — throws + rolls back on failure
+      let changes;
+      try {
+        changes = deps.model.applyBatch(ops); // atomic — throws + rolls back on failure
+      } catch (err) {
+        // Structure-plane emits are best-effort: a module projecting into an
+        // incomplete document (e.g. before its parent exists) must never crash
+        // the engine. The projection is idempotent, so a later re-project succeeds.
+        console.warn('[module-host] emit skipped (op batch rejected)', err);
+        return;
+      }
       void deps.reconciler.applyChanges(changes).catch((err) => console.error('[module-host] reconcile failed', err));
     },
     resolve: (id) => deps.renderer.getHandle(id),

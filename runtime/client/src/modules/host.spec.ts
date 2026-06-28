@@ -21,16 +21,17 @@ describe('createModuleHost', () => {
     expect(model.getNode('root')).toBeTruthy();
   });
 
-  it('emit rolls back the whole batch if any op fails (atomic)', () => {
+  it('emit is best-effort: a rejected batch does not throw and leaves model unchanged', () => {
     const { model, host } = setup();
     host.emit([{ kind: 'addNode', id: 'root', type: 'Root', props: {} }]);
-    // second op is invalid (duplicate id) => batch should roll back, leaving only root
+    // batch with duplicate id — GraphModel rejects atomically; emit must swallow the error
     expect(() =>
       host.emit([
         { kind: 'addNode', id: 'a', type: 'Container', props: {} },
         { kind: 'addNode', id: 'a', type: 'Container', props: {} },
       ]),
-    ).toThrow();
+    ).not.toThrow();
+    // model is unchanged — neither 'a' was added
     expect(model.getNode('a')).toBeUndefined();
   });
 
