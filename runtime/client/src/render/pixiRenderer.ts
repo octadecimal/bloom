@@ -205,7 +205,15 @@ export class PixiRenderer implements IRenderer {
     // animation frame so the just-applied ops (texture uploads, new bounds) are
     // drawn, then extract — otherwise the critic would grade a stale frame.
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    return app.renderer.extract.base64(app.stage);
+    // Capture the full visible canvas as the user sees it (framing + negative
+    // space + background), not just the content bounding box — composition
+    // critique needs the framed scene, and a sparse/early scene must still
+    // yield a full frame rather than a near-empty crop.
+    return app.renderer.extract.base64({
+      target: app.stage,
+      frame: app.renderer.screen,
+      clearColor: '#0b0b0c',
+    });
   }
 
   onTick(cb: (dtMs: number) => void): () => void {
