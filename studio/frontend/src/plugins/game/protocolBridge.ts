@@ -4,17 +4,20 @@ import type { ISceneOp } from '../../scene/reducers';
 type InboundMessage =
   | { v: 1; kind: 'init'; id: string; document?: ISceneDocument }
   | { v: 1; kind: 'op'; id: string; op: ISceneOp }
-  | { v: 1; kind: 'batch'; id: string; ops: ISceneOp[] };
+  | { v: 1; kind: 'batch'; id: string; ops: ISceneOp[] }
+  | { v: 1; kind: 'capture'; id: string };
 
 type OutboundMessage =
   | { v: 1; kind: 'ready'; protocolVersion: 1 }
   | { v: 1; kind: 'ack'; id: string }
+  | { v: 1; kind: 'captured'; id: string; png: string }
   | { v: 1; kind: 'error'; id: string; code: string; message: string };
 
 export interface IProtocolBridgeDeps {
   post: (m: InboundMessage, targetOrigin: string) => void;
   engineOrigin: string;
   onError?: (e: { code: string; message: string }) => void;
+  onCaptured?: (c: { id: string; png: string }) => void;
 }
 
 export class ProtocolBridge {
@@ -34,6 +37,8 @@ export class ProtocolBridge {
       for (const m of pending) this.deps.post(m, this.deps.engineOrigin);
     } else if (data.kind === 'error') {
       this.deps.onError?.({ code: data.code, message: data.message });
+    } else if (data.kind === 'captured') {
+      this.deps.onCaptured?.({ id: data.id, png: data.png });
     }
   }
 
@@ -47,6 +52,13 @@ export class ProtocolBridge {
 
   batch(ops: ISceneOp[]): void {
     this.send({ v: 1, kind: 'batch', id: this.nextId(), ops });
+  }
+
+  /** Request a render-settled frame capture. The engine replies with `captured`,
+   *  surfaced via deps.onCaptured. `id` is the backend-issued captureId so the
+   *  PNG can be correlated when relayed back over the socket. */
+  capture(id: string): void {
+    this.send({ v: 1, kind: 'capture', id });
   }
 
   reset(): void {
