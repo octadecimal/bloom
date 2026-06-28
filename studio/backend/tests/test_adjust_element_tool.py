@@ -1,6 +1,6 @@
 import pytest
 
-from app.agent_tools import ToolContext, build_adjust_element_tool
+from app.agent_tools import ToolContext, ToolFactory, build_adjust_element_tool
 from app.scene.store import GameSceneStore
 from app.scene.hub import GameSceneHub
 
@@ -122,3 +122,10 @@ async def test_adjust_element_ambiguous_ref_returns_candidates(mongo_db):
     assert "matches several" in out
     assert "logo_top" in out and "logo_bottom" in out
     await mongo_db["game_scenes"].delete_many({})
+
+
+def test_tool_factory_builds_adjust_element():
+    f = ToolFactory(asset_store=None, asset_hub=None)
+    ctx = ToolContext("r1", "g1", None, None, scene_store=None, scene_hub=None)
+    tools = f.build(["adjust_element"], ctx)
+    assert [t.name for t in tools] == ["adjust_element"]
