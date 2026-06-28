@@ -307,6 +307,76 @@ def build_regenerate_element_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+def build_adjust_element_tool(ctx: ToolContext) -> BaseTool:
+    async def adjust_element(
+        ref: str,
+        x: float | None = None,
+        y: float | None = None,
+        scale: float | None = None,
+        z: int | None = None,
+    ) -> str:
+        document = await ctx.scene_store.get_document(ctx.game_id)
+        if not document or not document.get("nodes"):
+            return "The scene is empty; there's nothing placed to adjust."
+        assets = await ctx.asset_store.list_assets(ctx.game_id)
+
+        matches = _resolve_placed_elements(document, assets, ref)
+        if not matches:
+            return (f"No placed element matches '{ref}'. "
+                    f"Placed: {_placed_summary(document, assets)}. "
+                    f"Use one of those, or add it with generate_and_place.")
+        if len(matches) > 1:
+            opts = ", ".join(
+                m.handle + (f" (role {m.role})" if m.role else "") for m in matches)
+            return (f"'{ref}' matches several placed elements: {opts}. "
+                    f"Call adjust_element again with ref set to the exact one.")
+
+        el = matches[0]
+        ops: list[dict] = []
+        changed: list[str] = []
+        if x is not None:
+            ops.append({"kind": "setProp", "id": el.sprite_id,
+                        "path": "position.x", "value": x})
+            changed.append(f"x={x:g}")
+        if y is not None:
+            ops.append({"kind": "setProp", "id": el.sprite_id,
+                        "path": "position.y", "value": y})
+            changed.append(f"y={y:g}")
+        if scale is not None:
+            ops.append({"kind": "setProp", "id": el.sprite_id,
+                        "path": "scale.x", "value": scale})
+            ops.append({"kind": "setProp", "id": el.sprite_id,
+                        "path": "scale.y", "value": scale})
+            changed.append(f"scale={scale:g}")
+        if z is not None:
+            ops.append({"kind": "setProp", "id": el.sprite_id,
+                        "path": "zIndex", "value": int(z)})
+            changed.append(f"z={int(z)}")
+        if not ops:
+            return "Pass at least one of x, y, scale, or z to adjust."
+
+        try:
+            doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
+        except OpError as e:
+            return f"Rejected ({e.code}): {e}"
+        return (f"Adjusted '{el.handle}': {', '.join(changed)}." + _orphan_suffix(doc))
+
+    return StructuredTool.from_function(
+        coroutine=adjust_element, name="adjust_element",
+        description=(
+            "MOVE, RESIZE, or REORDER an element ALREADY placed in the scene "
+            "WITHOUT changing its art. Use this for pure layout fixes — 'move the "
+            "logo up', 'make the captain smaller', 'bring the chest to the front'. "
+            "`ref` is matched against each placed element's slot/role/asset name. "
+            "Pass any of: x, y (Root pixel position of the element's anchor), scale "
+            "(uniform multiplier, e.g. 0.4 to shrink), z (z-index; higher draws on "
+            "top). Omit a field to leave it unchanged. Prefer this over "
+            "regenerate_element for anything that's just mispositioned or mis-sized — "
+            "regeneration makes a different image, this keeps the same art."
+        ),
+    )
+
+
 def build_read_scene_tool(ctx: ToolContext) -> BaseTool:
     async def read_scene() -> str:
         document = await ctx.scene_store.get_document(ctx.game_id)
@@ -979,6 +1049,7 @@ class ToolFactory:
         "add_sprite": build_add_sprite_tool,
         "generate_and_place": build_generate_and_place_tool,
         "regenerate_element": build_regenerate_element_tool,
+        "adjust_element": build_adjust_element_tool,
         "read_scene": build_read_scene_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,
