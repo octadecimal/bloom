@@ -22,6 +22,7 @@ describe('brand favicon', () => {
   it('favicon.svg paints the brand tile and renders the glyph as a vector path', () => {
     const svg = faviconSvg();
     expect(svg).toContain('#f0641e'); // brand tile — tracks --accent
+    expect(svg).toContain('#160a02'); // glyph — tracks --accent-fg
     expect(svg).toContain('<path'); // glyph is an outline, not a font glyph
     expect(svg).not.toContain('<text'); // never depend on a system font
   });
