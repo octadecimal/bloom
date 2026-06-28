@@ -67,6 +67,7 @@ class AssetHub:
                 await self._store.set_status(asset_id, "error", error=error)
                 await self._emit_status(game_id, asset_id, "error")
             finally:
+                self._auto_select.discard(asset_id)
                 # Unblock any generate_and_wait() awaiting this asset — on success or error.
                 self._signal_done(asset_id, error)
 

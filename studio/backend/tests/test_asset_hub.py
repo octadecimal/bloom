@@ -245,6 +245,85 @@ async def test_generate_and_wait_raises_on_failure(mongo_db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_failed_auto_select_does_not_poison_later_agent_generation(mongo_db, tmp_path):
+    """auto_select=True with a failing generation must clear the flag so a subsequent
+    agent-path generation (no auto_select) is NOT wrongly rebound."""
+    store = AssetStore(mongo_db)
+    game_id = "g1"
+    asset = await store.create_asset(
+        game_id, "Wild", "p", 64, 64, "schnell-transparent", slot="wild"
+    )
+
+    scene_doc = {
+        "version": 1,
+        "nodes": {
+            "tex.wild": {
+                "id": "tex.wild",
+                "type": "Texture",
+                "props": {"src": "/media/old.png", "assetId": asset.id},
+            }
+        },
+        "edges": [],
+    }
+
+    class _SceneStore:
+        async def get_document(self, gid):
+            return scene_doc
+
+    class _SceneHub:
+        def __init__(self):
+            self.ops = []
+
+        async def apply_op(self, gid, op):
+            self.ops.append((gid, op))
+
+    class FailThenSucceedProvider:
+        def __init__(self):
+            self.calls = 0
+
+        async def generate(self, graph):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("gpu exploded")
+                yield  # pragma: no cover
+            yield ProgressEvent(value=1, max=1)
+            yield ImageEvent(data=_FAKE_PNG)
+
+    shub = _SceneHub()
+    sio = FakeSio()
+    hub = AssetHub(
+        sio,
+        store,
+        FailThenSucceedProvider(),
+        MediaStore(tmp_path),
+        scene_store=_SceneStore(),
+        scene_hub=shub,
+    )
+
+    # --- Phase 1: auto_select=True, generation FAILS ---
+    await hub.request_generation(game_id, asset.id, auto_select=True)
+    # Wait for drain to finish: error status emitted + hub no longer busy
+    await _wait_until(
+        lambda: any(
+            e[0] == "asset_status" and e[1].get("status") == "error" for e in sio.events
+        )
+    )
+    await _wait_until(lambda: game_id not in hub._busy)
+
+    # Minimum check: flag must be cleared even after failure
+    assert asset.id not in hub._auto_select
+
+    # --- Phase 2: agent-path generation (no auto_select) succeeds → must NOT rebind ---
+    sio.events.clear()
+    await hub.request_generation(game_id, asset.id)  # no auto_select
+    await _wait_for(sio, "asset_completed")
+    # rebind is async-after-emit; allow a small window for any spurious op to arrive
+    await asyncio.sleep(0.05)
+
+    assert not shub.ops, "agent-path generation must not trigger a rebind (auto_select flag leak)"
+
+
+@pytest.mark.asyncio
 async def test_notify_deleted_emits_asset_deleted_to_game_room():
     class _Sio:
         def __init__(self): self.emits = []
