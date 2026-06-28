@@ -1,0 +1,10 @@
+{
+  "target": "reel_frame",
+  "passes": [
+    {
+      "done": false,
+      "edits": [{ "target_handle": "reel_frame", "action": "scale", "params": { "scale": 0.8 }, "why": "shrink the frame so it sits inside the play area" }]
+    },
+    { "done": true, "edits": [] }
+  ]
+}
