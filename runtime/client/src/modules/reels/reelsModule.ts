@@ -1,5 +1,5 @@
 // runtime/client/src/modules/reels/reelsModule.ts
-import type { JsonValue } from '../../model/document';
+import type { IGameDocument, JsonValue } from '../../model/document';
 import type { IGameModule, IModuleHost, IOutcome } from '../module';
 import { validateConfig, type IConfigSchema } from '../schema';
 import { reconcileOps, type IDesiredNode, type IDesiredScene } from '../reconcile';
@@ -26,6 +26,19 @@ export function containerId(moduleId: string, col: number): string {
 
 export function cellId(moduleId: string, col: number, row: number): string {
   return `${moduleId}:cell:${col}:${row}`;
+}
+
+/** Centered origin so the visible rows×cols block sits in the middle of the safe area.
+ *  (Buffer rows extend below, as today.) span = cellSize + spacing. */
+export function centeredOrigin(
+  grid: { cols: number; rows: number; cellSize: number; spacing: number },
+  safe: { width: number; height: number },
+): { originX: number; originY: number } {
+  const span = grid.cellSize + grid.spacing;
+  return {
+    originX: safe.width / 2 - ((grid.cols - 1) * span) / 2,
+    originY: safe.height / 2 - ((grid.rows - 1) * span) / 2,
+  };
 }
 
 interface IReelsConfig {
@@ -112,9 +125,27 @@ export class ReelsModule implements IGameModule {
   }
 
   project(): void {
-    const desired = buildDesired(this.id, this.config);
+    const snap = this.host.snapshot();
+    const desired = buildDesired(this.id, this.withCenteredOrigin(this.config, snap));
     const owns = (nodeId: string) => nodeId.startsWith(`${this.id}:`);
-    this.host.emit(reconcileOps(this.host.snapshot(), desired, owns));
+    this.host.emit(reconcileOps(snap, desired, owns));
+  }
+
+  /** Fill a centered origin from the Root's landscape safe area when the config
+   *  leaves originX/originY unset; explicit origins pass through unchanged. */
+  private withCenteredOrigin(raw: Record<string, JsonValue>, doc: IGameDocument): Record<string, JsonValue> {
+    if (raw.originX !== undefined && raw.originY !== undefined) return raw;
+    const cfg = resolveConfig(raw);
+    const { originX, originY } = centeredOrigin(cfg, this.landscapeSafeArea(doc));
+    return { ...raw, originX: raw.originX ?? originX, originY: raw.originY ?? originY };
+  }
+
+  private landscapeSafeArea(doc: IGameDocument): { width: number; height: number } {
+    const root = Object.values(doc.nodes).find((n) => n.type === 'Root');
+    const land = (root?.props?.safeArea as { landscape?: { width?: number; height?: number } } | undefined)?.landscape;
+    const w = typeof land?.width === 'number' && land.width > 0 ? land.width : 1280;
+    const h = typeof land?.height === 'number' && land.height > 0 ? land.height : 720;
+    return { width: w, height: h };
   }
 
   mount(): void {

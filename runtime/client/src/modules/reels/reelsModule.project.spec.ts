@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GraphModel } from '../../model/graphModel';
 import type { IModuleHost } from '../module';
-import { ReelsModule, buildDesired, containerId, cellId } from './reelsModule';
+import { ReelsModule, buildDesired, centeredOrigin, containerId, cellId } from './reelsModule';
 import { colorForSymbol } from './symbolColor';
 
 /** Host backed by a real GraphModel so project()'s idempotency is exercised end to end. */
@@ -92,5 +92,49 @@ describe('ReelsModule.project', () => {
     const doc = model.toDocument();
     expect(doc.nodes[cellId('m', 0, 3)]).toBeTruthy();
     spy.mockRestore();
+  });
+});
+
+function modelWithSafeArea(): GraphModel {
+  const m = new GraphModel();
+  m.apply({
+    kind: 'addNode',
+    id: 'root',
+    type: 'Root',
+    props: { safeArea: { landscape: { width: 1280, height: 720 }, portrait: { width: 720, height: 1280 } } },
+  });
+  return m;
+}
+
+describe('centeredOrigin', () => {
+  it('centers the visible grid block in the safe area', () => {
+    // 5 cols x 3 rows, cellSize 100, spacing 8 -> span = 108
+    expect(centeredOrigin({ cols: 5, rows: 3, cellSize: 100, spacing: 8 }, { width: 1280, height: 720 })).toEqual({
+      originX: 1280 / 2 - (4 * 108) / 2, // 424
+      originY: 720 / 2 - (2 * 108) / 2, // 252
+    });
+  });
+});
+
+describe('ReelsModule.project centering', () => {
+  it('defaults to a centered origin from the Root safe area when origin is unset', () => {
+    const model = modelWithSafeArea();
+    const m = new ReelsModule({
+      id: 'r',
+      host: modelHost(model),
+      config: { rows: 3, cols: 5, cellSize: 100, spacing: 8, symbols: ['A', 'B', 'C'], parentId: 'root' },
+    });
+    m.project();
+    const doc = model.toDocument();
+    const reel0 = doc.nodes[containerId('r', 0)].props.position as { x: number; y: number };
+    expect(reel0).toEqual({ x: 424, y: 252 }); // centered, not pinned to the corner
+    expect((doc.nodes[containerId('r', 4)].props.position as { x: number }).x).toBe(424 + 4 * 108);
+  });
+
+  it('honors an explicit origin (no centering)', () => {
+    const model = modelWithSafeArea();
+    const m = new ReelsModule({ id: 'r', host: modelHost(model), config: { ...cfg, parentId: 'root' } });
+    m.project();
+    expect((model.toDocument().nodes[containerId('r', 0)].props.position as { x: number }).x).toBe(0); // cfg sets originX: 0
   });
 });
