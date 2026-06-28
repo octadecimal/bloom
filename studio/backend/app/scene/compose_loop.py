@@ -29,7 +29,6 @@ class ComposeBounds:
     look_behind: int = 3        # editable window = [K-look_behind .. K]
     max_passes: int = 3         # re-look passes per element
     regen_budget: int = 5       # hard ceiling on regenerations per build
-    capture_timeout: float = 8.0
 
 
 class BuildElement(BaseModel):
@@ -110,7 +109,10 @@ async def run_compose(
                 result.notes.append(
                     f"{target}: {verdict.reason} (regen budget exhausted, kept)")
         else:
-            result.notes.append(f"{target}: asset ok")
+            if verdict.ok:
+                result.notes.append(f"{target}: asset ok")
+            else:
+                result.notes.append(f"{target}: {verdict.reason}")
 
         # Composition passes: critique the composited scene and apply edits.
         for pass_index in range(bounds.max_passes):

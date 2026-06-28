@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 
 from app.scene.compose_loop import (
@@ -187,3 +185,17 @@ async def test_bad_asset_regenerate_respects_shared_budget():
     assert deps.regens == ["a"]                     # only the first is funded
     assert result.assets_regenerated == 1
     assert any("budget" in n for n in result.notes) # b's regen refused, noted
+
+
+@pytest.mark.asyncio
+async def test_unloadable_asset_surfaces_visible_note_not_asset_ok():
+    from app.scene.asset_critic import AssetVerdict
+    deps = FakeDeps(
+        {"logo": [Critique(done=True)]},
+        asset_verdicts={"logo": AssetVerdict(ok=False, action="keep",
+                                             reason="couldn't load asset image for review")},
+    )
+    result = await run_compose([_el("logo")], "pirate", deps)
+    assert deps.regens == []
+    assert any("couldn't load asset image for review" in n for n in result.notes)
+    assert not any("logo: asset ok" in n for n in result.notes)

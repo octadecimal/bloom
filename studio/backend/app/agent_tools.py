@@ -453,7 +453,8 @@ class _SceneComposeDeps:
         tex_id = _texture_of(document or {}, f"spr.{target_handle}")
         image_png = images.get(tex_id) if tex_id else None
         if not image_png:
-            return AssetVerdict()  # nothing to judge -> keep
+            return AssetVerdict(ok=False, action="keep",
+                                reason="couldn't load asset image for review")
         # Role: prefer sprite's own role prop (authoritative); fall back to
         # asset.role, then handle so the heuristic always has a label.
         nodes = (document or {}).get("nodes", {})

@@ -63,8 +63,8 @@ async def test_compose_loop_critiques_for_real_and_regenerates_bad_asset(live_se
     # --- Load the persisted run from the REST API ---
     # GET /rooms/{room_id}/runs returns a list of Run objects, each with a
     # `steps` list.  Each step has: type (tool_call|tool_result|final|...),
-    # tool_name, content, status.  We look for the tool_result step whose
-    # tool_name is "compose_scene" — its content is the format_compose_summary
+    # toolName, content, status.  We look for the tool_result step whose
+    # toolName is "compose_scene" — its content is the format_compose_summary
     # string that encodes every measurable outcome of the loop.
     async with httpx.AsyncClient(base_url=live_server) as http:
         runs = (await http.get(f"/rooms/{room_id}/runs")).json()

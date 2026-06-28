@@ -7,6 +7,11 @@ Pillow, matching the engine's layout math (anchor-positioned, scaled, z-ordered)
 It deliberately reproduces only the *layout* (not engine filters/blend/responsive
 scaling) — the composition critic acts on layout, and the canonical document is
 the source of truth.
+
+Note: this compositor places all Sprite nodes flat under the canvas by absolute
+``position`` with a global zIndex sort; it intentionally ignores Container
+nesting and parent transforms, which is correct for the compose loop (all
+elements are placed directly under root).
 """
 
 from io import BytesIO
