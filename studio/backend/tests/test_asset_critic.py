@@ -61,3 +61,15 @@ async def test_replay_asset_critic_defaults_to_keep_when_no_cassette():
     req = AssetCritiqueRequest(image_png=_png((5, 6, 7, 255)), role="logo", transparent=True)
     v = await critic.critique(req)
     assert v.action == "keep"
+
+
+def test_asset_prompt_checks_text_and_ghosted_solids():
+    from app.scene.asset_critic import ASSET_SYSTEM_PROMPT
+
+    low = ASSET_SYSTEM_PROMPT.lower()
+    # item 1: must read and judge text on logos/UI
+    assert "text" in low
+    assert "misspelled" in low or "illegible" in low
+    # item 5 (vision): must flag semi-transparent / ghosted solids
+    assert "transparent" in low or "see-through" in low or "ghost" in low
+    assert "opaque" in low

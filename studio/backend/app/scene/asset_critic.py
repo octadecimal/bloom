@@ -102,9 +102,17 @@ ASSET_SYSTEM_PROMPT = (
     "this asset on its own: is it empty, cut off at the edges, low quality, or "
     "clearly wrong for its stated role/theme? Backgrounds should be full scenes; "
     "logos/props/characters should be clean, complete, and (when transparent) cut "
-    "out cleanly. Return {ok, action, reason} where action is 'keep' if the asset "
-    "is usable, or 'regenerate' if it must be remade. Prefer 'keep' unless the "
-    "asset is clearly unusable."
+    "out cleanly.\n"
+    "TEXT: if the asset carries text — a logo wordmark, a UI label, a button "
+    "caption — READ it. Flag it 'regenerate' if the text is misspelled, garbled, "
+    "duplicated, or illegible, EVEN IF the art is otherwise good (e.g. "
+    "'PIRATE FORTUNEE' or 'PHAARAOH'S RIICHES' are unusable).\n"
+    "TRANSPARENCY: a solid object must read as solid. Flag it 'regenerate' if a "
+    "subject that should be opaque looks semi-transparent, ghostly, or see-through, "
+    "or has transparent holes where the background shows through.\n"
+    "Return {ok, action, reason} where action is 'keep' if the asset is usable, or "
+    "'regenerate' if it must be remade. Prefer 'keep' unless the asset is clearly "
+    "unusable."
 )
 
 
