@@ -1,0 +1,17 @@
+{
+  "target": "desk",
+  "passes": [
+    {
+      "done": false,
+      "edits": [
+        {
+          "target_handle": "desk",
+          "action": "regenerate",
+          "params": {},
+          "why": "The desk art is a dense rectangular blob that can't be salvaged by moving or scaling; it needs a cleaner background plate."
+        }
+      ]
+    },
+    { "done": true, "edits": [] }
+  ]
+}
