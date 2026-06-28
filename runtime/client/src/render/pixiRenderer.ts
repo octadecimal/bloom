@@ -1,4 +1,4 @@
-import { Application, Assets, BlurFilter, Container, Sprite, Texture, type Filter, type Ticker } from 'pixi.js';
+import { Application, Assets, BlurFilter, Container, Sprite, Text, Texture, type Filter, type Ticker } from 'pixi.js';
 import type { JsonValue, NodeType } from '../model/document';
 import type { IDisplayHandle, IRenderer, ITextureHandle } from './renderer';
 import type { IViewport } from './viewport';
@@ -51,6 +51,20 @@ export function applyPixiProp(obj: DisplayObject, path: string, value: JsonValue
     case 'zIndex':
       (obj as { zIndex: number }).zIndex = value as number;
       return;
+    case 'fill': {
+      if (obj instanceof Sprite) {
+        obj.texture = Texture.WHITE;
+        obj.tint = (value as string) ?? 0xffffff;
+      }
+      return;
+    }
+    case 'size': {
+      if (obj instanceof Sprite) {
+        const s = (value ?? {}) as { width?: number; height?: number };
+        obj.setSize(s.width ?? 0, s.height ?? 0);
+      }
+      return;
+    }
     default:
       return; // unknown props are ignored (forward-compatible)
   }
@@ -62,6 +76,7 @@ export class PixiRenderer implements IRenderer {
   private app: Application | null = null;
   private rootId: string | null = null;
   private objects = new Map<string, DisplayObject>();
+  private labels = new Map<string, Text>();
   private pendingTicks: Array<(ticker: Ticker) => void> = [];
 
   constructor(
@@ -116,6 +131,7 @@ export class PixiRenderer implements IRenderer {
     if (!obj || id === this.rootId) return;
     obj.removeFromParent();
     obj.destroy();
+    this.labels.delete(id);
     this.objects.delete(id);
   }
 
@@ -129,8 +145,27 @@ export class PixiRenderer implements IRenderer {
   }
 
   setProp(id: string, path: string, value: JsonValue): void {
+    if (path === 'label') {
+      this.applyLabel(id, value);
+      return;
+    }
     const obj = this.objects.get(id);
     if (obj) applyPixiProp(obj, path, value);
+  }
+
+  private applyLabel(id: string, value: JsonValue): void {
+    const obj = this.objects.get(id);
+    if (!(obj instanceof Sprite)) return;
+    const str = value == null ? '' : String(value);
+    let text = this.labels.get(id);
+    if (!text) {
+      text = new Text({ text: str, style: { fill: '#0b0b0c', fontSize: 28, fontWeight: 'bold' } });
+      text.anchor.set(0.5); // centered on the sprite's origin (cells are anchor-0.5)
+      obj.addChild(text);
+      this.labels.set(id, text);
+    } else {
+      text.text = str;
+    }
   }
 
   async loadTexture(src: string): Promise<ITextureHandle> {
