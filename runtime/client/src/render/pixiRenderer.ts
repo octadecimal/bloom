@@ -85,6 +85,10 @@ export class PixiRenderer implements IRenderer {
   ) {}
 
   async mount(rootId: string): Promise<void> {
+    if (this.app) {
+      this.resetScene(rootId); // re-init reuses the one Application/canvas (no second mount)
+      return;
+    }
     const app = new Application();
     const width = Math.max(1, this.host.clientWidth);
     const height = Math.max(1, this.host.clientHeight);
@@ -102,6 +106,22 @@ export class PixiRenderer implements IRenderer {
     this.flushPendingTicks();
     this.rootId = rootId;
     this.objects.set(rootId, app.stage as unknown as Container);
+  }
+
+  /** A re-init reuses the existing Application: tear the scene down to bare root so
+   *  the next projection rebuilds on the single canvas (no duplicate canvas). */
+  private resetScene(rootId: string): void {
+    const stage = this.app!.stage as unknown as Container;
+    for (const [id, obj] of this.objects) {
+      if (id === this.rootId) continue;
+      obj.destroy();
+    }
+    for (const text of this.labels.values()) text.destroy();
+    this.objects.clear();
+    this.labels.clear();
+    stage.removeChildren();
+    this.rootId = rootId;
+    this.objects.set(rootId, stage);
   }
 
   applyViewport(vp: IViewport): void {

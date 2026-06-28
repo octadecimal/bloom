@@ -211,3 +211,32 @@ describe('PixiRenderer.onStage', () => {
     expect(r.onStage('ghost')).toBe(false); // unknown id
   });
 });
+
+describe('PixiRenderer.mount idempotency', () => {
+  it('a second mount reuses the existing Application/canvas and resets the scene to bare root', async () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    const stage = new Container();
+    stage.sortableChildren = true;
+    const fakeApp = { stage, canvas: document.createElement('canvas'), ticker: { add() {}, remove() {} } };
+    const internals = r as unknown as {
+      app: unknown;
+      rootId: string;
+      objects: Map<string, Container>;
+      labels: Map<string, Text>;
+    };
+    internals.app = fakeApp;
+    internals.rootId = 'root';
+    internals.objects.set('root', stage);
+
+    r.createObject('cell', 'Sprite');
+    r.setParent('cell', 'root');
+    expect(stage.children.length).toBe(1);
+
+    await r.mount('root'); // re-init — must NOT build a new Application
+
+    expect(internals.app).toBe(fakeApp); // same app reused — no second canvas
+    expect(stage.children.length).toBe(0); // scene torn down
+    expect(internals.objects.size).toBe(1); // only root remains
+    expect(internals.objects.get('root')).toBe(stage);
+  });
+});
