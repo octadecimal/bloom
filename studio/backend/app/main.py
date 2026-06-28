@@ -139,6 +139,8 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.sim_hub = sim_hub
     fastapi_app.state.tuner_store = tuner_store
     fastapi_app.state.tuner_hub = tuner_hub
+    fastapi_app.state.scene_store = scene_store
+    fastapi_app.state.scene_hub = scene_hub
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(sim_router)
     fastapi_app.include_router(tuner_router)
