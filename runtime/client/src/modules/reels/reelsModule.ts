@@ -5,6 +5,8 @@ import { validateConfig, type IConfigSchema } from '../schema';
 import { reconcileOps, type IDesiredNode, type IDesiredScene } from '../reconcile';
 import type { IDisplayHandle } from '../../render/renderer';
 import { advance, blurFor, easeOutCubic, reelDelay, settleT, symbolAt, wrap } from './reelsMath';
+import type { Op } from '../../model/ops';
+import { colorForSymbol } from './symbolColor';
 
 export const REELS_SCHEMA: IConfigSchema = {
   rows: { type: 'integer', default: 3, min: 1, max: 8 },
@@ -57,10 +59,17 @@ export function buildDesired(moduleId: string, raw: Record<string, JsonValue>): 
       parent: cfg.parentId,
     });
     for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
+      const sym = cfg.symbols[r % cfg.symbols.length];
       nodes.push({
         id: cellId(moduleId, c, r),
         type: 'Sprite',
-        props: { position: { x: 0, y: r * span }, symbol: cfg.symbols[r % cfg.symbols.length] },
+        props: {
+          position: { x: 0, y: r * span },
+          symbol: sym,
+          fill: colorForSymbol(sym),
+          size: { width: cfg.cellSize, height: cfg.cellSize },
+          label: sym,
+        },
         parent: containerId(moduleId, c),
       });
     }
@@ -193,6 +202,16 @@ export class ReelsModule implements IGameModule {
         handle.position.y = r * (cfg.cellSize + cfg.spacing);
       }
     }
+    const ops: Op[] = [];
+    for (let c = 0; c < cfg.cols; c++) {
+      for (let r = 0; r < cfg.rows; r++) {
+        const sym = grid[c]?.[r];
+        if (sym === undefined) continue;
+        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'fill', value: colorForSymbol(sym) });
+        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'label', value: sym });
+      }
+    }
+    if (ops.length) this.host.emit(ops);
     this.settledGrid = grid;
     this.phase = 'idle';
     this.host.bus.emit('reels:settled', { grid });

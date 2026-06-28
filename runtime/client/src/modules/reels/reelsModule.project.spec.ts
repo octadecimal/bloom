@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { GraphModel } from '../../model/graphModel';
 import type { IModuleHost } from '../module';
 import { ReelsModule, buildDesired, containerId, cellId } from './reelsModule';
+import { colorForSymbol } from './symbolColor';
 
 /** Host backed by a real GraphModel so project()'s idempotency is exercised end to end. */
 function modelHost(model: GraphModel): IModuleHost {
@@ -24,6 +25,14 @@ function seededModel(): GraphModel {
 }
 
 describe('buildDesired', () => {
+  it('each cell carries fill, size and label for rectangle rendering', () => {
+    const scene = buildDesired('reels', { cols: 1, rows: 1, symbols: ['7'], cellSize: 100, spacing: 0, buffer: 0, parentId: 'root' });
+    const cell = scene.nodes.find((n) => n.id === 'reels:cell:0:0')!;
+    expect(cell.props.fill).toBe(colorForSymbol('7'));
+    expect(cell.props.size).toEqual({ width: 100, height: 100 });
+    expect(cell.props.label).toBe('7');
+  });
+
   it('produces one Container per column and (rows+buffer) Sprites per column with stable ids', () => {
     const desired = buildDesired('m', cfg);
     const ids = desired.nodes.map((n) => n.id);
