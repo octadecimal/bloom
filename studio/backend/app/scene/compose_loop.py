@@ -29,6 +29,8 @@ class ComposeBounds:
     look_behind: int = 3        # editable window = [K-look_behind .. K]
     max_passes: int = 3         # re-look passes per element
     regen_budget: int = 5       # hard ceiling on regenerations per build
+    asset_regen_retries: int = 2    # max regenerate->re-judge cycles per asset
+    max_edits_per_element: int = 4  # deterministic per-element critic-edit cap
 
 
 class BuildElement(BaseModel):
@@ -58,6 +60,7 @@ class ComposeResult:
     assets_regenerated: int = 0
     rejected: int = 0
     elements_placed: int = 0
+    corrections_applied: int = 0
     notes: list[str] = field(default_factory=list)
 
 

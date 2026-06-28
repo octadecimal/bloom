@@ -199,3 +199,12 @@ async def test_unloadable_asset_surfaces_visible_note_not_asset_ok():
     assert deps.regens == []
     assert any("couldn't load asset image for review" in n for n in result.notes)
     assert not any("logo: asset ok" in n for n in result.notes)
+
+
+def test_bounds_and_result_have_new_quality_fields():
+    b = ComposeBounds()
+    assert b.asset_regen_retries == 2
+    assert b.max_edits_per_element == 4
+    # still the established defaults
+    assert (b.look_behind, b.max_passes, b.regen_budget) == (3, 3, 5)
+    assert ComposeResult().corrections_applied == 0
