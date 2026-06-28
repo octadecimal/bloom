@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "openai/gpt-5.5"
+    # Vision composition critic (Plan 2). Direct structured+image call via the
+    # SceneCritic seam — an OpenRouter slug, tunable without code changes. See
+    # docs/.../vision-in-the-loop-scene-composition-design.md (decided: sonnet-4-6).
+    critic_model: str = "anthropic/claude-sonnet-4-6"
     available_models: str = "openai/gpt-5.5,openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
     provider_mode: Literal["live", "replay"] = "live"
     replay_token_delay: float = 0.0
