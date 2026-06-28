@@ -1,11 +1,12 @@
 """Vision-in-the-loop scene composition — compose-loop orchestrator core.
 
 `run_compose` owns the bounded build loop described in the spec (§1): for each
-element the user named, place it, then repeatedly capture the real rendered
-frame, critique its composition, and apply transform/regenerate edits until the
-critic returns `done` or the caps are hit. It is pure: all I/O (placement,
-capture, critique, edits) is behind the `ComposeDeps` Protocol so the bounds /
-window / budget / stop logic is unit-testable without Mongo, sockets, or an LLM.
+element the user named, place it, run the per-asset quality gate, then
+repeatedly composite the canonical scene, critique its composition, and apply
+transform/regenerate edits until the critic returns `done` or the caps are hit.
+It is pure: all I/O (placement, render, critique, edits) is behind the
+`ComposeDeps` Protocol so the bounds / window / budget / stop logic is
+unit-testable without Mongo, sockets, or an LLM.
 See docs/superpowers/specs/2026-06-27-vision-in-the-loop-scene-composition-design.md.
 """
 
@@ -15,6 +16,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+from app.scene.asset_critic import AssetVerdict
 from app.scene.critic import Critique, CritiqueRequest, EditParams
 
 logger = logging.getLogger(__name__)
@@ -27,7 +29,6 @@ class ComposeBounds:
     look_behind: int = 3        # editable window = [K-look_behind .. K]
     max_passes: int = 3         # re-look passes per element
     regen_budget: int = 5       # hard ceiling on regenerations per build
-    capture_timeout: float = 8.0
 
 
 class BuildElement(BaseModel):
@@ -54,19 +55,21 @@ class ComposeResult:
     passes: int = 0
     edits_applied: int = 0
     regens_spent: int = 0
+    assets_regenerated: int = 0
     rejected: int = 0
     elements_placed: int = 0
     notes: list[str] = field(default_factory=list)
 
 
 class ComposeDeps(Protocol):
-    """The I/O surface the loop drives. Task 3 supplies the real impl; tests a
+    """The I/O surface the loop drives. Task 4 supplies the real impl; tests a
     fake. Every method is async."""
 
     async def place(self, element: BuildElement) -> str: ...
     async def placed_handles(self) -> list[str]: ...
     async def scene_context(self) -> dict: ...
-    async def capture(self) -> bytes: ...
+    async def render_scene(self) -> bytes: ...
+    async def critique_asset(self, target_handle: str) -> AssetVerdict: ...
     async def critique(self, request: CritiqueRequest) -> Critique: ...
     async def adjust(self, handle: str, params: EditParams) -> str: ...
     async def regenerate(self, handle: str) -> str: ...
@@ -93,14 +96,32 @@ async def run_compose(
         window = handles[max(0, k - bounds.look_behind):k + 1]
         result.notes.append(f"placed {target} (window={window})")
 
+        # Per-asset quality gate (before composition): regenerate degenerate art.
+        verdict = await deps.critique_asset(target)
+        if verdict.action == "regenerate":
+            if regen_left > 0:
+                regen_left -= 1
+                result.regens_spent += 1
+                result.assets_regenerated += 1
+                await deps.regenerate(target)
+                result.notes.append(f"{target}: {verdict.reason} -> regenerated")
+            else:
+                result.notes.append(
+                    f"{target}: {verdict.reason} (regen budget exhausted, kept)")
+        else:
+            if verdict.ok:
+                result.notes.append(f"{target}: asset ok")
+            else:
+                result.notes.append(f"{target}: {verdict.reason}")
+
+        # Composition passes: critique the composited scene and apply edits.
         for pass_index in range(bounds.max_passes):
             try:
-                frame = await deps.capture()
-            except Exception:
-                # Best-effort capture (decision 3): no frame -> cannot grade this
-                # element. Skip its critique loop and move on.
-                result.notes.append(f"{target}: no frame, skipped critique")
-                logger.info("compose: capture failed for %s; skipping", target)
+                frame = await deps.render_scene()
+            except Exception as exc:
+                # Fail-loud (NOT silent): a render failure is surfaced, not hidden.
+                result.notes.append(f"{target}: could not render scene for review ({exc})")
+                logger.warning("compose: render_scene failed for %s: %s", target, exc)
                 break
 
             scene = await deps.scene_context()

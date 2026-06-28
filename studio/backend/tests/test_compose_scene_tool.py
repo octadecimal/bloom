@@ -1,4 +1,10 @@
+from io import BytesIO
+
+import pytest
+from PIL import Image
+
 from app.agent_tools import ToolContext
+from app.scene.asset_critic import AssetVerdict
 
 
 def test_tool_context_carries_critic_and_capture_broker():
@@ -40,6 +46,9 @@ class _SilentSio:
 class _NoAssets:
     async def list_assets(self, game_id):
         return []
+
+    async def get_by_slot(self, game_id, slot):
+        return None
 
 
 class _FakeBroker:
@@ -91,17 +100,6 @@ async def test_compose_deps_lists_placed_handles_in_order(mongo_db):
 
 
 @pytest.mark.asyncio
-async def test_compose_deps_capture_calls_the_broker(mongo_db):
-    broker = _FakeBroker(png=b"\x89PNGxyz")
-    ctx = ToolContext("r1", "g1", _NoAssets(), None,
-                      scene_store=GameSceneStore(mongo_db), scene_hub=None,
-                      capture_broker=broker)
-    deps = _SceneComposeDeps(ctx)
-    assert await deps.capture() == b"\x89PNGxyz"
-    assert broker.calls == 1
-
-
-@pytest.mark.asyncio
 async def test_compose_deps_adjust_applies_a_scale(mongo_db):
     await mongo_db["game_scenes"].delete_many({})
     store = GameSceneStore(mongo_db)
@@ -119,3 +117,107 @@ def test_tool_factory_builds_compose_scene():
     ctx = ToolContext("r1", "g1", _NoAssets(), None, scene_store=None, scene_hub=None)
     tools = ToolFactory(asset_store=None, asset_hub=None).build(["compose_scene"], ctx)
     assert [t.name for t in tools] == ["compose_scene"]
+
+
+# ---------------------------------------------------------------------------
+# Task 4: real deps — render_scene, critique_asset, asset_critic field
+# ---------------------------------------------------------------------------
+
+class _FakeAssetCritic:
+    def __init__(self, verdict):
+        self.verdict = verdict
+        self.calls = []
+
+    async def critique(self, request):
+        self.calls.append(request.role)
+        return self.verdict
+
+
+def _png_bytes(color, size=(32, 32)):
+    buf = BytesIO()
+    Image.new("RGBA", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_render_scene_composites_from_media(mongo_db, tmp_path, monkeypatch):
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    await _seed_sprite(hub, "g1", "background", "background")
+    # bind a texture node + edge and lay a media file matching its src
+    await hub.apply_batch("g1", [
+        {"kind": "addNode", "id": "tex.background", "type": "Texture",
+         "props": {"src": "/media/g1/background/1.png"}},
+        {"kind": "connect", "edgeId": "e.tex.background", "type": "data",
+         "from": {"node": "tex.background", "port": "data"},
+         "to": {"node": "spr.background", "port": "texture"}},
+    ])
+    media = tmp_path / "g1" / "background"
+    media.mkdir(parents=True)
+    (media / "1.png").write_bytes(_png_bytes((255, 0, 0, 255), (1280, 720)))
+
+    ctx = ToolContext("r1", "g1", _NoAssets(), None, scene_store=store, scene_hub=hub)
+    monkeypatch.setattr("app.agent_tools.get_settings",
+                        lambda: type("S", (), {"media_dir": str(tmp_path)})())
+    deps = _SceneComposeDeps(ctx)
+    png = await deps.render_scene()
+    img = Image.open(BytesIO(png)).convert("RGBA")
+    assert img.size == (1280, 720)
+    assert img.getpixel((640, 360))[:3] == (255, 0, 0)
+    await mongo_db["game_scenes"].delete_many({})
+
+
+@pytest.mark.asyncio
+async def test_critique_asset_calls_asset_critic_with_latest_generation(
+        mongo_db, tmp_path, monkeypatch):
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    await _seed_sprite(hub, "g1", "reel_frame", "reel frame")
+    await hub.apply_batch("g1", [
+        {"kind": "addNode", "id": "tex.reel_frame", "type": "Texture",
+         "props": {"src": "/media/g1/reel_frame/1.png"}},
+        {"kind": "connect", "edgeId": "e.tex.reel_frame", "type": "data",
+         "from": {"node": "tex.reel_frame", "port": "data"},
+         "to": {"node": "spr.reel_frame", "port": "texture"}},
+    ])
+    media = tmp_path / "g1" / "reel_frame"
+    media.mkdir(parents=True)
+    (media / "1.png").write_bytes(_png_bytes((9, 9, 9, 255)))
+
+    fake = _FakeAssetCritic(AssetVerdict(ok=False, action="regenerate", reason="x"))
+    ctx = ToolContext("r1", "g1", _NoAssets(), None, scene_store=store, scene_hub=hub,
+                      asset_critic=fake)
+    monkeypatch.setattr("app.agent_tools.get_settings",
+                        lambda: type("S", (), {"media_dir": str(tmp_path)})())
+    deps = _SceneComposeDeps(ctx)
+    verdict = await deps.critique_asset("reel_frame")
+    assert verdict.action == "regenerate"
+    assert fake.calls == ["reel frame"]   # role passed through
+    await mongo_db["game_scenes"].delete_many({})
+
+
+def test_tool_context_carries_asset_critic():
+    sentinel = object()
+    ctx = ToolContext("r1", "g1", None, None, asset_critic=sentinel)
+    assert ctx.asset_critic is sentinel
+
+
+# ---------------------------------------------------------------------------
+# Task 5: format_compose_summary — surfaces asset + composition verdicts
+# ---------------------------------------------------------------------------
+
+from app.agent_tools import format_compose_summary
+from app.scene.compose_loop import ComposeResult
+
+
+def test_compose_summary_reports_asset_regenerations_and_notes():
+    r = ComposeResult(elements_placed=2, passes=3, edits_applied=1,
+                      regens_spent=2, assets_regenerated=1,
+                      notes=["reel_frame: near-empty image (7600 bytes) -> regenerated",
+                             "logo: asset ok", "scale logo: too big"])
+    s = format_compose_summary(r)
+    assert "2 element(s)" in s and "3 critique pass(es)" in s
+    assert "1 asset regeneration(s)" in s
+    assert "reel_frame: near-empty" in s and "logo: asset ok" in s
