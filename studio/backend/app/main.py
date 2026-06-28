@@ -23,6 +23,7 @@ from app.gdd.store import GddStore
 from app.scene.hub import GameSceneHub
 from app.scene.capture import SceneCaptureBroker
 from app.scene.critic import build_scene_critic
+from app.scene.asset_critic import build_asset_critic
 from app.scene.sockets import register_scene_handlers
 from app.scene.store import GameSceneStore
 from app.simulator.store import SlotModelStore
@@ -116,6 +117,7 @@ def build(settings: Settings) -> AppContext:
     presence = PresenceRegistry()
     capture_broker = SceneCaptureBroker(sio)
     scene_critic = build_scene_critic(settings)
+    asset_critic = build_asset_critic(settings)
     hub = RoomHub(
         sio, store, chat_service,
         run_store=run_store, turn_runner=turn_runner,
@@ -125,6 +127,7 @@ def build(settings: Settings) -> AppContext:
         scene_store=scene_store, scene_hub=scene_hub,
         sim_store=sim_store, tuner_store=tuner_store, tuner_hub=tuner_hub,
         scene_critic=scene_critic, capture_broker=capture_broker,
+        asset_critic=asset_critic,
     )
     register_socket_handlers(sio, hub, presence)
 

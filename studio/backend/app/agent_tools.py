@@ -4,11 +4,14 @@ from dataclasses import dataclass
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
 
+from app.config import get_settings
 from app.gdd.store import GddEditError
 from app.scene.document import OpError, unreachable_nodes, empty_document
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.scene.compose_loop import BuildElement, ComposeBounds, run_compose
 from app.scene.critic import CritiqueRequest, EditParams
+from app.scene.compositor import collect_scene_images, composite_scene
+from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
 from app.simulator.targets import derive_target, TargetGap
 from app.tuner.models import TuningParams
 
@@ -31,6 +34,7 @@ class ToolContext:
     # capture broker fetches the real engine frame (Plans 2 & 3).
     scene_critic: object = None
     capture_broker: object = None
+    asset_critic: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -423,9 +427,34 @@ class _SceneComposeDeps:
             })
         return {"elements": out}
 
-    async def capture(self) -> bytes:
-        return await self._ctx.capture_broker.request_capture(
-            self._ctx.game_id, timeout=ComposeBounds().capture_timeout)
+    async def render_scene(self) -> bytes:
+        document = await self._ctx.scene_store.get_document(self._ctx.game_id)
+        if not document:
+            raise RuntimeError("no scene document to render")
+        media_dir = get_settings().media_dir
+        images = collect_scene_images(document, media_dir)
+        return composite_scene(document, images)
+
+    async def critique_asset(self, target_handle: str):
+        document = await self._ctx.scene_store.get_document(self._ctx.game_id)
+        media_dir = get_settings().media_dir
+        images = collect_scene_images(document or {}, media_dir)
+        tex_id = _texture_of(document or {}, f"spr.{target_handle}")
+        image_png = images.get(tex_id) if tex_id else None
+        if not image_png:
+            return AssetVerdict()  # nothing to judge -> keep
+        # Role: prefer sprite's own role prop (authoritative); fall back to
+        # asset.role, then handle so the heuristic always has a label.
+        nodes = (document or {}).get("nodes", {})
+        sprite_props = (nodes.get(f"spr.{target_handle}") or {}).get("props") or {}
+        sprite_role = sprite_props.get("role") or ""
+        asset = await self._ctx.asset_store.get_by_slot(self._ctx.game_id, target_handle)
+        role = sprite_role or getattr(asset, "role", None) or target_handle
+        description = getattr(asset, "description", "") or ""
+        transparent = bool(getattr(asset, "transparent", True))
+        return await self._ctx.asset_critic.critique(AssetCritiqueRequest(
+            image_png=image_png, role=role, description=description,
+            theme="", transparent=transparent))
 
     async def critique(self, request: CritiqueRequest):
         return await self._ctx.scene_critic.critique(request)
@@ -443,8 +472,8 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
     async def compose_scene(elements: list[dict], theme: str = "") -> str:
         if not elements:
             return "Pass at least one element to build."
-        if ctx.scene_critic is None or ctx.capture_broker is None:
-            return ("Compose loop unavailable: no critic/capture wired. "
+        if ctx.scene_critic is None or ctx.asset_critic is None:
+            return ("Compose loop unavailable: no critic wired. "
                     "Place elements individually with generate_and_place.")
         build = [BuildElement(**e) for e in elements]
         deps = _SceneComposeDeps(ctx)
