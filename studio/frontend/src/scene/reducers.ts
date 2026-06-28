@@ -50,6 +50,7 @@ export function loadDocument(doc: ISceneDocument): ISceneDocument {
     version: doc.version,
     nodes: Object.fromEntries(Object.entries(doc.nodes).map(([id, n]) => [id, { ...n, props: { ...n.props } }])),
     edges: doc.edges.map((e) => ({ ...e, from: { ...e.from }, to: { ...e.to } })),
+    modules: doc.modules ? doc.modules.map((m) => ({ ...m })) : undefined,
   };
 }
 

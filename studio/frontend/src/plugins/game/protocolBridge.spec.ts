@@ -75,4 +75,15 @@ describe('ProtocolBridge', () => {
     bridge.handleEngineMessage({ v: 1, kind: 'captured', id: 'cap1', png: 'x' }, 'http://evil:9999');
     expect(onCaptured).not.toHaveBeenCalled();
   });
+
+  it('queues a spin before ready, then posts it on ready', () => {
+    const { bridge, post } = setup();
+    bridge.spin({ grid: [['0', '1']] });
+    expect(post).not.toHaveBeenCalled();
+    bridge.handleEngineMessage({ v: 1, kind: 'ready', protocolVersion: 1 }, ENGINE);
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({ v: 1, kind: 'spin', outcome: { grid: [['0', '1']] } }),
+      ENGINE,
+    );
+  });
 });
