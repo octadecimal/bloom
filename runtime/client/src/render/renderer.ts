@@ -28,4 +28,7 @@ export interface IRenderer {
   getHandle(id: string): IDisplayHandle | null;
   /** Per-frame tick; returns an unsubscribe thunk. dtMs since last frame. */
   onTick(cb: (dtMs: number) => void): () => void;
+  /** Render-settled capture of the current frame as a PNG data URL
+   *  ("data:image/png;base64,..."). Resolves to '' if not yet mounted. */
+  capture(): Promise<string>;
 }

@@ -76,4 +76,26 @@ describe('ProtocolHost', () => {
     expect(model.getNode('b')).toBeDefined();
     expect(sent).toContainEqual({ v: 1, kind: 'ack', id: 'm4' });
   });
+
+  it('captures the rendered frame and replies with captured (not ack)', async () => {
+    const { host, sent } = setup();
+    await host.handle({ v: 1, kind: 'capture', id: 'c1' });
+    expect(sent).toContainEqual({ v: 1, kind: 'captured', id: 'c1', png: 'data:image/png;base64,MOCK' });
+    expect(sent.some((m) => m.kind === 'ack' && m.id === 'c1')).toBe(false);
+  });
+
+  it('reports an error (not captured) when capture throws', async () => {
+    const model = new GraphModel();
+    const fakeReconciler = {
+      applyChanges: async () => {},
+      capture: async () => {
+        throw new Error('extract failed');
+      },
+    } as unknown as import('../render/reconciler').Reconciler;
+    const sent: OutboundMessage[] = [];
+    const host = new ProtocolHost({ model, reconciler: fakeReconciler, post: (m) => sent.push(m) });
+    await host.handle({ v: 1, kind: 'capture', id: 'c2' });
+    expect(sent.some((m) => m.kind === 'error' && m.id === 'c2' && m.code === 'internal')).toBe(true);
+    expect(sent.some((m) => m.kind === 'captured')).toBe(false);
+  });
 });

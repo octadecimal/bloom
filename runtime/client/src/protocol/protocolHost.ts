@@ -33,6 +33,10 @@ export class ProtocolHost {
         await this.deps.reconciler.applyChanges(changes);
       } else if (msg.kind === 'spin') {
         this.deps.onSpin?.(msg.outcome);
+      } else if (msg.kind === 'capture') {
+        const png = await this.deps.reconciler.capture();
+        this.deps.post({ v: 1, kind: 'captured', id: msg.id, png });
+        return; // capture replies with `captured`, not the generic `ack`
       } else {
         return;
       }
