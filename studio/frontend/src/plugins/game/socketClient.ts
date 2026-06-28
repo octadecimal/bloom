@@ -12,6 +12,11 @@ function isActive(gameId: string): boolean {
   return gameSlice().activeGameId.get() === gameId;
 }
 
+export function applyCaptureRequest(payload: { gameId: string; captureId: string }): void {
+  if (!isActive(payload.gameId)) return;
+  getBridge()?.capture(payload.captureId);
+}
+
 export function applyInbound(event: 'scene_snapshot' | 'scene_op', payload: unknown): void {
   if (event === 'scene_snapshot') {
     const p = payload as { gameId: string; document: ISceneDocument };
@@ -48,9 +53,12 @@ export function createGameSocket() {
       }
     });
     sock.on('scene_op', (p) => applyInbound('scene_op', p));
+    sock.on('scene_capture_request', (p) => applyCaptureRequest(p as { gameId: string; captureId: string }));
     if (!import.meta.env.PROD) {
       (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
       (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) => sock?.emit('join_scene', { gameId });
+      (window as unknown as { __gameRequestCapture?: (captureId: string) => void }).__gameRequestCapture = (captureId: string) =>
+        getBridge()?.capture(captureId);
     }
   }
   function disconnect(): void {
@@ -77,4 +85,8 @@ export function emitSceneApplyOp(gameId: string, op: ISceneOp): void {
   if (!import.meta.env.PROD) {
     (window as unknown as { __gameLastApplyOp?: unknown }).__gameLastApplyOp = { gameId, op };
   }
+}
+
+export function emitSceneCaptureResult(gameId: string, captureId: string, png: string): void {
+  sock?.emit('scene_capture_result', { gameId, captureId, png });
 }

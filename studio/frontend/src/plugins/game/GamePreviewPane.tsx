@@ -5,6 +5,7 @@ import { sceneStore } from '../../scene/sceneStore';
 import type { ISceneDocument } from '../../scene/types';
 import { engineOrigin, backendOrigin } from './config';
 import { ProtocolBridge, setBridge, clearBridge } from './protocolBridge';
+import { emitSceneCaptureResult } from './socketClient';
 
 export function GamePreviewPane(_props: IDockviewPanelProps) {
   const s = gameHooks.usePluginState();
@@ -19,6 +20,7 @@ export function GamePreviewPane(_props: IDockviewPanelProps) {
     const bridge = new ProtocolBridge({
       engineOrigin: origin,
       post: (m, targetOrigin) => frame.contentWindow?.postMessage(m, targetOrigin),
+      onCaptured: ({ id, png }) => emitSceneCaptureResult(activeGameId, id, png),
     });
     setBridge(bridge);
 
