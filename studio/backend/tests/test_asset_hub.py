@@ -255,3 +255,64 @@ async def test_notify_deleted_emits_asset_deleted_to_game_room():
     hub = AssetHub(sio, asset_store=None, comfy=None, media=None)
     await hub.notify_deleted("g1", "a1")
     assert ("asset_deleted", {"gameId": "g1", "assetId": "a1"}, "g1") in sio.emits
+
+
+@pytest.mark.asyncio
+async def test_request_generation_auto_select_rebinds_scene(mongo_db, tmp_path):
+    store = AssetStore(mongo_db)
+    game_id = "g1"
+    asset = await store.create_asset(
+        game_id, "Wild", "p", 64, 64, "schnell-transparent", slot="wild"
+    )
+    await store.add_generation(asset.id, "gen1", 1, "/media/g1/%s/gen1.png" % asset.id)
+
+    scene_doc = {
+        "version": 1,
+        "nodes": {
+            "tex.wild": {
+                "id": "tex.wild",
+                "type": "Texture",
+                "props": {
+                    "src": "/media/g1/%s/gen1.png" % asset.id,
+                    "assetId": asset.id,
+                },
+            }
+        },
+        "edges": [],
+    }
+
+    class _SceneStore:
+        async def get_document(self, gid):
+            return scene_doc
+
+    class _SceneHub:
+        def __init__(self):
+            self.ops = []
+
+        async def apply_op(self, gid, op):
+            self.ops.append((gid, op))
+
+    shub = _SceneHub()
+    sio = FakeSio()
+    hub = AssetHub(
+        sio,
+        store,
+        ReplayComfyProvider(progress=[(1, 2), (2, 2)], image=_FAKE_PNG, delay=0.0),
+        MediaStore(tmp_path),
+        scene_store=_SceneStore(),
+        scene_hub=shub,
+    )
+
+    await hub.request_generation(game_id, asset.id, auto_select=True)
+    await _wait_for(sio, "asset_completed")
+    # rebind happens after the emit inside _drain; wait for it
+    await _wait_until(lambda: bool(shub.ops))
+
+    refreshed = await store.get_asset(asset.id)
+    newest = refreshed.generations[-1]
+    assert refreshed.selected_generation_id == newest.id
+    assert shub.ops
+    assert shub.ops[-1] == (
+        game_id,
+        {"kind": "setProp", "id": "tex.wild", "path": "src", "value": newest.image_ref},
+    )

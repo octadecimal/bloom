@@ -9,4 +9,4 @@ def register_asset_handlers(sio, hub):
 
     @sio.on("generate_asset")
     async def generate_asset(sid, data):
-        await hub.request_generation(data["gameId"], data["assetId"])
+        await hub.request_generation(data["gameId"], data["assetId"], auto_select=True)

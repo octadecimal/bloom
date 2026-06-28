@@ -91,13 +91,14 @@ def build(settings: Settings) -> AppContext:
     media_root.mkdir(parents=True, exist_ok=True)
     media = MediaStore(media_root)
     comfy = build_comfy_provider(settings)
-    asset_hub = AssetHub(sio, asset_store, comfy, media)
-
-    gdd_store = GddStore(mongo[settings.mongo_db])
-    gdd_hub = GddHub(sio, gdd_store)
 
     scene_store = GameSceneStore(mongo[settings.mongo_db])
     scene_hub = GameSceneHub(sio, scene_store)
+
+    asset_hub = AssetHub(sio, asset_store, comfy, media, scene_store=scene_store, scene_hub=scene_hub)
+
+    gdd_store = GddStore(mongo[settings.mongo_db])
+    gdd_hub = GddHub(sio, gdd_store)
 
     sim_store = SlotModelStore(mongo[settings.mongo_db])
     sim_hub = CurationHub(sio, sim_store, build_curation_runner(settings), gdd_store)

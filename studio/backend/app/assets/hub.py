@@ -5,19 +5,23 @@ from uuid import uuid4
 from app.assets.comfy import ImageEvent, ProgressEvent
 from app.assets.graph import build_graph, random_seed
 from app.assets.models import asset_wire
+from app.scene.rebind import rebind_asset_textures
 
 
 class AssetHub:
-    def __init__(self, sio, asset_store, comfy, media):
+    def __init__(self, sio, asset_store, comfy, media, scene_store=None, scene_hub=None):
         self._sio = sio
         self._store = asset_store
         self._comfy = comfy
         self._media = media
+        self._scene_store = scene_store
+        self._scene_hub = scene_hub
         self._queues: dict[str, list[str]] = {}
         self._busy: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._active: dict[str, dict] = {}  # game_id -> {assetId, value, max}
         self._waiters: dict[str, dict] = {}  # asset_id -> {event, error} (generate_and_wait)
+        self._auto_select: set[str] = set()  # asset_ids whose newest gen should auto-select + rebind
 
     def _lock(self, game_id: str) -> asyncio.Lock:
         return self._locks.setdefault(game_id, asyncio.Lock())
@@ -35,10 +39,12 @@ class AssetHub:
             if snap is not None:
                 await self._sio.emit("asset_progress", snap, to=sid)
 
-    async def request_generation(self, game_id: str, asset_id: str) -> None:
+    async def request_generation(self, game_id: str, asset_id: str, auto_select: bool = False) -> None:
         await self._store.set_status(asset_id, "queued")
         async with self._lock(game_id):
             self._queues.setdefault(game_id, []).append(asset_id)
+            if auto_select:
+                self._auto_select.add(asset_id)
             await self._emit_status(game_id, asset_id, "queued")
             if game_id in self._busy:
                 return
@@ -94,7 +100,13 @@ class AssetHub:
         gen_id = uuid4().hex
         image_ref = self._media.save(game_id, asset_id, gen_id, image_bytes)
         asset = await self._store.add_generation(asset_id, gen_id, seed, image_ref)
+        do_rebind = asset_id in self._auto_select
+        if do_rebind:
+            self._auto_select.discard(asset_id)
+            asset = await self._store.select_generation(asset_id, gen_id)
         await self._sio.emit("asset_completed", {"gameId": game_id, "asset": asset_wire(asset)}, room=game_id)
+        if do_rebind and self._scene_store is not None and self._scene_hub is not None:
+            await rebind_asset_textures(self._scene_store, self._scene_hub, game_id, asset)
 
     def _signal_done(self, asset_id: str, error: str | None) -> None:
         rec = self._waiters.get(asset_id)
