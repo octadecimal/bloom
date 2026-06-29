@@ -19,7 +19,7 @@ impl ServerConfig {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
-        let port = base + offset;
+        let port = base.saturating_add(offset);
 
         let package_path = std::env::var("BLOOM_RUNTIME_PACKAGE")
             .unwrap_or_else(|_| "runtime/server/demo/demo.pkg".to_string())

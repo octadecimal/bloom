@@ -11,6 +11,9 @@ __pycache__/
 .venv/
 *.pyc
 
+# Local machine-specific Cargo config (e.g. DLLTOOL path on Windows-GNU)
+.cargo/config.toml
+
 # Editor / OS / local
 .claude/settings.local.json
 .superpowers/
