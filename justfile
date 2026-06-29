@@ -139,3 +139,10 @@ runtime-demo-pkg:
 # Run the authoritative runtime game server on the demo package.
 runtime-serve: runtime-demo-pkg
     cargo run --release -p bloom-runtime-server
+
+# Print the direct play-mode URL. Start the two servers first (separate shells):
+#   just runtime-serve            # authoritative server on 9000+offset
+#   just serve-runtime-client     # Pixi client on 4300+offset
+# then open the printed URL from any LAN browser.
+runtime-playmode:
+    @off="${BLOOM_PORT_OFFSET:-0}"; echo "Open: http://<dev-host>:$((4300 + off))/?server=http://<dev-host>:$((9000 + off))"
