@@ -25,6 +25,14 @@ describe('validatePresentation', () => {
   it('rejects a presentation missing cols/rows/symbols', () => {
     expect(() => validatePresentation({ ...ok, presentation: { cols: 3 } })).toThrow(PlayModeError);
   });
+
+  it('rejects a presentation whose symbols array contains non-string elements', () => {
+    expect(() => validatePresentation({ ...ok, presentation: { cols: 3, rows: 3, symbols: [0, 1, 2] } })).toThrow(PlayModeError);
+  });
+
+  it('rejects a presentation missing symbols entirely', () => {
+    expect(() => validatePresentation({ ...ok, presentation: { cols: 3, rows: 3 } })).toThrow(PlayModeError);
+  });
 });
 
 describe('toReelsConfig', () => {

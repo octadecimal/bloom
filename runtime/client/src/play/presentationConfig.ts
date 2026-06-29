@@ -15,7 +15,7 @@ export function validatePresentation(hs: IHandshakeResponse): IPresentation {
     throw new PlayModeError('handshake presentation is empty');
   }
   const rec = p as Record<string, unknown>;
-  if (typeof rec.cols !== 'number' || typeof rec.rows !== 'number' || !Array.isArray(rec.symbols)) {
+  if (typeof rec.cols !== 'number' || typeof rec.rows !== 'number' || !Array.isArray(rec.symbols) || rec.symbols.some((s) => typeof s !== 'string')) {
     throw new PlayModeError('handshake presentation missing cols/rows/symbols');
   }
   return p as IPresentation;

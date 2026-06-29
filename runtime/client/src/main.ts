@@ -15,6 +15,10 @@ if (!stage) throw new Error('missing #stage element');
 
 const params = new URLSearchParams(window.location.search);
 
+// Direct play-mode: the client talks straight to runtime/server (no studio).
+// Selected by an explicit ?server=<url> or a bare ?play flag.
+const isPlayMode = params.has('server') || params.has('play');
+
 // When embedded by the studio, the iframe src carries ?parentOrigin=<studio origin>.
 // Standalone (no param) keeps Plan 1 behavior: accept any origin, post with '*'.
 const expectedOrigin = parseParentOrigin(window.location.search);
@@ -62,17 +66,15 @@ modules.bus.on<IViewport>('viewport:changed', (e) => viewportEvents.push(e));
 // createSerializer() also catches handle() rejections so a single failure cannot
 // wedge the chain and drop all subsequent messages.
 const enqueue = createSerializer();
-window.addEventListener('message', (event: MessageEvent) => {
-  if (!originAllowed(expectedOrigin, event.origin)) return;
-  const msg = event.data as InboundMessage;
-  enqueue(() => host.handle(msg));
-});
+if (!isPlayMode) {
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (!originAllowed(expectedOrigin, event.origin)) return;
+    const msg = event.data as InboundMessage;
+    enqueue(() => host.handle(msg));
+  });
+}
 
 host.start();
-
-// Direct play-mode: the client talks straight to runtime/server (no studio).
-// Selected by an explicit ?server=<url> or a bare ?play flag.
-const isPlayMode = params.has('server') || params.has('play');
 
 if (isPlayMode) {
   const env = import.meta.env as Record<string, string | undefined>;
