@@ -245,11 +245,7 @@ import { resolveRuntimeServerUrl } from './runtimeServerUrl';
 
 describe('resolveRuntimeServerUrl', () => {
   it('uses an explicit ?server= override verbatim (trailing slash trimmed)', () => {
-    const url = resolveRuntimeServerUrl(
-      new URLSearchParams('server=http://10.0.0.5:9001/'),
-      { hostname: 'ignored' },
-      { defaultPort: 9000 },
-    );
+    const url = resolveRuntimeServerUrl(new URLSearchParams('server=http://10.0.0.5:9001/'), { hostname: 'ignored' }, { defaultPort: 9000 });
     expect(url).toBe('http://10.0.0.5:9001');
   });
 
@@ -281,11 +277,7 @@ export interface ILocationLike {
 /** Resolve the runtime/server base URL. Precedence: an explicit `?server=` query
  *  param wins; otherwise host-derived from the page's own hostname so a LAN
  *  browser reaches the dev host (never a hardcoded localhost). */
-export function resolveRuntimeServerUrl(
-  params: URLSearchParams,
-  location: ILocationLike,
-  opts: { defaultPort: number },
-): string {
+export function resolveRuntimeServerUrl(params: URLSearchParams, location: ILocationLike, opts: { defaultPort: number }): string {
   const override = params.get('server');
   if (override) return override.replace(/\/+$/, '');
   return `http://${location.hostname}:${opts.defaultPort}`;
@@ -502,7 +494,14 @@ function res(base_grid: number[][]): ISpinResponse {
 
 describe('toClientOutcome', () => {
   it('stringifies symbol ids cell-for-cell', () => {
-    expect(toClientOutcome(res([[0, 1, 2], [9, 0, 1]])).grid).toEqual([
+    expect(
+      toClientOutcome(
+        res([
+          [0, 1, 2],
+          [9, 0, 1],
+        ]),
+      ).grid,
+    ).toEqual([
       ['0', '1', '2'],
       ['9', '0', '1'],
     ]);
@@ -510,7 +509,13 @@ describe('toClientOutcome', () => {
 
   it('preserves orientation without transposing (non-square grid proves col/row are not swapped)', () => {
     // 3 reels x 2 rows -> client grid must be 3 columns each of length 2.
-    const grid = toClientOutcome(res([[0, 1], [2, 9], [1, 0]])).grid;
+    const grid = toClientOutcome(
+      res([
+        [0, 1],
+        [2, 9],
+        [1, 0],
+      ]),
+    ).grid;
     expect(grid.length).toBe(3);
     expect(grid.every((reel) => reel.length === 2)).toBe(true);
     expect(grid).toEqual([
@@ -695,7 +700,18 @@ const HS: IHandshakeResponse = {
 const SPIN: ISpinResponse = {
   seed: '33',
   bet: 1,
-  outcome: { mechanic: 'slots@1', base_grid: [[0, 1, 2], [1, 2, 9], [2, 9, 0]], base_payout: 0, feature_payout: 0, total_payout: 0, features: [] },
+  outcome: {
+    mechanic: 'slots@1',
+    base_grid: [
+      [0, 1, 2],
+      [1, 2, 9],
+      [2, 9, 0],
+    ],
+    base_payout: 0,
+    feature_payout: 0,
+    total_payout: 0,
+    features: [],
+  },
 };
 
 function harness(over: Partial<{ handshake: () => Promise<IHandshakeResponse>; spin: () => Promise<ISpinResponse> }> = {}) {
@@ -743,7 +759,13 @@ describe('startPlayMode', () => {
     await startPlayMode(h.deps);
     h.spinButton.click();
     await vi.waitFor(() => expect(h.spun).toHaveLength(1));
-    expect(h.spun[0]).toEqual({ grid: [['0', '1', '2'], ['1', '2', '9'], ['2', '9', '0']] });
+    expect(h.spun[0]).toEqual({
+      grid: [
+        ['0', '1', '2'],
+        ['1', '2', '9'],
+        ['2', '9', '0'],
+      ],
+    });
     // disabled while spinning; re-enabled when the reels settle
     expect(h.spinButton.disabled).toBe(true);
     h.settledCbs.forEach((cb) => cb());
@@ -751,7 +773,11 @@ describe('startPlayMode', () => {
   });
 
   it('surfaces a handshake failure and does not show the Spin button', async () => {
-    const h = harness({ handshake: async () => { throw new Error('network down'); } });
+    const h = harness({
+      handshake: async () => {
+        throw new Error('network down');
+      },
+    });
     await startPlayMode(h.deps);
     expect(h.errorEl.hidden).toBe(false);
     expect(h.errorEl.textContent).toContain('network down');
@@ -760,7 +786,11 @@ describe('startPlayMode', () => {
   });
 
   it('surfaces a spin failure and re-enables Spin for retry', async () => {
-    const h = harness({ spin: async () => { throw new Error('spin failed: 500'); } });
+    const h = harness({
+      spin: async () => {
+        throw new Error('spin failed: 500');
+      },
+    });
     await startPlayMode(h.deps);
     h.spinButton.click();
     await vi.waitFor(() => expect(h.errorEl.textContent).toContain('spin failed: 500'));
@@ -897,44 +927,48 @@ Add the third boot branch, the Spin button + error overlay, and the server-port 
 - [ ] **Step 1: Add the Spin button + error overlay to `index.html`** — inside `<style>`, append:
 
 ```css
-      #spin {
-        position: fixed;
-        left: 50%;
-        bottom: 24px;
-        transform: translateX(-50%);
-        z-index: 10;
-        padding: 12px 28px;
-        font: 600 16px system-ui, sans-serif;
-        color: #0b0b0c;
-        background: #e8e8ea;
-        border: 0;
-        border-radius: 8px;
-        cursor: pointer;
-      }
-      #spin:disabled {
-        opacity: 0.5;
-        cursor: default;
-      }
-      #play-error {
-        position: fixed;
-        left: 50%;
-        top: 24px;
-        transform: translateX(-50%);
-        z-index: 10;
-        padding: 10px 16px;
-        font: 500 14px system-ui, sans-serif;
-        color: #fff;
-        background: #b00020;
-        border-radius: 8px;
-        max-width: 80vw;
-      }
+#spin {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 12px 28px;
+  font:
+    600 16px system-ui,
+    sans-serif;
+  color: #0b0b0c;
+  background: #e8e8ea;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+#spin:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+#play-error {
+  position: fixed;
+  left: 50%;
+  top: 24px;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 10px 16px;
+  font:
+    500 14px system-ui,
+    sans-serif;
+  color: #fff;
+  background: #b00020;
+  border-radius: 8px;
+  max-width: 80vw;
+}
 ```
 
 Inside `<body>`, after `<div id="stage"></div>`, add:
 
 ```html
-    <button id="spin" hidden>Spin</button>
-    <div id="play-error" hidden></div>
+<button id="spin" hidden>Spin</button>
+<div id="play-error" hidden></div>
 ```
 
 - [ ] **Step 2: Add the play-mode branch to `main.ts`** — add imports near the existing ones:
@@ -1043,9 +1077,7 @@ test('direct play-mode renders the grid from handshake and settles a server spin
   await page.goto(`/?server=${encodeURIComponent(SERVER)}`);
 
   // Handshake built the scene: the demo presentation is 3 reels x 3 rows.
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:reel:2'] != null), { timeout: 15000 })
-    .toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:reel:2'] != null), { timeout: 15000 }).toBe(true);
 
   // The Spin button is revealed after a successful handshake.
   await expect(page.locator('#spin')).toBeVisible();
@@ -1053,9 +1085,7 @@ test('direct play-mode renders the grid from handshake and settles a server spin
   await page.click('#spin');
 
   // The reels settle to idle with a server-dictated grid of the right shape.
-  await expect
-    .poll(() => page.evaluate(() => (window as any).__engineModules.state().phase), { timeout: 10000 })
-    .toBe('idle');
+  await expect.poll(() => page.evaluate(() => (window as any).__engineModules.state().phase), { timeout: 10000 }).toBe('idle');
 
   const grid = await page.evaluate(() => (window as any).__engineModules.state().grid);
   expect(grid.length).toBe(3); // 3 reels
@@ -1089,10 +1119,20 @@ export default function globalSetup(): void {
   if (existsSync(pkg)) return;
   execFileSync(
     'cargo',
-    ['run', '-p', 'bloom-simulator', '--bin', 'curate', '--',
-      'runtime/server/demo/model.json', 'runtime/server/demo/target.json',
-      'bloom-demo-slots', 'runtime/server/demo/demo.pkg', 'runtime/server/demo/demo.report.txt',
-      'runtime/server/demo/presentation.json'],
+    [
+      'run',
+      '-p',
+      'bloom-simulator',
+      '--bin',
+      'curate',
+      '--',
+      'runtime/server/demo/model.json',
+      'runtime/server/demo/target.json',
+      'bloom-demo-slots',
+      'runtime/server/demo/demo.pkg',
+      'runtime/server/demo/demo.report.txt',
+      'runtime/server/demo/presentation.json',
+    ],
     { cwd: repoRoot, stdio: 'inherit' },
   );
 }
