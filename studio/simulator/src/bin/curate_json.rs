@@ -125,6 +125,7 @@ fn main() {
         &target,
         tj.master_seed,
         &args[3],
+        &[],
         &signing_key,
         &mut on_progress,
     );

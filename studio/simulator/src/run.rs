@@ -75,6 +75,7 @@ pub fn run_curation_streamed(
     target: &TargetSpec,
     master_seed: u64,
     package_id: &str,
+    presentation: &[u8],
     signing_key: &SigningKey,
     on_progress: &mut dyn FnMut(CurationProgress),
 ) -> StreamedOutcome {
@@ -125,7 +126,7 @@ pub fn run_curation_streamed(
         },
         math_payload: to_payload(model),
         seeds: pool.seeds.clone(),
-        presentation: Vec::new(),
+        presentation: presentation.to_vec(),
     };
     let package_bytes = build(&content, signing_key);
 
@@ -176,6 +177,7 @@ pub fn run_curation(
         target,
         master_seed,
         package_id,
+        &[],
         signing_key,
         &mut |_| {},
     )
@@ -348,6 +350,7 @@ mod tests {
             &target_09(),
             2026,
             "pkg-test",
+            &[],
             &key(),
             &mut |p| match p {
                 CurationProgress::Phase(name) => seen.push(name.to_string()),
@@ -376,10 +379,29 @@ mod tests {
             &t,
             2026,
             "pkg-test",
+            &[],
             &key(),
             &mut |_| {},
         );
         assert!(matches!(s.outcome, Err(RunError::VerifyFailed(_))));
         assert!((s.metrics.rtp - 0.9).abs() < 0.02); // metrics still measured
+    }
+
+    #[test]
+    fn presentation_bytes_are_carried_into_the_package() {
+        let pres = br#"{"cols":1}"#;
+        let s = run_curation_streamed(
+            &measurable_model(),
+            &target_09(),
+            2026,
+            "pkg-pres",
+            pres,
+            &key(),
+            &mut |_| {},
+        );
+        let out = s.outcome.expect("passes");
+        let content =
+            bloom_package::verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
+        assert_eq!(content.presentation, pres.to_vec());
     }
 }

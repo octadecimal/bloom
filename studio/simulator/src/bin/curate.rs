@@ -13,7 +13,7 @@
 //! keys are a sign-off-gate concern (umbrella §9), out of scope here.
 
 use bloom_math::mechanics::slots::SlotModel;
-use bloom_simulator::run::run_curation;
+use bloom_simulator::run::run_curation_streamed;
 use bloom_simulator::target::{HitRateBand, TargetSpec};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
@@ -40,9 +40,9 @@ struct TargetJson {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 6 {
+    if args.len() != 6 && args.len() != 7 {
         eprintln!(
-            "usage: curate <model.json> <target.json> <package_id> <out.pkg> <out.report.txt>"
+            "usage: curate <model.json> <target.json> <package_id> <out.pkg> <out.report.txt> [presentation.json]"
         );
         std::process::exit(2);
     }
@@ -75,8 +75,23 @@ fn main() {
         std::process::exit(2);
     }
 
+    let presentation: Vec<u8> = if args.len() == 7 {
+        fs::read(&args[6]).expect("read presentation")
+    } else {
+        Vec::new()
+    };
+
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only
-    match run_curation(&model, &target, tj.master_seed, &args[3], &signing_key) {
+    let streamed = run_curation_streamed(
+        &model,
+        &target,
+        tj.master_seed,
+        &args[3],
+        &presentation,
+        &signing_key,
+        &mut |_| {},
+    );
+    match streamed.outcome {
         Ok(out) => {
             fs::write(&args[4], &out.package_bytes).expect("write package");
             fs::write(&args[5], &out.report).expect("write report");
