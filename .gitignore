@@ -31,3 +31,6 @@ test-results
 playwright-report
 blob-report
 .playwright
+
+# Runtime game-server audit output (append-only JSONL, runtime state not source)
+runtime/server/var/
