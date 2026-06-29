@@ -14,5 +14,7 @@ rand = "0.8"
 ed25519-dalek = "2"
 postcard = { version = "1", features = ["use-std"] }
 
+tower-http = { version = "0.5", features = ["cors"] }
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

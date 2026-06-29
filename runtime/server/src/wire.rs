@@ -164,7 +164,10 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert!(json["seed"].is_string(), "seed must serialize as a string");
-        assert_eq!(json["seed"], serde_json::Value::String("9007199254740993".into()));
+        assert_eq!(
+            json["seed"],
+            serde_json::Value::String("9007199254740993".into())
+        );
         assert_eq!(json["bet"], 1);
     }
 }
