@@ -1,0 +1,17 @@
+# Windows GNU toolchain requires dlltool (for raw-dylib import lib generation when
+# building crates like tokio/mio that use windows-sys).  The Rust self-contained
+# dlltool.exe needs `as.exe` (GNU assembler) to be on PATH, but its own binary
+# fails to launch a sub-process on this machine.  WinLibs (installed via
+# `winget install BrechtSanders.WinLibs.POSIX.UCRT`) ships a fully working dlltool
+# that bundles its own assembler and does not have this limitation.
+#
+# Cargo respects the DLLTOOL env var; set it to the WinLibs copy:
+#   $env:DLLTOOL = "C:\Users\dheye\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\dlltool.exe"
+#
+# Alternatively, add the WinLibs bin dir to PATH before the Rust self-contained dir:
+#   $env:PATH = "C:\Users\dheye\...\mingw64\bin;" + $env:PATH
+#
+# The DLLTOOL env variable is the cleanest fix.  See runtime/server/README note.
+
+[env]
+DLLTOOL = { value = "C:\\Users\\dheye\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\dlltool.exe", force = false }
