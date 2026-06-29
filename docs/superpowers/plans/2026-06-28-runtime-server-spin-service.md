@@ -27,6 +27,7 @@
 Creates the crate, wires it into the workspace, and delivers the first observable behavior: the server constructs `AppState` by verifying + decoding a package, and `GET /health` reports the loaded package id. Scaffolding (Cargo.toml, lib/main, config, state) folds into this deliverable because `/health` needs all of it.
 
 **Files:**
+
 - Modify: `Cargo.toml` (workspace `members`)
 - Create: `runtime/server/Cargo.toml`
 - Create: `runtime/server/src/lib.rs`
@@ -37,6 +38,7 @@ Creates the crate, wires it into the workspace, and delivers the first observabl
 - Test: inline `#[cfg(test)]` in `state.rs` and `routes.rs`
 
 **Interfaces:**
+
 - Produces:
   - `config::ServerConfig { package_path: PathBuf, audit_path: PathBuf, bind_addr: SocketAddr }` with `ServerConfig::from_env() -> ServerConfig`.
   - `state::AppState { package: PackageContent, model: SlotModel, draw: Box<dyn Draw>, audit: Box<dyn AuditSink> }` (the `draw`/`audit` fields are added in Tasks 2–3; in Task 1 the struct holds only `package` + `model`, and the two boxed fields are introduced when their seams land).
@@ -434,12 +436,14 @@ git commit -m "feat(runtime): scaffold runtime/server, boot on verified package 
 Adds the `Draw` trait + the OS-CSPRNG impl and a fixed test impl, and wires `draw` into `AppState`.
 
 **Files:**
+
 - Create: `runtime/server/src/draw.rs`
 - Modify: `runtime/server/src/lib.rs` (add `pub mod draw;`)
 - Modify: `runtime/server/src/state.rs` (add `draw` field; widen `from_package_bytes` / `load`)
 - Test: inline `#[cfg(test)]` in `draw.rs`; update `state.rs` + `routes.rs` test constructors
 
 **Interfaces:**
+
 - Produces:
   - `draw::Draw` — `pub trait Draw: Send + Sync { fn index(&self, pool_size: usize) -> usize; }`
   - `draw::OsRngDraw` (unit struct) implementing `Draw` via `rand`.
@@ -568,6 +572,7 @@ Widen `load` to supply the production draw:
 - [ ] **Step 4: Update the existing test constructors to pass a draw**
 
 In `state.rs` tests, update the three call sites:
+
 - `loads_and_decodes_a_valid_package`: `AppState::from_package_bytes(&good_package_bytes(), Box::new(crate::draw::OsRngDraw))`
 - `rejects_a_tampered_package`: `AppState::from_package_bytes(&bytes, Box::new(crate::draw::OsRngDraw))`
 - `rejects_a_wrong_key_package`: `AppState::from_package_bytes(&content_bytes, Box::new(crate::draw::OsRngDraw))`
@@ -597,6 +602,7 @@ git commit -m "feat(runtime): add Draw seam (OS CSPRNG index) wired into AppStat
 Adds the `AuditRecord`, the `AuditSink` trait, the JSONL file impl, and an in-memory test impl; wires `audit` into `AppState`. Adds the additive `ENGINE_VERSION` constant to `bloom-math` so the audit record can name the engine that expanded the seed.
 
 **Files:**
+
 - Modify: `trusted/math/src/lib.rs` (add `pub const ENGINE_VERSION`)
 - Create: `runtime/server/src/audit.rs`
 - Modify: `runtime/server/src/lib.rs` (add `pub mod audit;`)
@@ -604,6 +610,7 @@ Adds the `AuditRecord`, the `AuditSink` trait, the JSONL file impl, and an in-me
 - Test: inline `#[cfg(test)]` in `audit.rs`; update `state.rs` + `routes.rs` test constructors
 
 **Interfaces:**
+
 - Produces:
   - `bloom_math::ENGINE_VERSION: &str` (the math crate version).
   - `audit::AuditRecord` — a serde struct (defined below); its `outcome` field uses `crate::wire::OutcomeWire`, which does not exist until Task 4. **Order note:** in Task 3 the `AuditRecord.outcome` field is typed as `serde_json::Value` (a placeholder); Task 5 retypes it to `wire::OutcomeWire`. The JSONL append/read tests in Task 3 use a `Value` outcome, so they survive the retype.
@@ -851,11 +858,13 @@ git commit -m "feat(runtime): add append-only JSONL audit seam + bloom-math ENGI
 Defines the server-owned outcome wire type (one `slots@1` arm), the `RoundOutcome` → wire mapping, and the handshake/spin response DTOs. Keeps `trusted/math` untouched (no serde on `RoundOutcome`).
 
 **Files:**
+
 - Create: `runtime/server/src/wire.rs`
 - Modify: `runtime/server/src/lib.rs` (add `pub mod wire;`)
 - Test: inline `#[cfg(test)]` in `wire.rs`
 
 **Interfaces:**
+
 - Produces:
   - `wire::SlotsOutcomeWire`, `wire::FeatureWire` (serde structs).
   - `wire::OutcomeWire` — mechanic-tagged enum, one variant `Slots`, tagged `"slots@1"`.
@@ -1021,12 +1030,14 @@ git commit -m "feat(runtime): add mechanic-tagged outcome wire contract + DTOs"
 Wires draw → evaluate → audit → response, returning the mechanic-tagged outcome. Retypes the audit record's `outcome` to `OutcomeWire`. Proves the round is authoritative AND reproducible.
 
 **Files:**
+
 - Modify: `runtime/server/src/audit.rs` (retype `AuditRecord.outcome` to `wire::OutcomeWire`; fix the sample in its tests)
 - Modify: `runtime/server/src/routes.rs` (add the `spin` handler + request type)
 - Modify: `runtime/server/src/lib.rs` (route `POST /spin`)
 - Test: inline `#[cfg(test)]` in `routes.rs`
 
 **Interfaces:**
+
 - Consumes: `state::AppState` (`draw`, `package.seeds`, `model`, `audit`), `wire::{OutcomeWire, SpinResponse}`, `bloom_math::mechanics::slots::evaluate`, `bloom_math::ENGINE_VERSION`.
 - Produces: `routes::spin` handler; `routes::SpinRequest { bet: u64 }` (serde, default bet = 1).
 
@@ -1285,11 +1296,13 @@ git commit -m "feat(runtime): POST /spin — authoritative, audited, reproducibl
 Returns the package's presentation bytes (parsed as JSON) plus the envelope, so the client can render. No client wiring.
 
 **Files:**
+
 - Modify: `runtime/server/src/routes.rs` (add `handshake` handler)
 - Modify: `runtime/server/src/lib.rs` (route `GET /handshake`)
 - Test: inline `#[cfg(test)]` in `routes.rs`
 
 **Interfaces:**
+
 - Consumes: `state::AppState` (`package.presentation`, `package.envelope`), `wire::HandshakeResponse`.
 - Produces: `routes::handshake` handler.
 
@@ -1417,12 +1430,14 @@ git commit -m "feat(runtime): GET /handshake — serve package presentation + en
 The one change outside `runtime/`: let `curate` write a presentation manifest into the package. Backward compatible — omitting it yields today's empty presentation. Threads `presentation` through `run_curation_streamed` only (keeping `run_curation`'s signature and its callers unchanged), and switches the `curate` binary to the streamed path so it can pass presentation.
 
 **Files:**
+
 - Modify: `studio/simulator/src/run.rs` (`run_curation_streamed` gains `presentation: &[u8]`; `run_curation` passes `&[]`)
 - Modify: `studio/simulator/src/bin/curate.rs` (accept optional `presentation.json`; call `run_curation_streamed`)
 - Modify: `studio/simulator/src/bin/curate_json.rs` (pass `&[]` at its call site)
 - Test: `studio/simulator/src/run.rs` (add a presentation round-trip test; update 2 existing streamed call sites)
 
 **Interfaces:**
+
 - Consumes (unchanged externally): `run_curation(model, target, master_seed, package_id, signing_key)`.
 - Produces (changed): `run_curation_streamed(model, target, master_seed, package_id, presentation: &[u8], signing_key, on_progress)`.
 
@@ -1611,6 +1626,7 @@ git commit -m "feat(simulator): curate accepts an optional presentation manifest
 Mints a demo `.pkg` (with a presentation manifest) via `curate`, adds a `just` recipe, and proves the real server boots on it and serves all three endpoints. Finalizes the binary path.
 
 **Files:**
+
 - Create: `runtime/server/demo/model.json`
 - Create: `runtime/server/demo/target.json`
 - Create: `runtime/server/demo/presentation.json`
@@ -1619,6 +1635,7 @@ Mints a demo `.pkg` (with a presentation manifest) via `curate`, adds a `just` r
 - Test: `runtime/server/tests/boot.rs` (integration test loading the minted demo package)
 
 **Interfaces:**
+
 - Consumes: the `curate` binary; `AppState::from_package_bytes`; `build_app`.
 - Produces: `runtime/server/demo/demo.pkg` (generated, git-ignored); `just runtime-demo-pkg`, `just runtime-serve`.
 
@@ -1640,12 +1657,18 @@ Create `runtime/server/demo/model.json` (3×3, no bonuses — matches an empty h
     [0, 1, 2, 0, 1, 2, 9, 0, 1, 2]
   ],
   "rows": 3,
-  "paylines": [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-  "paytable": { "entries": [
-    { "symbol": 0, "count": 3, "payout": 5 },
-    { "symbol": 1, "count": 3, "payout": 3 },
-    { "symbol": 2, "count": 3, "payout": 2 }
-  ] },
+  "paylines": [
+    [0, 0, 0],
+    [1, 1, 1],
+    [2, 2, 2]
+  ],
+  "paytable": {
+    "entries": [
+      { "symbol": 0, "count": 3, "payout": 5 },
+      { "symbol": 1, "count": 3, "payout": 3 },
+      { "symbol": 2, "count": 3, "payout": 2 }
+    ]
+  },
   "bonuses": []
 }
 ```
@@ -1851,6 +1874,7 @@ git commit -m "style(runtime): satisfy fmt + clippy gates" || echo "nothing to c
 ## Self-Review
 
 **Spec coverage:**
+
 - §3 crate/module structure → Tasks 1–6 create exactly the modules in the spec tree. ✓
 - §3.1 `config`/`state`/`draw`/`audit`/`wire`/`routes`/`main`/`lib` responsibilities → Tasks 1 (config/state/routes/lib/main), 2 (draw), 3 (audit), 4 (wire), 5–6 (routes). ✓
 - §4 `POST /spin`, `GET /handshake`, `GET /health` → Tasks 5, 6, 1. ✓
@@ -1866,6 +1890,7 @@ git commit -m "style(runtime): satisfy fmt + clippy gates" || echo "nothing to c
 **Placeholder scan:** No `TBD`/`TODO`/"handle edge cases"/"similar to Task N" — every code step shows full code. The one cross-task ordering note (audit `outcome` typed `Value` in Task 3, retyped in Task 5) is explicit with the exact retype in Task 5 Step 1. ✓
 
 **Type consistency:**
+
 - `AppState::from_package_bytes` arity grows deliberately across Tasks 1→2→3; each widening task updates ALL call sites (state tests, routes `test_state`). Final arity (bytes, draw, audit) is consistent in Tasks 5/6/8. ✓
 - `Draw::index(&self, pool_size: usize) -> usize`, `AuditSink::append(&self, &AuditRecord) -> io::Result<()>`, `OutcomeWire::from_round`, `SpinResponse`/`HandshakeResponse`/`SpinRequest` names are used identically wherever referenced. ✓
 - `run_curation_streamed` new arg position (`presentation` after `package_id`, before `signing_key`) is applied identically in run.rs, curate.rs, curate_json.rs, and both streamed test call sites. ✓

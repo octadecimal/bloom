@@ -31,12 +31,12 @@ subprocess, no duplicated spin logic. It reuses the existing building blocks nat
 ## 2. What already exists (reused natively, not rebuilt)
 
 - **`bloom-package`** (`trusted/package`): `verify_and_load(bytes, &VerifyingKey) ->
-  Result<PackageContent, PackageError>` — ed25519 + postcard, signature-checked, pure.
+Result<PackageContent, PackageError>` — ed25519 + postcard, signature-checked, pure.
   `PackageContent { envelope { package_id, package_version, mechanic }, math_payload:
-  Vec<u8>, seeds: Vec<u64>, presentation: Vec<u8> }`.
+Vec<u8>, seeds: Vec<u64>, presentation: Vec<u8> }`.
 - **`bloom-math`** (`trusted/math`): `mechanics::slots::evaluate(&model, seed) ->
-  RoundOutcome` and `from_payload(&[u8]) -> Result<SlotModel, _>`. `RoundOutcome {
-  base_grid, base_payout, features: Vec<FeatureOutcome>, feature_payout, total_payout }`.
+RoundOutcome` and `from_payload(&[u8]) -> Result<SlotModel, _>`. `RoundOutcome {
+base_grid, base_payout, features: Vec<FeatureOutcome>, feature_payout, total_payout }`.
   Deterministic (SplitMix64); same `(model, seed)` is bit-identical forever.
 - **`curate`** (`studio/simulator/src/bin/curate.rs`): mints a signed `.pkg` from a
   model JSON + target JSON using the dev signing key `[7u8; 32]`. Sets
@@ -86,8 +86,8 @@ runtime/server/
   `Draw` to make outcomes deterministic.
 - **`audit.rs`** — the **append-only audit record** (architecture §9):
   `AuditRecord { package_id, package_version, mechanic, math_engine_version, seed, bet,
-  timestamp_ms, outcome }`. `trait AuditSink { fn append(&self, rec: &AuditRecord) ->
-  io::Result<()>; }`. SP1 impl `JsonlAuditSink` appends one JSON line per round to a
+timestamp_ms, outcome }`. `trait AuditSink { fn append(&self, rec: &AuditRecord) ->
+io::Result<()>; }`. SP1 impl `JsonlAuditSink` appends one JSON line per round to a
   file (durable, replayable, genuinely append-only). A real event store / DB is deferred
   behind this trait.
 - **`wire.rs`** — the **server → client outcome contract** (architecture §7): a
@@ -95,7 +95,7 @@ runtime/server/
   arm today (`slots`). `trusted/math`'s `RoundOutcome` is intentionally **not** made
   serde-serializable (it stays a pure certified type); `wire.rs` maps `RoundOutcome` →
   the slots arm. Also defines `HandshakeResponse { package_id, package_version,
-  mechanic, presentation }` and `SpinResponse { seed, audit_id?, outcome }`.
+mechanic, presentation }` and `SpinResponse { seed, audit_id?, outcome }`.
 - **`routes.rs`** — the three handlers (§4), each a thin orchestration over the seams.
 - **`main.rs` / `lib.rs`** — `lib.rs::build_app(state) -> axum::Router` so handler tests
   run in-process via `oneshot` with no socket; `main.rs` builds config + state and binds
@@ -175,6 +175,7 @@ All tests are `cargo test` — cheap, deterministic, CI-affordable (the repo's C
 policy welcomes non-browser suites). Test-first throughout.
 
 **Unit**
+
 - `draw`: `OsRngDraw.index(n)` is always in `[0, n)` across many draws; a fixed-index
   test `Draw` returns its configured index.
 - `audit`: `JsonlAuditSink.append` writes one parseable JSON line per call and appends
@@ -185,6 +186,7 @@ policy welcomes non-browser suites). Test-first throughout.
   package and on an undecodable payload.
 
 **Handler-level (axum `oneshot` via `build_app`, no socket)**
+
 - `POST /spin`: returns `200`; the returned `seed` is a member of the package pool; the
   returned outcome equals `evaluate(model, returned_seed)` mapped to wire — i.e. the
   served outcome is authoritative **and** reproducible. With a fixed-index test `Draw`,

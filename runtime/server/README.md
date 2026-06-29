@@ -7,7 +7,7 @@ via `bloom-math`, records an audit entry, and returns the spin result over HTTP.
 
 Building this crate on a Windows-GNU target (the default for `x86_64-pc-windows-gnu`)
 pulls in `tokio` and `windows-sys`, which require `dlltool` to generate raw-dylib
-import libraries.  The Rust self-contained `dlltool.exe` tries to spawn `as.exe`
+import libraries. The Rust self-contained `dlltool.exe` tries to spawn `as.exe`
 (GNU assembler) as a subprocess; on some machines this launch fails with a
 `NotImplementedError` / access-denied, breaking the build.
 
@@ -18,7 +18,7 @@ import libraries.  The Rust self-contained `dlltool.exe` tries to spawn `as.exe`
 winget install BrechtSanders.WinLibs.POSIX.UCRT
 ```
 
-Then tell Cargo which `dlltool` to use.  Create a **local, git-ignored**
+Then tell Cargo which `dlltool` to use. Create a **local, git-ignored**
 `.cargo/config.toml` at the repo root (already in `.gitignore` — do **not** commit
 it) with the path that `winget` installed:
 
@@ -31,5 +31,5 @@ Alternatively, prepend the WinLibs `bin` dir to `PATH` before Rust's self-contai
 dir — Cargo picks whichever `dlltool` appears first on `PATH`.
 
 This file is **machine-specific** (it encodes a username and a WinGet store hash);
-that is why it lives outside git.  Every developer who hits the build error on
+that is why it lives outside git. Every developer who hits the build error on
 Windows-GNU should create their own copy pointing at their local WinLibs install.
