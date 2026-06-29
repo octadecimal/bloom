@@ -274,6 +274,60 @@ mod tests {
         (status, v)
     }
 
+    struct FailingSink;
+    impl crate::audit::AuditSink for FailingSink {
+        fn append(&self, _rec: &crate::audit::AuditRecord) -> std::io::Result<()> {
+            Err(std::io::Error::other("audit down"))
+        }
+    }
+
+    #[tokio::test]
+    async fn spin_returns_500_when_audit_fails() {
+        let model = SlotModel {
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
+            reels: vec![
+                vec![0, 0, 0, 0, 1],
+                vec![0, 0, 1, 0, 0],
+                vec![1, 0, 0, 0, 0],
+            ],
+            rows: 1,
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable {
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 3,
+                    payout: 2,
+                }],
+            },
+            bonuses: vec![],
+        };
+        let content = PackageContent {
+            envelope: Envelope {
+                package_id: "pkg-fail-audit".into(),
+                package_version: 1,
+                mechanic: "slots@1".into(),
+            },
+            math_payload: to_payload(&model),
+            seeds: vec![11, 22, 33, 44, 55],
+            presentation: Vec::new(),
+        };
+        let bytes = build(&content, &SigningKey::from_bytes(&[7u8; 32]));
+        let state = Arc::new(
+            AppState::from_package_bytes(
+                &bytes,
+                Box::new(FixedDraw { index: 0 }),
+                Box::new(FailingSink),
+            )
+            .unwrap(),
+        );
+        let app = build_app(state);
+        let (status, _v) = post_spin(app, "{}").await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     #[tokio::test]
     async fn health_reports_loaded_package() {
         let app = build_app(test_state());

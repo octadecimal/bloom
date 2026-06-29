@@ -18,6 +18,7 @@ pub enum StartupError {
     BadPackage(PackageError),
     BadPayload(postcard::Error),
     Io(std::io::Error),
+    EmptyPool,
 }
 
 pub struct AppState {
@@ -37,6 +38,9 @@ impl AppState {
         let package =
             verify_and_load(bytes, &dev_verifying_key()).map_err(StartupError::BadPackage)?;
         let model = from_payload(&package.math_payload).map_err(StartupError::BadPayload)?;
+        if package.seeds.is_empty() {
+            return Err(StartupError::EmptyPool);
+        }
         Ok(AppState {
             package,
             model,
@@ -126,6 +130,29 @@ mod tests {
                 Box::new(crate::audit::MemoryAuditSink::new()),
             ),
             Err(StartupError::BadPackage(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_a_zero_seed_package() {
+        let content = PackageContent {
+            envelope: Envelope {
+                package_id: "pkg-empty".into(),
+                package_version: 1,
+                mechanic: "slots@1".into(),
+            },
+            math_payload: to_payload(&tiny_model()),
+            seeds: vec![],
+            presentation: Vec::new(),
+        };
+        let bytes = build(&content, &dev_signing_key());
+        assert!(matches!(
+            AppState::from_package_bytes(
+                &bytes,
+                Box::new(crate::draw::OsRngDraw),
+                Box::new(crate::audit::MemoryAuditSink::new()),
+            ),
+            Err(StartupError::EmptyPool)
         ));
     }
 

@@ -137,6 +137,7 @@ mod tests {
         assert_eq!(r0.seed, 10);
         assert_eq!(r1.seed, 20);
         let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
