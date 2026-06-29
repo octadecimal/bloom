@@ -8,12 +8,13 @@ pub mod routes;
 pub mod state;
 pub mod wire;
 
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Arc;
 
 pub fn build_app(state: Arc<state::AppState>) -> Router {
     Router::new()
         .route("/health", get(routes::health))
+        .route("/spin", post(routes::spin))
         .with_state(state)
 }

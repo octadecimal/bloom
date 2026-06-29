@@ -16,9 +16,8 @@ pub struct AuditRecord {
     pub seed: u64,
     pub bet: u64,
     pub timestamp_ms: u128,
-    /// The served outcome. Typed as `serde_json::Value` in Task 3; retyped to
-    /// `crate::wire::OutcomeWire` in Task 5.
-    pub outcome: serde_json::Value,
+    /// The served outcome (mechanic-tagged).
+    pub outcome: crate::wire::OutcomeWire,
 }
 
 pub trait AuditSink: Send + Sync {
@@ -80,6 +79,19 @@ mod tests {
     use super::*;
 
     fn sample(seed: u64) -> AuditRecord {
+        use bloom_math::mechanics::slots::{
+            evaluate, Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
+        };
+        let model = SlotModel {
+            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            reels: vec![vec![0], vec![0], vec![0]],
+            rows: 1,
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable {
+                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+            },
+            bonuses: vec![],
+        };
         AuditRecord {
             package_id: "pkg".into(),
             package_version: 1,
@@ -88,7 +100,7 @@ mod tests {
             seed,
             bet: 1,
             timestamp_ms: 123,
-            outcome: serde_json::json!({"total_payout": 0}),
+            outcome: crate::wire::OutcomeWire::from_round(&evaluate(&model, seed)),
         }
     }
 
