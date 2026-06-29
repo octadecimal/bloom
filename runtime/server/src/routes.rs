@@ -56,7 +56,7 @@ mod tests {
             presentation: Vec::new(),
         };
         let bytes = build(&content, &SigningKey::from_bytes(&[7u8; 32]));
-        Arc::new(AppState::from_package_bytes(&bytes).unwrap())
+        Arc::new(AppState::from_package_bytes(&bytes, Box::new(crate::draw::FixedDraw { index: 0 })).unwrap())
     }
 
     #[tokio::test]

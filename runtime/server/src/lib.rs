@@ -2,6 +2,7 @@
 //! See docs/superpowers/specs/2026-06-28-runtime-server-spin-service-design.md.
 
 pub mod config;
+pub mod draw;
 pub mod routes;
 pub mod state;
 

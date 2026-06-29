@@ -3,6 +3,7 @@
 
 use bloom_math::mechanics::slots::{from_payload, SlotModel};
 use bloom_package::{verify_and_load, PackageContent, PackageError};
+use crate::draw::Draw;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 
 /// The development verifying key (matches the dev signing key `[7u8; 32]`).
@@ -21,23 +22,25 @@ pub enum StartupError {
 pub struct AppState {
     pub package: PackageContent,
     pub model: SlotModel,
+    pub draw: Box<dyn Draw>,
 }
 
 impl AppState {
     /// Verify the package bytes against the dev key, then decode its model.
-    // TASK-1 FORM: signature is `from_package_bytes(bytes: &[u8])`.
-    // Tasks 2–3 will widen this to take `draw: Box<dyn Draw>` and `audit: Box<dyn AuditSink>`.
-    pub fn from_package_bytes(bytes: &[u8]) -> Result<AppState, StartupError> {
+    pub fn from_package_bytes(
+        bytes: &[u8],
+        draw: Box<dyn Draw>,
+    ) -> Result<AppState, StartupError> {
         let package =
             verify_and_load(bytes, &dev_verifying_key()).map_err(StartupError::BadPackage)?;
         let model = from_payload(&package.math_payload).map_err(StartupError::BadPayload)?;
-        Ok(AppState { package, model })
+        Ok(AppState { package, model, draw })
     }
 
     /// Load the package file named by `config`, verify + decode it.
     pub fn load(config: &crate::config::ServerConfig) -> Result<AppState, StartupError> {
         let bytes = std::fs::read(&config.package_path).map_err(StartupError::Io)?;
-        AppState::from_package_bytes(&bytes)
+        AppState::from_package_bytes(&bytes, Box::new(crate::draw::OsRngDraw))
     }
 }
 
@@ -82,7 +85,7 @@ mod tests {
 
     #[test]
     fn loads_and_decodes_a_valid_package() {
-        let state = AppState::from_package_bytes(&good_package_bytes()).expect("loads");
+        let state = AppState::from_package_bytes(&good_package_bytes(), Box::new(crate::draw::OsRngDraw)).expect("loads");
         assert_eq!(state.package.envelope.package_id, "pkg-test");
         assert_eq!(state.model.reels.len(), 3);
     }
@@ -93,7 +96,7 @@ mod tests {
         let i = 8 + 2 + 1; // inside the signed content region
         bytes[i] ^= 0xFF;
         assert!(matches!(
-            AppState::from_package_bytes(&bytes),
+            AppState::from_package_bytes(&bytes, Box::new(crate::draw::OsRngDraw)),
             Err(StartupError::BadPackage(_))
         ));
     }
@@ -115,7 +118,7 @@ mod tests {
             build(&content, &other)
         };
         assert!(matches!(
-            AppState::from_package_bytes(&content_bytes),
+            AppState::from_package_bytes(&content_bytes, Box::new(crate::draw::OsRngDraw)),
             Err(StartupError::BadPackage(_))
         ));
     }
