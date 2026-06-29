@@ -357,7 +357,7 @@ mod tests {
         let app = build_app(state);
         let (status, v) = post_spin(app, "{}").await;
         assert_eq!(status, 200);
-        assert_eq!(v["seed"], 33);
+        assert_eq!(v["seed"], "33");
         // The served outcome must equal re-evaluating the returned seed.
         let expected =
             serde_json::to_value(OutcomeWire::from_round(&evaluate(&model, 33))).unwrap();
