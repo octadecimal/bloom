@@ -30,8 +30,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
 /// empty or non-JSON) plus the envelope. SP1 demo packages carry a small JSON
 /// manifest. Consuming this is SP2.
 pub async fn handshake(State(state): State<Arc<AppState>>) -> Json<HandshakeResponse> {
-    let presentation = serde_json::from_slice(&state.package.presentation)
-        .unwrap_or(serde_json::Value::Null);
+    let presentation =
+        serde_json::from_slice(&state.package.presentation).unwrap_or(serde_json::Value::Null);
     Json(HandshakeResponse {
         package_id: state.package.envelope.package_id.clone(),
         package_version: state.package.envelope.package_version,
@@ -105,12 +105,19 @@ mod tests {
 
     fn test_state() -> Arc<AppState> {
         let model = SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 1,
             paylines: vec![vec![0, 0, 0]],
             paytable: Paytable {
-                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 3,
+                    payout: 2,
+                }],
             },
             bonuses: vec![],
         };
@@ -139,12 +146,23 @@ mod tests {
     /// shared MemoryAuditSink returned alongside so the test can read records.
     fn spin_state(idx: usize) -> (Arc<AppState>, Arc<MemoryAuditSink>) {
         let model = SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
-            reels: vec![vec![0, 0, 0, 0, 1], vec![0, 0, 1, 0, 0], vec![1, 0, 0, 0, 0]],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
+            reels: vec![
+                vec![0, 0, 0, 0, 1],
+                vec![0, 0, 1, 0, 0],
+                vec![1, 0, 0, 0, 0],
+            ],
             rows: 1,
             paylines: vec![vec![0, 0, 0]],
             paytable: Paytable {
-                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 3,
+                    payout: 2,
+                }],
             },
             bonuses: vec![],
         };
@@ -179,12 +197,19 @@ mod tests {
 
     fn state_with_presentation(presentation: &[u8]) -> Arc<AppState> {
         let model = SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 1,
             paylines: vec![vec![0, 0, 0]],
             paytable: Paytable {
-                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 3,
+                    payout: 2,
+                }],
             },
             bonuses: vec![],
         };
@@ -220,11 +245,16 @@ mod tests {
             .await
             .unwrap();
         let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         (status, serde_json::from_slice(&bytes).unwrap())
     }
 
-    async fn post_spin(app: axum::Router, body: &str) -> (axum::http::StatusCode, serde_json::Value) {
+    async fn post_spin(
+        app: axum::Router,
+        body: &str,
+    ) -> (axum::http::StatusCode, serde_json::Value) {
         let req = axum::http::Request::builder()
             .method("POST")
             .uri("/spin")
@@ -233,7 +263,9 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v = if bytes.is_empty() {
             serde_json::Value::Null
         } else {
@@ -255,7 +287,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 200);
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(v["status"], "ok");
         assert_eq!(v["package_id"], "pkg-health");
@@ -271,7 +305,8 @@ mod tests {
         assert_eq!(status, 200);
         assert_eq!(v["seed"], 33);
         // The served outcome must equal re-evaluating the returned seed.
-        let expected = serde_json::to_value(OutcomeWire::from_round(&evaluate(&model, 33))).unwrap();
+        let expected =
+            serde_json::to_value(OutcomeWire::from_round(&evaluate(&model, 33))).unwrap();
         assert_eq!(v["outcome"], expected);
     }
 
@@ -287,7 +322,10 @@ mod tests {
         assert_eq!(recs[0].seed, 11);
         assert_eq!(recs[0].bet, 1);
         // Re-expand the recorded seed; the audit outcome must match (reproducible).
-        assert_eq!(recs[0].outcome, OutcomeWire::from_round(&evaluate(&model, 11)));
+        assert_eq!(
+            recs[0].outcome,
+            OutcomeWire::from_round(&evaluate(&model, 11))
+        );
     }
 
     #[tokio::test]

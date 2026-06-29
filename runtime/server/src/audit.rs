@@ -42,8 +42,7 @@ impl AuditSink for JsonlAuditSink {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let mut line = serde_json::to_string(rec)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let mut line = serde_json::to_string(rec).map_err(std::io::Error::other)?;
         line.push('\n');
         let mut f = std::fs::OpenOptions::new()
             .create(true)
@@ -58,9 +57,17 @@ pub struct MemoryAuditSink {
     records: Mutex<Vec<AuditRecord>>,
 }
 
+impl Default for MemoryAuditSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryAuditSink {
     pub fn new() -> Self {
-        MemoryAuditSink { records: Mutex::new(Vec::new()) }
+        MemoryAuditSink {
+            records: Mutex::new(Vec::new()),
+        }
     }
     pub fn records(&self) -> Vec<AuditRecord> {
         self.records.lock().unwrap().clone()
@@ -83,12 +90,19 @@ mod tests {
             evaluate, Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
         };
         let model = SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 1,
             paylines: vec![vec![0, 0, 0]],
             paytable: Paytable {
-                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 3,
+                    payout: 2,
+                }],
             },
             bonuses: vec![],
         };

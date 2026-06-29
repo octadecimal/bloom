@@ -1,10 +1,10 @@
 //! Server startup state: the verified package + decoded model, plus the
 //! runtime seams. A package that fails to verify or decode aborts boot loudly.
 
-use bloom_math::mechanics::slots::{from_payload, SlotModel};
-use bloom_package::{verify_and_load, PackageContent, PackageError};
 use crate::audit::AuditSink;
 use crate::draw::Draw;
+use bloom_math::mechanics::slots::{from_payload, SlotModel};
+use bloom_package::{verify_and_load, PackageContent, PackageError};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 
 /// The development verifying key (matches the dev signing key `[7u8; 32]`).
@@ -37,7 +37,12 @@ impl AppState {
         let package =
             verify_and_load(bytes, &dev_verifying_key()).map_err(StartupError::BadPackage)?;
         let model = from_payload(&package.math_payload).map_err(StartupError::BadPayload)?;
-        Ok(AppState { package, model, draw, audit })
+        Ok(AppState {
+            package,
+            model,
+            draw,
+            audit,
+        })
     }
 
     /// Load the package file named by `config`, verify + decode it.
@@ -65,12 +70,19 @@ mod tests {
 
     fn tiny_model() -> SlotModel {
         SlotModel {
-            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            symbols: vec![SymbolDef {
+                id: 0,
+                role: SymbolRole::Normal,
+            }],
             reels: vec![vec![0], vec![0], vec![0]],
             rows: 1,
             paylines: vec![vec![0, 0, 0]],
             paytable: Paytable {
-                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+                entries: vec![PaytableEntry {
+                    symbol: 0,
+                    count: 3,
+                    payout: 2,
+                }],
             },
             bonuses: vec![],
         }
@@ -96,7 +108,8 @@ mod tests {
             &good_package_bytes(),
             Box::new(crate::draw::OsRngDraw),
             Box::new(crate::audit::MemoryAuditSink::new()),
-        ).expect("loads");
+        )
+        .expect("loads");
         assert_eq!(state.package.envelope.package_id, "pkg-test");
         assert_eq!(state.model.reels.len(), 3);
     }

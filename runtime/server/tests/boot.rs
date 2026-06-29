@@ -31,7 +31,9 @@ async fn get(app: axum::Router, uri: &str) -> serde_json::Value {
         )
         .await
         .unwrap();
-    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     serde_json::from_slice(&bytes).unwrap()
 }
 
@@ -64,7 +66,9 @@ async fn demo_spin_returns_an_in_pool_outcome() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 200);
-    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(v["seed"].is_u64());
     assert_eq!(v["outcome"]["mechanic"], "slots@1");
