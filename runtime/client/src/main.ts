@@ -6,11 +6,18 @@ import { parseParentOrigin, originAllowed } from './protocol/origin';
 import { createSerializer } from './serialize';
 import { domHostSurface, type IViewport } from './render/viewportController';
 import { ReelsModule } from './modules/reels/reelsModule';
+import { resolveRuntimeServerUrl } from './play/runtimeServerUrl';
+import { createRuntimeClient } from './play/runtimeClient';
+import { startPlayMode } from './play/playMode';
 
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
 
 const params = new URLSearchParams(window.location.search);
+
+// Direct play-mode: the client talks straight to runtime/server (no studio).
+// Selected by an explicit ?server=<url> or a bare ?play flag.
+const isPlayMode = params.has('server') || params.has('play');
 
 // When embedded by the studio, the iframe src carries ?parentOrigin=<studio origin>.
 // Standalone (no param) keeps Plan 1 behavior: accept any origin, post with '*'.
@@ -28,13 +35,6 @@ const { host, model, modules, viewport } = createEngine({ renderer, post, surfac
 // Test/standalone observability.
 (window as unknown as { __engineModel: typeof model }).__engineModel = model;
 (window as unknown as { __engineRenderer: typeof renderer }).__engineRenderer = renderer;
-
-// Standalone (no studio parent) keeps a default reels module so the runtime is
-// usable on its own; embedded studio mode instead instantiates from the
-// document's `modules` declaration on init.
-if (!expectedOrigin) {
-  modules.manager.sync([{ id: 'reels', type: 'reels', config: { parentId: 'root' } }]);
-}
 
 const reels = () => modules.manager.byType('reels') as ReelsModule | undefined;
 
@@ -66,18 +66,43 @@ modules.bus.on<IViewport>('viewport:changed', (e) => viewportEvents.push(e));
 // createSerializer() also catches handle() rejections so a single failure cannot
 // wedge the chain and drop all subsequent messages.
 const enqueue = createSerializer();
-window.addEventListener('message', (event: MessageEvent) => {
-  if (!originAllowed(expectedOrigin, event.origin)) return;
-  const msg = event.data as InboundMessage;
-  enqueue(() => host.handle(msg));
-});
+if (!isPlayMode) {
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (!originAllowed(expectedOrigin, event.origin)) return;
+    const msg = event.data as InboundMessage;
+    enqueue(() => host.handle(msg));
+  });
+}
 
 host.start();
 
-// Standalone mode: ?doc=<url> loads a document file directly (no studio).
-const docUrl = params.get('doc');
-if (docUrl) {
-  void fetch(docUrl)
-    .then((r) => r.json())
-    .then((document) => host.handle({ v: 1, kind: 'init', id: 'standalone', document }));
+if (isPlayMode) {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const defaultPort = Number(env.VITE_RUNTIME_SERVER_PORT ?? '9000') || 9000;
+  const serverUrl = resolveRuntimeServerUrl(params, window.location, { defaultPort });
+  const client = createRuntimeClient(serverUrl);
+  const spinButton = document.getElementById('spin') as HTMLButtonElement;
+  const errorEl = document.getElementById('play-error') as HTMLElement;
+  void startPlayMode({
+    client,
+    host,
+    bus: modules.bus,
+    orchestrator: modules.orchestrator,
+    spinButton,
+    errorEl,
+  });
+} else {
+  // Standalone (no studio parent) keeps a default reels module so the runtime is
+  // usable on its own; embedded studio mode instead instantiates from the
+  // document's `modules` declaration on init.
+  if (!expectedOrigin) {
+    modules.manager.sync([{ id: 'reels', type: 'reels', config: { parentId: 'root' } }]);
+  }
+  // Standalone mode: ?doc=<url> loads a document file directly (no studio).
+  const docUrl = params.get('doc');
+  if (docUrl) {
+    void fetch(docUrl)
+      .then((r) => r.json())
+      .then((document) => host.handle({ v: 1, kind: 'init', id: 'standalone', document }));
+  }
 }

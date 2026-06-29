@@ -12,6 +12,9 @@ export default defineConfig(() => {
     server: { port: runtime, host: '0.0.0.0' },
     preview: { port: runtime, host: '0.0.0.0' },
     plugins: [nxViteTsPaths()],
+    define: {
+      'import.meta.env.VITE_RUNTIME_SERVER_PORT': JSON.stringify(String(9000 + offset)),
+    },
     build: {
       outDir: '../../dist/runtime/client',
       emptyOutDir: true,

@@ -357,7 +357,7 @@ mod tests {
         let app = build_app(state);
         let (status, v) = post_spin(app, "{}").await;
         assert_eq!(status, 200);
-        assert_eq!(v["seed"], 33);
+        assert_eq!(v["seed"], "33");
         // The served outcome must equal re-evaluating the returned seed.
         let expected =
             serde_json::to_value(OutcomeWire::from_round(&evaluate(&model, 33))).unwrap();
@@ -417,5 +417,51 @@ mod tests {
         let (status, v) = get_json(app, "/handshake").await;
         assert_eq!(status, 200);
         assert_eq!(v["presentation"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn cors_exposes_allow_origin_on_handshake() {
+        let app = build_app(test_state());
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/handshake")
+                    .header("origin", "http://example.com")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.headers()
+                .get("access-control-allow-origin")
+                .map(|v| v.to_str().unwrap().to_string()),
+            Some("*".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_options_is_allowed() {
+        let app = build_app(test_state());
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("OPTIONS")
+                    .uri("/spin")
+                    .header("origin", "http://example.com")
+                    .header("access-control-request-method", "POST")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(resp.status().is_success() || resp.status() == StatusCode::NO_CONTENT);
+        assert_eq!(
+            resp.headers()
+                .get("access-control-allow-origin")
+                .map(|v| v.to_str().unwrap().to_string()),
+            Some("*".to_string())
+        );
     }
 }

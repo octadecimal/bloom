@@ -52,9 +52,20 @@ fn feature_wire(f: &FeatureOutcome) -> FeatureWire {
 
 #[derive(Debug, Serialize)]
 pub struct SpinResponse {
+    #[serde(serialize_with = "serialize_seed_as_string")]
     pub seed: u64,
     pub bet: u64,
     pub outcome: OutcomeWire,
+}
+
+/// The seed is a `u64` that can exceed 2^53; a JS client parsing it as a JSON
+/// number would silently lose precision, so the client-facing wire encodes it as
+/// a string. Internal types (`AuditRecord`) keep the numeric `u64`.
+fn serialize_seed_as_string<S>(seed: &u64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&seed.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -140,5 +151,23 @@ mod tests {
         assert_eq!(json["mechanic"], "slots@1");
         let back: OutcomeWire = serde_json::from_value(json).unwrap();
         assert_eq!(back, wire);
+    }
+
+    #[test]
+    fn spin_response_serializes_seed_as_a_string() {
+        let outcome = OutcomeWire::from_round(&evaluate(&model_with_feature(), 53));
+        // 2^53 + 1 — the smallest u64 that a JS number cannot represent exactly.
+        let resp = SpinResponse {
+            seed: 9_007_199_254_740_993,
+            bet: 1,
+            outcome,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert!(json["seed"].is_string(), "seed must serialize as a string");
+        assert_eq!(
+            json["seed"],
+            serde_json::Value::String("9007199254740993".into())
+        );
+        assert_eq!(json["bet"], 1);
     }
 }

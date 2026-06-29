@@ -102,6 +102,6 @@ async fn demo_spin_returns_an_in_pool_outcome() {
         .await
         .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(v["seed"].is_u64());
+    assert!(v["seed"].is_string());
     assert_eq!(v["outcome"]["mechanic"], "slots@1");
 }
