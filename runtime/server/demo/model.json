@@ -1,0 +1,27 @@
+{
+  "symbols": [
+    { "id": 0, "role": "normal" },
+    { "id": 1, "role": "normal" },
+    { "id": 2, "role": "normal" },
+    { "id": 9, "role": "scatter" }
+  ],
+  "reels": [
+    [0, 1, 2, 0, 1, 2, 9, 0, 1, 2],
+    [0, 1, 2, 0, 1, 2, 9, 0, 1, 2],
+    [0, 1, 2, 0, 1, 2, 9, 0, 1, 2]
+  ],
+  "rows": 3,
+  "paylines": [
+    [0, 0, 0],
+    [1, 1, 1],
+    [2, 2, 2]
+  ],
+  "paytable": {
+    "entries": [
+      { "symbol": 0, "count": 3, "payout": 5 },
+      { "symbol": 1, "count": 3, "payout": 3 },
+      { "symbol": 2, "count": 3, "payout": 2 }
+    ]
+  },
+  "bonuses": []
+}

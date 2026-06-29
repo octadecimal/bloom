@@ -126,3 +126,16 @@ bootstrap:
     npm install
     cd studio/backend && uv sync
     @echo "Bootstrapped. (Cargo builds on demand; Mongo is shared — start it with: just mongo-up)"
+
+# ── Runtime game server ──────────────────────────────────────────────────────
+
+# Mint the runtime/server demo package (dev-signed) from its committed fixtures.
+runtime-demo-pkg:
+    cargo run --release -p bloom-simulator --bin curate -- \
+      runtime/server/demo/model.json runtime/server/demo/target.json \
+      bloom-demo-slots runtime/server/demo/demo.pkg runtime/server/demo/demo.report.txt \
+      runtime/server/demo/presentation.json
+
+# Run the authoritative runtime game server on the demo package.
+runtime-serve: runtime-demo-pkg
+    cargo run --release -p bloom-runtime-server

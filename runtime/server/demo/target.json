@@ -1,0 +1,11 @@
+{
+  "rtp_target": 0.5,
+  "rtp_tolerance": 1.0,
+  "volatility_min": 0.0,
+  "volatility_max": 1000000000.0,
+  "bonus_hit_rate_bands": [],
+  "pool_size": 1000,
+  "candidate_count": 50000,
+  "realized_correction_band": 1.0,
+  "master_seed": 42
+}
