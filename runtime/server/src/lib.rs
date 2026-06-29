@@ -6,6 +6,7 @@ pub mod config;
 pub mod draw;
 pub mod routes;
 pub mod state;
+pub mod wire;
 
 use axum::routing::get;
 use axum::Router;
