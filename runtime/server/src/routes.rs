@@ -1,7 +1,7 @@
 //! axum handlers. Thin orchestration over the AppState seams.
 
 use crate::state::AppState;
-use crate::wire::{OutcomeWire, SpinResponse};
+use crate::wire::{HandshakeResponse, OutcomeWire, SpinResponse};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
@@ -23,6 +23,20 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
         package_id: state.package.envelope.package_id.clone(),
         package_version: state.package.envelope.package_version,
         mechanic: state.package.envelope.mechanic.clone(),
+    })
+}
+
+/// Hand the untrusted client the package presentation (parsed as JSON; null if
+/// empty or non-JSON) plus the envelope. SP1 demo packages carry a small JSON
+/// manifest. Consuming this is SP2.
+pub async fn handshake(State(state): State<Arc<AppState>>) -> Json<HandshakeResponse> {
+    let presentation = serde_json::from_slice(&state.package.presentation)
+        .unwrap_or(serde_json::Value::Null);
+    Json(HandshakeResponse {
+        package_id: state.package.envelope.package_id.clone(),
+        package_version: state.package.envelope.package_version,
+        mechanic: state.package.envelope.mechanic.clone(),
+        presentation,
     })
 }
 
@@ -163,6 +177,53 @@ mod tests {
         (Arc::new(state), audit)
     }
 
+    fn state_with_presentation(presentation: &[u8]) -> Arc<AppState> {
+        let model = SlotModel {
+            symbols: vec![SymbolDef { id: 0, role: SymbolRole::Normal }],
+            reels: vec![vec![0], vec![0], vec![0]],
+            rows: 1,
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable {
+                entries: vec![PaytableEntry { symbol: 0, count: 3, payout: 2 }],
+            },
+            bonuses: vec![],
+        };
+        let content = PackageContent {
+            envelope: Envelope {
+                package_id: "pkg-hs".into(),
+                package_version: 2,
+                mechanic: "slots@1".into(),
+            },
+            math_payload: to_payload(&model),
+            seeds: vec![1, 2, 3],
+            presentation: presentation.to_vec(),
+        };
+        let bytes = build(&content, &SigningKey::from_bytes(&[7u8; 32]));
+        Arc::new(
+            AppState::from_package_bytes(
+                &bytes,
+                Box::new(crate::draw::FixedDraw { index: 0 }),
+                Box::new(crate::audit::MemoryAuditSink::new()),
+            )
+            .unwrap(),
+        )
+    }
+
+    async fn get_json(app: axum::Router, uri: &str) -> (axum::http::StatusCode, serde_json::Value) {
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(uri)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
     async fn post_spin(app: axum::Router, body: &str) -> (axum::http::StatusCode, serde_json::Value) {
         let req = axum::http::Request::builder()
             .method("POST")
@@ -243,5 +304,26 @@ mod tests {
         assert_eq!(s_b, 200);
         assert_eq!(v_b["bet"], 5);
         assert_eq!(audit_b.records()[0].bet, 5);
+    }
+
+    #[tokio::test]
+    async fn handshake_returns_envelope_and_parsed_presentation() {
+        let manifest = br#"{"cols":3,"rows":3,"symbols":["0","1","2","9"]}"#;
+        let app = build_app(state_with_presentation(manifest));
+        let (status, v) = get_json(app, "/handshake").await;
+        assert_eq!(status, 200);
+        assert_eq!(v["package_id"], "pkg-hs");
+        assert_eq!(v["package_version"], 2);
+        assert_eq!(v["mechanic"], "slots@1");
+        assert_eq!(v["presentation"]["cols"], 3);
+        assert_eq!(v["presentation"]["symbols"][3], "9");
+    }
+
+    #[tokio::test]
+    async fn handshake_empty_presentation_is_null() {
+        let app = build_app(state_with_presentation(b""));
+        let (status, v) = get_json(app, "/handshake").await;
+        assert_eq!(status, 200);
+        assert_eq!(v["presentation"], serde_json::Value::Null);
     }
 }

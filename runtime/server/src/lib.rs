@@ -15,6 +15,7 @@ use std::sync::Arc;
 pub fn build_app(state: Arc<state::AppState>) -> Router {
     Router::new()
         .route("/health", get(routes::health))
+        .route("/handshake", get(routes::handshake))
         .route("/spin", post(routes::spin))
         .with_state(state)
 }
