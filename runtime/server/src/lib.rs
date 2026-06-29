@@ -1,6 +1,7 @@
 //! `bloom-runtime-server` — the authoritative, zero-AI, audited game server.
 //! See docs/superpowers/specs/2026-06-28-runtime-server-spin-service-design.md.
 
+pub mod audit;
 pub mod config;
 pub mod draw;
 pub mod routes;

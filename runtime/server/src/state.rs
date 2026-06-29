@@ -3,6 +3,7 @@
 
 use bloom_math::mechanics::slots::{from_payload, SlotModel};
 use bloom_package::{verify_and_load, PackageContent, PackageError};
+use crate::audit::AuditSink;
 use crate::draw::Draw;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 
@@ -23,6 +24,7 @@ pub struct AppState {
     pub package: PackageContent,
     pub model: SlotModel,
     pub draw: Box<dyn Draw>,
+    pub audit: Box<dyn AuditSink>,
 }
 
 impl AppState {
@@ -30,17 +32,22 @@ impl AppState {
     pub fn from_package_bytes(
         bytes: &[u8],
         draw: Box<dyn Draw>,
+        audit: Box<dyn AuditSink>,
     ) -> Result<AppState, StartupError> {
         let package =
             verify_and_load(bytes, &dev_verifying_key()).map_err(StartupError::BadPackage)?;
         let model = from_payload(&package.math_payload).map_err(StartupError::BadPayload)?;
-        Ok(AppState { package, model, draw })
+        Ok(AppState { package, model, draw, audit })
     }
 
     /// Load the package file named by `config`, verify + decode it.
     pub fn load(config: &crate::config::ServerConfig) -> Result<AppState, StartupError> {
         let bytes = std::fs::read(&config.package_path).map_err(StartupError::Io)?;
-        AppState::from_package_bytes(&bytes, Box::new(crate::draw::OsRngDraw))
+        AppState::from_package_bytes(
+            &bytes,
+            Box::new(crate::draw::OsRngDraw),
+            Box::new(crate::audit::JsonlAuditSink::new(config.audit_path.clone())),
+        )
     }
 }
 
@@ -85,7 +92,11 @@ mod tests {
 
     #[test]
     fn loads_and_decodes_a_valid_package() {
-        let state = AppState::from_package_bytes(&good_package_bytes(), Box::new(crate::draw::OsRngDraw)).expect("loads");
+        let state = AppState::from_package_bytes(
+            &good_package_bytes(),
+            Box::new(crate::draw::OsRngDraw),
+            Box::new(crate::audit::MemoryAuditSink::new()),
+        ).expect("loads");
         assert_eq!(state.package.envelope.package_id, "pkg-test");
         assert_eq!(state.model.reels.len(), 3);
     }
@@ -96,7 +107,11 @@ mod tests {
         let i = 8 + 2 + 1; // inside the signed content region
         bytes[i] ^= 0xFF;
         assert!(matches!(
-            AppState::from_package_bytes(&bytes, Box::new(crate::draw::OsRngDraw)),
+            AppState::from_package_bytes(
+                &bytes,
+                Box::new(crate::draw::OsRngDraw),
+                Box::new(crate::audit::MemoryAuditSink::new()),
+            ),
             Err(StartupError::BadPackage(_))
         ));
     }
@@ -118,7 +133,11 @@ mod tests {
             build(&content, &other)
         };
         assert!(matches!(
-            AppState::from_package_bytes(&content_bytes, Box::new(crate::draw::OsRngDraw)),
+            AppState::from_package_bytes(
+                &content_bytes,
+                Box::new(crate::draw::OsRngDraw),
+                Box::new(crate::audit::MemoryAuditSink::new()),
+            ),
             Err(StartupError::BadPackage(_))
         ));
     }
