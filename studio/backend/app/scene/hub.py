@@ -30,19 +30,28 @@ class GameSceneHub:
             for nid, n in nodes.items():
                 if n.get("type") == "Root":
                     props = n.get("props") or {}
-                    return {
-                        "root_id": nid,
-                        "canvas": (int(props.get("width", cw)),
-                                   int(props.get("height", ch))),
-                    }
-            op = {"kind": "addNode", "id": "root", "type": "Root",
-                  "props": {"width": cw, "height": ch}}
-            await self._store.apply_op(game_id, op)
-            broadcast_op = op
-        await self._sio.emit(
-            "scene_op", {"gameId": game_id, "op": broadcast_op}, room=game_id
-        )
-        return {"root_id": "root", "canvas": (cw, ch)}
+                    ow = int(props.get("width", cw))
+                    oh = int(props.get("height", ch))
+                    if (ow, oh) == (cw, ch):
+                        return {"root_id": nid, "canvas": (ow, oh)}
+                    resize_ops = [
+                        {"kind": "setProp", "id": nid, "path": "width", "value": cw},
+                        {"kind": "setProp", "id": nid, "path": "height", "value": ch},
+                    ]
+                    await self._store.apply_batch(game_id, resize_ops)
+                    broadcast_ops = resize_ops
+                    break
+            else:
+                op = {"kind": "addNode", "id": "root", "type": "Root",
+                      "props": {"width": cw, "height": ch}}
+                await self._store.apply_op(game_id, op)
+                broadcast_ops = [op]
+                nid = "root"
+        for op in broadcast_ops:
+            await self._sio.emit(
+                "scene_op", {"gameId": game_id, "op": op}, room=game_id
+            )
+        return {"root_id": nid, "canvas": (cw, ch)}
 
     async def attach(self, game_id: str, sid: str) -> None:
         await self._sio.enter_room(sid, game_id)

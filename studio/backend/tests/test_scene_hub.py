@@ -57,3 +57,33 @@ async def test_apply_batch_broadcasts_each_op(mongo_db):
     await hub.apply_batch("g1", ops)
     sent = [e[1]["op"] for e in sio.emitted if e[0] == "scene_op"]
     assert sent == ops
+
+
+@pytest_asyncio.fixture
+async def scene_hub_and_store(mongo_db):
+    store = GameSceneStore(mongo_db)
+    yield GameSceneHub(FakeSio(), store), store
+
+
+@pytest.mark.asyncio
+async def test_ensure_root_resizes_existing_root_on_orientation_flip(scene_hub_and_store):
+    hub, store = scene_hub_and_store
+    gid = "g-flip"
+    await hub.ensure_root(gid, (1280, 720))           # landscape first
+    info = await hub.ensure_root(gid, (720, 1280))     # flip to portrait
+    assert info["canvas"] == (720, 1280)               # returns the NEW canvas
+    doc = await store.get_document(gid)
+    root = next(n for n in doc["nodes"].values() if n["type"] == "Root")
+    assert (int(root["props"]["width"]), int(root["props"]["height"])) == (720, 1280)
+
+
+@pytest.mark.asyncio
+async def test_ensure_root_same_size_is_noop(scene_hub_and_store):
+    hub, store = scene_hub_and_store
+    gid = "g-same"
+    await hub.ensure_root(gid, (1280, 720))
+    info = await hub.ensure_root(gid, (1280, 720))      # identical
+    assert info["canvas"] == (1280, 720)
+    doc = await store.get_document(gid)
+    roots = [n for n in doc["nodes"].values() if n["type"] == "Root"]
+    assert len(roots) == 1                              # still exactly one Root
