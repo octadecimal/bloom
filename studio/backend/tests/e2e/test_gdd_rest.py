@@ -180,15 +180,17 @@ async def test_put_intent_field_emits_and_rebuilds(blueprint_rest_harness):
     h = blueprint_rest_harness
     gid = h.game_id
 
-    before = (await h.scene_doc())["nodes"]["spr.reels"]["props"]["position"]
+    before_scale = (await h.scene_doc())["nodes"]["spr.reels"]["props"]["scale"]["x"]
     resp = await h.put_gdd(gid, "ui-ux", {"focal_emphasis": "reels"})
     assert resp["rebuilt"] is True
 
     plan = bind(GddIntent(focal_emphasis="reels"))
     after = (await h.scene_doc())["nodes"]["spr.reels"]["props"]["position"]
     assert after == {"x": plan.for_role("reels").x, "y": plan.for_role("reels").y}
-    # reels scaled into its enlarged region
-    assert (await h.scene_doc())["nodes"]["spr.reels"]["props"]["scale"]["x"] != before
+    # focal_emphasis=reels enlarges the reels region (~1.18×/1.12×), so
+    # scale_to_region yields a strictly larger fit scale for the same 512×512 texture.
+    after_scale = (await h.scene_doc())["nodes"]["spr.reels"]["props"]["scale"]["x"]
+    assert after_scale > before_scale
 
 
 @pytest.mark.asyncio
