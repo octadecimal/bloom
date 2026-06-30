@@ -103,6 +103,7 @@ async def _place_in_scene(
     ctx: ToolContext, *, handle: str, src: str, role: str, parent: str,
     x: float | None, y: float | None, anchor_x: float, anchor_y: float,
     fit: str, z_index: int, tex_size: tuple[int, int], asset_id: str = "",
+    region_w: int | None = None, region_h: int | None = None,
 ) -> str:
     """Place an already-resolved asset image into the live scene as one atomic batch.
 
@@ -125,11 +126,12 @@ async def _place_in_scene(
         canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
                   int(root_props.get("height", DEFAULT_CANVAS[1])))
 
+    region = (region_w, region_h) if region_w and region_h else None
     ops = build_sprite_ops(
         handle=handle, src=src, role=role, parent_id=parent_id,
         ensure_root=False, canvas=canvas, tex_size=tex_size,
         x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
-        asset_id=asset_id,
+        asset_id=asset_id, region=region,
     )
     try:
         doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
@@ -202,6 +204,8 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
         anchor_y: float = 0.5,
         fit: str = "none",
         z_index: int = 0,
+        region_w: int | None = None,
+        region_h: int | None = None,
     ) -> str:
         # 1. reuse: if the slot already holds an asset with a selected image, place
         #    it as-is instead of regenerating (idempotent re-runs of the same build).
@@ -237,7 +241,7 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
-            asset_id=asset.id,
+            asset_id=asset.id, region_w=region_w, region_h=region_h,
         )
         if placement.startswith("Rejected"):
             return placement

@@ -59,6 +59,9 @@ class BuildElement(BaseModel):
     anchor_y: float = 0.5
     fit: str = "none"
     z_index: int = 0
+    scale: float | None = None
+    region_w: int | None = None
+    region_h: int | None = None
 
 
 @dataclass
