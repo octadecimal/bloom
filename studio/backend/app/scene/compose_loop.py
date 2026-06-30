@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from app.scene.asset_critic import AssetVerdict
 from app.scene.critic import Critique, CritiqueRequest, EditParams
+from app.scene.layout.plan import ScenePlan
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,9 @@ class BuildElement(BaseModel):
     anchor_y: float = 0.5
     fit: str = "none"
     z_index: int = 0
+    scale: float | None = None
+    region_w: int | None = None
+    region_h: int | None = None
 
 
 @dataclass
@@ -88,11 +92,42 @@ class ComposeDeps(Protocol):
     async def out_of_frame(self) -> list[FrameCorrection]: ...
 
 
+def _apply_plan(element: BuildElement, plan: "ScenePlan | None") -> BuildElement:
+    """Overwrite an element's geometry from its planned role region. The plan owns
+    geometry; the agent only chose content + role. No-op when no plan or no role."""
+    if plan is None:
+        return element
+    pr = plan.for_role(element.role or element.slot)
+    if pr is None:
+        return element
+    return element.model_copy(update={
+        "x": pr.x, "y": pr.y, "anchor_x": pr.anchor_x, "anchor_y": pr.anchor_y,
+        "z_index": pr.z, "fit": pr.fit,
+        "region_w": pr.region_w, "region_h": pr.region_h,
+    })
+
+
+def _plan_context(plan: "ScenePlan | None", window: list[str],
+                  elements: list[BuildElement]) -> dict:
+    """Map in-window handles to their intended region for the critic."""
+    if plan is None:
+        return {}
+    role_by_handle = {(e.slot or e.role): (e.role or e.slot) for e in elements}
+    out: dict = {}
+    for handle in window:
+        pr = plan.for_role(role_by_handle.get(handle, handle))
+        if pr is not None:
+            out[handle] = {"role": pr.role, "x": pr.x, "y": pr.y,
+                           "w": pr.region_w, "h": pr.region_h, "z": pr.z}
+    return out
+
+
 async def run_compose(
     elements: list[BuildElement],
     theme: str,
     deps: ComposeDeps,
     bounds: ComposeBounds = ComposeBounds(),
+    plan: ScenePlan | None = None,
 ) -> ComposeResult:
     """Drive the bounded compose loop. Returns a tally + per-step notes."""
     result = ComposeResult()
@@ -100,7 +135,7 @@ async def run_compose(
     edit_history: dict[str, list[dict]] = {}
 
     for element in elements:
-        await deps.place(element)
+        await deps.place(_apply_plan(element, plan))
         result.elements_placed += 1
         handles = await deps.placed_handles()
         if not handles:
@@ -157,6 +192,7 @@ async def run_compose(
                 frame_png=frame, scene=scene, target_handle=target,
                 window=window, theme=theme, regen_budget_left=regen_left,
                 pass_index=pass_index, edit_history=window_history,
+                plan=_plan_context(plan, window, elements),
             ))
             result.passes += 1
             if critique.done or not critique.edits:

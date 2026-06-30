@@ -10,6 +10,9 @@ from app.scene.document import OpError, unreachable_nodes, empty_document
 from app.scene.rebind import rebind_asset_textures, selected_image_ref
 from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
+from app.scene.layout.bind import bind
+from app.scene.layout.intent import read_intent
+from app.scene.layout.plan import ScenePlan
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
@@ -103,6 +106,7 @@ async def _place_in_scene(
     ctx: ToolContext, *, handle: str, src: str, role: str, parent: str,
     x: float | None, y: float | None, anchor_x: float, anchor_y: float,
     fit: str, z_index: int, tex_size: tuple[int, int], asset_id: str = "",
+    region_w: int | None = None, region_h: int | None = None,
 ) -> str:
     """Place an already-resolved asset image into the live scene as one atomic batch.
 
@@ -125,11 +129,12 @@ async def _place_in_scene(
         canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
                   int(root_props.get("height", DEFAULT_CANVAS[1])))
 
+    region = (region_w, region_h) if region_w and region_h else None
     ops = build_sprite_ops(
         handle=handle, src=src, role=role, parent_id=parent_id,
         ensure_root=False, canvas=canvas, tex_size=tex_size,
         x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
-        asset_id=asset_id,
+        asset_id=asset_id, region=region,
     )
     try:
         doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
@@ -202,6 +207,8 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
         anchor_y: float = 0.5,
         fit: str = "none",
         z_index: int = 0,
+        region_w: int | None = None,
+        region_h: int | None = None,
     ) -> str:
         # 1. reuse: if the slot already holds an asset with a selected image, place
         #    it as-is instead of regenerating (idempotent re-runs of the same build).
@@ -237,7 +244,7 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             ctx, handle=slot or asset.id, src=src, role=role, parent=parent,
             x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
             tex_size=(int(getattr(asset, "width", 0)), int(getattr(asset, "height", 0))),
-            asset_id=asset.id,
+            asset_id=asset.id, region_w=region_w, region_h=region_h,
         )
         if placement.startswith("Rejected"):
             return placement
@@ -530,6 +537,15 @@ def format_compose_summary(result) -> str:
     return head + ("\n" + body if body else "")
 
 
+async def _plan_for_game(ctx: ToolContext) -> ScenePlan:
+    """Bind a ScenePlan from the game's persisted GDD intent. Falls back to the
+    default landscape template when no GDD store / intent is present."""
+    if ctx.gdd_store is None:
+        from app.scene.layout.bind import GddIntent
+        return bind(GddIntent())
+    return bind(await read_intent(ctx.gdd_store, ctx.game_id))
+
+
 def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
     async def compose_scene(elements: list[dict], theme: str = "") -> str:
         if not elements:
@@ -537,9 +553,12 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
         if ctx.scene_critic is None or ctx.asset_critic is None:
             return ("Compose loop unavailable: no critic wired. "
                     "Place elements individually with generate_and_place.")
+        plan = await _plan_for_game(ctx)
+        if ctx.scene_hub is not None:
+            await ctx.scene_hub.ensure_root(ctx.game_id, plan.canvas)
         build = [BuildElement(**e) for e in elements]
         deps = _SceneComposeDeps(ctx)
-        result = await run_compose(build, theme, deps)
+        result = await run_compose(build, theme, deps, plan=plan)
         return format_compose_summary(result)
 
     return StructuredTool.from_function(
@@ -557,7 +576,41 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
             "a whole build ('make a pirate game with a background and a logo') or a "
             "single add ('add a treasure chest bottom-right'). Do NOT use it to "
             "change something already on screen — that is adjust_element / "
-            "regenerate_element."
+            "regenerate_element. Element positions come from the game's layout plan "
+            "(you choose each element's role/slot — background, logo, reels, spin, "
+            "flourish_left, flourish_right — not its x/y)."
+        ),
+    )
+
+
+def build_rebuild_scene_tool(ctx: ToolContext) -> BaseTool:
+    async def rebuild_scene(theme: str = "") -> str:
+        """Re-run bind -> place -> reconcile for every role already in the scene,
+        using the CURRENT persisted GDD intent. Use after the art direction or
+        layout intent changes so the live scene reflows to the new plan."""
+        if ctx.scene_critic is None or ctx.asset_critic is None:
+            return "Rebuild unavailable: no critic wired."
+        plan = await _plan_for_game(ctx)
+        if ctx.scene_hub is not None:
+            await ctx.scene_hub.ensure_root(ctx.game_id, plan.canvas)
+        deps = _SceneComposeDeps(ctx)
+        handles = await deps.placed_handles()
+        if not handles:
+            return "Nothing to rebuild: the scene is empty."
+        # Re-place each existing role from the plan; reuse keeps the same art
+        # (generate_and_place reuses a slot that already has a selected image).
+        elements = [BuildElement(slot=h, role=h) for h in handles]
+        result = await run_compose(elements, theme, deps, plan=plan)
+        return "Rebuilt scene from current design intent. " + format_compose_summary(result)
+
+    return StructuredTool.from_function(
+        coroutine=rebuild_scene, name="rebuild_scene",
+        description=(
+            "Reflow the existing scene to the current design intent: re-bind the "
+            "layout plan from the GDD (orientation / focal emphasis / framing "
+            "density + art direction) and re-place every element into its planned "
+            "region, keeping each element's art. Call this AFTER changing art "
+            "direction or layout intent so the live game updates."
         ),
     )
 
@@ -1231,6 +1284,7 @@ class ToolFactory:
         "regenerate_element": build_regenerate_element_tool,
         "adjust_element": build_adjust_element_tool,
         "compose_scene": build_compose_scene_tool,
+        "rebuild_scene": build_rebuild_scene_tool,
         "read_scene": build_read_scene_tool,
         "delete_asset": build_delete_asset_tool,
         "list_gdd_docs": build_list_gdd_docs_tool,

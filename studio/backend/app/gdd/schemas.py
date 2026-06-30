@@ -86,6 +86,12 @@ ASPECT_SCHEMAS: dict[str, list[Field]] = {
     ],
     "ui-ux": [
         Field("layout", "Layout", "text", "narrative"),
+        Field("orientation", "Orientation", "enum", "param",
+              enum=("portrait", "landscape")),
+        Field("focal_emphasis", "Focal emphasis", "enum", "param",
+              enum=("reels", "logo", "balanced")),
+        Field("framing_density", "Framing density", "enum", "param",
+              enum=("clean", "moderate", "ornate")),
         Field("key_screens", "Key screens", "list", "param"),
         Field("controls", "Controls", "text", "narrative"),
         Field("quick_spin", "Quick spin", "text", "param"),

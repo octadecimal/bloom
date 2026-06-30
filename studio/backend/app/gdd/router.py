@@ -38,7 +38,11 @@ Decide what the latest user message is:
    and a {{field_key: value}} patch. Pass real values — percents like "96%",
    ratios like "1:200", enums by their allowed value, table fields as a list of
    row objects. Then confirm in ONE short sentence, e.g. "Set Math Model → bonus
-   hit rate = 1:200."
+   hit rate = 1:200." If the field you just set is an ART-DIRECTION or
+   LAYOUT-INTENT field (theme.art_direction, ui-ux.layout, ui-ux.orientation,
+   ui-ux.focal_emphasis, ui-ux.framing_density) AND the scene already has placed
+   elements, follow the `set_gdd_fields` call with a single `rebuild_scene` call
+   so the live scene reflows to the new plan. Then confirm in one sentence.
 2. A change to a SYMBOL's identity or art (e.g. "make the high symbol a dragon",
    "the wild should be a rune stone"): first call `set_gdd_fields` on
    "symbols-reels" to update that symbol row's name/art_desc (keep its `slot`
@@ -119,7 +123,7 @@ def build_design_router_spec() -> SkillSpec:
             GDD_TOOL_NAMES
             | {"realize_symbol", "generate_asset", "add_sprite", "list_assets",
                "generate_and_place", "regenerate_element", "read_scene",
-               "adjust_element", "compose_scene"}
+               "adjust_element", "compose_scene", "rebuild_scene"}
         ),
         body=_BODY_TEMPLATE.format(catalog=_render_catalog(field_catalog())),
     )

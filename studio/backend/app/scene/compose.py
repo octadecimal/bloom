@@ -9,7 +9,8 @@ bookkeeping from callers. ``build_sprite_ops`` is the first; ``build_text_ops`` 
 DEFAULT_CANVAS: tuple[int, int] = (1280, 720)
 
 
-def _scale_for_fit(fit: str, canvas: tuple[int, int], tex: tuple[int, int]) -> float:
+def _scale_for_fit(fit: str, canvas: tuple[int, int], tex: tuple[int, int],
+                   region: tuple[int, int] | None = None) -> float:
     cw, ch = canvas
     tw, th = tex
     if not tw or not th:
@@ -18,6 +19,9 @@ def _scale_for_fit(fit: str, canvas: tuple[int, int], tex: tuple[int, int]) -> f
         return max(cw / tw, ch / th)
     if fit == "contain":
         return min(cw / tw, ch / th)
+    if fit == "region" and region:
+        rw, rh = region
+        return min(rw / tw, rh / th)
     return 1.0
 
 
@@ -37,6 +41,7 @@ def build_sprite_ops(
     fit: str = "none",
     z_index: int = 0,
     asset_id: str = "",
+    region: tuple[int, int] | None = None,
 ) -> list[dict]:
     """Ops to place an image asset as a Sprite bound to a Texture.
 
@@ -48,7 +53,7 @@ def build_sprite_ops(
     cw, ch = canvas
     px = cw / 2 if x is None else x
     py = ch / 2 if y is None else y
-    scale = _scale_for_fit(fit, canvas, tex_size)
+    scale = _scale_for_fit(fit, canvas, tex_size, region)
 
     sprite_id = f"spr.{handle}"
     texture_id = f"tex.{handle}"

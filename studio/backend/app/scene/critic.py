@@ -69,6 +69,7 @@ class CritiqueRequest:
     regen_budget_left: int = 0
     pass_index: int = 0
     edit_history: dict = field(default_factory=dict)
+    plan: dict = field(default_factory=dict)
 
 
 class SceneCritic(Protocol):
@@ -101,32 +102,28 @@ class ReplaySceneCritic:
 
 CRITIC_SYSTEM_PROMPT = (
     "You are a slot-game composition critic. You are shown a RENDERED frame of a "
-    "slot game scene being assembled element-by-element, plus structured context "
-    "for every placed element. Judge the COMPOSITION of the assembled frame — not "
-    "the quality of any single asset — and return corrective edits as structured "
-    "output.\n\n"
-    "Canonical slot anatomy (aesthetic guidance, NOT a hard region map — content "
-    "and style stay free):\n"
-    "- Background fills the frame (full-bleed), sits at the back.\n"
-    "- The reel grid is centered and is the visual focus; symbols sit INSIDE the "
-    "grid, never spilling outside it.\n"
-    "- The logo sits in the top band, clear of the play area.\n"
-    "- The spin button sits bottom-center.\n"
-    "- Foreground flourishes FRAME the play area, they do not cover it.\n\n"
+    "slot game scene being assembled element-by-element, structured context for "
+    "every placed element, and a LAYOUT PLAN giving each element's INTENDED region "
+    "(x, y, width, height, z) on the canvas. Your job is to RECONCILE the frame to "
+    "the plan and return corrective edits as structured output.\n\n"
+    "Reconcile each element to its planned region:\n"
+    "- It should sit at its planned (x, y), fill close to its planned (w, h), and "
+    "draw at its planned z. If it is off its mark, too large, too small, or behind/"
+    "in front of the wrong neighbours, correct it with move / scale / reorder.\n"
+    "- Elements must not spill outside their planned region or collide with another "
+    "element's region.\n\n"
     "Discipline:\n"
-    "- TRANSFORM-FIRST. Prefer move / scale / reorder. Reach for 'regenerate' "
-    "only when no transform can fix the element because the asset is wrong FOR "
-    "ITS ROLE (e.g. a dense rectangular blob that cannot be salvaged by "
-    "moving/scaling). A 'regenerate' edit MUST justify in 'why' that no transform "
-    "fixes it, and is refused once the regeneration budget is exhausted.\n"
+    "- TRANSFORM-FIRST. Prefer move / scale / reorder. Reach for 'regenerate' only "
+    "when no transform can reconcile the element because the asset is wrong FOR ITS "
+    "ROLE (e.g. a dense rectangular blob). A 'regenerate' edit MUST justify in 'why' "
+    "that no transform fixes it, and is refused once the budget is exhausted.\n"
     "- Edit ONLY elements inside the provided editable look-behind WINDOW. Never "
     "target a handle that is not in the window.\n"
-    "- When the composition is acceptable, return done=true with an empty edit "
-    "list. Do not invent busywork edits.\n"
-    "- CONVERGE. You are shown 'edit_history' — your prior edits to each element "
-    "this build. Do NOT undo a move you already made, and do not oscillate an "
-    "element back and forth. If an element has already been adjusted a few times, "
-    "leave it unless it is clearly still wrong; prefer to return done=true.\n\n"
+    "- When every in-window element matches the plan, return done=true with an empty "
+    "edit list. Do not invent busywork edits.\n"
+    "- CONVERGE. You are shown 'edit_history' — your prior edits this build. Do NOT "
+    "undo a move or oscillate; if an element was already adjusted a few times, leave "
+    "it unless clearly still off-plan; prefer done=true.\n\n"
     "Return: {done, edits:[{target_handle, action, params, why}]} where action is "
     "one of move|scale|reorder|regenerate and params carries x, y (move), scale "
     "(scale), or z (reorder)."
@@ -149,17 +146,18 @@ def build_critic_messages(request: CritiqueRequest) -> list[BaseMessage]:
         "editable_window": request.window,
         "regen_budget_left": request.regen_budget_left,
         "edit_history": request.edit_history,
+        "plan": request.plan,
         "scene": request.scene,
     }
     text = (
         "Critique the rendered slot scene shown in the image and return corrective "
-        "edits.\n"
+        "edits that RECONCILE each element to its planned region.\n"
         f"Just-added element (judge it hardest): {request.target_handle}\n"
         f"Editable look-behind window (you may ONLY target these handles): "
         f"{request.window}\n"
         f"Regenerations left in budget: {request.regen_budget_left}\n"
         f"Theme/intent: {request.theme}\n\n"
-        f"Scene context (JSON):\n{json.dumps(context, indent=2)}"
+        f"Layout plan + scene context (JSON):\n{json.dumps(context, indent=2)}"
     )
     return [
         SystemMessage(CRITIC_SYSTEM_PROMPT),
