@@ -40,3 +40,8 @@ def test_scene_plan_for_role_uses_alias():
                      template_version=1, roles={"reels": pr})
     assert plan.for_role("reel_frame") is pr
     assert plan.for_role("nope") is None
+
+
+def test_scale_to_region_is_width_limited_for_wide_box():
+    # a 512x512 texture into a 400x900 box -> limited by width: 400/512
+    assert scale_to_region((512, 512), (400, 900)) == 400 / 512

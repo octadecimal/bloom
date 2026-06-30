@@ -366,3 +366,19 @@ async def test_loop_without_plan_is_unchanged():
     await run_compose([el], "pirate", deps)   # no plan -> agent coords preserved
     assert (deps.placed[0].x, deps.placed[0].y) == (10, 10)
     assert deps.requests[0].plan == {}
+
+
+@pytest.mark.asyncio
+async def test_plan_context_and_apply_agree_on_handle_role_resolution():
+    """The handle the critic is keyed by (slot-or-role) and the role used to fetch
+    its planned region must stay consistent between place and critique."""
+    plan = bind(GddIntent())
+    deps = _RecordingDeps()
+    # slot and role differ: handle should be the slot, region resolved via role.
+    el = BuildElement(description="x", slot="reel_frame", role="reels")
+    await run_compose([el], "pirate", deps, plan=plan)
+    placed = deps.placed[0]
+    pr = plan.for_role("reels")
+    assert (placed.x, placed.y) == (pr.x, pr.y)          # _apply_plan resolved via role
+    assert "reel_frame" in deps.requests[0].plan          # _plan_context keyed by slot
+    assert deps.requests[0].plan["reel_frame"]["w"] == pr.region_w

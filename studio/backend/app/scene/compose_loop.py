@@ -60,7 +60,6 @@ class BuildElement(BaseModel):
     anchor_y: float = 0.5
     fit: str = "none"
     z_index: int = 0
-    scale: float | None = None
     region_w: int | None = None
     region_h: int | None = None
 
@@ -92,12 +91,22 @@ class ComposeDeps(Protocol):
     async def out_of_frame(self) -> list[FrameCorrection]: ...
 
 
+def _handle_of(element: BuildElement) -> str:
+    """The stable scene handle for an element: its slot, else its role."""
+    return element.slot or element.role
+
+
+def _role_of(element: BuildElement) -> str:
+    """The canonical-layout role for an element: its role, else its slot."""
+    return element.role or element.slot
+
+
 def _apply_plan(element: BuildElement, plan: "ScenePlan | None") -> BuildElement:
     """Overwrite an element's geometry from its planned role region. The plan owns
     geometry; the agent only chose content + role. No-op when no plan or no role."""
     if plan is None:
         return element
-    pr = plan.for_role(element.role or element.slot)
+    pr = plan.for_role(_role_of(element))
     if pr is None:
         return element
     return element.model_copy(update={
@@ -112,7 +121,7 @@ def _plan_context(plan: "ScenePlan | None", window: list[str],
     """Map in-window handles to their intended region for the critic."""
     if plan is None:
         return {}
-    role_by_handle = {(e.slot or e.role): (e.role or e.slot) for e in elements}
+    role_by_handle = {_handle_of(e): _role_of(e) for e in elements}
     out: dict = {}
     for handle in window:
         pr = plan.for_role(role_by_handle.get(handle, handle))
