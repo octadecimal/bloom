@@ -84,6 +84,20 @@ describe('PixiRenderer.createObject', () => {
   });
 });
 
+describe('PixiRenderer.scaleOf', () => {
+  it('reports a Sprite scale set via setProp', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    r.createObject('s', 'Sprite');
+    r.setProp('s', 'scale', { x: 1.5, y: 2 });
+    expect(r.scaleOf('s')).toEqual({ x: 1.5, y: 2 });
+  });
+
+  it('returns null for an unknown id', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    expect(r.scaleOf('nope')).toBeNull();
+  });
+});
+
 describe('PixiRenderer.applyLabel', () => {
   function rendererWithStage() {
     const r = new PixiRenderer(document.createElement('div'));
