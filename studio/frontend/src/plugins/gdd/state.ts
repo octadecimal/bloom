@@ -14,6 +14,7 @@ export interface IGddDoc {
   order: number;
   body: string;
   status: GddStatus;
+  data: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }

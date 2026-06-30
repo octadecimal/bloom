@@ -1,6 +1,7 @@
-import { gddSlice } from './state';
-import { getGddDocs } from './restClient';
+import { gddSlice, type IGddDoc } from './state';
+import { getGddDocs, setGddFields } from './restClient';
 import { gddSock } from './socketClient';
+import { upsertDoc } from './reducers';
 
 export function initGdd(): void {
   gddSock().connect();
@@ -27,4 +28,11 @@ export async function openGameDocs(gameId: string): Promise<void> {
   } catch {
     gddSlice().docsStatus.set('error');
   }
+}
+
+export async function saveIntentFields(gameId: string, aspect: string, fields: Record<string, unknown>): Promise<{ rebuilt: boolean; warnings: string[] }> {
+  const res = await setGddFields(gameId, aspect, fields);
+  const s = gddSlice();
+  s.docs.set(upsertDoc(s.docs.get({ noproxy: true }) as IGddDoc[], res.doc));
+  return { rebuilt: res.rebuilt, warnings: res.warnings };
 }

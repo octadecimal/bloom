@@ -16,6 +16,7 @@ const doc = (aspect: string, order: number, status: IGddDoc['status']): IGddDoc 
   order,
   body: `# ${aspect}`,
   status,
+  data: {},
   createdAt: '',
   updatedAt: '',
 });
