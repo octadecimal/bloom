@@ -285,3 +285,84 @@ async def test_per_element_edit_cap_refuses_further_edits():
     assert result.edits_applied == 2           # capped
     assert result.rejected >= 1
     assert any("edit cap" in n for n in result.notes)
+
+
+# ---------------------------------------------------------------------------
+# Task 8: plan-aware compose loop
+# ---------------------------------------------------------------------------
+
+from app.scene.asset_critic import AssetVerdict
+from app.scene.critic import CritiqueRequest
+from app.scene.layout.bind import GddIntent, bind
+
+
+class _RecordingDeps:
+    """Minimal ComposeDeps fake that records placed elements + critic requests."""
+
+    def __init__(self):
+        self.placed: list[BuildElement] = []
+        self.requests: list[CritiqueRequest] = []
+
+    async def place(self, element):
+        self.placed.append(element)
+        return "ok"
+
+    async def placed_handles(self):
+        return [e.slot or e.role for e in self.placed]
+
+    async def scene_context(self):
+        return {"elements": []}
+
+    async def render_scene(self):
+        return b"\x89PNG"
+
+    async def critique_asset(self, target_handle, attempt=0):
+        return AssetVerdict(ok=True, action="keep", reason="ok")
+
+    async def critique(self, request):
+        self.requests.append(request)
+        return Critique(done=True, edits=[])
+
+    async def adjust(self, handle, params):
+        return "ok"
+
+    async def regenerate(self, handle):
+        return "ok"
+
+    async def out_of_frame(self):
+        return []
+
+
+@pytest.mark.asyncio
+async def test_loop_overwrites_geometry_from_plan():
+    plan = bind(GddIntent(focal_emphasis="reels"))
+    deps = _RecordingDeps()
+    el = BuildElement(description="ornate reel frame", slot="reels", role="reels",
+                      x=10, y=10, fit="none")   # agent-guessed coords, should be ignored
+    await run_compose([el], "pirate", deps, plan=plan)
+    placed = deps.placed[0]
+    pr = plan.for_role("reels")
+    assert (placed.x, placed.y) == (pr.x, pr.y)        # plan position, not (10,10)
+    assert placed.fit == pr.fit
+    assert (placed.region_w, placed.region_h) == (pr.region_w, pr.region_h)
+    assert placed.z_index == pr.z
+
+
+@pytest.mark.asyncio
+async def test_loop_passes_plan_region_into_critique():
+    plan = bind(GddIntent())
+    deps = _RecordingDeps()
+    el = BuildElement(description="x", slot="reels", role="reels")
+    await run_compose([el], "pirate", deps, plan=plan)
+    req = deps.requests[0]
+    assert "reels" in req.plan
+    assert req.plan["reels"]["w"] == plan.for_role("reels").region_w
+
+
+@pytest.mark.asyncio
+async def test_loop_without_plan_is_unchanged():
+    deps = _RecordingDeps()
+    el = BuildElement(description="x", slot="reels", role="reels", x=10, y=10)
+    await run_compose([el], "pirate", deps)   # no plan -> agent coords preserved
+    assert (deps.placed[0].x, deps.placed[0].y) == (10, 10)
+    assert deps.requests[0].plan == {}
