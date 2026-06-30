@@ -28,53 +28,53 @@ three structural causes that compound — each upstream stage starves the one be
 2. **The critic judges a proxy, not the real frame.** Post-#120 the critic sees a
    Pillow **layout-only** composite (position/anchor/scale/z-order/background) — no
    filters, blends, masks, glows, particles, or responsive scaling. `done: true`
-   certifies *geometry is plausible*, not that the scene looks premium. (Addressed
+   certifies _geometry is plausible_, not that the scene looks premium. (Addressed
    by sub-project B, out of scope here — but see the synergy note in the design.)
 
 3. **Quality is reactive, plan-less, and budget-starved.** There is no up-front
    layout. It is place-then-nudge with a 3-element sliding window, 3 passes, and 5
    total regenerations per build (`compose_loop.py`). Premium composition is a
-   *global* property; a sliding-window nudger structurally cannot reason about it.
-   PR #120's own spec defers the fix: *"an up-front slot layout plan / reserved
-   region map that the critic reconciles each element against."* That deferred
+   _global_ property; a sliding-window nudger structurally cannot reason about it.
+   PR #120's own spec defers the fix: _"an up-front slot layout plan / reserved
+   region map that the critic reconciles each element against."_ That deferred
    planner is the premium-quality floor, and it was never built.
 
 ## Goals
 
-- A **Scene Blueprint**: high-level art-direction + layout *intent* persisted in the
+- A **Scene Blueprint**: high-level art-direction + layout _intent_ persisted in the
   GDD as rich, human-readable, AI-authorable prose (plus three light enums) — **no
   geometry, no coordinates, ever**.
 - A **canonical layout template in code** (the reusable slot anatomy with default
-  regions) that the intent *selects and nudges*, producing a concrete per-game
+  regions) that the intent _selects and nudges_, producing a concrete per-game
   **plan** the placer fills and the critic reconciles against.
 - The generator's prompts and the placer's coordinates both **consume** the GDD
   intent (closing cause 1); the critic **reconciles each element to its planned
   region** instead of re-composing from remembered principles (closing cause 3).
 - **Two authoring modes through one pipeline:** a fully AI-generated scene (no human
   touch) and human-in-the-loop, both feeding the same intent → bind → realize flow.
-- **Full reproducibility** of any built scene from persisted inputs — *without*
+- **Full reproducibility** of any built scene from persisted inputs — _without_
   putting pixels in the GDD.
 
 ## Non-goals
 
 - **Real-frame vision** (critic grading the actual engine frame with effects /
   responsive scaling). That is **sub-project B**, additive on top of this work — the
-  plan-reconcile critic here is a *geometry* judgment, which the existing layout-only
+  plan-reconcile critic here is a _geometry_ judgment, which the existing layout-only
   compositor already renders faithfully, so A needs no real-frame capture to be
   correct.
 - **Raising the per-asset quality floor** (negative prompts, `cfg`/steps tuning,
   upscaling, mandatory standalone asset critic). That is **sub-project C**. This spec
-  *feeds* it (the generator now reads art direction + role) but does not build it.
+  _feeds_ it (the generator now reads art direction + role) but does not build it.
 - **Pixel positions in the GDD.** The GDD holds intent only; geometry lives in code,
   realized scenes + overrides + seeds carry reproducibility.
 
 ## Wider roadmap (context, not built here)
 
-| Sub-project | Scope | This spec |
-| --- | --- | --- |
-| **A — Scene Blueprint** | GDD intent → bind → plan → plan-driven placer → reconcile-to-plan critic → `rebuild_scene` spine + HITL surfaces | **this spec** |
-| B — Real-frame vision | critic grades the real engine frame, not the Pillow proxy | follow-on spec |
-| C — Asset quality floor | negatives, cfg/steps, role-aware prompts, upscale, mandatory asset critic | follow-on spec |
+| Sub-project             | Scope                                                                                                            | This spec      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------- |
+| **A — Scene Blueprint** | GDD intent → bind → plan → plan-driven placer → reconcile-to-plan critic → `rebuild_scene` spine + HITL surfaces | **this spec**  |
+| B — Real-frame vision   | critic grades the real engine frame, not the Pillow proxy                                                        | follow-on spec |
+| C — Asset quality floor | negatives, cfg/steps, role-aware prompts, upscale, mandatory asset critic                                        | follow-on spec |
 
 ## Architecture — three layers, one job each
 
@@ -93,8 +93,8 @@ Layer 3  Realized scene + asset seeds (PERSISTED) ◄──── place into reg
           GameSceneStore sprites + asset Generation.seed  = the reproducible artifact
 ```
 
-- **Layer 1 — intent, in the GDD.** Rich prose drives *art generation*; three enums
-  drive *geometry*. The design-router authors both from one user prompt (so
+- **Layer 1 — intent, in the GDD.** Rich prose drives _art generation_; three enums
+  drive _geometry_. The design-router authors both from one user prompt (so
   fully-AI sets them together); a human can edit either.
 - **Layer 2 — geometry, in code.** The precision that the placer and critic must
   agree on lives where precision belongs: versioned, testable code.
@@ -106,17 +106,19 @@ template into a concrete per-game `ScenePlan`.
 
 ## Layer 1 — GDD intent fields
 
-Enrich existing fields (finally *consumed*) and add three light enums. Schema lives
+Enrich existing fields (finally _consumed_) and add three light enums. Schema lives
 in `studio/backend/app/gdd/schemas.py`; the system auto-adapts (catalog, router
 prompt, REST, frontend) — see the GDD extensibility notes.
 
 **`theme` aspect** (enrich, consume):
-- `art_direction` (text, *exists*) — now consumed. Palette, materials, lighting,
+
+- `art_direction` (text, _exists_) — now consumed. Palette, materials, lighting,
   mood, motifs as rich prose.
-- `tone`, `setting` (text/enum, *exist*) — folded into prompt context.
+- `tone`, `setting` (text/enum, _exist_) — folded into prompt context.
 
 **`ui-ux` aspect** (enrich + add):
-- `layout` (text, *exists*) — rich prose layout intent.
+
+- `layout` (text, _exists_) — rich prose layout intent.
 - `orientation` (enum: `portrait` | `landscape`) — **new**; selects the template
   variant + canvas.
 - `focal_emphasis` (enum: `reels` | `logo` | `balanced`) — **new**.
@@ -166,13 +168,13 @@ bind(gdd_intent, orientation, overrides) -> ScenePlan
 
 ## Placer — role-driven, not coordinate-driven
 
-The agent's job shifts from *"pick x, y"* to *"pick the role"*; the plan supplies
+The agent's job shifts from _"pick x, y"_ to _"pick the role"_; the plan supplies
 geometry. In `studio/backend/app/agent_tools.py` + the compose loop:
 
 - **`compose_scene` becomes plan-driven.** Internally `bind(...) -> ScenePlan`, then
   iterate planned roles in z-order: generate each asset (prompt = art-direction prose
-  + the role's snippet) and place it into **its planned region** via the existing
-  `build_sprite_ops` / fit math. The agent no longer hand-places in the compose path.
+  - the role's snippet) and place it into **its planned region** via the existing
+    `build_sprite_ops` / fit math. The agent no longer hand-places in the compose path.
 - **`generate_and_place` gains a `role`.** With a role, it places into that role's
   planned region; raw `x`/`y` remains an escape hatch (and for HITL nudging).
 - **`adjust_element` / `add_sprite`** unchanged — fine control + the manual-nudge
@@ -186,19 +188,19 @@ canvas instead of guessing.
 In `studio/backend/app/scene/critic.py` + `compose_loop.py`:
 
 - The critic receives **each element's intended region** (the `ScenePlan`) in context
-  and judges a *bounded* question: *is this element in its planned region, at the
-  right scale, without colliding?* — emitting the same `move`/`scale`/`reorder`/
+  and judges a _bounded_ question: _is this element in its planned region, at the
+  right scale, without colliding?_ — emitting the same `move`/`scale`/`reorder`/
   `regenerate` edits, now as **deviations from plan**.
 - The system prompt's remembered "canonical slot anatomy" prose is **replaced** by
   the concrete per-role plan passed in context. `CritiqueRequest` gains the
   `ScenePlan`.
 - Because each element now has an **absolute target**, the tight look-behind window /
-  pass / regen budgets stop hurting — they bound *correction*, not *search*. Existing
+  pass / regen budgets stop hurting — they bound _correction_, not _search_. Existing
   bounds are kept but reinterpreted.
 
-**Synergy with sub-project B:** reconcile-to-plan is a *geometry* judgment — exactly
+**Synergy with sub-project B:** reconcile-to-plan is a _geometry_ judgment — exactly
 what the layout-only compositor renders faithfully — so A is correct on the proxy we
-already have. B then *adds* the art/effects/quality judgment on top.
+already have. B then _adds_ the art/effects/quality judgment on top.
 
 ## Human-in-the-loop — four surfaces, one spine
 
@@ -213,22 +215,22 @@ rebuild_scene(game_id):
 This single deterministic entry point is what keeps four surfaces from becoming four
 code paths.
 
-1. **Chat-driven edits** *(phase A1; rides existing infra).* Human tells the agent
+1. **Chat-driven edits** _(phase A1; rides existing infra)._ Human tells the agent
    ("make the framing ornate", "logo as a banner"); the design-router rewrites GDD
    intent via `set_gdd_fields`, then calls `rebuild_scene`. Adds one router branch.
-2. **Direct GDD field editing** *(phase A2).* Turn the read-only `GddViewerPane` into
+2. **Direct GDD field editing** _(phase A2)._ Turn the read-only `GddViewerPane` into
    an editor for the intent fields (textareas for prose, selects for the three
    enums). Save → existing `PUT /games/{id}/gdd/{aspect}` (`set_fields`) → emits
    `gdd_doc_updated` → triggers `rebuild_scene`. Reuses REST + websocket; no new
    persistence.
-3. **Scene review / approval checkpoint** *(phase A3).* `rebuild_scene` pauses and
+3. **Scene review / approval checkpoint** _(phase A3)._ `rebuild_scene` pauses and
    surfaces the composed frame + proposed per-element edits for **approve / reject /
    nudge** before finalizing. **Reuses the existing LangGraph `interrupt()` approval
    gate** (the destructive-delete gate + GDD question-interrupt use it). Approve →
    finalize; reject → discard; nudge → apply overrides then continue.
-4. **Manual region nudge** *(phase A3; most UI).* Human drags a role's region in the
+4. **Manual region nudge** _(phase A3; most UI)._ Human drags a role's region in the
    scene; the delta persists in a small **per-game region-override store**
-   (`role → override`). Overrides apply *after* `bind` (the final bind layer), so a
+   (`role → override`). Overrides apply _after_ `bind` (the final bind layer), so a
    nudge survives future rebuilds and never fights the plan.
 
 ## Reproducibility
@@ -244,7 +246,7 @@ GDD:
 
 `rebuild_scene` is deterministic given these: the bind is pure; reproduction
 **reuses stored seeds** rather than drawing fresh; the critic runs against replay
-cassettes. The realized scene doc stays the concrete artifact but is now *derivable*.
+cassettes. The realized scene doc stays the concrete artifact but is now _derivable_.
 
 ## Testing (TDD-first, per repo norms)
 
@@ -261,12 +263,12 @@ cassettes. The realized scene doc stays the concrete artifact but is now *deriva
 
 ## Phase breakdown (each a clean stop/ship point)
 
-| Phase | Deliverable | Tests |
-| --- | --- | --- |
-| **A1 — engine** | L1 fields (3 enums + consume prose) · L2 template module · deterministic `bind` → `ScenePlan` · plan-driven `compose_scene` / `generate_and_place` · critic reframe to reconcile-to-plan · `rebuild_scene` spine · Surface 1 (chat re-trigger) | unit (template/bind/plan) + backend e2e (rebuild + reconcile + reproducibility) |
-| **A2 — intent editing** | editable GDD pane (Surface 2) → rebuild trigger | Playwright: edit → save → reflow |
-| **A3 — review + nudge** | approval checkpoint via `interrupt()` (Surface 3) · region-override store + drag UI (Surface 4) | Playwright: pause/approve; nudge → persist → survive rebuild |
-| **A4 — optional** | bounded `LLMLayoutRefiner` behind the `LayoutRefiner` seam | unit (bounds/clamp) + backend e2e |
+| Phase                   | Deliverable                                                                                                                                                                                                                                    | Tests                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **A1 — engine**         | L1 fields (3 enums + consume prose) · L2 template module · deterministic `bind` → `ScenePlan` · plan-driven `compose_scene` / `generate_and_place` · critic reframe to reconcile-to-plan · `rebuild_scene` spine · Surface 1 (chat re-trigger) | unit (template/bind/plan) + backend e2e (rebuild + reconcile + reproducibility) |
+| **A2 — intent editing** | editable GDD pane (Surface 2) → rebuild trigger                                                                                                                                                                                                | Playwright: edit → save → reflow                                                |
+| **A3 — review + nudge** | approval checkpoint via `interrupt()` (Surface 3) · region-override store + drag UI (Surface 4)                                                                                                                                                | Playwright: pause/approve; nudge → persist → survive rebuild                    |
+| **A4 — optional**       | bounded `LLMLayoutRefiner` behind the `LayoutRefiner` seam                                                                                                                                                                                     | unit (bounds/clamp) + backend e2e                                               |
 
 ## Risks
 

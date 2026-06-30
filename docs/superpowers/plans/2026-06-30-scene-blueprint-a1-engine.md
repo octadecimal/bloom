@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make scene composition plan-driven — GDD art-direction/layout *intent* is bound onto a code-side canonical layout template to produce a concrete per-game `ScenePlan` that supplies every element's geometry, and the vision critic reconciles each element to its planned region instead of re-composing from remembered principles.
+**Goal:** Make scene composition plan-driven — GDD art-direction/layout _intent_ is bound onto a code-side canonical layout template to produce a concrete per-game `ScenePlan` that supplies every element's geometry, and the vision critic reconciles each element to its planned region instead of re-composing from remembered principles.
 
 **Architecture:** Three new pure modules under `studio/backend/app/scene/layout/` (`template.py`, `plan.py`, `bind.py`, `intent.py`) turn GDD intent + orientation into a typed `ScenePlan`. The existing `compose_scene` / `run_compose` loop stops trusting agent coordinates: it overwrites each placed element's geometry from the plan (position/anchor/scale-to-region/z) and passes each element's intended region into the critic. A new `rebuild_scene` agent verb re-runs the whole bind→place→reconcile flow from persisted GDD intent, and the design-router calls it after intent edits (HITL Surface 1, chat-driven).
 
@@ -26,10 +26,12 @@
 Add the three geometry-driving enums to the `ui-ux` aspect so the design-router can set them and `read_intent` (Task 5) can read them. The GDD schema is permissive and auto-propagates to the catalog, router prompt, REST, and frontend — only the schema dict changes.
 
 **Files:**
+
 - Modify: `studio/backend/app/gdd/schemas.py:87-93` (the `"ui-ux"` field list)
 - Test: `studio/backend/tests/test_gdd_schema_intent.py` (create)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `ASPECT_SCHEMAS["ui-ux"]` now contains `Field("orientation", ...)`, `Field("focal_emphasis", ...)`, `Field("framing_density", ...)`; `field_catalog()["ui-ux"]` lists them with their enums.
 
@@ -107,11 +109,13 @@ git commit -m "feat(gdd): add orientation/focal_emphasis/framing_density intent 
 The reusable slot anatomy as normalized 0–1 regions, two orientation variants, versioned. Pure data + pure functions.
 
 **Files:**
+
 - Create: `studio/backend/app/scene/layout/__init__.py`
 - Create: `studio/backend/app/scene/layout/template.py`
 - Test: `studio/backend/tests/test_layout_template.py` (create)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `TEMPLATE_VERSION: int`
@@ -267,10 +271,12 @@ git commit -m "feat(scene): add canonical layout template (normalized regions, v
 Resolve normalized regions to a concrete per-game plan in pixels, plus the role-alias map (so agent roles like `reel_frame` map to canonical `reels`) and the scale-to-region helper used at placement time.
 
 **Files:**
+
 - Create: `studio/backend/app/scene/layout/plan.py`
 - Test: `studio/backend/tests/test_layout_plan.py` (create)
 
 **Interfaces:**
+
 - Consumes: `template.RoleRegion`.
 - Produces:
   - `PlannedRole` frozen dataclass: `role:str, x:float, y:float, anchor_x:float, anchor_y:float, z:int, fit:str, region_w:int, region_h:int, prompt_snippet:str=""`
@@ -436,10 +442,12 @@ git commit -m "feat(scene): add ScenePlan types, role aliases, region resolution
 The keystone. `bind` selects the orientation template, applies the three enum transforms deterministically, resolves to pixels, attaches per-role prompt snippets, and runs an optional `LayoutRefiner` (no-op default in A1). `GddIntent` is the plain input struct (Task 5 fills it from the GDD store).
 
 **Files:**
+
 - Create: `studio/backend/app/scene/layout/bind.py`
 - Test: `studio/backend/tests/test_layout_bind.py` (create)
 
 **Interfaces:**
+
 - Consumes: `template.{template_for,canvas_for,TEMPLATE_VERSION,REELS,LOGO,...}`, `plan.{ScenePlan,PlannedRole,resolve_region}`.
 - Produces:
   - `GddIntent` frozen dataclass: `orientation:str="landscape", focal_emphasis:str="balanced", framing_density:str="moderate", art_direction:str="", tone:str="", setting:str="", layout:str="", role_snippets:dict[str,str]=field(default_factory=dict)`
@@ -597,10 +605,12 @@ git commit -m "feat(scene): add deterministic bind step + LayoutRefiner seam"
 Read the persisted GDD docs into a `GddIntent`, distilling per-role prompt snippets from the art direction. Async, store-backed; tested with a tiny fake store.
 
 **Files:**
+
 - Create: `studio/backend/app/scene/layout/intent.py`
 - Test: `studio/backend/tests/test_layout_intent.py` (create)
 
 **Interfaces:**
+
 - Consumes: `bind.GddIntent`; a `gdd_store` with `async get_doc(game_id, aspect) -> doc|None` where `doc.data` is a dict (matches `app.gdd.store.GddStore.get_doc`).
 - Produces:
   - `async read_intent(gdd_store, game_id: str) -> GddIntent`
@@ -735,15 +745,17 @@ git commit -m "feat(scene): read GDD intent into GddIntent for the bind"
 
 ### Task 6: Thread an explicit region/scale through the placement path
 
-The plan sizes each non-background element to its region box. The current placement math (`_scale_for_fit`) only knows `cover`/`contain`/`none` against the *whole canvas*. Add a `fit="region"` mode plus a `region` box so a sprite can be scaled to fit inside its planned box. Thread it through `build_sprite_ops` → `_place_in_scene` → `generate_and_place` → `BuildElement` (the loop sets these; the agent never does).
+The plan sizes each non-background element to its region box. The current placement math (`_scale_for_fit`) only knows `cover`/`contain`/`none` against the _whole canvas_. Add a `fit="region"` mode plus a `region` box so a sprite can be scaled to fit inside its planned box. Thread it through `build_sprite_ops` → `_place_in_scene` → `generate_and_place` → `BuildElement` (the loop sets these; the agent never does).
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/compose.py:12-21` (`_scale_for_fit`), `:24-51` (`build_sprite_ops` signature + scale line)
 - Modify: `studio/backend/app/agent_tools.py:102-138` (`_place_in_scene`), `:190-241` (`generate_and_place`)
 - Modify: `studio/backend/app/scene/compose_loop.py:45-61` (`BuildElement`)
 - Test: `studio/backend/tests/test_build_sprite_region.py` (create)
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `build_sprite_ops(..., region: tuple[int,int] | None = None)` honoring `fit="region"`; `BuildElement` gains `scale: float | None = None`, `region_w: int | None = None`, `region_h: int | None = None`; `generate_and_place` and `_place_in_scene` accept and forward `region_w`/`region_h`.
 
@@ -864,10 +876,12 @@ git commit -m "feat(scene): add region fit-mode and thread it through placement"
 Give the critic each element's intended region and replace the remembered "slot anatomy" prose with the concrete plan. Pure changes to the request shape + prompt builder.
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/critic.py:53-72` (`CritiqueRequest`), `:102-133` (`CRITIC_SYSTEM_PROMPT`), `:141-172` (`build_critic_messages`)
 - Test: `studio/backend/tests/test_scene_critic.py` (extend — append new tests)
 
 **Interfaces:**
+
 - Consumes: nothing new (plan is passed as a plain dict to keep the critic decoupled from `layout.plan` types and replay-serializable).
 - Produces: `CritiqueRequest` gains `plan: dict = field(default_factory=dict)` where `plan` maps `handle -> {role, x, y, w, h, z}` (the intended region for each placed handle). `build_critic_messages` includes it; `CRITIC_SYSTEM_PROMPT` instructs reconcile-to-plan.
 
@@ -994,10 +1008,12 @@ git commit -m "feat(scene): critic reconciles each element to its planned region
 `run_compose` learns about the plan: before placing each element it overwrites the element's geometry from the plan (position/anchor/region/z), and it passes the per-handle intended regions into every `CritiqueRequest`. Pure loop change, tested with a fake `ComposeDeps`.
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/compose_loop.py:91-160` (`run_compose` signature + body)
 - Test: `studio/backend/tests/test_compose_loop.py` (extend — append new tests; reuse existing fakes if present, else the fake below)
 
 **Interfaces:**
+
 - Consumes: `app.scene.layout.plan.ScenePlan`.
 - Produces: `run_compose(elements, theme, deps, bounds=ComposeBounds(), plan: ScenePlan | None = None) -> ComposeResult`. When `plan` is given: (a) each `BuildElement` is rewritten so its `x/y/anchor_x/anchor_y/z_index/fit/region_w/region_h` come from `plan.for_role(element.role or element.slot)`; (b) each `CritiqueRequest.plan` carries `{handle: {role,x,y,w,h,z}}` for handles in the window.
 
@@ -1180,6 +1196,7 @@ git commit -m "feat(scene): compose loop places into plan regions and feeds crit
 Make the agent path plan-driven end-to-end: `compose_scene` reads GDD intent, binds a plan, ensures the Root at the plan's canvas, and runs the loop with the plan. Add a `rebuild_scene` verb that re-runs the whole flow from persisted intent (HITL Surface 1), and have the design-router call it after intent edits.
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py:533-562` (`build_compose_scene_tool`), and add `build_rebuild_scene_tool` nearby
 - Modify: `studio/backend/app/scene/document.py` — none; reuse `empty_document` already imported
 - Modify: `studio/backend/app/gdd/models.py` — add `"rebuild_scene"` to `GDD_TOOL_NAMES` only if the router needs it in its toolset (see Step 3)
@@ -1188,6 +1205,7 @@ Make the agent path plan-driven end-to-end: `compose_scene` reads GDD intent, bi
 - Test: `studio/backend/tests/test_compose_scene_bind.py` (create)
 
 **Interfaces:**
+
 - Consumes: `layout.intent.read_intent`, `layout.bind.bind`, `layout.plan.ScenePlan`, existing `_SceneComposeDeps`, `run_compose`, `ctx.scene_hub.ensure_root`.
 - Produces:
   - `compose_scene(elements, theme="")` now binds a plan from `ctx.gdd_store` and calls `run_compose(..., plan=plan)`.
@@ -1356,11 +1374,13 @@ git commit -m "feat(scene): bind plan in compose_scene, add rebuild_scene, route
 Prove the integration path end-to-end against a replay backend: a build places elements into their planned regions, the critic reconciles, and a second identical bind produces an equivalent plan (reproducibility of geometry). This is the authoritative backend contract for A1.
 
 **Files:**
+
 - Create: `studio/backend/tests/e2e/test_scene_blueprint_compose.py`
 - Create (if missing): `studio/backend/tests/fixtures/replay/critic/default.json` (a `done:true` cassette so the loop converges in one pass — only create if not already present)
 - Test: the file above
 
 **Interfaces:**
+
 - Consumes: the real `run_compose`, `bind`, `_SceneComposeDeps` (or a thin real-store harness mirroring the existing `tests/e2e/test_compose_loop.py` setup).
 - Produces: passing e2e asserting plan geometry + reproducibility.
 
@@ -1441,9 +1461,7 @@ Expected: FAIL — the integration test fails (no `compose_harness` fixture yet)
 - Ensure `studio/backend/tests/fixtures/replay/critic/default.json` exists with a single-pass converge cassette (only create if missing):
 
 ```json
-[
-  { "done": true, "edits": [] }
-]
+[{ "done": true, "edits": [] }]
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1464,19 +1482,19 @@ git commit -m "test(scene): backend e2e for plan-driven compose + reproducibilit
 
 **1. Spec coverage**
 
-| Spec element | Task |
-| --- | --- |
-| L1 GDD intent: 3 enums + consume prose | Task 1 (enums), Task 5 (read + prose) |
-| L2 canonical template in code, normalized regions, versioned | Task 2 |
-| ScenePlan + region resolution | Task 3 |
-| Bind step (enum transforms) + `LayoutRefiner` no-op seam | Task 4 |
-| Generator prompts consume art direction | Task 5 (`prompt_for_role`) — consumed by `_SceneComposeDeps` via role snippets/intent; full per-asset prompt augmentation is sub-project C |
-| Plan-driven placer (agent stops hand-placing) | Task 6 (region fit) + Task 8 (geometry overwrite) + Task 9 (compose_scene binds) |
-| Critic reconciles to plan; remembered anatomy replaced | Task 7 + Task 8 (plan threaded) |
-| `rebuild_scene` spine | Task 9 |
-| HITL Surface 1 (chat re-trigger) | Task 9 (router branch) |
-| Reproducibility (TEMPLATE_VERSION pinned, deterministic bind) | Task 3/4 (version in plan) + Task 10 (reproducibility e2e) |
-| Testing: unit + backend replay e2e | Tasks 1–9 unit, Task 10 e2e |
+| Spec element                                                  | Task                                                                                                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| L1 GDD intent: 3 enums + consume prose                        | Task 1 (enums), Task 5 (read + prose)                                                                                                      |
+| L2 canonical template in code, normalized regions, versioned  | Task 2                                                                                                                                     |
+| ScenePlan + region resolution                                 | Task 3                                                                                                                                     |
+| Bind step (enum transforms) + `LayoutRefiner` no-op seam      | Task 4                                                                                                                                     |
+| Generator prompts consume art direction                       | Task 5 (`prompt_for_role`) — consumed by `_SceneComposeDeps` via role snippets/intent; full per-asset prompt augmentation is sub-project C |
+| Plan-driven placer (agent stops hand-placing)                 | Task 6 (region fit) + Task 8 (geometry overwrite) + Task 9 (compose_scene binds)                                                           |
+| Critic reconciles to plan; remembered anatomy replaced        | Task 7 + Task 8 (plan threaded)                                                                                                            |
+| `rebuild_scene` spine                                         | Task 9                                                                                                                                     |
+| HITL Surface 1 (chat re-trigger)                              | Task 9 (router branch)                                                                                                                     |
+| Reproducibility (TEMPLATE_VERSION pinned, deterministic bind) | Task 3/4 (version in plan) + Task 10 (reproducibility e2e)                                                                                 |
+| Testing: unit + backend replay e2e                            | Tasks 1–9 unit, Task 10 e2e                                                                                                                |
 
 Out of A1 scope (correctly deferred per spec): real-frame vision (B); asset-floor prompt/cfg/upscale/mandatory asset critic (C); HITL Surfaces 2–4 (A2/A3); LLM layout refiner (A4 — seam present, impl deferred).
 
