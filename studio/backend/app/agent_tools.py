@@ -583,25 +583,30 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+async def rebuild_scene_core(ctx: ToolContext, theme: str = "") -> str:
+    """Re-run bind -> place -> reconcile for every role already in the scene,
+    using the CURRENT persisted GDD intent. Shared by the agent tool and the
+    REST intent-save path (room_id is unused, so a REST caller may pass "")."""
+    if ctx.scene_critic is None or ctx.asset_critic is None:
+        return "Rebuild unavailable: no critic wired."
+    plan = await _plan_for_game(ctx)
+    if ctx.scene_hub is not None:
+        await ctx.scene_hub.ensure_root(ctx.game_id, plan.canvas)
+    deps = _SceneComposeDeps(ctx)
+    handles = await deps.placed_handles()
+    if not handles:
+        return "Nothing to rebuild: the scene is empty."
+    elements = [BuildElement(slot=h, role=h) for h in handles]
+    result = await run_compose(elements, theme, deps, plan=plan)
+    return "Rebuilt scene from current design intent. " + format_compose_summary(result)
+
+
 def build_rebuild_scene_tool(ctx: ToolContext) -> BaseTool:
     async def rebuild_scene(theme: str = "") -> str:
         """Re-run bind -> place -> reconcile for every role already in the scene,
         using the CURRENT persisted GDD intent. Use after the art direction or
         layout intent changes so the live scene reflows to the new plan."""
-        if ctx.scene_critic is None or ctx.asset_critic is None:
-            return "Rebuild unavailable: no critic wired."
-        plan = await _plan_for_game(ctx)
-        if ctx.scene_hub is not None:
-            await ctx.scene_hub.ensure_root(ctx.game_id, plan.canvas)
-        deps = _SceneComposeDeps(ctx)
-        handles = await deps.placed_handles()
-        if not handles:
-            return "Nothing to rebuild: the scene is empty."
-        # Re-place each existing role from the plan; reuse keeps the same art
-        # (generate_and_place reuses a slot that already has a selected image).
-        elements = [BuildElement(slot=h, role=h) for h in handles]
-        result = await run_compose(elements, theme, deps, plan=plan)
-        return "Rebuilt scene from current design intent. " + format_compose_summary(result)
+        return await rebuild_scene_core(ctx, theme)
 
     return StructuredTool.from_function(
         coroutine=rebuild_scene, name="rebuild_scene",
