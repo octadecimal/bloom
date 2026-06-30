@@ -10,7 +10,7 @@ def test_router_spec_binds_gdd_tools():
     assert set(spec.tools) == GDD_TOOL_NAMES | {
         "realize_symbol", "generate_asset", "add_sprite", "list_assets",
         "generate_and_place", "regenerate_element", "read_scene", "adjust_element",
-        "compose_scene",
+        "compose_scene", "rebuild_scene",
     }
     assert spec.args == []
 
