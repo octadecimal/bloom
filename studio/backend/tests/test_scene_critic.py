@@ -190,7 +190,7 @@ def test_critic_system_prompt_is_slot_aware():
     from app.scene.critic import CRITIC_SYSTEM_PROMPT
 
     low = CRITIC_SYSTEM_PROMPT.lower()
-    assert "reel" in low  # slot anatomy
+    assert "slot" in low  # slot-game context
     assert "transform" in low  # transform-first discipline
     assert "window" in low  # look-behind constraint
 
@@ -218,3 +218,32 @@ def test_critic_prompt_has_convergence_discipline():
     low = CRITIC_SYSTEM_PROMPT.lower()
     assert "history" in low
     assert "undo" in low or "converge" in low
+
+
+from app.scene.critic import CRITIC_SYSTEM_PROMPT
+
+
+def test_critique_request_carries_plan():
+    req = CritiqueRequest(
+        frame_png=b"", scene={"elements": []}, target_handle="reels",
+        window=["reels"], plan={"reels": {"role": "reels", "x": 640, "y": 396,
+                                          "w": 794, "h": 432, "z": 20}},
+    )
+    assert req.plan["reels"]["w"] == 794
+
+
+def test_messages_include_plan_region_for_target():
+    req = CritiqueRequest(
+        frame_png=b"\x89PNG", scene={"elements": []}, target_handle="reels",
+        window=["reels"], plan={"reels": {"role": "reels", "x": 640, "y": 396,
+                                          "w": 794, "h": 432, "z": 20}},
+    )
+    msgs = build_critic_messages(req)
+    text = msgs[1].content[0]["text"]
+    assert "plan" in text.lower()
+    assert "794" in text   # the intended region is shown to the critic
+
+
+def test_system_prompt_is_reconcile_to_plan():
+    assert "plan" in CRITIC_SYSTEM_PROMPT.lower()
+    assert "reconcile" in CRITIC_SYSTEM_PROMPT.lower()
