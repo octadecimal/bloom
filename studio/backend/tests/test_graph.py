@@ -31,3 +31,37 @@ def test_build_graph_loads_each_named_workflow():
 def test_random_seed_in_range():
     s = random_seed()
     assert 0 <= s <= 2**32 - 1
+
+
+def test_patch_sets_generation_params_on_their_nodes():
+    base = {
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "OLD"}},
+        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}},
+        "5": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 1216, "height": 832}},
+        "3": {"class_type": "KSampler", "inputs": {"seed": 1, "steps": 4, "cfg": 1.0}},
+        "11": {"class_type": "FluxGuidance", "inputs": {"guidance": 3.5}},
+    }
+    out = patch_graph(base, prompt="NEW", width=512, height=512, seed=7,
+                      negative="blurry", steps=24, cfg=2.0, guidance=3.0)
+    assert out["7"]["inputs"]["text"] == "blurry"
+    assert out["3"]["inputs"]["steps"] == 24 and out["3"]["inputs"]["cfg"] == 2.0
+    assert out["11"]["inputs"]["guidance"] == 3.0
+    # base untouched
+    assert base["3"]["inputs"]["steps"] == 4
+
+
+def test_guidance_patch_is_a_noop_when_no_flux_guidance_node():
+    base = {
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "x"}},
+        "5": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 1, "height": 1}},
+        "3": {"class_type": "KSampler", "inputs": {"seed": 1, "steps": 4, "cfg": 1.0}},
+    }
+    out = patch_graph(base, prompt="p", width=64, height=64, seed=1, guidance=9.0)
+    assert "11" not in out  # schnell has no FluxGuidance; no crash, no node added
+
+
+def test_none_params_leave_baked_values_untouched():
+    out = build_graph("dev-transparent", prompt="p", width=64, height=64, seed=1)
+    # dev-transparent bakes steps=24, guidance=3.5
+    assert out["3"]["inputs"]["steps"] == 24
+    assert out["11"]["inputs"]["guidance"] == 3.5
