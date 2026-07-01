@@ -40,6 +40,10 @@ class ToolContext:
     scene_critic: object = None
     capture_broker: object = None
     asset_critic: object = None
+    # Sub-project B: grades the REAL captured engine frame after geometry
+    # converges (additive art/effects judgment). None on headless paths -> the
+    # art stage skips.
+    scene_art_critic: object = None
     region_override_store: object = None
 
 

@@ -33,6 +33,7 @@ class RoomHub:
         scene_critic=None,
         capture_broker=None,
         asset_critic=None,
+        scene_art_critic=None,
         region_override_store=None,
     ):
         self._sio = sio
@@ -54,6 +55,7 @@ class RoomHub:
         self._scene_critic = scene_critic
         self._capture_broker = capture_broker
         self._asset_critic = asset_critic
+        self._scene_art_critic = scene_art_critic
         self._region_override_store = region_override_store
         self._router_spec = None
         # queues hold turn descriptors: {"kind": "prompt"} (no-tool plain chat)
@@ -301,6 +303,7 @@ class RoomHub:
                          scene_critic=self._scene_critic,
                          capture_broker=self._capture_broker,
                          asset_critic=self._asset_critic,
+                         scene_art_critic=self._scene_art_critic,
                          region_override_store=self._region_override_store)
         status = "completed"
         try:

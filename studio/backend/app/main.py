@@ -24,6 +24,7 @@ from app.scene.hub import GameSceneHub
 from app.scene.capture import SceneCaptureBroker
 from app.scene.critic import build_scene_critic
 from app.scene.asset_critic import build_asset_critic
+from app.scene.art_critic import build_scene_art_critic
 from app.scene.layout.overrides import RegionOverrideStore
 from app.scene.sockets import register_scene_handlers
 from app.scene.reels_spin import build_spin_runner
@@ -122,6 +123,7 @@ def build(settings: Settings) -> AppContext:
     capture_broker = SceneCaptureBroker(sio)
     scene_critic = build_scene_critic(settings)
     asset_critic = build_asset_critic(settings)
+    scene_art_critic = build_scene_art_critic(settings)
     hub = RoomHub(
         sio, store, chat_service,
         run_store=run_store, turn_runner=turn_runner,
@@ -132,6 +134,7 @@ def build(settings: Settings) -> AppContext:
         sim_store=sim_store, tuner_store=tuner_store, tuner_hub=tuner_hub,
         scene_critic=scene_critic, capture_broker=capture_broker,
         asset_critic=asset_critic,
+        scene_art_critic=scene_art_critic,
         region_override_store=region_override_store,
     )
     register_socket_handlers(sio, hub, presence)
@@ -151,6 +154,7 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.asset_hub = asset_hub
     fastapi_app.state.scene_critic = scene_critic
     fastapi_app.state.asset_critic = asset_critic
+    fastapi_app.state.scene_art_critic = scene_art_critic
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(sim_router)
     fastapi_app.include_router(tuner_router)
