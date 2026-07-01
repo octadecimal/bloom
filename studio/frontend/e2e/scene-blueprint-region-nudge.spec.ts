@@ -79,7 +79,10 @@ test('nudging reels x in the region editor reflows the live scene and survives r
   // Wait explicitly for the approval card (same design-router → rebuild_scene path as
   // the approval-gate spec) before clicking Approve.
   await expect(page.getByTestId('approval-card')).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId('approval-card').getByRole('button', { name: /approve/i }).click();
+  await page
+    .getByTestId('approval-card')
+    .getByRole('button', { name: /approve/i })
+    .click();
   // Re-activate the Game Scene pane after rebuild (engine was unmounted during the run).
   await page.getByTestId('menu-view').click();
   await page.getByTestId('view-open-game/preview').click();

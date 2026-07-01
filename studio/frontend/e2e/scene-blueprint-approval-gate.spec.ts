@@ -68,7 +68,10 @@ test('rebuild_scene pauses on an approval card; approve reflows the scene', asyn
   await expect(page.getByTestId('approval-card')).toBeVisible({ timeout: 60_000 });
 
   // 4. Approve -> the scene reflows (the logo moves to its newly planned region).
-  await page.getByTestId('approval-card').getByRole('button', { name: /approve/i }).click();
+  await page
+    .getByTestId('approval-card')
+    .getByRole('button', { name: /approve/i })
+    .click();
   // Re-activate Game Scene to check the logo's updated position (engine re-inits from
   // the new scene doc after Dockview remounts it).
   await page.getByTestId('menu-view').click();
