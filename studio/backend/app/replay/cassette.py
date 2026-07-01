@@ -85,6 +85,29 @@ def load_critic_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
     return out
 
 
+def load_scene_art_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
+    """Load scene art/effects-critic cassettes keyed by normalized theme.
+
+    Each ``scene_art/*.json`` is ``{passes: [<SceneArtVerdict-shaped dict>, ...]}``
+    with an optional ``theme``. ``default.json`` becomes ``"__default__"`` (the
+    fallback). Files with a ``theme`` are also keyed by ``normalize_prompt(theme)``.
+    Mirrors ``load_critic_cassettes`` — the art critic is a direct structured+image
+    call with its OWN per-pass cassette format, keyed by build theme.
+    """
+    out: dict[str, list[dict]] = {}
+    base = Path(fixtures_dir) / "scene_art"
+    if not base.is_dir():
+        return out
+    for path in sorted(base.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        passes = list(data.get("passes", []))
+        if path.name == "default.json":
+            out["__default__"] = passes
+        if "theme" in data:
+            out[normalize_prompt(data["theme"])] = passes
+    return out
+
+
 def load_asset_cassettes(fixtures_dir: Path) -> dict[str, list[dict]]:
     """Recorded per-role asset verdicts from ``tests/fixtures/replay/asset/``.
 

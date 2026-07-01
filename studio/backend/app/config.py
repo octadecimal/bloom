@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # SceneCritic seam — an OpenRouter slug, tunable without code changes. See
     # docs/.../vision-in-the-loop-scene-composition-design.md (decided: sonnet-4-6).
     critic_model: str = "anthropic/claude-sonnet-4-6"
+    # Short timeout for the real-frame capture used by the art/effects grade
+    # (sub-project B). A live browser client answers in well under a second; the
+    # short bound lets a HEADLESS rebuild (no client) fail fast and skip the art
+    # stage instead of blocking on the broker's 10s default.
+    art_capture_timeout: float = 3.0
     available_models: str = "openai/gpt-5.5,openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
     provider_mode: Literal["live", "replay"] = "live"
     replay_token_delay: float = 0.0

@@ -1,6 +1,8 @@
 import type { IRunStep } from './state';
 
-export type IRenderStep = { kind: 'passthrough'; step: IRunStep } | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status'] };
+export type IRenderStep =
+  | { kind: 'passthrough'; step: IRunStep }
+  | { kind: 'tool'; callIndex: number; toolName: string | null; status: IRunStep['status']; output: string | null };
 
 type IToolEntry = Extract<IRenderStep, { kind: 'tool' }>;
 
@@ -22,17 +24,19 @@ export function foldToolSteps(steps: readonly IRunStep[]): IRenderStep[] {
         callIndex: step.index,
         toolName: step.toolName,
         status: step.status === 'error' ? 'error' : 'running',
+        output: null,
       };
       out.push(entry);
       openCalls.push(entry);
     } else if (step.type === 'tool_result') {
       const matchAt = openCalls.findIndex((c) => c.toolName === step.toolName);
       if (matchAt === -1) {
-        out.push({ kind: 'tool', callIndex: step.index, toolName: step.toolName, status: step.status });
+        out.push({ kind: 'tool', callIndex: step.index, toolName: step.toolName, status: step.status, output: step.content });
       } else {
         const entry = openCalls[matchAt];
         openCalls.splice(matchAt, 1);
         entry.status = entry.status === 'error' || step.status === 'error' ? 'error' : step.status;
+        entry.output = step.content;
       }
     } else {
       out.push({ kind: 'passthrough', step });

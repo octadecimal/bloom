@@ -1,0 +1,11 @@
+{
+  "theme": "art regen probe",
+  "passes": [
+    {
+      "premium": false,
+      "summary": "logo washed out by the glow",
+      "regenerate": [{ "target_handle": "logo", "why": "lost to background glow" }]
+    },
+    { "premium": true, "summary": "logo now reads clearly" }
+  ]
+}
