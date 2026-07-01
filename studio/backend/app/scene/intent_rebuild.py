@@ -6,7 +6,11 @@ live scene the same way the design-router's chat path does — by running the on
 if so, assembles a ToolContext from the app's shared singletons and runs it.
 No new persistence; geometry still comes only from the bind.
 """
+import logging
+
 from app.agent_tools import ToolContext, rebuild_scene_core
+
+log = logging.getLogger(__name__)
 
 INTENT_FIELDS: dict[str, set[str]] = {
     "theme": {"art_direction"},
@@ -33,7 +37,13 @@ async def rebuild_after_intent(app_state, game_id: str) -> str | None:
         scene_critic=getattr(app_state, "scene_critic", None),
         asset_critic=getattr(app_state, "asset_critic", None),
     )
-    summary = await rebuild_scene_core(ctx)
+    # The GDD edit is already persisted by the time we get here, so the reflow is
+    # best-effort: a live-mode critic/LLM/store error must not fail the save's PUT.
+    try:
+        summary = await rebuild_scene_core(ctx)
+    except Exception:  # noqa: BLE001 — reflow is best-effort; the save stays authoritative
+        log.warning("scene reflow after intent edit failed for game %s", game_id, exc_info=True)
+        return None
     if summary.startswith("Rebuild unavailable") or summary.startswith("Nothing to rebuild"):
         return None
     return summary
