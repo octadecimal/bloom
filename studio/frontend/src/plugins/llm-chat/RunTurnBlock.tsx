@@ -31,7 +31,10 @@ function ToolLine({ callIndex, toolName, status, output }: { callIndex: number; 
         <span className={isRunning ? 'tool-shimmer' : undefined}>{toolName ?? 'tool'}</span>
       </div>
       {trimmedOutput && (
-        <div data-testid={`run-step-output-${callIndex}`} className="whitespace-pre-wrap pl-[18px] text-xs text-muted-foreground">
+        <div
+          data-testid={`run-step-output-${callIndex}`}
+          className={`max-h-24 overflow-y-auto whitespace-pre-wrap pl-[18px] text-xs ${isError ? 'text-destructive' : 'text-muted-foreground'}`}
+        >
           {trimmedOutput}
         </div>
       )}

@@ -63,6 +63,25 @@ describe('RunTurnBlock', () => {
     expect(screen.getByTestId('run-step-output-0').textContent).toContain('Scene reads as a premium slot');
   });
 
+  it('caps the output line height and makes it scrollable for verbose tool output', () => {
+    const verbose = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n');
+    chatSlice().runs.set([
+      run({
+        steps: [
+          { index: 0, type: 'tool_call', toolName: 'read_scene', content: '{}', status: 'complete' },
+          { index: 1, type: 'tool_result', toolName: 'read_scene', content: verbose, status: 'complete' },
+        ],
+      }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    const output = screen.getByTestId('run-step-output-0');
+    expect(output.className).toMatch(/max-h-\d/);
+    expect(output.className).toContain('overflow-y-auto');
+    // Text stays in the DOM (scroll, not truncate) so downstream text assertions still pass.
+    expect(output.textContent).toContain('line 0');
+    expect(output.textContent).toContain('line 39');
+  });
+
   it('renders no output line when the tool has no result content', () => {
     chatSlice().runs.set([
       run({
@@ -89,6 +108,36 @@ describe('RunTurnBlock', () => {
     const tool = screen.getByTestId('run-step-0');
     expect(tool.getAttribute('data-state')).toBe('error');
     expect(tool.className).toContain('text-destructive');
+  });
+
+  it('gives an errored tool output line the destructive tone', () => {
+    chatSlice().runs.set([
+      run({
+        steps: [
+          { index: 0, type: 'tool_call', toolName: 'delete_asset', content: '{}', status: 'complete' },
+          { index: 1, type: 'tool_result', toolName: 'delete_asset', content: 'boom', status: 'error' },
+        ],
+      }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    const output = screen.getByTestId('run-step-output-0');
+    expect(output.className).toContain('text-destructive');
+    expect(output.className).not.toContain('text-muted-foreground');
+  });
+
+  it('keeps a non-errored tool output line muted', () => {
+    chatSlice().runs.set([
+      run({
+        steps: [
+          { index: 0, type: 'tool_call', toolName: 'compose_scene', content: '{}', status: 'complete' },
+          { index: 1, type: 'tool_result', toolName: 'compose_scene', content: 'ok', status: 'complete' },
+        ],
+      }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    const output = screen.getByTestId('run-step-output-0');
+    expect(output.className).toContain('text-muted-foreground');
+    expect(output.className).not.toContain('text-destructive');
   });
 
   it('renders an approval step as the approval card', () => {

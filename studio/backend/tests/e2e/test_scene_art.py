@@ -65,7 +65,7 @@ async def test_art_stage_captures_real_frame_when_client_answers(live_server):
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_art_stage_skips_and_build_completes_without_client(live_server):
+async def test_art_stage_skips_when_client_never_answers_and_build_completes(live_server):
     # A client is joined but NEVER answers capture -> art stage times out
     # (art_capture_timeout ~3s) and skips; the build still completes.
     capture_requests = await _run_prompt(live_server, answer_capture=False)
