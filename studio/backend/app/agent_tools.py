@@ -172,10 +172,9 @@ async def _place_in_scene(
         )
         if sprite_addnode:
             sp = sprite_addnode["props"]
-            # Reflow updates position/scale/zIndex/role only. anchor is intentionally
-            # omitted: every RoleRegion and the focal/density transforms keep anchors at
-            # the 0.5 default, so an intent edit never moves one. If a future template
-            # varies a role's anchor, add anchor.x/anchor.y setProps here too.
+            # Reflow updates position/scale/zIndex/anchor/role. anchor IS emitted
+            # now (A3): a region override can set anchor_x/anchor_y, so the reflow
+            # must carry it through or an anchor nudge would never reach the sprite.
             ops = [
                 {"kind": "setProp", "id": sprite_id, "path": "position.x",
                  "value": sp["position"]["x"]},
@@ -185,6 +184,10 @@ async def _place_in_scene(
                  "value": sp["scale"]["x"]},
                 {"kind": "setProp", "id": sprite_id, "path": "scale.y",
                  "value": sp["scale"]["y"]},
+                {"kind": "setProp", "id": sprite_id, "path": "anchor.x",
+                 "value": sp["anchor"]["x"]},
+                {"kind": "setProp", "id": sprite_id, "path": "anchor.y",
+                 "value": sp["anchor"]["y"]},
                 {"kind": "setProp", "id": sprite_id, "path": "zIndex",
                  "value": sp["zIndex"]},
             ]
