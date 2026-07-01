@@ -78,6 +78,7 @@ async def blueprint_rest_harness(mongo_db, tmp_path, monkeypatch):
     from app.scene.asset_critic import ReplayAssetCritic
     from app.scene.critic import ReplaySceneCritic
     from app.scene.hub import GameSceneHub
+    from app.scene.layout.overrides import RegionOverrideStore
     from app.scene.store import GameSceneStore
 
     # Point get_settings().media_dir at the test-scoped tmp dir so
@@ -107,6 +108,8 @@ async def blueprint_rest_harness(mongo_db, tmp_path, monkeypatch):
 
     game_id = f"game-gdd-rest-{uuid4().hex[:8]}"
 
+    region_override_store = RegionOverrideStore(mongo_db)
+
     # Assemble app.state-like object so rebuild_after_intent can read all singletons.
     state = SimpleNamespace(
         asset_store=asset_store,
@@ -117,6 +120,7 @@ async def blueprint_rest_harness(mongo_db, tmp_path, monkeypatch):
         scene_hub=scene_hub,
         scene_critic=scene_critic,
         asset_critic=asset_critic,
+        region_override_store=region_override_store,
     )
 
     # Seed the GDD taxonomy for this game.
@@ -164,6 +168,7 @@ async def blueprint_rest_harness(mongo_db, tmp_path, monkeypatch):
     finally:
         await mongo_db["game_scenes"].delete_many({"_id": game_id})
         await mongo_db["gdd_docs"].delete_many({"game_id": game_id})
+        await mongo_db["region_overrides"].delete_many({"_id": game_id})
 
 
 # ---------------------------------------------------------------------------
