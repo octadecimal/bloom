@@ -1425,7 +1425,19 @@ import { getOverrides, putOverride, deleteOverride, type IOverrideView, type IRe
 
 const FIELDS: (keyof IRegionFields)[] = ['x', 'y', 'region_w', 'region_h', 'anchor_x', 'anchor_y'];
 
-function RoleRow({ gameId, role, plan, override, onDone }: { gameId: string; role: string; plan: IRegionFields; override: Partial<IRegionFields>; onDone: (msg: string) => void }) {
+function RoleRow({
+  gameId,
+  role,
+  plan,
+  override,
+  onDone,
+}: {
+  gameId: string;
+  role: string;
+  plan: IRegionFields;
+  override: Partial<IRegionFields>;
+  onDone: (msg: string) => void;
+}) {
   const [vals, setVals] = useState<Record<string, string>>(Object.fromEntries(FIELDS.map((f) => [f, override[f] != null ? String(override[f]) : ''])));
 
   async function save() {
@@ -1462,7 +1474,11 @@ function RoleRow({ gameId, role, plan, override, onDone }: { gameId: string; rol
         ))}
       </div>
       <div className="flex gap-2">
-        <button data-testid={`region-${role}-save`} onClick={save} className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover">
+        <button
+          data-testid={`region-${role}-save`}
+          onClick={save}
+          className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover"
+        >
           Save
         </button>
         <button data-testid={`region-${role}-reset`} onClick={reset} className="rounded border border-hairline px-3 py-1 text-sm text-text-2 hover:bg-raised">
@@ -1479,7 +1495,10 @@ export function RegionOverridePane(_props: IDockviewPanelProps) {
   const [status, setStatus] = useState('');
 
   useEffect(() => {
-    if (gameId) getOverrides(gameId).then(setView).catch(() => setStatus('Load failed.'));
+    if (gameId)
+      getOverrides(gameId)
+        .then(setView)
+        .catch(() => setStatus('Load failed.'));
   }, [gameId]);
 
   if (!gameId) return <div className="p-3 text-sm text-text-3">Open a game to edit its layout regions.</div>;
@@ -1526,7 +1545,20 @@ Register it in `studio/frontend/src/plugins/index.ts`:
 ```ts
 import { regionOverrides } from './region-overrides';
 // ...append to the PLUGINS array:
-export const PLUGINS: IPlugin[] = [sceneStorePlugin, demoCounter, demoScratch, llmChat, assets, gdd, game, simulator, tuner, sceneGraph, propertyInspector, regionOverrides];
+export const PLUGINS: IPlugin[] = [
+  sceneStorePlugin,
+  demoCounter,
+  demoScratch,
+  llmChat,
+  assets,
+  gdd,
+  game,
+  simulator,
+  tuner,
+  sceneGraph,
+  propertyInspector,
+  regionOverrides,
+];
 ```
 
 - [ ] **Step 7: Run the pane test — PASS**
@@ -1616,7 +1648,10 @@ test('rebuild_scene pauses on an approval card; approve reflows', async ({ page 
   await expect(page.getByTestId('approval-card')).toBeVisible({ timeout: 60_000 });
 
   // 4. Approve -> the scene reflows (the logo moves to its planned region).
-  await page.getByTestId('approval-card').getByRole('button', { name: /approve/i }).click();
+  await page
+    .getByTestId('approval-card')
+    .getByRole('button', { name: /approve/i })
+    .click();
   await expect.poll(() => logoPos(page), { timeout: 30_000 }).not.toBe(before);
 });
 ```
@@ -1709,7 +1744,10 @@ test('nudging reels x in the region editor reflows the live scene and survives r
   // 4. Survive a rebuild: a chat intent edit -> approve -> reels stays at 200.
   await page.getByTestId('chat-composer').fill('make the framing ornate');
   await page.getByTestId('chat-send').click();
-  await page.getByTestId('approval-card').getByRole('button', { name: /approve/i }).click();
+  await page
+    .getByTestId('approval-card')
+    .getByRole('button', { name: /approve/i })
+    .click();
   await expect.poll(() => reelsX(page), { timeout: 30_000 }).toBe(200);
 });
 ```
