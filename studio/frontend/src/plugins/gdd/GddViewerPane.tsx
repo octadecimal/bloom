@@ -14,7 +14,8 @@ const STATUS_LABEL: Record<string, string> = {
 
 function IntentEditor({ gameId, aspect, data }: { gameId: string; aspect: string; data: Record<string, unknown> }) {
   const fields = INTENT_FIELDS[aspect];
-  const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(fields.map((f) => [f.key, String(data[f.key] ?? '')])));
+  const initial = Object.fromEntries(fields.map((f) => [f.key, String(data[f.key] ?? '')]));
+  const [values, setValues] = useState<Record<string, string>>(initial);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -22,7 +23,9 @@ function IntentEditor({ gameId, aspect, data }: { gameId: string; aspect: string
     setSaving(true);
     setStatus('');
     try {
-      const patch = Object.fromEntries(fields.map((f) => [f.key, values[f.key]]).filter(([, v]) => v !== ''));
+      // Send a field if it is non-empty OR it changed from its initial value
+      // (so clearing a previously-set field sends '' and actually clears it).
+      const patch = Object.fromEntries(fields.map((f) => [f.key, values[f.key]]).filter(([k, v]) => v !== '' || v !== initial[k as string]));
       const res = await saveIntentFields(gameId, aspect, patch);
       setStatus(res.rebuilt ? 'Reflowed scene.' : 'Saved.');
     } catch {
