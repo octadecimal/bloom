@@ -98,6 +98,16 @@ describe('PixiRenderer.scaleOf', () => {
   });
 });
 
+describe('PixiRenderer.positionOf', () => {
+  it('reports a sprite position and null for unknown ids', () => {
+    const r = new PixiRenderer(document.createElement('div'));
+    r.createObject('s', 'Sprite');
+    r.setProp('s', 'position', { x: 12, y: 34 });
+    expect(r.positionOf('s')).toEqual({ x: 12, y: 34 });
+    expect(r.positionOf('ghost')).toBeNull();
+  });
+});
+
 describe('PixiRenderer.applyLabel', () => {
   function rendererWithStage() {
     const r = new PixiRenderer(document.createElement('div'));

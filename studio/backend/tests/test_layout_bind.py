@@ -35,7 +35,7 @@ def test_role_snippet_attached_from_intent():
 
 def test_noop_refiner_leaves_plan_unchanged():
     intent = GddIntent()
-    assert bind(intent, NoopRefiner()).roles.keys() == bind(intent).roles.keys()
+    assert bind(intent, refiner=NoopRefiner()).roles.keys() == bind(intent).roles.keys()
 
 
 def test_focal_logo_enlarges_logo_region():
@@ -48,3 +48,38 @@ def test_focal_reels_shrinks_flourishes():
     base = bind(GddIntent(focal_emphasis="balanced", framing_density="ornate"))
     reels = bind(GddIntent(focal_emphasis="reels", framing_density="ornate"))
     assert reels.for_role(FLOURISH_LEFT).region_w < base.for_role(FLOURISH_LEFT).region_w
+
+
+def test_override_replaces_only_set_fields():
+    base = bind(GddIntent()).for_role("reels")
+    plan = bind(GddIntent(), overrides={"reels": {"x": 100.0, "region_w": 200}})
+    r = plan.for_role("reels")
+    assert (r.x, r.region_w) == (100.0, 200)
+    # untouched fields fall through to the plan
+    assert (r.y, r.region_h, r.anchor_x) == (base.y, base.region_h, base.anchor_x)
+
+
+def test_override_accepts_role_aliases():
+    plan = bind(GddIntent(), overrides={"reel_frame": {"y": 42.0}})
+    assert plan.for_role("reels").y == 42.0
+
+
+def test_override_is_clamped_to_canvas():
+    # landscape canvas is 1280x720; out-of-range values clamp
+    plan = bind(GddIntent(), overrides={"reels": {"x": 9999.0, "y": -50.0,
+                                                  "region_w": 99999, "anchor_x": 5.0}})
+    r = plan.for_role("reels")
+    assert r.x == 1280.0 and r.y == 0.0
+    assert r.region_w == 1280 and r.anchor_x == 1.0
+
+
+def test_override_for_absent_role_is_ignored():
+    # 'clean' density drops flourishes; an override for one is a no-op, not a crash
+    plan = bind(GddIntent(framing_density="clean"),
+                overrides={"flourish_left": {"x": 10.0}})
+    assert plan.for_role("flourish_left") is None
+
+
+def test_bind_without_overrides_is_unchanged():
+    assert bind(GddIntent()).for_role("reels") == bind(GddIntent(), overrides=None).for_role("reels")
+    assert bind(GddIntent()).for_role("reels") == bind(GddIntent(), overrides={}).for_role("reels")

@@ -1,0 +1,18 @@
+{
+  "prompt": "make the framing ornate",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "set_gdd_fields",
+        "args": {"aspect": "ui-ux", "fields": {"framing_density": "ornate"}}
+      }
+    ],
+    [
+      {
+        "name": "rebuild_scene",
+        "args": {"theme": ""}
+      }
+    ]
+  ],
+  "final": ["Updated the framing style to ornate and rebuilt the scene."]
+}

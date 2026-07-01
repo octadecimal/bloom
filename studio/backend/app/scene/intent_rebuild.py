@@ -36,6 +36,7 @@ async def rebuild_after_intent(app_state, game_id: str) -> str | None:
         scene_hub=getattr(app_state, "scene_hub", None),
         scene_critic=getattr(app_state, "scene_critic", None),
         asset_critic=getattr(app_state, "asset_critic", None),
+        region_override_store=getattr(app_state, "region_override_store", None),
     )
     # The GDD edit is already persisted by the time we get here, so the reflow is
     # best-effort: a live-mode critic/LLM/store error must not fail the save's PUT.

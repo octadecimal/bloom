@@ -45,6 +45,35 @@ const uiDoc = (data: Record<string, unknown>): IGddDoc => ({
 });
 
 describe('GddViewerPane intent editor', () => {
+  it('clears a previously-set prose field (sends empty string)', async () => {
+    act(() => {
+      gddSlice().activeGameId.set('g1');
+      gddSlice().docs.set([uiDoc({ layout: 'reels centered', orientation: 'landscape' })]);
+      gddSlice().selectedAspect.set('ui-ux');
+    });
+    render(<GddViewerPane {...fakeProps} />);
+    const layout = screen.getByTestId('gdd-intent-layout') as HTMLTextAreaElement;
+    act(() => fireEvent.change(layout, { target: { value: '' } })); // clear it
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('gdd-intent-save'));
+    });
+    expect(saveIntentFields).toHaveBeenCalledWith('g1', 'ui-ux', expect.objectContaining({ layout: '' }));
+  });
+
+  it('omits a field that started empty and stayed empty', async () => {
+    act(() => {
+      gddSlice().activeGameId.set('g1');
+      gddSlice().docs.set([uiDoc({ orientation: 'landscape' })]); // no layout set
+      gddSlice().selectedAspect.set('ui-ux');
+    });
+    render(<GddViewerPane {...fakeProps} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('gdd-intent-save'));
+    });
+    const [, , patch] = (saveIntentFields as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    expect('layout' in (patch as Record<string, unknown>)).toBe(false);
+  });
+
   it('renders enum selects + prose textareas for ui-ux and saves on click', async () => {
     act(() => {
       gddSlice().activeGameId.set('g1');

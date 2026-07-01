@@ -6,6 +6,10 @@ from app.gdd.models import gdd_wire
 from app.models import message_wire, room_wire
 from app.runs import run_wire
 from app.scene.intent_rebuild import is_intent_change, rebuild_after_intent
+from app.scene.layout.overrides import RegionOverride
+from app.scene.override_rebuild import (
+    set_override_and_rebuild, clear_override_and_rebuild, override_view,
+)
 from app.skills import SkillError
 
 router = APIRouter()
@@ -26,6 +30,15 @@ class WriteSkillBody(BaseModel):
 
 class SetGddFieldsBody(BaseModel):
     fields: dict
+
+
+class RegionOverrideBody(BaseModel):
+    x: float | None = None
+    y: float | None = None
+    region_w: int | None = None
+    region_h: int | None = None
+    anchor_x: float | None = None
+    anchor_y: float | None = None
 
 
 @router.get("/health")
@@ -126,6 +139,26 @@ async def set_gdd_fields_rest(
     if is_intent_change(aspect, body.fields):
         rebuilt = (await rebuild_after_intent(request.app.state, game_id)) is not None
     return {"doc": gdd_wire(doc), "warnings": warnings, "rebuilt": rebuilt}
+
+
+@router.get("/games/{game_id}/scene/overrides")
+async def get_scene_overrides(game_id: str, request: Request) -> dict:
+    return await override_view(request.app.state, game_id)
+
+
+@router.put("/games/{game_id}/scene/overrides/{role}")
+async def put_scene_override(
+    game_id: str, role: str, body: RegionOverrideBody, request: Request
+) -> dict:
+    override = RegionOverride(**body.model_dump())
+    summary = await set_override_and_rebuild(request.app.state, game_id, role, override)
+    return {"rebuilt": summary is not None}
+
+
+@router.delete("/games/{game_id}/scene/overrides/{role}")
+async def delete_scene_override(game_id: str, role: str, request: Request) -> dict:
+    summary = await clear_override_and_rebuild(request.app.state, game_id, role)
+    return {"rebuilt": summary is not None}
 
 
 @router.get("/rooms/{room_id}/runs")

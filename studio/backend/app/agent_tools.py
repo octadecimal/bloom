@@ -12,7 +12,8 @@ from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.layout.bind import bind
 from app.scene.layout.intent import read_intent
-from app.scene.layout.plan import ScenePlan
+from app.scene.layout.plan import ScenePlan, canonical_role
+from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
@@ -39,6 +40,7 @@ class ToolContext:
     scene_critic: object = None
     capture_broker: object = None
     asset_critic: object = None
+    region_override_store: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -171,10 +173,9 @@ async def _place_in_scene(
         )
         if sprite_addnode:
             sp = sprite_addnode["props"]
-            # Reflow updates position/scale/zIndex/role only. anchor is intentionally
-            # omitted: every RoleRegion and the focal/density transforms keep anchors at
-            # the 0.5 default, so an intent edit never moves one. If a future template
-            # varies a role's anchor, add anchor.x/anchor.y setProps here too.
+            # Reflow updates position/scale/zIndex/anchor/role. anchor IS emitted
+            # now (A3): a region override can set anchor_x/anchor_y, so the reflow
+            # must carry it through or an anchor nudge would never reach the sprite.
             ops = [
                 {"kind": "setProp", "id": sprite_id, "path": "position.x",
                  "value": sp["position"]["x"]},
@@ -184,6 +185,10 @@ async def _place_in_scene(
                  "value": sp["scale"]["x"]},
                 {"kind": "setProp", "id": sprite_id, "path": "scale.y",
                  "value": sp["scale"]["y"]},
+                {"kind": "setProp", "id": sprite_id, "path": "anchor.x",
+                 "value": sp["anchor"]["x"]},
+                {"kind": "setProp", "id": sprite_id, "path": "anchor.y",
+                 "value": sp["anchor"]["y"]},
                 {"kind": "setProp", "id": sprite_id, "path": "zIndex",
                  "value": sp["zIndex"]},
             ]
@@ -593,12 +598,17 @@ def format_compose_summary(result) -> str:
 
 
 async def _plan_for_game(ctx: ToolContext) -> ScenePlan:
-    """Bind a ScenePlan from the game's persisted GDD intent. Falls back to the
-    default landscape template when no GDD store / intent is present."""
-    if ctx.gdd_store is None:
-        from app.scene.layout.bind import GddIntent
-        return bind(GddIntent())
-    return bind(await read_intent(ctx.gdd_store, ctx.game_id))
+    """Bind a ScenePlan from the game's persisted GDD intent + any per-game region
+    overrides. Falls back to the default landscape template when no GDD store is
+    present; overrides are the final bind layer so a human nudge survives rebuild."""
+    from app.scene.layout.bind import GddIntent
+    intent = GddIntent()
+    if ctx.gdd_store is not None:
+        intent = await read_intent(ctx.gdd_store, ctx.game_id)
+    overrides: dict = {}
+    if ctx.region_override_store is not None:
+        overrides = await ctx.region_override_store.get(ctx.game_id)
+    return bind(intent, overrides=overrides)
 
 
 def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
@@ -656,11 +666,40 @@ async def rebuild_scene_core(ctx: ToolContext, theme: str = "") -> str:
     return "Rebuilt scene from current design intent. " + format_compose_summary(result)
 
 
+async def _current_role_positions(ctx: "ToolContext") -> dict[str, tuple[float, float]]:
+    """Canonical role -> current sprite (x, y) from the live scene doc. Empty when
+    there is no scene. Used to render the approval gate's planned-change summary."""
+    doc = await ctx.scene_store.get_document(ctx.game_id) if ctx.scene_store else None
+    out: dict[str, tuple[float, float]] = {}
+    if not doc:
+        return out
+    for nid, n in doc.get("nodes", {}).items():
+        if n.get("type") != "Sprite":
+            continue
+        props = n.get("props") or {}
+        role = canonical_role(props.get("role") or nid.removeprefix("spr."))
+        pos = props.get("position") or {}
+        if role:
+            out[role] = (float(pos.get("x", 0)), float(pos.get("y", 0)))
+    return out
+
+
 def build_rebuild_scene_tool(ctx: ToolContext) -> BaseTool:
     async def rebuild_scene(theme: str = "") -> str:
         """Re-run bind -> place -> reconcile for every role already in the scene,
-        using the CURRENT persisted GDD intent. Use after the art direction or
-        layout intent changes so the live scene reflows to the new plan."""
+        using the CURRENT persisted GDD intent + region overrides. Asks the human
+        to approve the planned reflow before applying it."""
+        current = await _current_role_positions(ctx)
+        if not current:
+            # nothing placed -> no gate; let the core report the empty/no-critic case
+            return await rebuild_scene_core(ctx, theme)
+        plan = await _plan_for_game(ctx)
+        label = ("Rebuild the scene to the current design intent?\n"
+                 + summarize_rebuild(plan, current))
+        decision = interrupt(
+            {"tool": "rebuild_scene", "args": {"theme": theme}, "label": label})
+        if decision != "approve":
+            return "Rebuild cancelled by the user."
         return await rebuild_scene_core(ctx, theme)
 
     return StructuredTool.from_function(

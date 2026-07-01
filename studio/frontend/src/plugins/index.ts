@@ -10,5 +10,19 @@ import { simulator } from './simulator';
 import { tuner } from './tuner';
 import { sceneGraph } from './scene-graph';
 import { propertyInspector } from './property-inspector';
+import { regionOverrides } from './region-overrides';
 
-export const PLUGINS: IPlugin[] = [sceneStorePlugin, demoCounter, demoScratch, llmChat, assets, gdd, game, simulator, tuner, sceneGraph, propertyInspector];
+export const PLUGINS: IPlugin[] = [
+  sceneStorePlugin,
+  demoCounter,
+  demoScratch,
+  llmChat,
+  assets,
+  gdd,
+  game,
+  simulator,
+  tuner,
+  sceneGraph,
+  propertyInspector,
+  regionOverrides,
+];
