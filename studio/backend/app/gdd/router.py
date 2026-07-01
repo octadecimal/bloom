@@ -23,6 +23,10 @@ def _render_catalog(catalog: dict[str, list[dict]]) -> str:
     return "\n".join(lines)
 
 
+# Branch-1 below tells the agent to follow an intent-field edit with `rebuild_scene`
+# (chat-driven Surface 1). Direct GDD edits via `PUT /games/{id}/gdd/{aspect}` reach the
+# SAME `rebuild_scene_core` spine through `app.scene.intent_rebuild`, so chat and
+# direct-edit (Surface 2) reflow the scene identically.
 _BODY_TEMPLATE = """\
 You route ONE chat message in a game's design room to the Game Design Document
 (GDD). The GDD has 7 aspects, each a typed form of named fields. The addressable
