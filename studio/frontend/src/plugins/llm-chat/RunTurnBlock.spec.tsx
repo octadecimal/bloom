@@ -47,6 +47,35 @@ describe('RunTurnBlock', () => {
     expect(screen.getByTestId('run-step-0').getAttribute('data-state')).toBe('running');
   });
 
+  it('renders the tool_result content as a muted output line under the tool name', () => {
+    const summary = 'Composed 2 element(s)\n- art: Scene reads as a premium slot.';
+    chatSlice().runs.set([
+      run({
+        steps: [
+          { index: 0, type: 'tool_call', toolName: 'compose_scene', content: '{}', status: 'complete' },
+          { index: 1, type: 'tool_result', toolName: 'compose_scene', content: summary, status: 'complete' },
+        ],
+      }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    const tool = screen.getByTestId('run-step-0');
+    expect(tool.textContent).toContain('compose_scene');
+    expect(screen.getByTestId('run-step-output-0').textContent).toContain('Scene reads as a premium slot');
+  });
+
+  it('renders no output line when the tool has no result content', () => {
+    chatSlice().runs.set([
+      run({
+        steps: [
+          { index: 0, type: 'tool_call', toolName: 'generate_asset', content: '{}', status: 'complete' },
+          { index: 1, type: 'tool_result', toolName: 'generate_asset', content: '', status: 'complete' },
+        ],
+      }),
+    ]);
+    render(<RunTurnBlock index={0} />);
+    expect(screen.queryByTestId('run-step-output-0')).toBeNull();
+  });
+
   it('marks an errored tool as data-state=error', () => {
     chatSlice().runs.set([
       run({

@@ -10,23 +10,31 @@ import { Markdown } from '@/components/ui/Markdown';
 
 type IReadonlyRunStep = Readonly<IRunStep>;
 
-function ToolLine({ callIndex, toolName, status }: { callIndex: number; toolName: string | null; status: IRunStep['status'] }) {
+function ToolLine({ callIndex, toolName, status, output }: { callIndex: number; toolName: string | null; status: IRunStep['status']; output: string | null }) {
   const isRunning = status === 'running';
   const isError = status === 'error';
+  const trimmedOutput = output?.trim() ?? '';
   return (
-    <div
-      data-testid={`run-step-${callIndex}`}
-      data-state={status}
-      className={`flex items-center gap-1.5 text-xs ${isError ? 'text-destructive' : 'text-muted-foreground'}`}
-    >
-      {isRunning ? (
-        <Loader2 aria-label="running" className="h-3 w-3 flex-none animate-spin text-accent-text" />
-      ) : isError ? (
-        <X aria-hidden className="h-3 w-3 flex-none" />
-      ) : (
-        <Check aria-hidden className="h-3 w-3 flex-none" />
+    <div className="flex flex-col gap-0.5">
+      <div
+        data-testid={`run-step-${callIndex}`}
+        data-state={status}
+        className={`flex items-center gap-1.5 text-xs ${isError ? 'text-destructive' : 'text-muted-foreground'}`}
+      >
+        {isRunning ? (
+          <Loader2 aria-label="running" className="h-3 w-3 flex-none animate-spin text-accent-text" />
+        ) : isError ? (
+          <X aria-hidden className="h-3 w-3 flex-none" />
+        ) : (
+          <Check aria-hidden className="h-3 w-3 flex-none" />
+        )}
+        <span className={isRunning ? 'tool-shimmer' : undefined}>{toolName ?? 'tool'}</span>
+      </div>
+      {trimmedOutput && (
+        <div data-testid={`run-step-output-${callIndex}`} className="whitespace-pre-wrap pl-[18px] text-xs text-muted-foreground">
+          {trimmedOutput}
+        </div>
       )}
-      <span className={isRunning ? 'tool-shimmer' : undefined}>{toolName ?? 'tool'}</span>
     </div>
   );
 }
@@ -74,7 +82,7 @@ export const RunTurnBlock = memo(function RunTurnBlock({ index }: { index: numbe
       <div className="flex min-w-0 flex-col gap-2">
         {foldToolSteps(steps).map((entry: IRenderStep) =>
           entry.kind === 'tool' ? (
-            <ToolLine key={`t:${entry.callIndex}`} callIndex={entry.callIndex} toolName={entry.toolName} status={entry.status} />
+            <ToolLine key={`t:${entry.callIndex}`} callIndex={entry.callIndex} toolName={entry.toolName} status={entry.status} output={entry.output} />
           ) : (
             <RunStepCard key={`s:${entry.step.index}`} step={entry.step} index={entry.step.index} runId={id} />
           ),

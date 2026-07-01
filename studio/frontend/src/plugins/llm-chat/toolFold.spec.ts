@@ -17,12 +17,21 @@ describe('foldToolSteps', () => {
       step({ index: 0, type: 'tool_call', toolName: 'generate_asset', status: 'complete' }),
       step({ index: 1, type: 'tool_result', toolName: 'generate_asset', status: 'complete' }),
     ]);
-    expect(out).toEqual([{ kind: 'tool', callIndex: 0, toolName: 'generate_asset', status: 'complete' }]);
+    expect(out).toEqual([{ kind: 'tool', callIndex: 0, toolName: 'generate_asset', status: 'complete', output: '' }]);
   });
 
-  it('treats a lone tool_call (no result yet) as running', () => {
+  it('carries the tool_result content through as the folded entry output', () => {
+    const summary = 'Composed 2 element(s)\n- art: Scene reads as a premium slot.';
+    const out = foldToolSteps([
+      step({ index: 0, type: 'tool_call', toolName: 'compose_scene', status: 'complete' }),
+      step({ index: 1, type: 'tool_result', toolName: 'compose_scene', content: summary, status: 'complete' }),
+    ]);
+    expect(out).toEqual([{ kind: 'tool', callIndex: 0, toolName: 'compose_scene', status: 'complete', output: summary }]);
+  });
+
+  it('treats a lone tool_call (no result yet) as running with no output', () => {
     const out = foldToolSteps([step({ index: 0, type: 'tool_call', toolName: 'generate_asset', status: 'complete' })]);
-    expect(out).toEqual([{ kind: 'tool', callIndex: 0, toolName: 'generate_asset', status: 'running' }]);
+    expect(out).toEqual([{ kind: 'tool', callIndex: 0, toolName: 'generate_asset', status: 'running', output: null }]);
   });
 
   it('propagates error from the result', () => {
@@ -56,14 +65,14 @@ describe('foldToolSteps', () => {
       step({ index: 3, type: 'tool_result', toolName: 'gen', status: 'complete' }),
     ]);
     expect(out).toEqual([
-      { kind: 'tool', callIndex: 0, toolName: 'gen', status: 'complete' },
-      { kind: 'tool', callIndex: 2, toolName: 'gen', status: 'complete' },
+      { kind: 'tool', callIndex: 0, toolName: 'gen', status: 'complete', output: '' },
+      { kind: 'tool', callIndex: 2, toolName: 'gen', status: 'complete', output: '' },
     ]);
   });
 
-  it('renders an orphan tool_result defensively as its own entry', () => {
-    const out = foldToolSteps([step({ index: 5, type: 'tool_result', toolName: 'gen', status: 'complete' })]);
-    expect(out).toEqual([{ kind: 'tool', callIndex: 5, toolName: 'gen', status: 'complete' }]);
+  it('renders an orphan tool_result defensively as its own entry, carrying its content', () => {
+    const out = foldToolSteps([step({ index: 5, type: 'tool_result', toolName: 'gen', content: 'ok', status: 'complete' })]);
+    expect(out).toEqual([{ kind: 'tool', callIndex: 5, toolName: 'gen', status: 'complete', output: 'ok' }]);
   });
 
   it('keeps a tool entry interleaved with passthrough steps in source order', () => {
