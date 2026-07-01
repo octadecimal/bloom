@@ -73,6 +73,13 @@ class FakeDeps:
     async def out_of_frame(self):
         return list(getattr(self, "corrections", []))
 
+    async def capture_real_frame(self):
+        return None
+
+    async def art_grade(self, request):
+        from app.scene.art_critic import SceneArtVerdict
+        return SceneArtVerdict(premium=True)
+
 
 def _el(slot: str) -> BuildElement:
     return BuildElement(slot=slot, description=f"a {slot}")
@@ -292,6 +299,7 @@ async def test_per_element_edit_cap_refuses_further_edits():
 # ---------------------------------------------------------------------------
 
 from app.scene.asset_critic import AssetVerdict
+from app.scene.art_critic import SceneArtVerdict
 from app.scene.critic import CritiqueRequest
 from app.scene.layout.bind import GddIntent, bind
 
@@ -331,6 +339,12 @@ class _RecordingDeps:
 
     async def out_of_frame(self):
         return []
+
+    async def capture_real_frame(self):
+        return None
+
+    async def art_grade(self, request):
+        return SceneArtVerdict(premium=True)
 
 
 @pytest.mark.asyncio

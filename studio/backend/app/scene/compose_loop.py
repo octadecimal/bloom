@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from app.scene.asset_critic import AssetVerdict
 from app.scene.critic import Critique, CritiqueRequest, EditParams
+from app.scene.art_critic import SceneArtRequest, SceneArtVerdict
 from app.scene.layout.plan import ScenePlan
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class ComposeBounds:
     regen_budget: int = 5       # hard ceiling on regenerations per build
     asset_regen_retries: int = 2    # max regenerate->re-judge cycles per asset
     max_edits_per_element: int = 4  # deterministic per-element critic-edit cap
+    art_passes: int = 2         # art/effects grades after geometry converges (1 grade + 1 re-grade)
 
 
 class FrameCorrection(BaseModel):
@@ -73,6 +75,7 @@ class ComposeResult:
     rejected: int = 0
     elements_placed: int = 0
     corrections_applied: int = 0
+    art_passes_run: int = 0
     notes: list[str] = field(default_factory=list)
 
 
@@ -89,6 +92,8 @@ class ComposeDeps(Protocol):
     async def adjust(self, handle: str, params: EditParams) -> str: ...
     async def regenerate(self, handle: str) -> str: ...
     async def out_of_frame(self) -> list[FrameCorrection]: ...
+    async def capture_real_frame(self) -> bytes | None: ...
+    async def art_grade(self, request: SceneArtRequest) -> SceneArtVerdict: ...
 
 
 def _handle_of(element: BuildElement) -> str:
@@ -241,5 +246,56 @@ async def run_compose(
                     "params": edit.params.model_dump(exclude_none=True),
                     "why": edit.why,
                 })
+
+    # ── Final art/effects grade (sub-project B) ──────────────────────────────
+    # After geometry converges on the Pillow proxy, grade the REAL captured
+    # engine frame (effects, blends, responsive scaling). Additive: geometry is
+    # untouched. Skips cleanly (a note) when no client is attached. Art
+    # regenerations draw from the SAME regen_left as the geometry loop.
+    all_handles = await deps.placed_handles()
+    if all_handles:
+        frame = await deps.capture_real_frame()
+        if frame is None:
+            result.notes.append("art grade skipped: no live client")
+        else:
+            for art_pass in range(bounds.art_passes):
+                scene = await deps.scene_context()
+                verdict = await deps.art_grade(SceneArtRequest(
+                    frame_png=frame, scene=scene,
+                    plan=_plan_context(plan, all_handles, elements),
+                    theme=theme, regen_budget_left=regen_left, pass_index=art_pass,
+                ))
+                result.art_passes_run += 1
+                if verdict.summary:
+                    result.notes.append(f"art: {verdict.summary}")
+                for note in verdict.notes:
+                    result.notes.append(f"art: {note}")
+                if verdict.premium or not verdict.regenerate:
+                    break
+                regenerated_any = False
+                for regen in verdict.regenerate:
+                    if regen_left <= 0:
+                        result.notes.append(
+                            f"art refused regenerate {regen.target_handle} "
+                            f"(budget exhausted)")
+                        break
+                    if regen.target_handle not in all_handles:
+                        result.rejected += 1
+                        result.notes.append(
+                            f"art rejected regenerate {regen.target_handle} "
+                            f"(not in scene)")
+                        continue
+                    regen_left -= 1
+                    result.regens_spent += 1
+                    await deps.regenerate(regen.target_handle)
+                    result.notes.append(
+                        f"art regenerated {regen.target_handle}: {regen.why}")
+                    regenerated_any = True
+                if not regenerated_any:
+                    break
+                frame = await deps.capture_real_frame()
+                if frame is None:
+                    result.notes.append("art re-grade skipped: no live client")
+                    break
 
     return result
