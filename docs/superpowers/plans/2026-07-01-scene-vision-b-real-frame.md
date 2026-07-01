@@ -23,6 +23,7 @@
 ## File Structure
 
 **Create:**
+
 - `studio/backend/app/scene/art_critic.py` — the `SceneArtCritic` seam (types, protocol, replay + live, pure builder, selector).
 - `studio/backend/tests/fixtures/replay/scene_art/default.json` — benign premium cassette (replay fallback).
 - `studio/backend/tests/fixtures/replay/scene_art/pirate-regen.json` — theme-keyed cassette that flags a regenerate then passes (for the injected-frame backend e2e).
@@ -32,6 +33,7 @@
 - `studio/frontend/e2e/scene-art.spec.ts` — browser e2e: real capture → grade → verdict in chat.
 
 **Modify:**
+
 - `studio/backend/app/replay/cassette.py` — add `load_scene_art_cassettes`.
 - `studio/backend/app/config.py` — add `art_capture_timeout`.
 - `studio/backend/app/scene/compose_loop.py` — `ComposeDeps` (+2 methods), `ComposeBounds.art_passes`, `ComposeResult.art_passes_run`, the art stage in `run_compose`.
@@ -46,12 +48,14 @@
 ## Task 1: `SceneArtCritic` seam — types, replay impl, cassette loader
 
 **Files:**
+
 - Create: `studio/backend/app/scene/art_critic.py`
 - Modify: `studio/backend/app/replay/cassette.py` (add `load_scene_art_cassettes`)
 - Create: `studio/backend/tests/fixtures/replay/scene_art/default.json`
 - Test: `studio/backend/tests/test_art_critic.py`
 
 **Interfaces:**
+
 - Produces:
   - `class ArtRegen(BaseModel)` — `target_handle: str`, `why: str = ""`
   - `class SceneArtVerdict(BaseModel)` — `premium: bool = False`, `summary: str = ""`, `regenerate: list[ArtRegen] = []`, `notes: list[str] = []`
@@ -253,11 +257,13 @@ git commit -m "feat(scene): SceneArtCritic seam + replay impl + cassette loader"
 ## Task 2: Pure message builder, live impl, and selector
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/art_critic.py`
 - Modify: `studio/backend/app/config.py` (add `art_capture_timeout`)
 - Test: `studio/backend/tests/test_art_critic.py` (add cases)
 
 **Interfaces:**
+
 - Consumes: `SceneArtRequest`, `SceneArtVerdict` (Task 1).
 - Produces:
   - `build_art_messages(request: SceneArtRequest) -> list[BaseMessage]`
@@ -418,12 +424,14 @@ git commit -m "feat(scene): art critic message builder, live impl, selector + ar
 ## Task 3: Wire `scene_art_critic` through `ToolContext`, `RoomHub`, and `main.py`
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py:24-43` (`ToolContext`)
 - Modify: `studio/backend/app/room_hub.py` (`__init__` param + field + `ToolContext` build)
 - Modify: `studio/backend/app/main.py` (build + pass + `state`)
 - Test: `studio/backend/tests/test_art_wiring.py` (new)
 
 **Interfaces:**
+
 - Consumes: `build_scene_art_critic` (Task 2).
 - Produces: `ToolContext.scene_art_critic: object = None`; `RoomHub(..., scene_art_critic=None)`.
 
@@ -463,14 +471,19 @@ In `studio/backend/app/agent_tools.py`, in the `ToolContext` dataclass add after
 In `studio/backend/app/room_hub.py`:
 
 Add the constructor param (after `asset_critic=None`, line ~35):
+
 ```python
         scene_art_critic=None,
 ```
+
 Store it (after `self._asset_critic = asset_critic`, line ~56):
+
 ```python
         self._scene_art_critic = scene_art_critic
 ```
+
 Pass it into the `ToolContext(...)` build (in the `scene_critic=...` block, ~line 301):
+
 ```python
                          scene_art_critic=self._scene_art_critic,
 ```
@@ -480,18 +493,25 @@ Pass it into the `ToolContext(...)` build (in the `scene_critic=...` block, ~lin
 In `studio/backend/app/main.py`:
 
 Add the import (with the other critic imports, ~line 26):
+
 ```python
 from app.scene.art_critic import build_scene_art_critic
 ```
+
 Build it (after `asset_critic = build_asset_critic(settings)`, ~line 124):
+
 ```python
     scene_art_critic = build_scene_art_critic(settings)
 ```
+
 Pass it into `RoomHub(...)` (in the `scene_critic=..., asset_critic=...` block, ~line 133):
+
 ```python
         scene_art_critic=scene_art_critic,
 ```
+
 Expose on app state (after `fastapi_app.state.asset_critic = asset_critic`, ~line 153):
+
 ```python
     fastapi_app.state.scene_art_critic = scene_art_critic
 ```
@@ -513,10 +533,12 @@ git commit -m "feat(scene): wire scene_art_critic through ToolContext, RoomHub, 
 ## Task 4: `run_compose` final art stage (pure orchestration)
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/compose_loop.py`
 - Test: `studio/backend/tests/test_compose_art_stage.py` (new)
 
 **Interfaces:**
+
 - Consumes: `SceneArtRequest`, `SceneArtVerdict`, `ArtRegen` (Task 1); existing `_plan_context`, `run_compose`, `ComposeBounds`, `ComposeResult`, `ComposeDeps`.
 - Produces:
   - `ComposeDeps.capture_real_frame(self) -> bytes | None`
@@ -649,18 +671,25 @@ Expected: FAIL — `ImportError` for `ArtRegen`/`SceneArtRequest`, and `ComposeR
 In `studio/backend/app/scene/compose_loop.py`:
 
 Add the import (after the existing `from app.scene.critic import ...`, line ~20):
+
 ```python
 from app.scene.art_critic import SceneArtRequest, SceneArtVerdict
 ```
+
 Add to `ComposeBounds` (after `max_edits_per_element`, line ~34):
+
 ```python
     art_passes: int = 2         # art/effects grades after geometry converges (1 grade + 1 re-grade)
 ```
+
 Add to `ComposeResult` (after `corrections_applied`, line ~75):
+
 ```python
     art_passes_run: int = 0
 ```
+
 Add the two methods to the `ComposeDeps` Protocol (after `out_of_frame`, line ~91):
+
 ```python
     async def capture_real_frame(self) -> bytes | None: ...
     async def art_grade(self, request: SceneArtRequest) -> SceneArtVerdict: ...
@@ -747,10 +776,12 @@ git commit -m "feat(scene): final art/effects grade stage in run_compose"
 ## Task 5: `_SceneComposeDeps` — real capture + grade seams
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (`import asyncio`; add `capture_real_frame` + `art_grade` to `_SceneComposeDeps`)
 - Test: `studio/backend/tests/test_compose_deps_capture.py` (new)
 
 **Interfaces:**
+
 - Consumes: `ToolContext.scene_art_critic`, `ToolContext.capture_broker`, `Settings.art_capture_timeout`.
 - Produces: `_SceneComposeDeps.capture_real_frame(self) -> bytes | None`; `_SceneComposeDeps.art_grade(self, request) -> SceneArtVerdict`.
 
@@ -811,6 +842,7 @@ Expected: FAIL — `_SceneComposeDeps` has no `capture_real_frame`.
 - [ ] **Step 3: Add `import asyncio`**
 
 In `studio/backend/app/agent_tools.py`, add at the top with the stdlib imports (line ~1):
+
 ```python
 import asyncio
 ```
@@ -854,11 +886,13 @@ git commit -m "feat(scene): _SceneComposeDeps real-frame capture + art_grade sea
 ## Task 6: Backend e2e — skip-when-no-client and grade-when-answered
 
 **Files:**
+
 - Create: `studio/backend/tests/e2e/test_scene_art.py`
 - Create: `studio/backend/tests/fixtures/replay/scene_art/pirate-regen.json`
 - Test: the file itself.
 
 **Interfaces:**
+
 - Consumes: the `live_server` fixture + the compose run cassette `run/compose-pirate-scene.json` (theme `"pirate slot"`), mirroring `tests/e2e/test_scene_compose.py`.
 
 **Note on isolation:** the compose prompt's theme is `"pirate slot"`. The default `scene_art/default.json` (premium, no regen) applies to every compose test. This task's `pirate-regen.json` is keyed to theme `"pirate slot"` and would override the default FOR THIS THEME — which would also affect `test_scene_compose.py` and the browser spec. To avoid coupling, **do NOT key the regen cassette to `"pirate slot"`.** Instead assert the two integration paths behaviorally (capture requested vs. skipped) using the default cassette; keep the regen-applied assertion in the Task 4 unit tests where it is deterministic. `pirate-regen.json` is therefore only used if a future isolated prompt/theme is added — create it keyed to a unique theme so it never collides.
@@ -988,10 +1022,12 @@ git commit -m "test(scene): backend e2e for real-frame art stage (capture + skip
 ## Task 7: Browser e2e — real capture → grade → verdict in chat
 
 **Files:**
+
 - Create: `studio/frontend/e2e/scene-art.spec.ts`
 - Test: the spec itself (Playwright, local, offset-1 replay stack).
 
 **Interfaces:**
+
 - Consumes: the same harness as `studio/frontend/e2e/compose-loop.spec.ts` (open the Game Scene pane so the engine attaches and answers capture; drive the pirate build prompt). Relies on `format_compose_summary` including the art note in the `compose_scene` step output, and the default `scene_art/default.json` summary `"Scene reads as a premium slot."`.
 
 - [ ] **Step 1: Write the spec**
@@ -1060,18 +1096,22 @@ test('the compose build runs the real-frame art grade and reports its verdict', 
 - [ ] **Step 2: Start the offset-1 replay stack**
 
 In the worktree (`C:\code\bloom.wt\scene-vision-b`), in separate persistent terminals, with `BLOOM_PORT_OFFSET=1` from `.env`:
+
 ```
 just backend-serve-replay      # backend on 8001 (replay)
 just serve-runtime-client      # Pixi client on 4301
 ```
+
 (The Playwright config starts/uses the studio dev server on 4201; global-setup does a `/health` parity check against :8001.)
 
 - [ ] **Step 3: Run the spec (expect it to exercise the real path)**
 
 From the worktree with the offset exported:
+
 ```
 $env:BLOOM_PORT_OFFSET=1; npx playwright test e2e/scene-art.spec.ts
 ```
+
 (or `just e2e` to run the whole suite). Expected: PASS — `compose_scene` and the art verdict `Scene reads as a premium slot` both appear in the feed.
 
 **If the art note does not render in the feed:** the `compose_scene` step body may collapse `format_compose_summary` output. Fallback: assert on the run step's expandable output region for that step, or expose the compose summary via the existing step payload. Prefer surfacing the note in the visible feed over weakening the assertion — the art verdict being visible to the user IS the client-behavior contract.
@@ -1081,6 +1121,7 @@ $env:BLOOM_PORT_OFFSET=1; npx playwright test e2e/scene-art.spec.ts
 ```
 $env:BLOOM_PORT_OFFSET=1; npx playwright test e2e/compose-loop.spec.ts
 ```
+
 Expected: PASS (the art stage is additive; its notes don't break the existing assertions).
 
 - [ ] **Step 5: Commit**
@@ -1097,11 +1138,13 @@ git commit -m "test(scene): browser e2e — real-frame art grade verdict in chat
 **Only attempt if Tasks 1–7 land cleanly and time allows. This is the spec's flagged optional stretch, not a required deliverable.**
 
 **Files:**
+
 - Modify: the A3 approval-gate payload builder (`studio/backend/app/agent_tools.py`, the `rebuild_scene` interrupt payload) to include the captured real frame + `SceneArtVerdict`.
 - Modify: the frontend `ApprovalCard` component to render the real frame thumbnail + verdict summary/notes when present.
 - Create: `studio/frontend/e2e/scene-art-approval.spec.ts` — approve-against-real-frame spec.
 
 **Approach (high level — detail during execution after re-reading the A3 code):**
+
 - The `rebuild_scene` tool already gates via `interrupt()` with an `ApprovalCard`-shaped payload (mirrors `delete_asset`). Extend that payload with an optional `frame` (data URL) + `art` ({summary, notes, regenerate}) captured at the gate.
 - The `ApprovalCard` renders them additively — absent fields keep today's behavior (no regression for `delete_asset`/geometry-only rebuilds).
 - e2e: with a live client, trigger a rebuild that reaches the gate, assert the card shows the real frame + verdict, then approve.
@@ -1114,10 +1157,11 @@ git commit -m "test(scene): browser e2e — real-frame art grade verdict in chat
 ## Self-Review
 
 **1. Spec coverage:**
+
 - Additive art critic on the real frame, geometry on proxy untouched → Tasks 1–2 (seam), Task 4 (stage runs after geometry loop; proxy path unchanged). ✓
 - Final whole-scene grade; regenerate + report; bounded re-grade → Task 4 (`art_passes`, premium short-circuit, shared budget). ✓
 - Graceful skip when headless + own cassette seam → Task 1 (benign default), Task 5 (`capture_real_frame` → None), Task 6 (skip e2e). ✓
-- New dedicated seam mirroring existing critics (Replay/Live/build_/pure builder/cassette dir) → Tasks 1–2. ✓
+- New dedicated seam mirroring existing critics (Replay/Live/build\_/pure builder/cassette dir) → Tasks 1–2. ✓
 - Short `art_capture_timeout` → Task 2. ✓
 - Shared regen budget → Task 4 (`regen_left`), unit `test_art_shares_regen_budget`. ✓
 - Ordering guarantee (ops emitted before capture request) → holds by construction (Task 4 runs after the awaited element loop; capture emitted on the same room); asserted behaviorally by Task 6/7. ✓

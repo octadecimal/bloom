@@ -76,11 +76,11 @@ run_compose ─capture_real_frame()─► broker.request_capture ─emit scene_c
 Two critic seams to **mirror exactly** — B's art critic is a third seam in the same
 shape:
 
-| Seam                         | Types                                  | Impls                                       | Selector                  | Cassettes                          |
-| ---------------------------- | -------------------------------------- | ------------------------------------------- | ------------------------- | ---------------------------------- |
-| `critic.py` (geometry)       | `CritiqueRequest` / `Critique`         | `ReplaySceneCritic` / `LiveSceneCritic`     | `build_scene_critic`      | `tests/fixtures/replay/critic/`    |
-| `asset_critic.py` (per-asset)| `AssetCritiqueRequest` / `AssetVerdict`| `ReplayAssetCritic` / `LiveAssetCritic`     | `build_asset_critic`      | `tests/fixtures/replay/asset/`     |
-| **`art_critic.py` (B, new)** | `SceneArtRequest` / `SceneArtVerdict`  | `ReplaySceneArtCritic` / `LiveSceneArtCritic`| `build_scene_art_critic` | `tests/fixtures/replay/scene_art/` |
+| Seam                          | Types                                   | Impls                                         | Selector                 | Cassettes                          |
+| ----------------------------- | --------------------------------------- | --------------------------------------------- | ------------------------ | ---------------------------------- |
+| `critic.py` (geometry)        | `CritiqueRequest` / `Critique`          | `ReplaySceneCritic` / `LiveSceneCritic`       | `build_scene_critic`     | `tests/fixtures/replay/critic/`    |
+| `asset_critic.py` (per-asset) | `AssetCritiqueRequest` / `AssetVerdict` | `ReplayAssetCritic` / `LiveAssetCritic`       | `build_asset_critic`     | `tests/fixtures/replay/asset/`     |
+| **`art_critic.py` (B, new)**  | `SceneArtRequest` / `SceneArtVerdict`   | `ReplaySceneArtCritic` / `LiveSceneArtCritic` | `build_scene_art_critic` | `tests/fixtures/replay/scene_art/` |
 
 ## Architecture
 
@@ -157,7 +157,7 @@ prefers `premium=true` unless the scene is clearly not shippable, and flags
   - `capture_real_frame() -> bytes | None` — the real frame, or `None` when no client
     is attached / capture times out.
   - `art_grade(request: SceneArtRequest) -> SceneArtVerdict`.
-  (`regenerate(handle)` is reused as-is.)
+    (`regenerate(handle)` is reused as-is.)
 - `ComposeBounds` gains `art_passes: int = 2` (one grade + one re-grade after regens).
 - **Budget:** art regenerations decrement the **same** `regen_left` used by the
   geometry loop, preserving the single hard per-build regeneration ceiling.
@@ -223,13 +223,13 @@ capture reflects the fully-built scene.
 
 ## Degradation & determinism
 
-| Context                             | Frame source          | Grade source            | Result                          |
-| ----------------------------------- | --------------------- | ----------------------- | ------------------------------- |
-| Live studio, browser client attached| real capture          | `LiveSceneArtCritic`    | true art grade, may regenerate  |
-| Playwright e2e (replay backend)     | **real** capture      | `ReplaySceneArtCritic`  | true round trip, cassette grade |
-| Backend replay e2e (no client)      | `None` (timeout)      | —                       | art skipped + note, geometry OK |
-| Backend replay e2e (injected frame) | fake broker bytes     | `ReplaySceneArtCritic`  | cassette grade, bounded regen   |
-| REST intent-save rebuild, no client | `None` (fast timeout) | —                       | art skipped + note              |
+| Context                              | Frame source          | Grade source           | Result                          |
+| ------------------------------------ | --------------------- | ---------------------- | ------------------------------- |
+| Live studio, browser client attached | real capture          | `LiveSceneArtCritic`   | true art grade, may regenerate  |
+| Playwright e2e (replay backend)      | **real** capture      | `ReplaySceneArtCritic` | true round trip, cassette grade |
+| Backend replay e2e (no client)       | `None` (timeout)      | —                      | art skipped + note, geometry OK |
+| Backend replay e2e (injected frame)  | fake broker bytes     | `ReplaySceneArtCritic` | cassette grade, bounded regen   |
+| REST intent-save rebuild, no client  | `None` (fast timeout) | —                      | art skipped + note              |
 
 The art grade is **non-deterministic only when live**; in replay it is
 cassette-driven. It is **not a new reproducibility input**: reproduction reuses stored
@@ -265,11 +265,11 @@ version). B adds no persisted state.
 
 ## Phase breakdown (each a clean stop/ship point)
 
-| Phase                    | Deliverable                                                                                                       | Tests                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| **B1 — art critic seam** | `art_critic.py` (types, protocol, replay + live, `build_scene_art_critic`, pure builder) · cassette loader · `art_capture_timeout` + `scene_art_critic` config/wiring | unit (replay selection, builder)          |
-| **B2 — compose art stage**| `run_compose` final art stage · `ComposeDeps` `capture_real_frame` / `art_grade` · `_SceneComposeDeps` impls · graceful skip · shared budget · chat surfacing | unit (stage logic) + backend e2e (skip + injected-frame) |
-| **B3 — client contract** | Playwright real capture → grade round trip; verdict in chat feed. _Optional stretch:_ real frame + verdict in the A3 `ApprovalCard` (+ approval-gate spec) | Playwright (offset-1 replay backend)      |
+| Phase                      | Deliverable                                                                                                                                                           | Tests                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **B1 — art critic seam**   | `art_critic.py` (types, protocol, replay + live, `build_scene_art_critic`, pure builder) · cassette loader · `art_capture_timeout` + `scene_art_critic` config/wiring | unit (replay selection, builder)                         |
+| **B2 — compose art stage** | `run_compose` final art stage · `ComposeDeps` `capture_real_frame` / `art_grade` · `_SceneComposeDeps` impls · graceful skip · shared budget · chat surfacing         | unit (stage logic) + backend e2e (skip + injected-frame) |
+| **B3 — client contract**   | Playwright real capture → grade round trip; verdict in chat feed. _Optional stretch:_ real frame + verdict in the A3 `ApprovalCard` (+ approval-gate spec)            | Playwright (offset-1 replay backend)                     |
 
 ## Risks
 
