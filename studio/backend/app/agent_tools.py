@@ -12,7 +12,8 @@ from app.scene.compose import build_sprite_ops, DEFAULT_CANVAS
 from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.layout.bind import bind
 from app.scene.layout.intent import read_intent
-from app.scene.layout.plan import ScenePlan
+from app.scene.layout.plan import ScenePlan, canonical_role
+from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
@@ -665,11 +666,40 @@ async def rebuild_scene_core(ctx: ToolContext, theme: str = "") -> str:
     return "Rebuilt scene from current design intent. " + format_compose_summary(result)
 
 
+async def _current_role_positions(ctx: "ToolContext") -> dict[str, tuple[float, float]]:
+    """Canonical role -> current sprite (x, y) from the live scene doc. Empty when
+    there is no scene. Used to render the approval gate's planned-change summary."""
+    doc = await ctx.scene_store.get_document(ctx.game_id) if ctx.scene_store else None
+    out: dict[str, tuple[float, float]] = {}
+    if not doc:
+        return out
+    for nid, n in doc.get("nodes", {}).items():
+        if n.get("type") != "Sprite":
+            continue
+        props = n.get("props") or {}
+        role = canonical_role(props.get("role") or nid.removeprefix("spr."))
+        pos = props.get("position") or {}
+        if role:
+            out[role] = (float(pos.get("x", 0)), float(pos.get("y", 0)))
+    return out
+
+
 def build_rebuild_scene_tool(ctx: ToolContext) -> BaseTool:
     async def rebuild_scene(theme: str = "") -> str:
         """Re-run bind -> place -> reconcile for every role already in the scene,
-        using the CURRENT persisted GDD intent. Use after the art direction or
-        layout intent changes so the live scene reflows to the new plan."""
+        using the CURRENT persisted GDD intent + region overrides. Asks the human
+        to approve the planned reflow before applying it."""
+        current = await _current_role_positions(ctx)
+        if not current:
+            # nothing placed -> no gate; let the core report the empty/no-critic case
+            return await rebuild_scene_core(ctx, theme)
+        plan = await _plan_for_game(ctx)
+        label = ("Rebuild the scene to the current design intent?\n"
+                 + summarize_rebuild(plan, current))
+        decision = interrupt(
+            {"tool": "rebuild_scene", "args": {"theme": theme}, "label": label})
+        if decision != "approve":
+            return "Rebuild cancelled by the user."
         return await rebuild_scene_core(ctx, theme)
 
     return StructuredTool.from_function(
