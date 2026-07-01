@@ -74,3 +74,77 @@ class ReplaySceneArtCritic:
         if passes is None or request.pass_index >= len(passes):
             return SceneArtVerdict(premium=True)
         return SceneArtVerdict(**passes[request.pass_index])
+
+
+ART_SYSTEM_PROMPT = (
+    "You are a premium slot-game ART DIRECTOR grading a RENDERED frame of a "
+    "finished slot scene — the real engine frame with lighting, blends, glows, "
+    "and responsive scaling, NOT a flat layout mock. Geometry (position/size) has "
+    "already been reconciled to a plan; do NOT re-judge placement. Judge whether "
+    "the scene READS AS A SHIPPED, PREMIUM slot:\n"
+    "- Overall composition, balance, and focal clarity.\n"
+    "- Lighting, depth, contrast, and colour cohesion against the theme.\n"
+    "- Framing and negative-space discipline; nothing important cropped or crowded.\n"
+    "- Readability of the key elements (logo, reels, spin) at the rendered scale.\n"
+    "- Effect integrity: an element must not be washed out, occluded, or lost to a "
+    "blend/glow/another element.\n\n"
+    "Your ONLY corrective action is REGENERATE: flag an element whose ART cannot be "
+    "salvaged as-rendered and must be remade (you do NOT move, scale, reorder, or "
+    "tune effects). Flag sparingly and only when no re-render of the SAME art could "
+    "fix it. Prefer premium=true unless the scene is clearly not shippable.\n\n"
+    "Return {premium, summary, regenerate:[{target_handle, why}], notes:[...]} where "
+    "summary is a one-line verdict and notes are specific observations."
+)
+
+
+def _data_url(frame_png: bytes) -> str:
+    b64 = base64.b64encode(frame_png).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
+def build_art_messages(request: SceneArtRequest) -> list[BaseMessage]:
+    """Pure builder: render a SceneArtRequest into the LLM message list (system
+    prompt + a multimodal human turn carrying scene/plan context and the real
+    frame PNG as a base64 data URL). Kept pure so it is unit-testable offline."""
+    context = {"theme": request.theme, "plan": request.plan, "scene": request.scene}
+    text = (
+        "Grade the RENDERED slot scene shown in the image on premium art quality.\n"
+        f"Theme/intent: {request.theme}\n"
+        f"Regenerations left in budget: {request.regen_budget_left}\n\n"
+        f"Layout plan + scene context (JSON):\n{json.dumps(context, indent=2)}"
+    )
+    return [
+        SystemMessage(ART_SYSTEM_PROMPT),
+        HumanMessage(content=[
+            {"type": "text", "text": text},
+            {"type": "image_url", "image_url": {"url": _data_url(request.frame_png)}},
+        ]),
+    ]
+
+
+class LiveSceneArtCritic:
+    """Live art critic: a DIRECT structured+image completion via OpenRouter, mirrors
+    ``LiveSceneCritic``. NOT a bound tool."""
+
+    def __init__(self, api_key: str, base_url: str, model: str):
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+
+    async def grade(self, request: SceneArtRequest) -> SceneArtVerdict:
+        from langchain_openai import ChatOpenAI
+
+        llm = ChatOpenAI(model=self._model, api_key=self._api_key, base_url=self._base_url)
+        structured = llm.with_structured_output(SceneArtVerdict)
+        return await structured.ainvoke(build_art_messages(request))
+
+
+def build_scene_art_critic(settings: Settings) -> SceneArtCritic:
+    """Select the art-critic impl by provider mode — mirrors ``build_scene_critic``."""
+    if settings.provider_mode == "replay":
+        return ReplaySceneArtCritic(load_scene_art_cassettes(DEFAULT_FIXTURES_DIR))
+    return LiveSceneArtCritic(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+        model=settings.critic_model,
+    )

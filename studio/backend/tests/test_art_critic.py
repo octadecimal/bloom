@@ -41,3 +41,38 @@ def test_replay_returns_keyed_pass_then_benign_default():
     # unknown theme, no default -> benign premium (never raises; additive stage)
     req_unknown = SceneArtRequest(frame_png=b"x", scene={}, theme="unknown")
     assert asyncio.run(critic.grade(req_unknown)).premium is True
+
+
+from app.config import Settings
+from app.scene.art_critic import (
+    ART_SYSTEM_PROMPT,
+    LiveSceneArtCritic,
+    build_art_messages,
+    build_scene_art_critic,
+)
+
+
+def test_build_art_messages_carries_frame_and_context():
+    req = SceneArtRequest(
+        frame_png=b"\x89PNGxyz", scene={"elements": [{"handle": "logo"}]},
+        plan={"logo": {"role": "logo", "x": 540, "y": 200}}, theme="pirate slot")
+    msgs = build_art_messages(req)
+    assert msgs[0].content == ART_SYSTEM_PROMPT
+    parts = msgs[1].content
+    assert parts[0]["type"] == "text" and "pirate slot" in parts[0]["text"]
+    assert parts[1]["type"] == "image_url"
+    assert parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_selector_picks_replay_in_replay_mode():
+    s = Settings(provider_mode="replay")
+    assert type(build_scene_art_critic(s)).__name__ == "ReplaySceneArtCritic"
+
+
+def test_selector_picks_live_otherwise():
+    s = Settings(provider_mode="live", openrouter_api_key="k")
+    assert isinstance(build_scene_art_critic(s), LiveSceneArtCritic)
+
+
+def test_art_capture_timeout_default():
+    assert Settings().art_capture_timeout == 3.0
