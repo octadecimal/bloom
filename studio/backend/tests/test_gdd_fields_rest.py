@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from types import SimpleNamespace
+from app.gdd.hub import GddHub
 from app.gdd.store import GddStore
 from app import rest
 
@@ -12,8 +13,19 @@ async def _clear_gdd(mongo_db):
     await mongo_db["gdd_docs"].delete_many({})
 
 
+class _FakeSio:
+    async def emit(self, event, data=None, **kwargs):
+        pass
+
+    async def enter_room(self, sid, room):
+        pass
+
+
 def _req(store):
-    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(gdd_store=store)))
+    hub = GddHub(_FakeSio(), store)
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
+        gdd_store=store, gdd_hub=hub,
+    )))
 
 
 @pytest.mark.asyncio

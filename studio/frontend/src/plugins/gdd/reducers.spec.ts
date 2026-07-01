@@ -10,6 +10,7 @@ const doc = (aspect: string, order: number, body = ''): IGddDoc => ({
   order,
   body,
   status: 'empty',
+  data: {},
   createdAt: '',
   updatedAt: '',
 });

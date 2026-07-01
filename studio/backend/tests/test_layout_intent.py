@@ -47,3 +47,13 @@ def test_prompt_for_role_composes_art_direction_and_snippet():
                        tone="luxe", role_snippets={"logo": "ornate crest wordmark"})
     p = prompt_for_role("logo", intent)
     assert "weathered gold" in p and "ornate crest wordmark" in p and "luxe" in p
+
+
+@pytest.mark.asyncio
+async def test_read_intent_falls_back_on_invalid_enum():
+    store = _FakeStore({"ui-ux": {"orientation": "sideways",
+                                  "focal_emphasis": "", "framing_density": "BOGUS"}})
+    intent = await read_intent(store, "g1")
+    assert intent.orientation == "landscape"
+    assert intent.focal_emphasis == "balanced"
+    assert intent.framing_density == "moderate"

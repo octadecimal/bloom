@@ -5,6 +5,7 @@ from app.catalog import build_model_catalog
 from app.gdd.models import gdd_wire
 from app.models import message_wire, room_wire
 from app.runs import run_wire
+from app.scene.intent_rebuild import is_intent_change, rebuild_after_intent
 from app.skills import SkillError
 
 router = APIRouter()
@@ -118,10 +119,13 @@ async def list_gdd_docs(game_id: str, request: Request) -> list[dict]:
 async def set_gdd_fields_rest(
     game_id: str, aspect: str, body: SetGddFieldsBody, request: Request
 ) -> dict:
-    store = request.app.state.gdd_store
-    await store.seed_taxonomy(game_id)  # idempotent: ensures the aspect doc exists
-    doc, warnings = await store.set_fields(game_id, aspect, body.fields)
-    return {"doc": gdd_wire(doc), "warnings": warnings}
+    hub = request.app.state.gdd_hub
+    await request.app.state.gdd_store.seed_taxonomy(game_id)  # idempotent
+    doc, warnings = await hub.set_fields(game_id, aspect, body.fields)  # emits gdd_doc_updated
+    rebuilt = False
+    if is_intent_change(aspect, body.fields):
+        rebuilt = (await rebuild_after_intent(request.app.state, game_id)) is not None
+    return {"doc": gdd_wire(doc), "warnings": warnings, "rebuilt": rebuilt}
 
 
 @router.get("/rooms/{room_id}/runs")

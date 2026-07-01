@@ -36,3 +36,15 @@ def test_role_snippet_attached_from_intent():
 def test_noop_refiner_leaves_plan_unchanged():
     intent = GddIntent()
     assert bind(intent, NoopRefiner()).roles.keys() == bind(intent).roles.keys()
+
+
+def test_focal_logo_enlarges_logo_region():
+    base = bind(GddIntent(focal_emphasis="balanced")).for_role(LOGO)
+    logo = bind(GddIntent(focal_emphasis="logo")).for_role(LOGO)
+    assert logo.region_w > base.region_w and logo.region_h > base.region_h
+
+
+def test_focal_reels_shrinks_flourishes():
+    base = bind(GddIntent(focal_emphasis="balanced", framing_density="ornate"))
+    reels = bind(GddIntent(focal_emphasis="reels", framing_density="ornate"))
+    assert reels.for_role(FLOURISH_LEFT).region_w < base.for_role(FLOURISH_LEFT).region_w

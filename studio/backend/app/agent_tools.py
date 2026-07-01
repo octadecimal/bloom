@@ -115,15 +115,38 @@ async def _place_in_scene(
     ITS LOCK (so two parallel calls can't both emit `addNode root` and collide); the
     sprite batch never carries a Root op. A custom parent does not auto-create a Root
     — derive the canvas from a light read for centering. Returns the human message.
+
+    Reflow path: if the sprite already exists (e.g. rebuild_scene_core re-places
+    every sprite after a GDD intent change), this issues setProp ops for position,
+    scale, and zIndex rather than addNode ops. This avoids duplicate_id errors and
+    correctly updates the existing sprite's geometry without touching its art.
     """
+    # Read the existing scene doc once; used for canvas discovery, the reflow
+    # duplicate-sprite check, and the non-root canvas derivation.
+    _doc = await ctx.scene_store.get_document(ctx.game_id) or {}
+
     if parent == "root":
-        info = await ctx.scene_hub.ensure_root(ctx.game_id, DEFAULT_CANVAS)
+        # Preserve the Root's current canvas rather than overwriting it with
+        # DEFAULT_CANVAS. This prevents placement calls during rebuild_scene_core
+        # from reverting an orientation flip that ensure_root already applied.
+        _existing_root = next(
+            (n for n in _doc.get("nodes", {}).values() if n.get("type") == "Root"),
+            None,
+        )
+        if _existing_root is not None:
+            _rp = _existing_root.get("props") or {}
+            _use_canvas: tuple[int, int] = (
+                int(_rp.get("width", DEFAULT_CANVAS[0])),
+                int(_rp.get("height", DEFAULT_CANVAS[1])),
+            )
+        else:
+            _use_canvas = DEFAULT_CANVAS
+        info = await ctx.scene_hub.ensure_root(ctx.game_id, _use_canvas)
         parent_id = info["root_id"]
         canvas = info["canvas"]
     else:
         parent_id = parent
-        doc = await ctx.scene_store.get_document(ctx.game_id) or empty_document()
-        nodes = doc.get("nodes", {})
+        nodes = _doc.get("nodes", {})
         root_id = next((nid for nid, n in nodes.items() if n.get("type") == "Root"), None)
         root_props = (nodes.get(root_id) or {}).get("props", {}) if root_id else {}
         canvas = (int(root_props.get("width", DEFAULT_CANVAS[0])),
@@ -136,6 +159,38 @@ async def _place_in_scene(
         x=x, y=y, anchor_x=anchor_x, anchor_y=anchor_y, fit=fit, z_index=z_index,
         asset_id=asset_id, region=region,
     )
+
+    # Reflow path: if the sprite already exists, update its geometry via setProp
+    # rather than re-adding it (which would raise duplicate_id). The Texture and
+    # edge nodes are left as-is (they already point at the asset's media ref).
+    sprite_id = f"spr.{handle}"
+    if sprite_id in _doc.get("nodes", {}):
+        sprite_addnode = next(
+            (op for op in ops if op.get("kind") == "addNode" and op.get("id") == sprite_id),
+            None,
+        )
+        if sprite_addnode:
+            sp = sprite_addnode["props"]
+            # Reflow updates position/scale/zIndex/role only. anchor is intentionally
+            # omitted: every RoleRegion and the focal/density transforms keep anchors at
+            # the 0.5 default, so an intent edit never moves one. If a future template
+            # varies a role's anchor, add anchor.x/anchor.y setProps here too.
+            ops = [
+                {"kind": "setProp", "id": sprite_id, "path": "position.x",
+                 "value": sp["position"]["x"]},
+                {"kind": "setProp", "id": sprite_id, "path": "position.y",
+                 "value": sp["position"]["y"]},
+                {"kind": "setProp", "id": sprite_id, "path": "scale.x",
+                 "value": sp["scale"]["x"]},
+                {"kind": "setProp", "id": sprite_id, "path": "scale.y",
+                 "value": sp["scale"]["y"]},
+                {"kind": "setProp", "id": sprite_id, "path": "zIndex",
+                 "value": sp["zIndex"]},
+            ]
+            if role:
+                ops.append({"kind": "setProp", "id": sprite_id, "path": "role",
+                            "value": role})
+
     try:
         doc = await ctx.scene_hub.apply_batch(ctx.game_id, ops)
     except OpError as e:
@@ -583,25 +638,30 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
     )
 
 
+async def rebuild_scene_core(ctx: ToolContext, theme: str = "") -> str:
+    """Re-run bind -> place -> reconcile for every role already in the scene,
+    using the CURRENT persisted GDD intent. Shared by the agent tool and the
+    REST intent-save path (room_id is unused, so a REST caller may pass "")."""
+    if ctx.scene_critic is None or ctx.asset_critic is None:
+        return "Rebuild unavailable: no critic wired."
+    plan = await _plan_for_game(ctx)
+    if ctx.scene_hub is not None:
+        await ctx.scene_hub.ensure_root(ctx.game_id, plan.canvas)
+    deps = _SceneComposeDeps(ctx)
+    handles = await deps.placed_handles()
+    if not handles:
+        return "Nothing to rebuild: the scene is empty."
+    elements = [BuildElement(slot=h, role=h) for h in handles]
+    result = await run_compose(elements, theme, deps, plan=plan)
+    return "Rebuilt scene from current design intent. " + format_compose_summary(result)
+
+
 def build_rebuild_scene_tool(ctx: ToolContext) -> BaseTool:
     async def rebuild_scene(theme: str = "") -> str:
         """Re-run bind -> place -> reconcile for every role already in the scene,
         using the CURRENT persisted GDD intent. Use after the art direction or
         layout intent changes so the live scene reflows to the new plan."""
-        if ctx.scene_critic is None or ctx.asset_critic is None:
-            return "Rebuild unavailable: no critic wired."
-        plan = await _plan_for_game(ctx)
-        if ctx.scene_hub is not None:
-            await ctx.scene_hub.ensure_root(ctx.game_id, plan.canvas)
-        deps = _SceneComposeDeps(ctx)
-        handles = await deps.placed_handles()
-        if not handles:
-            return "Nothing to rebuild: the scene is empty."
-        # Re-place each existing role from the plan; reuse keeps the same art
-        # (generate_and_place reuses a slot that already has a selected image).
-        elements = [BuildElement(slot=h, role=h) for h in handles]
-        result = await run_compose(elements, theme, deps, plan=plan)
-        return "Rebuilt scene from current design intent. " + format_compose_summary(result)
+        return await rebuild_scene_core(ctx, theme)
 
     return StructuredTool.from_function(
         coroutine=rebuild_scene, name="rebuild_scene",

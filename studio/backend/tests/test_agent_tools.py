@@ -238,3 +238,14 @@ async def test_list_assets_includes_slot():
     out = await build_list_assets_tool(ctx).ainvoke({})
     assert "slot=high1" in out
     assert "/media/g/a1/gen1.png" in out
+
+
+# --- Task 3: rebuild_scene_core shared spine ---
+
+from app.agent_tools import rebuild_scene_core
+
+
+@pytest.mark.asyncio
+async def test_rebuild_scene_core_reports_no_critic():
+    ctx = ToolContext(room_id="", game_id="g1", asset_store=None, asset_hub=None)
+    assert "no critic" in (await rebuild_scene_core(ctx)).lower()

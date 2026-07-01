@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { gddHooks } from './state';
+import { saveIntentFields } from './actions';
+import { INTENT_FIELDS } from './intentFields';
 import { Markdown } from '@/components/ui/Markdown';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -8,6 +11,75 @@ const STATUS_LABEL: Record<string, string> = {
   needs_input: 'needs input',
   complete: 'complete',
 };
+
+function IntentEditor({ gameId, aspect, data }: { gameId: string; aspect: string; data: Record<string, unknown> }) {
+  const fields = INTENT_FIELDS[aspect];
+  const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(fields.map((f) => [f.key, String(data[f.key] ?? '')])));
+  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function onSave() {
+    setSaving(true);
+    setStatus('');
+    try {
+      const patch = Object.fromEntries(fields.map((f) => [f.key, values[f.key]]).filter(([, v]) => v !== ''));
+      const res = await saveIntentFields(gameId, aspect, patch);
+      setStatus(res.rebuilt ? 'Reflowed scene.' : 'Saved.');
+    } catch {
+      setStatus('Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div data-testid="gdd-intent-editor" className="mb-4 flex flex-col gap-3 border-b border-hairline pb-4">
+      {fields.map((f) => (
+        <label key={f.key} className="flex flex-col gap-1 text-sm text-text-2">
+          <span>{f.label}</span>
+          {f.control === 'select' ? (
+            <select
+              data-testid={`gdd-intent-${f.key}`}
+              value={values[f.key] || ''}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              className="rounded border border-hairline bg-raised px-2 py-1 text-text-1"
+            >
+              <option value="">—</option>
+              {f.options!.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <textarea
+              data-testid={`gdd-intent-${f.key}`}
+              value={values[f.key] || ''}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              rows={3}
+              className="rounded border border-hairline bg-raised px-2 py-1 text-text-1"
+            />
+          )}
+        </label>
+      ))}
+      <div className="flex items-center gap-3">
+        <button
+          data-testid="gdd-intent-save"
+          onClick={onSave}
+          disabled={saving}
+          className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {status && (
+          <span data-testid="gdd-intent-status" className="text-sm text-text-3">
+            {status}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function GddViewerPane(_props: IDockviewPanelProps) {
   const s = gddHooks.usePluginState();
@@ -44,6 +116,9 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
         ))}
       </ul>
       <div className="flex-1 overflow-auto p-3">
+        {current && INTENT_FIELDS[current.aspect] && (
+          <IntentEditor key={current.aspect} gameId={activeGameId} aspect={current.aspect} data={current.data || {}} />
+        )}
         <Markdown source={current?.body || ''} />
       </div>
     </div>

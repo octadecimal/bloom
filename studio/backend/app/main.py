@@ -143,6 +143,10 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.tuner_hub = tuner_hub
     fastapi_app.state.scene_store = scene_store
     fastapi_app.state.scene_hub = scene_hub
+    fastapi_app.state.gdd_hub = gdd_hub
+    fastapi_app.state.asset_hub = asset_hub
+    fastapi_app.state.scene_critic = scene_critic
+    fastapi_app.state.asset_critic = asset_critic
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(sim_router)
     fastapi_app.include_router(tuner_router)
