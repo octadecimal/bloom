@@ -24,6 +24,7 @@ from app.scene.hub import GameSceneHub
 from app.scene.capture import SceneCaptureBroker
 from app.scene.critic import build_scene_critic
 from app.scene.asset_critic import build_asset_critic
+from app.scene.layout.overrides import RegionOverrideStore
 from app.scene.sockets import register_scene_handlers
 from app.scene.reels_spin import build_spin_runner
 from app.scene.store import GameSceneStore
@@ -95,6 +96,7 @@ def build(settings: Settings) -> AppContext:
 
     scene_store = GameSceneStore(mongo[settings.mongo_db])
     scene_hub = GameSceneHub(sio, scene_store)
+    region_override_store = RegionOverrideStore(mongo[settings.mongo_db])
 
     asset_hub = AssetHub(sio, asset_store, comfy, media, scene_store=scene_store, scene_hub=scene_hub)
 
@@ -130,6 +132,7 @@ def build(settings: Settings) -> AppContext:
         sim_store=sim_store, tuner_store=tuner_store, tuner_hub=tuner_hub,
         scene_critic=scene_critic, capture_broker=capture_broker,
         asset_critic=asset_critic,
+        region_override_store=region_override_store,
     )
     register_socket_handlers(sio, hub, presence)
 
@@ -143,6 +146,7 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.tuner_hub = tuner_hub
     fastapi_app.state.scene_store = scene_store
     fastapi_app.state.scene_hub = scene_hub
+    fastapi_app.state.region_override_store = region_override_store
     fastapi_app.state.gdd_hub = gdd_hub
     fastapi_app.state.asset_hub = asset_hub
     fastapi_app.state.scene_critic = scene_critic

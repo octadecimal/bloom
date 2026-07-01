@@ -39,6 +39,7 @@ class ToolContext:
     scene_critic: object = None
     capture_broker: object = None
     asset_critic: object = None
+    region_override_store: object = None
 
 
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
@@ -593,12 +594,17 @@ def format_compose_summary(result) -> str:
 
 
 async def _plan_for_game(ctx: ToolContext) -> ScenePlan:
-    """Bind a ScenePlan from the game's persisted GDD intent. Falls back to the
-    default landscape template when no GDD store / intent is present."""
-    if ctx.gdd_store is None:
-        from app.scene.layout.bind import GddIntent
-        return bind(GddIntent())
-    return bind(await read_intent(ctx.gdd_store, ctx.game_id))
+    """Bind a ScenePlan from the game's persisted GDD intent + any per-game region
+    overrides. Falls back to the default landscape template when no GDD store is
+    present; overrides are the final bind layer so a human nudge survives rebuild."""
+    from app.scene.layout.bind import GddIntent
+    intent = GddIntent()
+    if ctx.gdd_store is not None:
+        intent = await read_intent(ctx.gdd_store, ctx.game_id)
+    overrides: dict = {}
+    if ctx.region_override_store is not None:
+        overrides = await ctx.region_override_store.get(ctx.game_id)
+    return bind(intent, overrides=overrides)
 
 
 def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
