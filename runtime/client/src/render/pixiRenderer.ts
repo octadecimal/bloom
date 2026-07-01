@@ -238,6 +238,11 @@ export class PixiRenderer implements IRenderer {
     return obj ? { x: obj.scale.x, y: obj.scale.y } : null;
   }
 
+  positionOf(id: string): { x: number; y: number } | null {
+    const obj = this.objects.get(id);
+    return obj ? { x: obj.position.x, y: obj.position.y } : null;
+  }
+
   onStage(id: string): boolean {
     const stage = this.app?.stage as unknown as Container | undefined;
     let cur = this.objects.get(id) as Container | null | undefined;
