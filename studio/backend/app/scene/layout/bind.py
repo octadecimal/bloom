@@ -11,7 +11,7 @@ from app.scene.layout.template import (
     TEMPLATE_VERSION, RoleRegion, canvas_for, template_for,
     REELS, LOGO, FLOURISH_LEFT, FLOURISH_RIGHT,
 )
-from app.scene.layout.plan import ScenePlan, resolve_region
+from app.scene.layout.plan import ScenePlan, PlannedRole, resolve_region, canonical_role
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,45 @@ def _apply_density(regions: dict[str, RoleRegion], density: str) -> dict[str, Ro
     return out
 
 
-def bind(intent: GddIntent, refiner: LayoutRefiner | None = None) -> ScenePlan:
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+def _apply_overrides(plan: ScenePlan, overrides: dict | None) -> ScenePlan:
+    """Replace set fields on each role's PlannedRole from a per-game override map.
+    Absolute values, per-field-optional, clamped to the canvas. The FINAL bind
+    layer (spec §bind step 6): applied after the refiner so a human nudge always
+    wins, yet only for the fields it sets."""
+    if not overrides:
+        return plan
+    cw, ch = plan.canvas
+    roles = dict(plan.roles)
+    for role, ov in overrides.items():
+        key = canonical_role(role)
+        pr = roles.get(key) if key else None
+        if pr is None:
+            continue  # unknown / dropped role -> no-op
+        fields = ov.as_set_fields() if hasattr(ov, "as_set_fields") else {
+            k: v for k, v in dict(ov).items() if v is not None}
+        upd: dict = {}
+        if "x" in fields:
+            upd["x"] = _clamp(float(fields["x"]), 0.0, cw)
+        if "y" in fields:
+            upd["y"] = _clamp(float(fields["y"]), 0.0, ch)
+        if "region_w" in fields:
+            upd["region_w"] = int(_clamp(float(fields["region_w"]), 1.0, cw))
+        if "region_h" in fields:
+            upd["region_h"] = int(_clamp(float(fields["region_h"]), 1.0, ch))
+        if "anchor_x" in fields:
+            upd["anchor_x"] = _clamp(float(fields["anchor_x"]), 0.0, 1.0)
+        if "anchor_y" in fields:
+            upd["anchor_y"] = _clamp(float(fields["anchor_y"]), 0.0, 1.0)
+        roles[key] = replace(pr, **upd)
+    return replace(plan, roles=roles)
+
+
+def bind(intent: GddIntent, overrides: dict | None = None,
+         refiner: LayoutRefiner | None = None) -> ScenePlan:
     canvas = canvas_for(intent.orientation)
     regions = template_for(intent.orientation)
     regions = _apply_focal(regions, intent.focal_emphasis)
@@ -74,4 +112,5 @@ def bind(intent: GddIntent, refiner: LayoutRefiner | None = None) -> ScenePlan:
         template_version=TEMPLATE_VERSION,
         roles=roles,
     )
-    return (refiner or NoopRefiner()).refine(plan, intent)
+    plan = (refiner or NoopRefiner()).refine(plan, intent)
+    return _apply_overrides(plan, overrides)  # FINAL layer, after the refiner
