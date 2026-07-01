@@ -28,6 +28,12 @@
           ]
         }
       }
+    ],
+    [
+      {
+        "name": "adjust_element",
+        "args": {"ref": "logo", "y": 0}
+      }
     ]
   ],
   "final": ["Placed a pirate background and a logo at the top of the scene."]

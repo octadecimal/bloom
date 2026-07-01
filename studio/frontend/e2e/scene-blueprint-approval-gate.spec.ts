@@ -47,7 +47,20 @@ test('rebuild_scene pauses on an approval card; approve reflows the scene', asyn
   await page.getByTestId('view-open-game/preview').click();
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => logoPos(page), { timeout: 25_000 }).toBeGreaterThanOrEqual(0);
+  // Wait for the adjust_element cassette round (round 1) to settle, which moves the logo
+  // to y=0 after compose_scene places it at y=93.6 (plan position). This eliminates a
+  // timing race where a warm browser loads the engine faster than round 1 commits:
+  // the engine could get a snapshot at y=93.6, then receive a live setProp y=0 — both
+  // tests need `before=0` so that approve (logo→93.6) and deny (logo stays 0) diverge.
+  await expect.poll(() => logoPos(page), { timeout: 10_000 }).toBe(0);
   const before = await logoPos(page);
+
+  // 2.5. Switch back to the Chat Room tab. The Game Scene and Chat Room share the same
+  // Dockview tab group, so opening Game Scene hides Chat Room (chat-composer unreachable).
+  // Re-opening Chat Room via the View menu focuses the hidden tab without creating a new one.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-llm-chat/room').click();
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: 10_000 });
 
   // 3. Ask the agent to change intent -> it calls rebuild_scene -> approval card appears.
   await page.getByTestId('chat-composer').fill(EDIT_PROMPT);
@@ -56,6 +69,11 @@ test('rebuild_scene pauses on an approval card; approve reflows the scene', asyn
 
   // 4. Approve -> the scene reflows (the logo moves to its newly planned region).
   await page.getByTestId('approval-card').getByRole('button', { name: /approve/i }).click();
+  // Re-activate Game Scene to check the logo's updated position (engine re-inits from
+  // the new scene doc after Dockview remounts it).
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => logoPos(page), { timeout: 30_000 }).not.toBe(before);
 });
 
@@ -75,7 +93,18 @@ test('rebuild_scene pauses on an approval card; deny leaves the scene unchanged'
   await page.getByTestId('view-open-game/preview').click();
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => logoPos(page), { timeout: 25_000 }).toBeGreaterThanOrEqual(0);
+  // Wait for the adjust_element cassette round (round 1) to settle, which moves the logo
+  // to y=0 after compose_scene places it at y=93.6 (plan position). This eliminates a
+  // timing race where a warm browser loads the engine faster than round 1 commits:
+  // the engine could get a snapshot at y=93.6, then receive a live setProp y=0 — both
+  // tests need `before=0` so that approve (logo→93.6) and deny (logo stays 0) diverge.
+  await expect.poll(() => logoPos(page), { timeout: 10_000 }).toBe(0);
   const before = await logoPos(page);
+
+  // 2.5. Switch back to Chat Room (Game Scene + Chat Room share the same Dockview group).
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-llm-chat/room').click();
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: 10_000 });
 
   // 3. Ask the agent to change intent -> approval card appears.
   await page.getByTestId('chat-composer').fill(EDIT_PROMPT);
@@ -84,6 +113,10 @@ test('rebuild_scene pauses on an approval card; deny leaves the scene unchanged'
 
   // 4. Deny -> the re-place pass is never triggered; logo stays at its original position.
   await page.getByTestId('approval-card').getByRole('button', { name: /deny/i }).click();
-  // Short settle; value should remain `before` because no rebuild ran.
-  await expect.poll(() => logoPos(page), { timeout: 10_000 }).toBe(before);
+  // Re-activate Game Scene to read the logo position (engine re-inits from current doc).
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
+  // Value should remain `before` because no rebuild ran.
+  await expect.poll(() => logoPos(page), { timeout: 15_000 }).toBe(before);
 });

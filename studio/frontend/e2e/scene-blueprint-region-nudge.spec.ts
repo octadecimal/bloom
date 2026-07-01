@@ -52,22 +52,38 @@ test('nudging reels x in the region editor reflows the live scene and survives r
   await page.getByTestId('view-open-region-overrides/preview').click();
   await expect(page.getByTestId('region-editor')).toBeVisible({ timeout: 15_000 });
 
-  // 4. Nudge reels x to 200 and Save.
+  // 4. Nudge reels x to 400 and Save. (x=400 keeps the reels center safely inside the
+  //    canvas: left edge = 400 - 0.5*432 = 184 px ≥ 0, no out-of-frame correction fires.)
   //    Testids: region-{role}-{field} and region-{role}-save where role='reels'.
-  await page.getByTestId('region-reels-x').fill('200');
+  await page.getByTestId('region-reels-x').fill('400');
   await page.getByTestId('region-reels-save').click();
   // Status text is "Reflowed reels." when the PUT triggers a re-place (rebuilt=true).
   await expect(page.getByTestId('region-status')).toContainText(/reflow/i, { timeout: 60_000 });
-  await expect.poll(() => reelsX(page), { timeout: 30_000 }).toBe(200);
+  // Re-activate the Game Scene pane. Dockview unmounts the hidden engine tab when the
+  // region-overrides pane is in front (same pattern as scene-blueprint-intent-edit.spec.ts
+  // step 4). Re-opening the pane remounts the engine which re-inits from the reflowed doc.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => reelsX(page), { timeout: 30_000 }).toBe(400);
 
   // 5. Survive a rebuild: a chat intent edit triggers rebuild_scene -> approve -> the
-  //    override is re-applied on top of the new plan so reels stays at x=200.
+  //    override is re-applied on top of the new plan so reels stays at x=400.
+  // Switch to Chat Room first — Game Scene and Chat Room share the same Dockview tab
+  // group, so opening Game Scene hid Chat Room and made chat-composer unreachable.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-llm-chat/room').click();
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('chat-composer').fill('make the framing ornate');
   await page.getByTestId('chat-send').click();
   // Wait explicitly for the approval card (same design-router → rebuild_scene path as
   // the approval-gate spec) before clicking Approve.
   await expect(page.getByTestId('approval-card')).toBeVisible({ timeout: 60_000 });
   await page.getByTestId('approval-card').getByRole('button', { name: /approve/i }).click();
-  // Override must survive the rebuild: reels should still be at x=200.
-  await expect.poll(() => reelsX(page), { timeout: 30_000 }).toBe(200);
+  // Re-activate the Game Scene pane after rebuild (engine was unmounted during the run).
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game/preview').click();
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15_000 });
+  // Override must survive the rebuild: reels should still be at x=400.
+  await expect.poll(() => reelsX(page), { timeout: 30_000 }).toBe(400);
 });

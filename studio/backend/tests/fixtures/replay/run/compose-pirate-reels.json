@@ -1,0 +1,33 @@
+{
+  "prompt": "make a pirate theme game with a background and reels in the middle",
+  "tool_call_rounds": [
+    [
+      {
+        "name": "compose_scene",
+        "args": {
+          "theme": "pirate slot",
+          "elements": [
+            {
+              "description": "a pirate ship on the high seas at sunset, full scene background, no text, no words, no letters, no title, no logo, no UI",
+              "slot": "background",
+              "size": "1280x720",
+              "transparent": false,
+              "role": "background",
+              "fit": "cover",
+              "z_index": 0
+            },
+            {
+              "description": "pirate slot machine reels frame, ornate gold border, no background, transparent cutout",
+              "slot": "reels",
+              "size": "512x512",
+              "transparent": true,
+              "role": "reels",
+              "z_index": 20
+            }
+          ]
+        }
+      }
+    ]
+  ],
+  "final": ["Placed a pirate background and reels in the middle of the scene."]
+}
