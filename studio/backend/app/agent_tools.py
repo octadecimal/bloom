@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass
 
@@ -588,6 +589,22 @@ class _SceneComposeDeps:
 
     async def regenerate(self, handle: str) -> str:
         return await self._regen_tool.ainvoke({"ref": handle})
+
+    async def capture_real_frame(self) -> "bytes | None":
+        """The REAL rendered engine frame from the attached browser client, or
+        None when the art stage should skip: no capture broker, no art critic
+        wired, or no client answered within art_capture_timeout (headless REST
+        rebuild, backend replay e2e). Never raises — a skip is not a failure."""
+        if self._ctx.capture_broker is None or self._ctx.scene_art_critic is None:
+            return None
+        try:
+            return await self._ctx.capture_broker.request_capture(
+                self._ctx.game_id, timeout=get_settings().art_capture_timeout)
+        except (asyncio.TimeoutError, Exception):
+            return None
+
+    async def art_grade(self, request):
+        return await self._ctx.scene_art_critic.grade(request)
 
 
 def format_compose_summary(result) -> str:
