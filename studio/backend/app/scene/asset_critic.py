@@ -23,6 +23,7 @@ from app.replay.cassette import (
     load_asset_cassettes,
     normalize_prompt,
 )
+from app.scene.layout.plan import canonical_role
 
 # Heuristic thresholds (constants so they're greppable / tunable).
 MIN_ALPHA_COVERAGE = 0.02          # transparent cutout must cover >2% of the frame
@@ -86,7 +87,8 @@ def _interior_hole_fraction(alpha) -> float:
     return interior / max(1, w * h)
 
 
-def asset_heuristic(image_png: bytes, *, transparent: bool) -> AssetVerdict | None:
+def asset_heuristic(image_png: bytes, *, transparent: bool,
+                    role: str = "") -> AssetVerdict | None:
     """Cheap, deterministic degenerate-art detector.
 
     Returns a ``regenerate`` verdict for an empty / near-empty / flat image, or
@@ -96,6 +98,11 @@ def asset_heuristic(image_png: bytes, *, transparent: bool) -> AssetVerdict | No
     resolution/content-dependent (a valid flat or highly-transparent asset can be
     tiny), so alpha-coverage and entropy — which read the actual pixel distribution
     — are the discriminating checks.
+
+    ``role`` gates role-specific rules: a reel frame is a WINDOWED asset whose
+    interior cell cut-outs are the whole point, so the interior-hole check (which
+    treats interior transparency as a punched-hole defect) is skipped for it and
+    the cell/frame integrity is judged by the vision critic instead.
     """
     try:
         img = Image.open(BytesIO(image_png)).convert("RGBA")
@@ -120,7 +127,11 @@ def asset_heuristic(image_png: bytes, *, transparent: bool) -> AssetVerdict | No
             return AssetVerdict(ok=False, action="regenerate",
                                 reason="solid subject is see-through "
                                        "(semi-transparent, no opaque core)")
-        if _interior_hole_fraction(alpha) > MAX_INTERIOR_HOLE_FRACTION:
+        # A reel frame's interior cell windows are legitimate cut-outs, not holes
+        # in a solid — skip this check for it and let the vision critic judge the
+        # frame/cell integrity (see ROLE EXPECTATIONS).
+        if canonical_role(role) != "reels" \
+                and _interior_hole_fraction(alpha) > MAX_INTERIOR_HOLE_FRACTION:
             return AssetVerdict(ok=False, action="regenerate",
                                 reason="holes punched in solid area")
     else:
@@ -143,7 +154,7 @@ class ReplayAssetCritic:
         self._cassettes = cassettes
 
     async def critique(self, request: AssetCritiqueRequest) -> AssetVerdict:
-        flagged = asset_heuristic(request.image_png, transparent=request.transparent)
+        flagged = asset_heuristic(request.image_png, transparent=request.transparent, role=request.role)
         if flagged is not None:
             return flagged
         seq = (self._cassettes.get(normalize_prompt(request.role))
@@ -172,9 +183,14 @@ ASSET_SYSTEM_PROMPT = (
     "be a full-bleed scene with depth and NO stray text or UI. A 'logo' must have "
     "a legible, correctly-spelled wordmark, cleanly cut out. A 'reels'/reel-frame "
     "must be a COMPLETE reel frame: a full rectangular frame enclosing a 5-column x "
-    "3-row grid with visible vertical column dividers and cell structure and solid "
-    "ornate side posts — flag 'regenerate' if it is only thin top/bottom rails, a "
-    "bare border with an empty see-through middle, or has no defined 5x3 playfield. "
+    "3-row grid with visible vertical column dividers and solid ornate side posts. "
+    "Its ALPHA must be right: the frame, posts, dividers and rails must be SOLID and "
+    "fully opaque (no see-through gaps or missing chunks in the gold structure), "
+    "while the symbol cells inside the grid must be genuinely TRANSPARENT SEE-THROUGH "
+    "CELLS (the scene behind shows through them), NOT filled with an opaque or white "
+    "backing. Flag 'regenerate' if the frame structure is broken/see-through where it "
+    "should be solid, if the cells are opaque instead of transparent, or if it is "
+    "only thin rails / a bare border with no defined 5x3 playfield. "
     "A 'symbol'/icon must be a "
     "clean, centered, complete icon. A 'spin'/button must be a readable, glossy "
     "control. Flag 'regenerate' when the asset does not meet its role's bar.\n"
@@ -214,7 +230,7 @@ class LiveAssetCritic:
         self._model = model
 
     async def critique(self, request: AssetCritiqueRequest) -> AssetVerdict:
-        flagged = asset_heuristic(request.image_png, transparent=request.transparent)
+        flagged = asset_heuristic(request.image_png, transparent=request.transparent, role=request.role)
         if flagged is not None:
             return flagged
         from langchain_openai import ChatOpenAI

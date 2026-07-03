@@ -137,3 +137,45 @@ def test_reels_critic_demands_a_complete_frame_and_rejects_thin_rails():
     assert "5" in low and "3" in low
     assert "column" in low or "grid" in low
     assert "rail" in low or "bare border" in low or "empty" in low  # names the failure mode
+
+
+def _reel_frame_png(cell_alpha, border=40, size=240):
+    """A reel-frame-like RGBA: solid gold everywhere, with 5 interior cell windows
+    set to `cell_alpha` (0 = transparent cells = a correct reel frame)."""
+    from io import BytesIO
+    img = Image.new("RGBA", (size, size), (200, 160, 40, 255))
+    cols = 5
+    cellw = (size - 2 * border) // cols
+    for c in range(cols):
+        for x in range(border + c * cellw + 3, border + (c + 1) * cellw - 3):
+            for y in range(border + 3, size - border - 3):
+                img.putpixel((x, y), (0, 0, 0, cell_alpha))
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_reels_frame_transparent_cells_pass_heuristic_but_holes_flag_other_roles():
+    frame = _reel_frame_png(cell_alpha=0)  # transparent cell windows = correct
+    # role-blind / a logo: the interior windows read as holes-in-a-solid -> regenerate
+    v = asset_heuristic(frame, transparent=True, role="logo")
+    assert v is not None and v.action == "regenerate" and "hole" in v.reason.lower()
+    # reels: interior cell windows are EXPECTED, not a defect -> defer to vision critic
+    assert asset_heuristic(frame, transparent=True, role="reels") is None
+    assert asset_heuristic(frame, transparent=True, role="reel_frame") is None  # alias
+
+
+def test_reels_heuristic_still_flags_a_truly_empty_frame():
+    # exempting the interior-hole check must NOT disable the empty-asset floor
+    from io import BytesIO
+    empty = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+    buf = BytesIO(); empty.save(buf, "PNG")
+    v = asset_heuristic(buf.getvalue(), transparent=True, role="reels")
+    assert v is not None and v.action == "regenerate"
+
+
+def test_reels_critic_grades_frame_solidity_and_cell_transparency():
+    from app.scene.asset_critic import ASSET_SYSTEM_PROMPT
+    low = ASSET_SYSTEM_PROMPT.lower()
+    assert "see-through cells" in low or "transparent cells" in low
+    assert "solid" in low  # the frame structure itself must read as solid, not gappy
