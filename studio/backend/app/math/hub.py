@@ -4,6 +4,7 @@ app/analytics/hub.py (AnalyticsHub). Event names are unchanged:
 curation_progress/complete/failed, tuning_progress/complete/failed,
 analytics_progress, run_complete."""
 import asyncio
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -15,9 +16,21 @@ from app.math.models import (
 )
 from app.math.targets import derive_target, TargetGap
 
+logger = logging.getLogger(__name__)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _drain_task_exception(task: asyncio.Task) -> None:
+    """Done-callback for begin_generate's fire-and-forget task. The exception
+    (if any) is already logged inside _generate_reserved before it re-raises;
+    this callback only retrieves it so asyncio doesn't warn about an
+    unretrieved task exception."""
+    if task.cancelled():
+        return
+    task.exception()
 
 
 class MathHub:
@@ -154,7 +167,8 @@ class MathHub:
         """Fire-and-forget entry for the REST route. False if already running."""
         if not self._reserve(game_id):
             return False
-        asyncio.create_task(self._generate_reserved(game_id))
+        task = asyncio.create_task(self._generate_reserved(game_id))
+        task.add_done_callback(_drain_task_exception)
         return True
 
     async def generate(self, game_id: str) -> bool:
@@ -190,6 +204,16 @@ class MathHub:
                                   verify=verify)
             await self._status(game_id, "done")
             return True
+        except Exception:
+            # Unexpected failure (subprocess crash, transient DB error, ...) —
+            # the caller must not be stranded on "tuning"/"verifying" forever.
+            # Log it (this is the only place these exceptions are observed on
+            # the begin_generate fire-and-forget path), emit the same terminal
+            # generate_status:failed as the known-failure branches above, then
+            # re-raise so the awaited generate() path surfaces it to its caller.
+            logger.exception("generate pipeline failed for game %s", game_id)
+            await self._status(game_id, "failed")
+            raise
         finally:
             self._active.discard(game_id)
 

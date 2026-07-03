@@ -60,6 +60,12 @@ class GatedTunerRunner:
         return self._result
 
 
+class RaisingTunerRunner:
+    """Simulates a subprocess crash / transient error inside request_tune."""
+    async def run(self, seed_model, target, config, on_progress):
+        raise RuntimeError("boom")
+
+
 def _metrics():
     return MetricsWire(rtp=0.96, volatility=4.0, hit_frequency=0.3,
                        base_rtp=0.8, feature_rtp=0.16, bonus_hit_rates=[])
@@ -72,6 +78,10 @@ def _pass_tune():
 
 def _pass_curation():
     return CurationResult(status="pass", metrics=_metrics(), ran_at="t2")
+
+
+def _failing_curation():
+    return CurationResult(status="fail", metrics=_metrics(), ran_at="t2")
 
 
 def _hub(mongo_db, sio, *, tuner_runner, curation_runner, gdd=None):
@@ -150,3 +160,51 @@ async def test_second_generate_while_active_returns_false(mongo_db):
     gated.gate.set()
     assert await first is True
     assert len(await runs.list_for_game("g1")) == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_unexpected_exception_emits_failed_and_releases_reservation(mongo_db):
+    """Covers the review finding: an unhandled exception (subprocess crash,
+    transient DB error) inside the tune/verify/persist body must still emit a
+    terminal generate_status:failed, must not strand the reservation, and
+    (via begin_generate's fire-and-forget path) must not leave an unretrieved
+    asyncio task exception behind."""
+    sio = FakeSio()
+    hub, _, runs = _hub(mongo_db, sio,
+                        tuner_runner=RaisingTunerRunner(),
+                        curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+
+    assert hub.begin_generate("g1") is True
+    # Let the fire-and-forget task run to completion — it does real async I/O
+    # (mongo reads) before raising, so a single sleep(0) isn't enough turns.
+    for _ in range(100):
+        if sio.phases() == ["tuning", "failed"]:
+            break
+        await asyncio.sleep(0.01)
+
+    assert sio.phases() == ["tuning", "failed"]
+    assert await runs.list_for_game("g1") == []
+
+    # Reservation released (not stuck busy): a follow-up call is free to run
+    # again — it raises the same RuntimeError rather than being rejected with
+    # False, which is exactly how a "still busy" rejection would differ.
+    with pytest.raises(RuntimeError):
+        await hub.generate("g1")
+
+
+@pytest.mark.asyncio
+async def test_generate_failed_verify_still_persists_run_with_done_phase(mongo_db):
+    """Verify failing is not a pipeline failure: the pipeline finished (phase
+    ends 'done', not 'failed') and the run is persisted with the failing
+    verify verdict attached — record_run's contract only gates on the TUNE
+    result, not the verify result."""
+    sio = FakeSio()
+    hub, _, runs = _hub(mongo_db, sio,
+                        tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
+                        curation_runner=FakeCurationRunner(progress=[], result=_failing_curation()))
+    assert await hub.generate("g1") is True
+    docs = await runs.list_for_game("g1")
+    assert len(docs) == 1
+    assert docs[0].verdict == "pass"
+    assert docs[0].verify.status == "fail"
+    assert sio.phases() == ["tuning", "verifying", "done"]
