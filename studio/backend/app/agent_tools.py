@@ -108,6 +108,13 @@ async def _run_direct_floor(ctx, *, asset_id, role, description) -> list[str]:
         judge=judge, regenerate=regenerate, role=role or "asset",
         asset_regen_retries=settings.asset_regen_retries,
         regen_left=settings.asset_floor_regen_budget)
+    # add_generation only auto-selects the FIRST generation, so after a regen the
+    # dud (#1) is still selected. The floor judges the newest generation, so make it
+    # the selected one — otherwise the rejected asset is what gets placed/displayed.
+    if res.regens_spent:
+        asset = await ctx.asset_store.get_asset(asset_id)
+        if asset and asset.generations:
+            await ctx.asset_store.select_generation(asset_id, asset.generations[-1].id)
     return res.notes
 
 

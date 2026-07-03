@@ -90,5 +90,8 @@ async def test_direct_generate_logo_regenerates_via_the_floor(live_server):
     logo = next((a for a in assets if a.get("slot") == "logo"), None)
     assert logo is not None, f"no logo asset on the board: {assets}"
     assert len(logo["generations"]) == 2, logo
+    # the floor must SELECT the regenerated (newest) generation, not leave the
+    # rejected dud (#1) selected — the selected one is what gets placed/displayed.
+    assert logo["selectedGenerationId"] == logo["generations"][-1]["id"], logo
 
     await client.disconnect()
