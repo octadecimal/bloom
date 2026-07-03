@@ -168,6 +168,12 @@ ASSET_SYSTEM_PROMPT = (
     "TRANSPARENCY: a solid object must read as solid. Flag it 'regenerate' if a "
     "subject that should be opaque looks semi-transparent, ghostly, or see-through, "
     "or has transparent holes where the background shows through.\n"
+    "ROLE EXPECTATIONS: judge against what the role demands. A 'background' must "
+    "be a full-bleed scene with depth and NO stray text or UI. A 'logo' must have "
+    "a legible, correctly-spelled wordmark, cleanly cut out. 'reels'/frame art must "
+    "have crisp edges and a clear transparent center. A 'symbol'/icon must be a "
+    "clean, centered, complete icon. A 'spin'/button must be a readable, glossy "
+    "control. Flag 'regenerate' when the asset does not meet its role's bar.\n"
     "Return {ok, action, reason} where action is 'keep' if the asset is usable, or "
     "'regenerate' if it must be remade. Prefer 'keep' unless the asset is clearly "
     "unusable."
@@ -182,7 +188,7 @@ def build_asset_messages(request: AssetCritiqueRequest) -> list[BaseMessage]:
     from langchain_core.messages import HumanMessage, SystemMessage
 
     text = (
-        f"Judge this asset.\nRole: {request.role}\n"
+        f"Judge this asset for its role '{request.role}'.\n"
         f"Intended description: {request.description}\nTheme: {request.theme}\n"
         f"Expected transparent cutout: {request.transparent}"
     )

@@ -112,3 +112,19 @@ def test_asset_prompt_checks_text_and_ghosted_solids():
     # item 5 (vision): must flag semi-transparent / ghosted solids
     assert "transparent" in low or "see-through" in low or "ghost" in low
     assert "opaque" in low
+
+
+def test_asset_prompt_states_per_role_expectations():
+    from app.scene.asset_critic import ASSET_SYSTEM_PROMPT
+    low = ASSET_SYSTEM_PROMPT.lower()
+    assert "background" in low and "full" in low  # bg = full-bleed
+    assert "logo" in low  # logo = legible wordmark
+    assert "symbol" in low or "icon" in low  # symbols = clean icon
+
+
+def test_build_asset_messages_includes_role_expectation():
+    from app.scene.asset_critic import build_asset_messages, AssetCritiqueRequest
+    msgs = build_asset_messages(AssetCritiqueRequest(
+        image_png=_png((5, 6, 7, 255)), role="background", transparent=False))
+    human = msgs[-1].content[0]["text"].lower()
+    assert "background" in human
