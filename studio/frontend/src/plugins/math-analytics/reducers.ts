@@ -1,6 +1,10 @@
 import { MAX_COMPARE_SELECTION, type IAnalyticsState, type IGenFrame, type IMathRun } from './state';
 
-function framesFromTrace(run: IMathRun): IGenFrame[] {
+/** Derives per-generation Evolution frames from a persisted run's trace —
+ * exported for reuse by ReportTab (Task 17), which stacks the GA-evolution and
+ * gene-convergence charts for a run's history post-hoc, the same way `runLoaded`
+ * does when a run freezes. */
+export function framesFromTrace(run: IMathRun): IGenFrame[] {
   return run.trace.map((t) => ({
     generation: t.generation,
     best: { fitness: t.bestFitness, rtp: t.bestRtp, volatility: t.bestVolatility },

@@ -4,6 +4,7 @@ import { analyticsHooks, selectedRun, type IAnalyticsState, type IGenFrame, type
 import { MathProfileTab } from './tabs/MathProfileTab';
 import { EvolutionTab } from './tabs/EvolutionTab';
 import { CompareTab } from './tabs/CompareTab';
+import { ReportTab } from './tabs/ReportTab';
 import { openGameAnalytics, scrub, toggleRunSelected } from './actions';
 
 type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
@@ -11,9 +12,8 @@ type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
 interface ITabDef {
   id: ITabId;
   label: string;
-  // Math Profile (Task 10), Evolution (Task 13), and Compare (Task 16) are
-  // built; the bar stays scaffolded so Report (Task 17) slots in without
-  // reshaping the shell.
+  // Math Profile (Task 10), Evolution (Task 13), Compare (Task 16), and
+  // Report (Task 17) are all built now — every tab is enabled.
   enabled: boolean;
 }
 
@@ -21,7 +21,7 @@ const TABS: ITabDef[] = [
   { id: 'profile', label: 'Math Profile', enabled: true },
   { id: 'evolution', label: 'Evolution', enabled: true },
   { id: 'compare', label: 'Compare', enabled: true },
-  { id: 'report', label: 'Report', enabled: false },
+  { id: 'report', label: 'Report', enabled: true },
 ];
 
 /** The Math Analytics pane shell — a header strip over a tab bar, mirroring the
@@ -103,6 +103,7 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
         {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
         {loadStatus !== 'loading' && activeTab === 'evolution' && <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />}
         {loadStatus !== 'loading' && activeTab === 'compare' && <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />}
+        {loadStatus !== 'loading' && run && activeTab === 'report' && <ReportTab run={run} />}
       </div>
     </div>
   );

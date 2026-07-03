@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MathAnalyticsPane } from './MathAnalyticsPane';
 import { MATH_ANALYTICS_PLUGIN_ID, makeInitialState, analyticsSlice } from './state';
 import { rootStore } from '../../state/rootStore';
@@ -7,6 +7,11 @@ import type { IMathRun } from './state';
 
 vi.mock('./charts/UPlotChart', () => ({
   UPlotChart: ({ className }: { className?: string }) => <div data-testid="uplot-chart-stub" className={className} />,
+}));
+
+const exportReport = vi.fn();
+vi.mock('./lib/exportReport', () => ({
+  exportReport: (el: HTMLElement, format: 'pdf' | 'png') => exportReport(el, format),
 }));
 
 const openGameAnalytics = vi.fn();
@@ -25,7 +30,18 @@ function run(id: string, trace: IMathRun['trace'] = []): IMathRun {
   return {
     id,
     gameId: 'g1',
-    params: {} as never,
+    params: {
+      masterSeed: 2026,
+      population: 24,
+      maxGenerations: 40,
+      searchCandidateCount: 20000,
+      finalCandidateCount: 200000,
+      elitism: 2,
+      mutationRate: 0.25,
+      crossoverRate: 0.9,
+      stagnationWindow: 12,
+      weights: { rtp: 1, volatility: 1, hitRate: 1 },
+    },
     verdict: 'pass',
     metrics: { rtp: 0.9, volatility: 3, hitFrequency: 0.3, baseRtp: 0.6, featureRtp: 0.3, bonusHitRates: [] },
     trace,
@@ -53,6 +69,10 @@ function snapshot(generation: number) {
 beforeEach(() => {
   rootStore.plugins.nested(MATH_ANALYTICS_PLUGIN_ID).set(makeInitialState() as never);
   openGameAnalytics.mockReset();
+  // jsdom has no createObjectURL/revokeObjectURL by default — the Report tab's
+  // export-and-download path needs both.
+  (URL as unknown as { createObjectURL: () => string }).createObjectURL = vi.fn(() => 'blob:mock');
+  (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = vi.fn();
 });
 
 describe('MathAnalyticsPane', () => {
@@ -89,7 +109,7 @@ describe('MathAnalyticsPane', () => {
     expect(screen.getByTestId('math-profile-tab')).toBeTruthy();
   });
 
-  it('scaffolds a tab bar with the Math Profile tab active, Evolution/Compare selectable, Report still disabled', () => {
+  it('scaffolds a tab bar with the Math Profile tab active and Evolution/Compare/Report all selectable', () => {
     analyticsSlice().activeGameId.set('g1');
     analyticsSlice().loadStatus.set('idle');
     analyticsSlice().runs.set([run('r1', [snapshot(0), snapshot(1)])]);
@@ -103,7 +123,32 @@ describe('MathAnalyticsPane', () => {
     expect(profileTabButton.getAttribute('aria-selected')).toBe('true');
     expect((evolutionTabButton as HTMLButtonElement).disabled).toBe(false);
     expect((compareTabButton as HTMLButtonElement).disabled).toBe(false);
-    expect((reportTabButton as HTMLButtonElement).disabled).toBe(true);
+    expect((reportTabButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('switches to the Report tab and renders the stacked document for the selected run', () => {
+    analyticsSlice().activeGameId.set('g1');
+    analyticsSlice().loadStatus.set('idle');
+    analyticsSlice().runs.set([run('r1')]);
+    analyticsSlice().selectedRunId.set('r1');
+    render(<MathAnalyticsPane {...({} as never)} />);
+    fireEvent.click(screen.getByTestId('analytics-tab-report'));
+    expect(screen.getByTestId('report-tab')).toBeTruthy();
+    expect(screen.getByTestId('report-summary')).toBeTruthy();
+    expect(screen.getByTestId('report-config')).toBeTruthy();
+  });
+
+  it('dispatches exportReport when Export is clicked on the Report tab', async () => {
+    exportReport.mockReset();
+    exportReport.mockResolvedValue(new Blob(['x'], { type: 'image/png' }));
+    analyticsSlice().activeGameId.set('g1');
+    analyticsSlice().loadStatus.set('idle');
+    analyticsSlice().runs.set([run('r1')]);
+    analyticsSlice().selectedRunId.set('r1');
+    render(<MathAnalyticsPane {...({} as never)} />);
+    fireEvent.click(screen.getByTestId('analytics-tab-report'));
+    fireEvent.click(screen.getByTestId('export-button'));
+    await waitFor(() => expect(exportReport).toHaveBeenCalledTimes(1));
   });
 
   it('switches to the Compare tab and renders it over the store-held run history and selection', () => {

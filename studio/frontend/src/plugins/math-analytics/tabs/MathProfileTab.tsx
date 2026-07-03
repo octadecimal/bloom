@@ -115,8 +115,9 @@ function HitByBand({ profile }: { profile: IRunProfile }) {
  * wire carries no per-point variance, so rather than fabricate a statistical
  * confidence band, the final RTP is drawn as a dashed target-band reference line
  * (see docs/superpowers/plans/2026-07-02-math-analytics-dashboard.md — a real
- * confidence band is future work once the kernel exposes convergence variance). */
-function RtpConvergenceChart({ profile, metrics }: { profile: IRunProfile; metrics: IMetrics | null }) {
+ * confidence band is future work once the kernel exposes convergence variance).
+ * Exported for reuse by ReportTab (Task 17). */
+export function RtpConvergenceChart({ profile, metrics }: { profile: IRunProfile; metrics: IMetrics | null }) {
   const points = profile.rtpConvergence;
   const finalRtp = metrics?.rtp ?? points[points.length - 1]?.realizedRtp ?? 0;
   const data: IChartData = {
