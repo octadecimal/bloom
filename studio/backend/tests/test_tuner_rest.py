@@ -73,6 +73,27 @@ async def test_apply_writes_tuned_model_into_slot_store(mongo_db):
 
 
 @pytest.mark.asyncio
+async def test_apply_emits_tuner_source(mongo_db):
+    events = []
+
+    async def on_change(doc, source):
+        events.append(source)
+
+    sim = SlotModelStore(mongo_db, on_change=on_change)
+    await sim.put("g1", model={"reels": [[9]]})  # stale seed
+    events.clear()  # ignore the seed write above; only the apply write matters
+    tuner = TunerStore(mongo_db)
+    await tuner.save_result("g1", TuneResult(
+        status="pass", verdict="pass", tuned_model={"reels": [[0, 1, 2]]},
+        metrics=MetricsWire(rtp=0.9, volatility=2.0, hit_frequency=0.4,
+                            base_rtp=0.9, feature_rtp=0.0, bonus_hit_rates=[]),
+        missed=[], trace=[], ran_at="t"))
+    req = _req(sim_store=sim, tuner_store=tuner)
+    await rest.apply_tuner("g1", req)
+    assert events == ["tuner"]
+
+
+@pytest.mark.asyncio
 async def test_apply_errors_when_no_tuned_model(mongo_db):
     from fastapi import HTTPException
     sim = SlotModelStore(mongo_db)

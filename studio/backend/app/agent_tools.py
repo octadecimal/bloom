@@ -1463,7 +1463,7 @@ def build_apply_tuned_model_tool(ctx: ToolContext) -> BaseTool:
             {"tool": "apply_tuned_model", "args": {}, "label": label})
         if decision != "approve":
             return "Apply declined by the user; the slot model is unchanged."
-        await ctx.sim_store.put(ctx.game_id, model=tuned)
+        await ctx.sim_store.put(ctx.game_id, model=tuned, source="tuner")
         return ("Applied the tuned model to the slot model. Re-curate (in the "
                 "Simulator) to confirm it still passes.")
 

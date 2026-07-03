@@ -104,7 +104,16 @@ def build(settings: Settings) -> AppContext:
     gdd_store = GddStore(mongo[settings.mongo_db])
     gdd_hub = GddHub(sio, gdd_store)
 
-    sim_store = SlotModelStore(mongo[settings.mongo_db])
+    async def _on_slot_model_change(doc, source: str) -> None:
+        # Single choke point: every model/presentation write (editor PUT, tuner
+        # apply, agent tools) reaches any open Game Config pane via the game room.
+        await sio.emit(
+            "slot_model_changed",
+            {"gameId": doc.game_id, "updatedAt": doc.updated_at, "source": source},
+            room=doc.game_id,
+        )
+
+    sim_store = SlotModelStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
     sim_hub = CurationHub(sio, sim_store, build_curation_runner(settings), gdd_store)
     tuner_store = TunerStore(mongo[settings.mongo_db])
     tuner_hub = TunerHub(sio, tuner_store, sim_store, build_tuner_runner(settings), gdd_store)
