@@ -67,6 +67,36 @@ pub fn profile(samples: &[RoundSample], bet: u64) -> (WinDistribution, TailMetri
     )
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RtpPoint { pub n: usize, pub realized_rtp: f64 }
+
+pub fn rtp_convergence(samples: &[RoundSample], points: usize) -> Vec<RtpPoint> {
+    let total = samples.len();
+    assert!(total > 0, "cannot converge an empty population");
+    let points = points.max(2);
+    let lo = 100usize.min(total);
+    // log-spaced sizes lo..=total, deduped and ascending.
+    let mut sizes: Vec<usize> = (0..points)
+        .map(|i| {
+            let t = i as f64 / (points - 1) as f64;
+            let v = (lo as f64).ln() + t * ((total as f64).ln() - (lo as f64).ln());
+            v.exp().round() as usize
+        })
+        .map(|s| s.clamp(lo, total))
+        .collect();
+    sizes.dedup();
+    if *sizes.last().unwrap() != total { sizes.push(total); }
+
+    let mut running = 0f64;
+    let mut cursor = 0usize;
+    let mut out = Vec::with_capacity(sizes.len());
+    for &size in &sizes {
+        while cursor < size { running += samples[cursor].payout as f64; cursor += 1; }
+        out.push(RtpPoint { n: size, realized_rtp: running / size as f64 });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +131,19 @@ mod tests {
         assert!((tail.p_ge_100x - 0.2).abs() < 1e-9);
         assert_eq!(tail.longest_dead_streak, 2); // L,L before the last win
         assert!((tail.bonus_trigger_rate - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rtp_convergence_is_ascending_log_spaced_and_ends_at_full_mean() {
+        let pop: Vec<RoundSample> = (0..10_000)
+            .map(|i| RoundSample { seed: i, payout: (i % 2), base_payout: (i % 2),
+                                   feature_payout: 0, feature_triggers: vec![] })
+            .collect();
+        let series = rtp_convergence(&pop, 8);
+        assert!(series.len() >= 2 && series.len() <= 8);
+        assert!(series.windows(2).all(|w| w[0].n < w[1].n));       // strictly ascending n
+        assert_eq!(series.last().unwrap().n, 10_000);              // ends at full sample
+        let full_mean = 0.5;                                       // half the payouts are 1
+        assert!((series.last().unwrap().realized_rtp - full_mean).abs() < 1e-9);
     }
 }
