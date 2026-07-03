@@ -80,7 +80,7 @@ def _load_asset_bytes(media_dir: str, image_ref: str) -> bytes | None:
     return p.read_bytes() if p.exists() else None
 
 
-async def _run_direct_floor(ctx, *, asset_id, role, description, transparent) -> list[str]:
+async def _run_direct_floor(ctx, *, asset_id, role, description) -> list[str]:
     """Critique the freshly-generated asset and bounded-regenerate a dud. Returns the
     floor's notes. No-op (empty) when no asset critic is wired."""
     if ctx.asset_critic is None:
@@ -94,9 +94,12 @@ async def _run_direct_floor(ctx, *, asset_id, role, description, transparent) ->
         image = _load_asset_bytes(settings.media_dir, ref) if ref else None
         if not image:
             return AssetVerdict(ok=False, action="keep", reason="no image to review")
+        # Judge by the asset's ACTUAL transparency (mirrors the compose gate's
+        # critique_asset) — the generator may not honor the requested flag, and the
+        # critic must grade the image as it really is, not as it was asked for.
         return await ctx.asset_critic.critique(AssetCritiqueRequest(
             image_png=image, role=role, description=description, theme="",
-            transparent=transparent, attempt=attempt))
+            transparent=_image_has_transparency(image), attempt=attempt))
 
     async def regenerate():
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset_id)
@@ -126,8 +129,7 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
         notes = await _run_direct_floor(
-            ctx, asset_id=asset.id, role=role, description=description,
-            transparent=transparent)
+            ctx, asset_id=asset.id, role=role, description=description)
         tag = f" (slot {slot})" if slot else ""
         suffix = (" " + "; ".join(notes)) if notes else ""
         return (f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the "
@@ -366,7 +368,7 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             )
             await ctx.asset_hub.generate_and_wait(ctx.game_id, created.id)
             await _run_direct_floor(ctx, asset_id=created.id, role=role,
-                                    description=description, transparent=transparent)
+                                    description=description)
             asset = await ctx.asset_store.get_asset(created.id)
 
         # 3. place it immediately, so the scene fills in element-by-element.
