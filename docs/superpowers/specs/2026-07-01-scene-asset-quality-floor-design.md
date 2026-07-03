@@ -76,8 +76,8 @@ cap its ceiling:
   negative node; activating negatives requires `cfg>1`, which ~doubles inference cost.
   Negatives are therefore active **only on the `logo` profile** (`cfg≈2.0`), where
   garbled-text / artifact suppression earns the cost. Every other role keeps `cfg=1.0`
-  + FluxGuidance and relies on its positive recipe. (A deliberate boundary, revisitable
-  per-role later.)
+  - FluxGuidance and relies on its positive recipe. (A deliberate boundary, revisitable
+    per-role later.)
 - **A ComfyUI graph rewrite.** The existing node topology is reused; C adds params to
   existing nodes and inserts one upscale node. No new sampler / VAE / RMBG wiring.
 
@@ -145,6 +145,7 @@ a role-recipe-driven flux-dev path with persisted, reproducible params.
   when absent).
 
 **Tests (TDD, RED→GREEN→REFACTOR):**
+
 - **unit** — `profile_for` alias resolution + default fallback; `build_asset_prompt`
   composition (dedupe, art-direction folded, role boilerplate present); `patch_graph`
   patches each node for dev and is a guarded no-op for `11` on schnell; `GenParams`
@@ -192,6 +193,7 @@ direct path share one floor.
   already used by `_SceneComposeDeps`). No new persistence.
 
 **Tests (TDD):**
+
 - **unit** — `run_asset_floor`: converges (regenerate then keep → `regens_spent≥1`,
   settles ok); bounded (stays bad → stops at `asset_regen_retries`, respects
   `regen_left`, keeps with the right note); role passthrough (the request carries the
@@ -224,6 +226,7 @@ direct path share one floor.
   settings constant (`upscale_model`) so it's swappable without code changes.
 
 **Tests (TDD):**
+
 - **unit** — `build_graph` for a hero profile contains the upscale chain wired
   VAEDecode → upscale → terminal, and the final `ImageScale` targets the requested
   size; a standard profile's graph contains **no** upscale node (byte-identical to C1).
@@ -259,11 +262,11 @@ record, the natural home for generation inputs.
 
 ## Phase breakdown (each a clean stop/ship point)
 
-| Phase | Deliverable | Tests |
-| ----- | ----------- | ----- |
-| **C1 — recipes + dev + params** | `recipes.py` profile spine · `patch_graph` params · `dev-opaque` workflow · schnell→dev default · `GenParams` persisted · generate path builds role-aware prompt + params | unit (profile/prompt/graph/params) + backend e2e (dev workflow + params persisted) |
-| **C2 — mandatory critic** | `asset_floor.py` shared floor · compose delegates · direct path gated · role-aware critic prompt | unit (floor convergence/bounds/budget + `run_compose` regression) + backend e2e (direct dud regenerates & converges) |
-| **C3 — hero upscale** | conditional upscale chain in dev workflows · profile-gated (hero-only) · `upscale_model` setting · prereq verification | unit (graph has/omits upscale by profile) + opt-in live check |
+| Phase                           | Deliverable                                                                                                                                                               | Tests                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **C1 — recipes + dev + params** | `recipes.py` profile spine · `patch_graph` params · `dev-opaque` workflow · schnell→dev default · `GenParams` persisted · generate path builds role-aware prompt + params | unit (profile/prompt/graph/params) + backend e2e (dev workflow + params persisted)                                   |
+| **C2 — mandatory critic**       | `asset_floor.py` shared floor · compose delegates · direct path gated · role-aware critic prompt                                                                          | unit (floor convergence/bounds/budget + `run_compose` regression) + backend e2e (direct dud regenerates & converges) |
+| **C3 — hero upscale**           | conditional upscale chain in dev workflows · profile-gated (hero-only) · `upscale_model` setting · prereq verification                                                    | unit (graph has/omits upscale by profile) + opt-in live check                                                        |
 
 ## Risks
 

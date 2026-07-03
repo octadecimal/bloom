@@ -30,10 +30,12 @@ Node numbers referenced throughout (verified against `app/assets/workflows/ai_sl
 ### Task C1.1: Role → generation profile module
 
 **Files:**
+
 - Create: `studio/backend/app/assets/recipes.py`
 - Test: `studio/backend/tests/test_recipes.py`
 
 **Interfaces:**
+
 - Consumes: `canonical_role` from `app.scene.layout.plan`.
 - Produces:
   - `@dataclass(frozen=True) Profile(steps:int, guidance:float, cfg:float, negative:str, upscale:bool, positive:str)`
@@ -193,10 +195,12 @@ git commit -m "feat(assets): role -> generation profile (recipes) for the asset-
 ### Task C1.2: Parameterize the ComfyUI graph builder
 
 **Files:**
+
 - Modify: `studio/backend/app/assets/graph.py`
 - Test: `studio/backend/tests/test_graph.py`
 
 **Interfaces:**
+
 - Produces: `patch_graph(base, prompt, width, height, seed, *, negative=None, steps=None, cfg=None, guidance=None) -> dict` and `build_graph(workflow, prompt, width, height, seed, *, negative=None, steps=None, cfg=None, guidance=None) -> dict`. All new params optional (None = leave the workflow's baked value). Guidance patch is a no-op when the workflow has no FluxGuidance node.
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_graph.py`)
@@ -287,11 +291,13 @@ git commit -m "feat(assets): parameterize graph builder (negative/steps/cfg/guid
 ### Task C1.3: Add the `dev-opaque` workflow
 
 **Files:**
+
 - Create: `studio/backend/app/assets/workflows/ai_slots_dev_opaque.json`
 - Modify: `studio/backend/app/assets/graph.py` (WORKFLOWS map), `studio/backend/app/assets/models.py` (Workflow Literal)
 - Test: `studio/backend/tests/test_graph.py`
 
 **Interfaces:**
+
 - Produces: `"dev-opaque"` selectable in `WORKFLOWS` and the `Workflow` Literal; `build_graph("dev-opaque", ...)` loads a flux-dev opaque graph (VAEDecode → SaveImage, FluxGuidance present, no RMBG).
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_graph.py`)
@@ -397,10 +403,12 @@ git commit -m "feat(assets): add dev-opaque flux-dev workflow"
 ### Task C1.4: Persist `GenParams` on the asset and use them in the hub
 
 **Files:**
-- Modify: `studio/backend/app/assets/models.py` (GenParams + Asset.params), `studio/backend/app/assets/store.py` (create_asset persists params), `studio/backend/app/assets/hub.py` (_run reads params)
+
+- Modify: `studio/backend/app/assets/models.py` (GenParams + Asset.params), `studio/backend/app/assets/store.py` (create_asset persists params), `studio/backend/app/assets/hub.py` (\_run reads params)
 - Test: `studio/backend/tests/test_models.py`, `studio/backend/tests/test_assets_store.py`, `studio/backend/tests/test_asset_hub.py`
 
 **Interfaces:**
+
 - Produces:
   - `class GenParams(_WireModel)` with `negative:str=""`, `steps:int|None=None`, `guidance:float|None=None`, `cfg:float|None=None`, `upscale:bool=False`.
   - `Asset.params: GenParams | None = None`.
@@ -524,10 +532,12 @@ git commit -m "feat(assets): persist GenParams and forward them into generation"
 ### Task C1.5: Wire recipes into the generate verbs (dev default + role-aware prompt + params)
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (`build_generate_asset_tool`, `build_generate_and_place_tool`)
 - Test: `studio/backend/tests/e2e/test_assets.py` (backend replay e2e) or a focused `tests/test_generate_and_place_tool.py` addition
 
 **Interfaces:**
+
 - Consumes: `profile_for`, `build_asset_prompt` (Task C1.1); `read_intent` (`app.scene.layout.intent`); `GenParams` (Task C1.4).
 - Produces: `generate_asset(description, style="", size=..., transparent=True, slot="", role="")` — now role-aware; both verbs select `dev-transparent`/`dev-opaque` and persist `GenParams` from the profile.
 
@@ -647,6 +657,7 @@ git commit -m "feat(agent): generate on flux-dev with role-aware prompts + param
 ### Task C1.6: Audit fixtures for the schnell→dev default flip
 
 **Files:**
+
 - Inspect: `studio/backend/tests/fixtures/**`, any golden scene docs, `tests/test_fixtures_committed.py`
 - Test: run the full backend suite
 
@@ -655,10 +666,12 @@ git commit -m "feat(agent): generate on flux-dev with role-aware prompts + param
 - [ ] **Step 1: Grep for hard-coded schnell assumptions**
 
 Run:
+
 ```bash
 uv --directory studio/backend run pytest tests/ -q 2>&1 | tail -40
 git grep -n "schnell-transparent\|schnell-opaque" studio/backend/tests
 ```
+
 Expected: identify any test asserting `workflow == "schnell-*"` on an agent-generated asset.
 
 - [ ] **Step 2: Fix each to expect the new default**
@@ -684,10 +697,12 @@ git commit -m "test(assets): update fixtures for the flux-dev default"
 ### Task C2.1: Extract the shared asset floor
 
 **Files:**
+
 - Create: `studio/backend/app/scene/asset_floor.py`
 - Test: `studio/backend/tests/test_asset_floor.py`
 
 **Interfaces:**
+
 - Consumes: `AssetVerdict` from `app.scene.asset_critic`.
 - Produces:
   - `@dataclass AssetFloorResult(verdict: AssetVerdict, regens_spent: int, attempts: int, notes: list[str])`
@@ -825,10 +840,12 @@ git commit -m "feat(scene): extract shared run_asset_floor (generate->critique->
 ### Task C2.2: Delegate the compose loop's asset gate to `run_asset_floor`
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/compose_loop.py` (replace the inline gate at lines ~166–186)
 - Test: `studio/backend/tests/test_compose_loop.py` (existing tests are the regression guard)
 
 **Interfaces:**
+
 - Consumes: `run_asset_floor` (Task C2.1). The `ComposeDeps.critique_asset` + `regenerate` seams are reused as the floor's callables.
 
 - [ ] **Step 1: Confirm existing behavior is the contract**
@@ -891,10 +908,12 @@ git commit -m "refactor(scene): compose loop delegates its asset gate to run_ass
 ### Task C2.3: Role-aware asset critic prompt
 
 **Files:**
+
 - Modify: `studio/backend/app/scene/asset_critic.py` (`ASSET_SYSTEM_PROMPT` + `build_asset_messages`)
 - Test: `studio/backend/tests/test_asset_critic.py`
 
 **Interfaces:**
+
 - Produces: role-specific expectations in the critic's guidance. `ASSET_SYSTEM_PROMPT` gains per-role language; `build_asset_messages` names the role's expectation in the human turn.
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_asset_critic.py`)
@@ -961,10 +980,12 @@ git commit -m "feat(scene): role-aware expectations in the asset critic prompt"
 ### Task C2.4: Gate the direct generate path with the floor
 
 **Files:**
+
 - Modify: `studio/backend/app/agent_tools.py` (both generate verbs), `studio/backend/app/config.py` (`asset_floor_regen_budget`)
 - Test: `studio/backend/tests/e2e/test_assets.py` (backend replay e2e) + a focused unit test
 
 **Interfaces:**
+
 - Consumes: `run_asset_floor` (Task C2.1/C2.2 final signature: `judge`/`regenerate`), `build_asset_critic` on `ctx.asset_critic`, media dir from settings.
 - Produces: `generate_asset` / `generate_and_place` run the floor after `generate_and_wait` and before returning/placing.
 
@@ -1093,9 +1114,11 @@ git commit -m "feat(agent): gate every direct generation with the mandatory asse
 - [ ] **Step 1: Query the live ComfyUI for upscale models**
 
 With the worktree replay/live stack policy in mind, query the shared ComfyUI (port `8188`, not offset):
+
 ```bash
 curl -s http://127.0.0.1:8188/object_info/UpscaleModelLoader | python -c "import sys,json; print(json.load(sys.stdin)['UpscaleModelLoader']['input']['required']['model_name'][0])"
 ```
+
 Expected: a list including an upscaler (e.g. `4x-UltraSharp.pth`). **If none is installed, STOP** — C3 cannot be validated live; place the model in `C:\ComfyUI\models\upscale_models` first (this is the operator's action, not code).
 
 - [ ] **Step 2: Record the exact filename** to use as the `upscale_model` setting default in C3.1 (e.g. `4x-UltraSharp.pth`). No commit.
@@ -1105,10 +1128,12 @@ Expected: a list including an upscaler (e.g. `4x-UltraSharp.pth`). **If none is 
 ### Task C3.1: Conditional upscale chain in the graph builder
 
 **Files:**
+
 - Modify: `studio/backend/app/assets/graph.py` (`patch_graph`/`build_graph` gain `upscale` + `upscale_model`), `studio/backend/app/config.py` (`upscale_model`), `studio/backend/app/assets/hub.py` (forward `upscale`/`upscale_model`)
 - Test: `studio/backend/tests/test_graph.py`
 
 **Interfaces:**
+
 - Produces: `build_graph(..., upscale=False, upscale_model="4x-UltraSharp.pth")`. When `upscale=True`, inserts `UpscaleModelLoader`→`ImageUpscaleWithModel`→`ImageScale(width,height)` between `VAEDecode` (`8`) and whatever consumes `["8", 0]`, repointing that consumer to the final `ImageScale`. When `False`, the graph is byte-identical to C1.
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_graph.py`)
@@ -1217,6 +1242,7 @@ git commit -m "feat(assets): conditional hero-only model-upscale chain"
 ### Task C3.2: Opt-in live check for hero upscale round-trip
 
 **Files:**
+
 - Test: `studio/backend/tests/e2e/test_assets.py` (a `@pytest.mark.live` test, never CI)
 
 **Interfaces:** none (validation only).
