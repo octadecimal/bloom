@@ -42,7 +42,6 @@ export interface ISlotModelDoc {
 export interface ISimulatorState {
   connection: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
   activeGameId: string | null;
-  modelText: string;
   params: ICurationParams | null;
   status: 'idle' | 'running' | 'pass' | 'fail' | 'error';
   progress: { phase: string; done: number | null; total: number | null } | null;
@@ -55,7 +54,6 @@ export function makeInitialState(): ISimulatorState {
   return {
     connection: 'disconnected',
     activeGameId: null,
-    modelText: '',
     params: null,
     status: 'idle',
     progress: null,

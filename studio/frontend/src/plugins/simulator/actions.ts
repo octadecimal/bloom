@@ -13,7 +13,6 @@ export async function openGameSim(gameId: string): Promise<void> {
   simSock().joinSim(gameId);
   try {
     const doc = await getSlotModel(gameId);
-    s.modelText.set(JSON.stringify(doc.model ?? {}, null, 2));
     s.params.set(doc.params);
     s.result.set(doc.result);
     s.failure.set(null);
@@ -29,7 +28,6 @@ export function closeGameSim(): void {
   const prev = s.activeGameId.get();
   if (prev) simSock().leaveSim(prev);
   s.activeGameId.set(null);
-  s.modelText.set('');
   s.params.set(null);
   s.result.set(null);
   s.failure.set(null);
