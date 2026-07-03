@@ -41,3 +41,24 @@ async def test_curate_kicks_off(mongo_db):
     import asyncio
     await asyncio.sleep(0)
     assert calls == ["g1"]
+
+
+@pytest.mark.asyncio
+async def test_put_accepts_presentation_and_source(mongo_db):
+    events = []
+
+    async def on_change(doc, source):
+        events.append(source)
+
+    store = SlotModelStore(mongo_db, on_change=on_change)
+    req = _req(sim_store=store)
+    body = rest.PutSlotModelBody(
+        model={"rows": 2},
+        presentation={"symbols": {"0": {"label": "Ace", "color": "sym-1"}}},
+        source="editor",
+    )
+    updated = await rest.put_slot_model("g1", body, req)
+    assert updated["presentation"]["symbols"]["0"]["color"] == "sym-1"
+    assert events == ["editor"]
+    got = await rest.get_slot_model("g1", req)
+    assert got["presentation"]["symbols"]["0"]["label"] == "Ace"

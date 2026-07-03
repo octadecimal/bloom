@@ -11,6 +11,8 @@ class PutSlotModelBody(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     model: dict | None = None
     params: CurationParams | None = None
+    presentation: dict | None = None
+    source: str = "api"
 
 
 @router.get("/games/{game_id}/slot-model")
@@ -22,7 +24,8 @@ async def get_slot_model(game_id: str, request: Request) -> dict:
 @router.put("/games/{game_id}/slot-model")
 async def put_slot_model(game_id: str, body: PutSlotModelBody, request: Request) -> dict:
     doc = await request.app.state.sim_store.put(
-        game_id, model=body.model, params=body.params)
+        game_id, model=body.model, params=body.params,
+        presentation=body.presentation, source=body.source)
     return sim_wire(doc)
 
 

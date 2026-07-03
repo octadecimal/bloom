@@ -1,6 +1,7 @@
 import type { IDockviewPanelProps } from 'dockview-react';
 import { simulatorHooks, simulatorSlice } from './state';
-import { putSlotModel, curate } from './restClient';
+import { curate } from './restClient';
+import { getHost } from '../../state/hostRef';
 
 export function SimulatorPane(_props: IDockviewPanelProps) {
   const s = simulatorHooks.usePluginState();
@@ -18,12 +19,9 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
   const result = s.result.get();
   const failure = s.failure.get();
   const progress = s.progress.get();
-  const modelText = s.modelText.get();
 
   async function onCurate() {
     try {
-      const parsed = JSON.parse(simulatorSlice().modelText.get());
-      await putSlotModel(activeGameId!, { model: parsed });
       simulatorSlice().status.set('running');
       simulatorSlice().progress.set({ phase: 'starting', done: null, total: null });
       await curate(activeGameId!);
@@ -41,6 +39,13 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
       <div className="flex items-center justify-between border-b border-hairline p-2">
         <span className="text-sm text-text-1">Slot model</span>
         <button
+          data-testid="open-game-config-hint"
+          onClick={() => getHost().openPane('game-config/editor')}
+          className="text-xs text-accent-text hover:underline"
+        >
+          Edit model in Game Config →
+        </button>
+        <button
           data-testid="curate-button"
           onClick={onCurate}
           disabled={status === 'running'}
@@ -49,14 +54,6 @@ export function SimulatorPane(_props: IDockviewPanelProps) {
           {status === 'running' ? 'Curating…' : 'Curate'}
         </button>
       </div>
-
-      <textarea
-        data-testid="simulator-model-json"
-        value={modelText}
-        onChange={(e) => simulatorSlice().modelText.set(e.target.value)}
-        spellCheck={false}
-        className="h-48 flex-none resize-none bg-canvas p-2 font-mono text-xs text-text-1 outline-none"
-      />
 
       {progress && (
         <div data-testid="curation-progress" className="border-t border-hairline p-2 text-xs text-text-2">

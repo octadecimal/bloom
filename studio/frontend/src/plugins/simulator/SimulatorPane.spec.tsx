@@ -33,4 +33,13 @@ describe('SimulatorPane', () => {
     render(<SimulatorPane {...({} as never)} />);
     expect(screen.getByTestId('curation-status').textContent).toContain('PASS');
   });
+
+  it('has no JSON textarea and offers the Game Config hint', () => {
+    act(() => {
+      simulatorSlice().activeGameId.set('g1');
+    });
+    render(<SimulatorPane {...({} as never)} />);
+    expect(screen.queryByTestId('simulator-model-json')).toBeNull();
+    expect(screen.getByTestId('open-game-config-hint')).toBeTruthy();
+  });
 });

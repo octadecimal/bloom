@@ -67,7 +67,7 @@ async function setupGame(
 
   // Curation-only params (not in the GDD) — keep the run small + fast.
   const paramsResp = await request.put(`${BACKEND}/games/${room.gameId}/slot-model`, {
-    data: { params: FAST_PARAMS },
+    data: { model: MODEL_09, params: FAST_PARAMS },
   });
   expect(paramsResp.ok()).toBeTruthy();
 
@@ -83,7 +83,7 @@ async function openSimulator(page: Page) {
   await page.getByTestId('menu-view').click();
   await expect(page.getByTestId('view-open-simulator/viewer')).toBeVisible();
   await page.getByTestId('view-open-simulator/viewer').click();
-  await page.getByTestId('simulator-model-json').waitFor({ state: 'visible', timeout: 5_000 });
+  await page.getByTestId('curate-button').waitFor({ state: 'visible', timeout: 5_000 });
 }
 
 test('author a model and curate to PASS against GDD intent', async ({ page, request }) => {
@@ -96,7 +96,6 @@ test('author a model and curate to PASS against GDD intent', async ({ page, requ
   await setupGame(page, request, 'alice', `sim ${Date.now()}`, { rtp: '90%', volatility: 'low' });
   await openSimulator(page);
 
-  await page.getByTestId('simulator-model-json').fill(JSON.stringify(MODEL_09, null, 2));
   await page.getByTestId('curate-button').click();
 
   await expect(page.getByTestId('curation-status')).toContainText('PASS', { timeout: 90_000 });
@@ -116,7 +115,6 @@ test('a mismatched RTP intent curates to FAIL', async ({ page, request }) => {
   await setupGame(page, request, 'bob', `sim ${Date.now()}`, { rtp: '50%', volatility: 'low' });
   await openSimulator(page);
 
-  await page.getByTestId('simulator-model-json').fill(JSON.stringify(MODEL_09, null, 2));
   await page.getByTestId('curate-button').click();
 
   await expect(page.getByTestId('curation-status')).toContainText('FAIL', { timeout: 90_000 });

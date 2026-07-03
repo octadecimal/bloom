@@ -58,7 +58,7 @@ async def apply_tuner(game_id: str, request: Request) -> dict:
     tuned = doc.result.tuned_model if (doc and doc.result) else None
     if not tuned:
         raise HTTPException(status_code=400, detail="no tuned model to apply")
-    updated = await request.app.state.sim_store.put(game_id, model=tuned)
+    updated = await request.app.state.sim_store.put(game_id, model=tuned, source="tuner")
     return sim_wire(updated)
 
 

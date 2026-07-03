@@ -15,6 +15,8 @@ const openGameSim = vi.fn();
 const closeGameSim = vi.fn();
 const openGameTuner = vi.fn();
 const closeGameTuner = vi.fn();
+const openGameConfig = vi.fn();
+const closeGameConfig = vi.fn();
 const openGameAnalytics = vi.fn();
 const closeGameAnalytics = vi.fn();
 const error = vi.fn();
@@ -39,6 +41,11 @@ vi.mock('../../plugins/simulator/actions', () => ({
 vi.mock('../../plugins/tuner/actions', () => ({
   openGameTuner: (id: string) => openGameTuner(id),
   closeGameTuner: () => closeGameTuner(),
+}));
+vi.mock('../../plugins/game-config/actions', () => ({
+  openGameConfig: (id: string) => openGameConfig(id),
+  closeGameConfig: () => closeGameConfig(),
+  initGameConfig: vi.fn(),
 }));
 vi.mock('../../plugins/math-analytics/actions', () => ({
   openGameAnalytics: (id: string) => openGameAnalytics(id),
@@ -66,6 +73,8 @@ beforeEach(() => {
   closeGameSim.mockReset();
   openGameTuner.mockReset();
   closeGameTuner.mockReset();
+  openGameConfig.mockReset();
+  closeGameConfig.mockReset();
   openGameAnalytics.mockReset();
   closeGameAnalytics.mockReset();
   error.mockReset();
