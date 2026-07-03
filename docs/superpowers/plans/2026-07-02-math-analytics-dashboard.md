@@ -50,7 +50,7 @@
 
 Delivers the enabling Rust telemetry, end-of-tune profiling, `math_runs` persistence, and a working **Math Profile** tab reading a persisted run.
 
-### Task 1.1: `bloom-simulator` win-distribution + tail profiling
+### Task 1: `bloom-simulator` win-distribution + tail profiling
 
 **Files:**
 - Create: `studio/simulator/src/profile.rs`
@@ -207,7 +207,7 @@ git commit -m "feat(simulator): win-distribution histogram + tail metrics over s
 
 ---
 
-### Task 1.2: `bloom-simulator` RTP-convergence series
+### Task 2: `bloom-simulator` RTP-convergence series
 
 **Files:**
 - Modify: `studio/simulator/src/profile.rs`
@@ -289,7 +289,7 @@ git commit -m "feat(simulator): realized-RTP convergence series for sampling-tru
 
 ---
 
-### Task 1.3: `bloom-tuner` per-generation population telemetry
+### Task 3: `bloom-tuner` per-generation population telemetry
 
 **Files:**
 - Create: `studio/tuner/src/telemetry.rs`
@@ -408,7 +408,7 @@ git commit -m "feat(tuner): population fitness quantiles, diversity, and gene-ag
 
 ---
 
-### Task 1.4: Wire population telemetry + end-of-tune profiling into the GA
+### Task 4: Wire population telemetry + end-of-tune profiling into the GA
 
 **Files:**
 - Modify: `studio/tuner/src/outcome.rs`
@@ -533,7 +533,7 @@ git commit -m "feat(tuner): attach population telemetry per generation and end-o
 
 ---
 
-### Task 1.5: `tune_json` emits enriched progress + result NDJSON
+### Task 5: `tune_json` emits enriched progress + result NDJSON
 
 **Files:**
 - Modify: `studio/tuner/src/bin/tune_json.rs`
@@ -595,7 +595,7 @@ git commit -m "feat(tuner): emit enriched population + profile telemetry over ND
 
 ---
 
-### Task 1.6: Backend wire models for enriched telemetry + `math_runs`
+### Task 6: Backend wire models for enriched telemetry + `math_runs`
 
 **Files:**
 - Modify: `studio/backend/app/tuner/models.py` (extend `GenSnapshotWire`, `TuneResult`)
@@ -654,7 +654,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 
 ---
 
-### Task 1.7: Backend tuner runner parses the enriched result
+### Task 7: Backend tuner runner parses the enriched result
 
 **Files:**
 - Modify: `studio/backend/app/tuner/runner.py` (`parse_tune_result_line`, `TuneProgress`, `_drain_stdout`)
@@ -672,7 +672,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 
 ---
 
-### Task 1.8: `MathRunStore` (append-only) + REST
+### Task 8: `MathRunStore` (append-only) + REST
 
 **Files:**
 - Create: `studio/backend/app/analytics/store.py`, `studio/backend/app/analytics/rest.py`
@@ -694,7 +694,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 
 ---
 
-### Task 1.9: `AnalyticsHub` — write a run on tune completion
+### Task 9: `AnalyticsHub` — write a run on tune completion
 
 **Files:**
 - Create: `studio/backend/app/analytics/hub.py`, `studio/backend/app/analytics/sockets.py`
@@ -716,7 +716,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 
 ---
 
-### Task 1.10: Frontend `math-analytics` plugin scaffold + `IChart` seam + Math Profile tab
+### Task 10: Frontend `math-analytics` plugin scaffold + `IChart` seam + Math Profile tab
 
 **Files:**
 - Create: `studio/frontend/src/plugins/math-analytics/{index.ts,state.ts,actions.ts,reducers.ts,restClient.ts,config.ts}` and `.spec` siblings; `charts/IChart.ts`, `charts/UPlotChart.tsx`, `charts/Histogram.tsx`, `charts/StatTiles.tsx`; `tabs/MathProfileTab.tsx`; `MathAnalyticsPane.tsx`.
@@ -737,7 +737,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 
 ---
 
-### Task 1.11: e2e — Math Profile renders from a seeded run
+### Task 11: e2e — Math Profile renders from a seeded run
 
 **Files:**
 - Create: `studio/frontend/e2e/math-analytics-profile.spec.ts`
@@ -759,7 +759,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 
 Delivers the enriched live progress relay and the **Evolution** tab (live + scrubber).
 
-### Task 2.1: Analytics live progress relay
+### Task 12: Analytics live progress relay
 
 **Files:**
 - Modify: `studio/backend/app/tuner/hub.py` (also emit enriched progress on the analytics room) or add a thin relay in `AnalyticsHub`
@@ -773,7 +773,7 @@ Delivers the enriched live progress relay and the **Evolution** tab (live + scru
 - [ ] **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(backend): relay enriched GA progress on the analytics socket`.
 
-### Task 2.2: Evolution tab (live) — fitness landscape, homing, gene heatmap, scrubber
+### Task 13: Evolution tab (live) — fitness landscape, homing, gene heatmap, scrubber
 
 **Files:**
 - Create: `studio/frontend/src/plugins/math-analytics/tabs/EvolutionTab.tsx`, `charts/FitnessLandscape.tsx` (uPlot band+line), `charts/GeneHeatmap.tsx` (SVG/CSS), `charts/Scrubber.tsx`; `socketClient.ts` (+ `.spec`).
@@ -790,7 +790,7 @@ Delivers the enriched live progress relay and the **Evolution** tab (live + scru
 - [ ] **Step 4: Run** vitest + four frontend gates → PASS.
 - [ ] **Step 5: Commit** `feat(studio): live Evolution tab with fitness landscape, gene heatmap, scrubber`.
 
-### Task 2.3: e2e — live Evolution during a replay tune
+### Task 14: e2e — live Evolution during a replay tune
 
 **Files:** Create `studio/frontend/e2e/math-analytics-evolution.spec.ts`; replay cassette for an enriched tune stream (hand-authored from static analysis if no live session — [[tuner-agent-status]]).
 
@@ -808,7 +808,7 @@ Delivers the enriched live progress relay and the **Evolution** tab (live + scru
 
 Delivers cross-run comparison and the exportable report.
 
-### Task 3.1: Run selector over history
+### Task 15: Run selector over history
 
 **Files:** Modify `state.ts`/`actions.ts`/`reducers.ts`/`restClient.ts`; create `components/RunSelector.tsx` (+spec).
 
@@ -820,7 +820,7 @@ Delivers cross-run comparison and the exportable report.
 - [ ] **Step 4** vitest + gates → PASS.
 - [ ] **Step 5** Commit `feat(studio): math-analytics run history selector`.
 
-### Task 3.2: Compare tab
+### Task 16: Compare tab
 
 **Files:** Create `tabs/CompareTab.tsx`, `charts/OverlayLines.tsx` (uPlot multi-series), `components/DeltaTable.tsx` (+specs).
 
@@ -832,7 +832,7 @@ Delivers cross-run comparison and the exportable report.
 - [ ] **Step 4** vitest + gates → PASS.
 - [ ] **Step 5** Commit `feat(studio): Compare tab with overlaid curves + delta table`.
 
-### Task 3.3: Report tab + export
+### Task 17: Report tab + export
 
 **Files:** Create `tabs/ReportTab.tsx` (+spec); add an export util `lib/exportReport.ts` (+spec). Add the export library to `package.json` behind a thin seam (proven-library principle — [[prefer-proven-libraries]]); choose a self-contained client-side HTML→PDF/PNG approach.
 
@@ -844,7 +844,7 @@ Delivers cross-run comparison and the exportable report.
 - [ ] **Step 4** vitest + gates → PASS.
 - [ ] **Step 5** Commit `feat(studio): scrollable Report tab with PDF/PNG export`.
 
-### Task 3.4: e2e — Compare + Report
+### Task 18: e2e — Compare + Report
 
 **Files:** Create `studio/frontend/e2e/math-analytics-compare-report.spec.ts`; seed ≥2 `math_runs` for the game.
 
@@ -860,8 +860,8 @@ Delivers cross-run comparison and the exportable report.
 
 ## Self-Review (author checklist — completed)
 
-**Spec coverage:** Evolution tab → 2.2/2.3; Math Profile (win distribution, tail, composition, hit-by-band, RTP convergence) → 1.1/1.2/1.10/1.11; Compare + history → 3.1/3.2; Report + export → 3.3; append-only `math_runs` → 1.8/1.9; live streaming → 2.1/2.2; Rust telemetry (population + gene agreement + profile) → 1.1–1.5; charting seam (uPlot + SVG) → 1.10; design-language/token discipline → 1.10; summaries-not-raw → enforced by the histogram/quantile/downsample APIs; determinism preserved → explicit test in 1.4. The two flagged open items are pinned: **diversity** = normalized population fitness std-dev (Task 1.3, golden test); **histogram binning** = fixed log edges in `log_bins()` (Task 1.1, golden test).
+**Spec coverage:** Evolution tab → 2.2/2.3; Math Profile (win distribution, tail, composition, hit-by-band, RTP convergence) → 1.1/1.2/1.10/1.11; Compare + history → 3.1/3.2; Report + export → 3.3; append-only `math_runs` → 1.8/1.9; live streaming → 2.1/2.2; Rust telemetry (population + gene agreement + profile) → 1.1–1.5; charting seam (uPlot + SVG) → 1.10; design-language/token discipline → 1.10; summaries-not-raw → enforced by the histogram/quantile/downsample APIs; determinism preserved → explicit test in 1.4. The two flagged open items are pinned: **diversity** = normalized population fitness std-dev (Task 3, golden test); **histogram binning** = fixed log edges in `log_bins()` (Task 1, golden test).
 
-**Placeholder scan:** No TBD/TODO. Backend/frontend tasks that mirror an existing file cite the exact file to copy and give real interfaces + real test assertions; the Rust core tasks carry complete code. The export library is deliberately chosen at Task 3.3 behind a seam (phasing decision, not a gap).
+**Placeholder scan:** No TBD/TODO. Backend/frontend tasks that mirror an existing file cite the exact file to copy and give real interfaces + real test assertions; the Rust core tasks carry complete code. The export library is deliberately chosen at Task 17 behind a seam (phasing decision, not a gap).
 
 **Type consistency:** `RoundSample` fields match `measure.rs`; `WinDistribution`/`TailMetrics`/`RtpPoint` names are identical across Rust (1.1/1.2), the `RunProfile`/`GenSnapshot` extensions (1.4), the NDJSON (1.5), the pydantic `*Wire` models (1.6), and the TS `IMathRun` (1.10). camelCase alias `pGE100x` is called out explicitly where Python's auto-camel would mangle it.
