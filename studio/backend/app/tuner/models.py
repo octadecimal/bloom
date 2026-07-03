@@ -40,11 +40,61 @@ class BandMissWire(_WireModel):
     band_hi: float
 
 
+class PopulationStatsWire(_WireModel):
+    min: float
+    q1: float
+    median: float
+    q3: float
+    max: float
+    mean: float
+    diversity: float
+
+
+def _default_population_stats() -> "PopulationStatsWire":
+    return PopulationStatsWire(min=0.0, q1=0.0, median=0.0, q3=0.0, max=0.0, mean=0.0, diversity=0.0)
+
+
+class HistogramBinWire(_WireModel):
+    bin_lo: float
+    bin_hi: float
+    base: int
+    feature: int
+
+
+class WinDistributionWire(_WireModel):
+    bins: list[HistogramBinWire] = Field(default_factory=list)
+    zero_count: int
+
+
+class TailWire(_WireModel):
+    max_win: float
+    # Rust wire key is "pGE100x" (not the auto-camel "pGe100x") — explicit alias required.
+    p_ge100x: float = Field(alias="pGE100x")
+    p_losing_spin: float
+    longest_dead_streak: int
+    bonus_trigger_rate: float
+
+
+class RtpPointWire(_WireModel):
+    n: int
+    realized_rtp: float
+
+
+class RunProfileWire(_WireModel):
+    distribution: WinDistributionWire
+    tail: TailWire
+    rtp_convergence: list[RtpPointWire] = Field(default_factory=list)
+
+
 class GenSnapshotWire(_WireModel):
     generation: int
     best_fitness: float
     best_rtp: float
     best_volatility: float
+    # Safe defaults: existing construction sites (e.g. runner.py's
+    # parse_tune_result_line) don't yet populate these — Task 7 wires that up.
+    population: PopulationStatsWire = Field(default_factory=_default_population_stats)
+    gene_agreement: list[float] = Field(default_factory=list)
 
 
 class TuneResult(_WireModel):
@@ -54,6 +104,7 @@ class TuneResult(_WireModel):
     metrics: MetricsWire | None = None
     missed: list[BandMissWire] = Field(default_factory=list)
     trace: list[GenSnapshotWire] = Field(default_factory=list)
+    profile: RunProfileWire | None = None
     failure: str | None = None
     ran_at: str
 
