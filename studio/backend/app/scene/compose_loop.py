@@ -17,6 +17,7 @@ from typing import Protocol
 from pydantic import BaseModel
 
 from app.scene.asset_critic import AssetVerdict
+from app.scene.asset_floor import run_asset_floor
 from app.scene.critic import Critique, CritiqueRequest, EditParams
 from app.scene.art_critic import SceneArtRequest, SceneArtVerdict
 from app.scene.layout.plan import ScenePlan
@@ -159,31 +160,21 @@ async def run_compose(
         window = handles[max(0, k - bounds.look_behind):k + 1]
         result.notes.append(f"placed {target} (window={window})")
 
-        # Per-asset quality gate (before composition): regenerate degenerate art,
-        # then RE-JUDGE so a regeneration converges instead of silently swapping
-        # one bad asset for another. Bounded by asset_regen_retries and the shared
-        # regen budget.
-        verdict = await deps.critique_asset(target, attempt=0)
-        attempt = 0
-        while (verdict.action == "regenerate" and regen_left > 0
-               and attempt < bounds.asset_regen_retries):
-            regen_left -= 1
-            result.regens_spent += 1
-            result.assets_regenerated += 1
-            await deps.regenerate(target)
-            attempt += 1
-            result.notes.append(
-                f"{target}: {verdict.reason} -> regenerated (attempt {attempt})")
-            verdict = await deps.critique_asset(target, attempt=attempt)
-
-        if verdict.action == "regenerate":
-            cause = "regen budget exhausted" if regen_left <= 0 else "retries exhausted"
-            result.notes.append(
-                f"{target}: {verdict.reason} (could not fix: {cause}, kept)")
-        elif verdict.ok:
-            result.notes.append(f"{target}: asset ok")
-        else:
-            result.notes.append(f"{target}: {verdict.reason}")
+        # Per-asset quality gate (before composition): generate→critique→bounded-regen,
+        # delegated to the shared asset floor so the compose loop and the direct generate
+        # path enforce ONE floor. deps.critique_asset already loads bytes + critiques, so
+        # it IS the floor's `judge`; deps.regenerate is the `regenerate`.
+        floor = await run_asset_floor(
+            judge=lambda a: deps.critique_asset(target, attempt=a),
+            regenerate=lambda: deps.regenerate(target),
+            role=_role_of(element),
+            asset_regen_retries=bounds.asset_regen_retries,
+            regen_left=regen_left,
+        )
+        regen_left -= floor.regens_spent
+        result.regens_spent += floor.regens_spent
+        result.assets_regenerated += floor.regens_spent
+        result.notes.extend(floor.notes)
 
         # Composition passes: critique the composited scene and apply edits.
         for pass_index in range(bounds.max_passes):
