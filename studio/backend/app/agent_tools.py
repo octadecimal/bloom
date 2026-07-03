@@ -1414,7 +1414,12 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
 
         before_ran = sim_doc.tune_result.ran_at if sim_doc.tune_result else None
 
-        await ctx.math_hub.request_tune(ctx.game_id)   # runs GA, streams to the pane
+        # Full pipeline: GA tune + automatic verify pass on the winner. The
+        # tool's report text is unchanged (replay cassettes are prompt-keyed).
+        ok = await ctx.math_hub.generate(ctx.game_id)
+        if not ok:
+            return ("A math run is already in progress for this game — wait for "
+                    "it to finish, then tune again.")
 
         after = await ctx.math_store.get(ctx.game_id)
         result = after.tune_result if after else None

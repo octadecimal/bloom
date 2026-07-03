@@ -117,6 +117,14 @@ async def tune_tuner(game_id: str, request: Request) -> Response:
     return Response(status_code=202)
 
 
+@router.post("/games/{game_id}/math/generate", status_code=202)
+async def generate_math(game_id: str, request: Request) -> Response:
+    if not request.app.state.math_hub.begin_generate(game_id):
+        raise HTTPException(status_code=409,
+                            detail="a math run is already in progress for this game")
+    return Response(status_code=202)
+
+
 @router.post("/games/{game_id}/tuner/apply")
 async def apply_tuner(game_id: str, request: Request) -> dict:
     doc = await request.app.state.math_store.get(game_id)

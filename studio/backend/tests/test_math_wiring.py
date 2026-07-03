@@ -18,5 +18,6 @@ def test_math_wiring_exposes_unified_state_and_routes():
               "/games/{game_id}/tuner", "/games/{game_id}/tuner/tune",
               "/games/{game_id}/tuner/apply", "/analytics/runs",
               "/slot-model/templates",
-              "/games/{game_id}/slot-model/apply-template"):
+              "/games/{game_id}/slot-model/apply-template",
+              "/games/{game_id}/math/generate"):
         assert p in paths, p

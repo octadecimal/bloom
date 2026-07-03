@@ -149,6 +149,66 @@ class MathHub:
             await self.record_run(game_id, doc.tuner_params, result, duration_ms)
         return result
 
+    # ── generate pipeline: tune → verify → persist (spec sub-project 1) ──────
+    def begin_generate(self, game_id: str) -> bool:
+        """Fire-and-forget entry for the REST route. False if already running."""
+        if not self._reserve(game_id):
+            return False
+        asyncio.create_task(self._generate_reserved(game_id))
+        return True
+
+    async def generate(self, game_id: str) -> bool:
+        """Run the full pipeline to completion (agent-tool entry).
+        False if a run for this game is already in flight."""
+        if not self._reserve(game_id):
+            return False
+        return await self._generate_reserved(game_id)
+
+    def _reserve(self, game_id: str) -> bool:
+        if game_id in self._active:
+            return False
+        self._active.add(game_id)
+        return True
+
+    async def _status(self, game_id: str, phase: str) -> None:
+        await self._sio.emit("generate_status",
+                             {"gameId": game_id, "phase": phase}, room=game_id)
+
+    async def _generate_reserved(self, game_id: str) -> bool:
+        try:
+            await self._status(game_id, "tuning")
+            started = time.monotonic()
+            result = await self.request_tune(game_id, record=False)
+            duration_ms = int((time.monotonic() - started) * 1000)
+            if result is None or result.status not in ("pass", "near_miss"):
+                await self._status(game_id, "failed")
+                return True
+            await self._status(game_id, "verifying")
+            verify = await self._verify_tuned(game_id, result.tuned_model)
+            doc = await self._store.get(game_id)
+            await self.record_run(game_id, doc.tuner_params, result, duration_ms,
+                                  verify=verify)
+            await self._status(game_id, "done")
+            return True
+        finally:
+            self._active.discard(game_id)
+
+    async def _verify_tuned(self, game_id: str, tuned_model: dict) -> CurationResult:
+        """Independent curate pass on the WINNER (not the stored model). Does not
+        touch doc.result and emits no curation_* events — the simulator pane's
+        contract stays 'result == last curation of the stored model'."""
+        doc = await self._store.get_or_seed(game_id)
+        # Target re-derivation uses the STORED doc's params + the STORED model's
+        # num_bonuses (the tuned model isn't touched here) — safe because the GA
+        # never adds/removes bonuses, so the tuned model has the same bonus count.
+        target = await self._derive_target(game_id, doc)
+
+        def _noop(p):
+            pass
+
+        return await self._curation_runner.run(tuned_model, target,
+                                               on_progress=_noop)
+
     # ── run recording (was AnalyticsHub.record_run, + verify) ───────────────
     async def record_run(self, game_id: str, params: TuningParams,
                          result: TuneResult, duration_ms: int,

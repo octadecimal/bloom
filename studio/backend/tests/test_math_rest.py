@@ -7,9 +7,49 @@ import pytest_asyncio
 from types import SimpleNamespace
 from fastapi import HTTPException
 
-from app.math.models import MathRunDoc, SectionLocks, TuneResult, MetricsWire, default_tuning_params
+from app.math.models import (
+    CurationResult, MathRunDoc, SectionLocks, TuneResult, MetricsWire, default_tuning_params,
+)
 from app.math.store import MathStore, MathRunStore
+from app.math.hub import MathHub
+from app.math.runners.curate import FakeCurationRunner
+from app.math.runners.tune import FakeTunerRunner
 from app.math import rest
+
+
+class _FakeSio:
+    async def emit(self, event, payload, room=None, to=None):
+        pass
+
+    async def enter_room(self, sid, room):
+        pass
+
+
+class _GatedTunerRunner:
+    """Parks forever until .gate is set — used to hold a generate() run 'in
+    flight' so a second call observes the 409/busy path."""
+
+    def __init__(self, result):
+        self._result = result
+        self.gate = asyncio.Event()
+
+    async def run(self, seed_model, target, config, on_progress):
+        await self.gate.wait()
+        return self._result
+
+
+def _metrics():
+    return MetricsWire(rtp=0.96, volatility=4.0, hit_frequency=0.3,
+                       base_rtp=0.8, feature_rtp=0.16, bonus_hit_rates=[])
+
+
+def _pass_tune_result():
+    return TuneResult(status="pass", verdict="pass", tuned_model={"rows": 7},
+                      metrics=_metrics(), ran_at="t1")
+
+
+def _pass_curation_result():
+    return CurationResult(status="pass", metrics=_metrics(), ran_at="t2")
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -210,6 +250,43 @@ async def test_tune_kicks_off(mongo_db):
     await rest.tune_tuner("g1", req)
     await asyncio.sleep(0)
     assert calls == ["g1"]
+
+
+# ── generate pipeline route (NEW) ─────────────────────────────────────────────
+def _generate_hub(mongo_db, *, tuner_runner):
+    store = MathStore(mongo_db)
+    run_store = MathRunStore(mongo_db)
+    gdd = FakeGdd({"rtp": 0.96, "volatility": "medium", "bonus_hit_rate": "1:150"})
+    return MathHub(_FakeSio(), store, run_store,
+                   FakeCurationRunner(progress=[], result=_pass_curation_result()),
+                   tuner_runner, gdd)
+
+
+@pytest.mark.asyncio
+async def test_generate_route_returns_202_while_idle(mongo_db):
+    hub = _generate_hub(mongo_db,
+                        tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune_result()))
+    req = _req(math_hub=hub)
+    resp = await rest.generate_math("g1", req)
+    assert resp.status_code == 202
+    await asyncio.sleep(0)  # let the background pipeline settle
+
+
+@pytest.mark.asyncio
+async def test_generate_route_returns_409_when_already_running(mongo_db):
+    gated = _GatedTunerRunner(_pass_tune_result())
+    hub = _generate_hub(mongo_db, tuner_runner=gated)
+    req = _req(math_hub=hub)
+
+    resp = await rest.generate_math("g1", req)
+    assert resp.status_code == 202
+    await asyncio.sleep(0)  # let the first run reserve + park on the gate
+
+    with pytest.raises(HTTPException) as exc_info:
+        await rest.generate_math("g1", req)
+    assert exc_info.value.status_code == 409
+
+    gated.gate.set()
 
 
 # ── analytics (was test_analytics_rest.py) ───────────────────────────────────

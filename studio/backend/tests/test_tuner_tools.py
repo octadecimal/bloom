@@ -11,7 +11,8 @@ from app.agent_tools import (
 from app.math.store import MathStore, MathRunStore
 from app.math.models import MetricsWire
 from app.math.runners.tune import FakeTunerRunner, TuneProgress
-from app.math.models import TuneResult, BandMissWire
+from app.math.runners.curate import FakeCurationRunner
+from app.math.models import CurationResult, TuneResult, BandMissWire
 from app.math.hub import MathHub
 
 
@@ -167,7 +168,12 @@ def _tune_ctx(mongo_db, *, result):
     gdd = _StubGddStore({"rtp": "0.94", "volatility": "high", "bonus_hit_rate": "1:150"})
     runner = FakeTunerRunner(
         progress=[TuneProgress(1, 40, 0.5, 0.90, 8.0)], result=result)
-    hub = MathHub(_FakeSio(), store, run_store, None, runner, gdd)
+    # tune_slot_model now runs the full generate() pipeline (GA tune + verify),
+    # so the hub needs a real curation runner for the verify sub-step even
+    # though these tests only assert on the tune_result / report text.
+    curation_runner = FakeCurationRunner(progress=[], result=CurationResult(
+        status="pass", metrics=_metrics(0.94), ran_at="t1"))
+    hub = MathHub(_FakeSio(), store, run_store, curation_runner, runner, gdd)
     return ToolContext("r1", "g1", None, None, gdd_store=gdd,
                        math_store=store, math_hub=hub)
 
