@@ -1,24 +1,26 @@
 import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { analyticsHooks, selectedRun, type IAnalyticsState, type IGenFrame } from './state';
+import { analyticsHooks, selectedRun, type IAnalyticsState, type IGenFrame, type IMathRun } from './state';
 import { MathProfileTab } from './tabs/MathProfileTab';
 import { EvolutionTab } from './tabs/EvolutionTab';
-import { openGameAnalytics, scrub } from './actions';
+import { CompareTab } from './tabs/CompareTab';
+import { openGameAnalytics, scrub, toggleRunSelected } from './actions';
 
 type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
 
 interface ITabDef {
   id: ITabId;
   label: string;
-  // Math Profile (Task 10) and Evolution (Task 13) are built; the bar stays
-  // scaffolded so Phase 3 (Compare / Report) slots in without reshaping the shell.
+  // Math Profile (Task 10), Evolution (Task 13), and Compare (Task 16) are
+  // built; the bar stays scaffolded so Report (Task 17) slots in without
+  // reshaping the shell.
   enabled: boolean;
 }
 
 const TABS: ITabDef[] = [
   { id: 'profile', label: 'Math Profile', enabled: true },
   { id: 'evolution', label: 'Evolution', enabled: true },
-  { id: 'compare', label: 'Compare', enabled: false },
+  { id: 'compare', label: 'Compare', enabled: true },
   { id: 'report', label: 'Report', enabled: false },
 ];
 
@@ -47,6 +49,8 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
 
   const loadStatus = s.loadStatus.get();
   const run = selectedRun(s.get() as IAnalyticsState);
+  const runs = s.runs.get() as IMathRun[];
+  const selectedRunIds = s.selectedRunIds.get() as string[];
   const frames = s.frames.get() as IGenFrame[];
   const selectedGeneration = s.selectedGeneration.get();
   // Evolution has data whenever frames exist — which happens before any run has
@@ -98,6 +102,7 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
         )}
         {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
         {loadStatus !== 'loading' && activeTab === 'evolution' && <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />}
+        {loadStatus !== 'loading' && activeTab === 'compare' && <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />}
       </div>
     </div>
   );

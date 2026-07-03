@@ -11,12 +11,14 @@ vi.mock('./charts/UPlotChart', () => ({
 
 const openGameAnalytics = vi.fn();
 const scrub = vi.fn();
+const toggleRunSelected = vi.fn();
 vi.mock('./actions', () => ({
   openGameAnalytics: (id: string) => openGameAnalytics(id),
   closeGameAnalytics: vi.fn(),
   initAnalytics: vi.fn(),
   selectRun: vi.fn(),
   scrub: (n: number) => scrub(n),
+  toggleRunSelected: (id: string) => toggleRunSelected(id),
 }));
 
 function run(id: string, trace: IMathRun['trace'] = []): IMathRun {
@@ -87,7 +89,7 @@ describe('MathAnalyticsPane', () => {
     expect(screen.getByTestId('math-profile-tab')).toBeTruthy();
   });
 
-  it('scaffolds a tab bar with the Math Profile tab active, Evolution selectable, Compare/Report still disabled', () => {
+  it('scaffolds a tab bar with the Math Profile tab active, Evolution/Compare selectable, Report still disabled', () => {
     analyticsSlice().activeGameId.set('g1');
     analyticsSlice().loadStatus.set('idle');
     analyticsSlice().runs.set([run('r1', [snapshot(0), snapshot(1)])]);
@@ -97,9 +99,39 @@ describe('MathAnalyticsPane', () => {
     const profileTabButton = screen.getByTestId('analytics-tab-profile');
     const evolutionTabButton = screen.getByTestId('analytics-tab-evolution');
     const compareTabButton = screen.getByTestId('analytics-tab-compare');
+    const reportTabButton = screen.getByTestId('analytics-tab-report');
     expect(profileTabButton.getAttribute('aria-selected')).toBe('true');
     expect((evolutionTabButton as HTMLButtonElement).disabled).toBe(false);
-    expect((compareTabButton as HTMLButtonElement).disabled).toBe(true);
+    expect((compareTabButton as HTMLButtonElement).disabled).toBe(false);
+    expect((reportTabButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('switches to the Compare tab and renders it over the store-held run history and selection', () => {
+    analyticsSlice().activeGameId.set('g1');
+    analyticsSlice().loadStatus.set('idle');
+    analyticsSlice().runs.set([run('r1'), run('r2')]);
+    analyticsSlice().selectedRunId.set('r1');
+    analyticsSlice().selectedRunIds.set(['r1', 'r2']);
+    render(<MathAnalyticsPane {...({} as never)} />);
+    fireEvent.click(screen.getByTestId('analytics-tab-compare'));
+    expect(screen.getByTestId('compare-tab')).toBeTruthy();
+    expect(screen.getByTestId('compare-rtp-overlay')).toBeTruthy();
+    expect(screen.getByTestId('compare-vol-overlay')).toBeTruthy();
+    expect(screen.getByTestId('delta-table')).toBeTruthy();
+    expect(screen.getByTestId('delta-col-r1')).toBeTruthy();
+    expect(screen.getByTestId('delta-col-r2')).toBeTruthy();
+  });
+
+  it('dispatches toggleRunSelected when a run row is clicked in the Compare tab', () => {
+    analyticsSlice().activeGameId.set('g1');
+    analyticsSlice().loadStatus.set('idle');
+    analyticsSlice().runs.set([run('r1'), run('r2')]);
+    analyticsSlice().selectedRunId.set('r1');
+    analyticsSlice().selectedRunIds.set(['r1']);
+    render(<MathAnalyticsPane {...({} as never)} />);
+    fireEvent.click(screen.getByTestId('analytics-tab-compare'));
+    fireEvent.click(screen.getByTestId('run-selector-row-r2'));
+    expect(toggleRunSelected).toHaveBeenCalledWith('r2');
   });
 
   it('switches to the Evolution tab and renders it from the store-held frames', () => {

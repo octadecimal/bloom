@@ -167,6 +167,15 @@ export function chartSeriesToken(index: number): string {
   return CHART_SERIES_TOKENS[index % CHART_SERIES_TOKENS.length];
 }
 
+/** Human-readable identity for a Compare selection slot, by position in
+ * `selectedRunIds` — shared by the overlay charts' series legends
+ * (`OverlayLines.tsx`) and the delta table's column headers (`DeltaTable.tsx`)
+ * so the same run reads with the same label everywhere in the Compare tab
+ * (Task 16). */
+export function runSeriesLabel(run: IMathRun, index: number): string {
+  return `Run ${index + 1} · ${new Date(run.createdAt).toLocaleString()}`;
+}
+
 export const analyticsHooks = makePluginHooks<IAnalyticsState>(MATH_ANALYTICS_PLUGIN_ID);
 
 export function analyticsSlice(): State<IAnalyticsState> {
