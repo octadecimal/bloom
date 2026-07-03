@@ -24,6 +24,16 @@ const EXPECTED: Record<string, string> = {
   '--success': '#3ec28b',
   '--warning': '#e7b549',
   '--danger': '#f0574d',
+  '--sym-1': '#e2635a',
+  '--sym-2': '#e5924c',
+  '--sym-3': '#d4b04e',
+  '--sym-4': '#87b860',
+  '--sym-5': '#46b0a1',
+  '--sym-6': '#57a8d8',
+  '--sym-7': '#7d8fe8',
+  '--sym-8': '#a97fe0',
+  '--sym-9': '#d873b8',
+  '--sym-10': '#9aa2ad',
 };
 
 describe('design-language token layer', () => {

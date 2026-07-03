@@ -44,6 +44,18 @@
   --warning: #e7b549;
   --danger: #f0574d;
 
+  /* Symbol swatches — game-config editor chip dots. Muted categorical ramp for dark UI. */
+  --sym-1: #e2635a;
+  --sym-2: #e5924c;
+  --sym-3: #d4b04e;
+  --sym-4: #87b860;
+  --sym-5: #46b0a1;
+  --sym-6: #57a8d8;
+  --sym-7: #7d8fe8;
+  --sym-8: #a97fe0;
+  --sym-9: #d873b8;
+  --sym-10: #9aa2ad;
+
   /* Type */
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
@@ -90,6 +102,16 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-sym-1: var(--sym-1);
+  --color-sym-2: var(--sym-2);
+  --color-sym-3: var(--sym-3);
+  --color-sym-4: var(--sym-4);
+  --color-sym-5: var(--sym-5);
+  --color-sym-6: var(--sym-6);
+  --color-sym-7: var(--sym-7);
+  --color-sym-8: var(--sym-8);
+  --color-sym-9: var(--sym-9);
+  --color-sym-10: var(--sym-10);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
