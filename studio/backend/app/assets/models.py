@@ -19,6 +19,14 @@ class Generation(_WireModel):
     created_at: datetime
 
 
+class GenParams(_WireModel):
+    negative: str = ""
+    steps: Optional[int] = None
+    guidance: Optional[float] = None
+    cfg: Optional[float] = None
+    upscale: bool = False
+
+
 class Asset(_WireModel):
     id: str
     game_id: str
@@ -30,6 +38,7 @@ class Asset(_WireModel):
     height: int
     workflow: Workflow
     seed: Optional[int] = None
+    params: Optional[GenParams] = None
     status: Status = "idle"
     generations: list[Generation] = Field(default_factory=list)
     selected_generation_id: Optional[str] = None
