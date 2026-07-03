@@ -128,3 +128,12 @@ def test_build_asset_messages_includes_role_expectation():
         image_png=_png((5, 6, 7, 255)), role="background", transparent=False))
     human = msgs[-1].content[0]["text"].lower()
     assert "background" in human
+
+
+def test_reels_critic_demands_a_complete_frame_and_rejects_thin_rails():
+    from app.scene.asset_critic import ASSET_SYSTEM_PROMPT
+    low = ASSET_SYSTEM_PROMPT.lower()
+    # a reel frame must be a full 5x3 frame with structure, not thin rails
+    assert "5" in low and "3" in low
+    assert "column" in low or "grid" in low
+    assert "rail" in low or "bare border" in low or "empty" in low  # names the failure mode

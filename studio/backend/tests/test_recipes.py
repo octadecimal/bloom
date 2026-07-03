@@ -2,10 +2,21 @@ from app.assets.recipes import Profile, profile_for, build_asset_prompt
 
 
 def test_hero_roles_upscale_and_standard_roles_do_not():
+    # background, logo AND reels are hero roles (the reel frame is the paramount
+    # element, so it earns the sharpness pass); spin/symbols stay standard.
     assert profile_for("background").upscale is True
     assert profile_for("logo").upscale is True
-    assert profile_for("reels").upscale is False
+    assert profile_for("reels").upscale is True
     assert profile_for("spin").upscale is False
+
+
+def test_reels_prompt_demands_a_complete_5x3_frame_not_a_bare_border():
+    p = profile_for("reels")
+    low = p.positive.lower()
+    # must describe a full grid structure, not just "transparent center"
+    assert "5" in low and "3" in low            # 5x3 / 5 columns x 3 rows
+    assert "column" in low or "grid" in low
+    assert "row" in low or "cell" in low
 
 
 def test_logo_is_the_only_role_with_active_negatives_and_cfg_above_one():
