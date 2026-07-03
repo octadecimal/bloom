@@ -15,7 +15,19 @@ export interface IOverlayLinesProps {
  * (`buildRtpConvergenceOverlay` / `buildVolatilityOverlay` below) differs. */
 export function OverlayLines({ testId, title, data }: IOverlayLinesProps) {
   return (
-    <div data-testid={testId} className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2">
+    // `data-series-count` is a plain React-rendered attribute (not uPlot's canvas
+    // legend, whose `legend.show` option is fixed at construction time and does
+    // NOT re-evaluate on a later `setData` — see UPlotChart.tsx#toOptions/#update).
+    // Selecting Compare runs one at a time mounts this chart at 1 series before a
+    // second selection brings it to 2, so the legend's own DOM is not a reliable
+    // series-count signal across that sequence; this attribute always reflects the
+    // live series count for e2e/inspection (mirrors the unit tests'
+    // `data-series-labels` stub convention, but real).
+    <div
+      data-testid={testId}
+      data-series-count={data.series.length}
+      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2"
+    >
       <span className="flex-none px-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-2">{title}</span>
       <UPlotChart data={data} className="min-h-0 flex-1" />
     </div>

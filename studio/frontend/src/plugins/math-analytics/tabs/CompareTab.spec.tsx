@@ -78,16 +78,24 @@ describe('CompareTab', () => {
 
   it('renders two series in the overlaid RTP-convergence chart for two selected runs', () => {
     render(<CompareTab runs={ALL_RUNS} selectedRunIds={['r1', 'r2']} onToggleRun={vi.fn()} />);
-    const stub = screen.getByTestId('compare-rtp-overlay').querySelector('[data-testid="uplot-chart-stub"]');
+    const overlay = screen.getByTestId('compare-rtp-overlay');
+    const stub = overlay.querySelector('[data-testid="uplot-chart-stub"]');
     const labels = stub?.getAttribute('data-series-labels')?.split('|') ?? [];
     expect(labels).toHaveLength(2);
+    // `data-series-count` on the OverlayLines wrapper itself — a plain
+    // React-rendered signal (unlike uPlot's real legend, whose `legend.show`
+    // is fixed at mount and won't reflect a series count that grows via a
+    // later `setData`) so e2e/inspection has a reliable series-count DOM hook.
+    expect(overlay.getAttribute('data-series-count')).toBe('2');
   });
 
   it('renders two series in the overlaid volatility (win-distribution) chart for two selected runs', () => {
     render(<CompareTab runs={ALL_RUNS} selectedRunIds={['r1', 'r2']} onToggleRun={vi.fn()} />);
-    const stub = screen.getByTestId('compare-vol-overlay').querySelector('[data-testid="uplot-chart-stub"]');
+    const overlay = screen.getByTestId('compare-vol-overlay');
+    const stub = overlay.querySelector('[data-testid="uplot-chart-stub"]');
     const labels = stub?.getAttribute('data-series-labels')?.split('|') ?? [];
     expect(labels).toHaveLength(2);
+    expect(overlay.getAttribute('data-series-count')).toBe('2');
   });
 
   it('renders a delta-table with one column per selected run', () => {
