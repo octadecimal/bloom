@@ -2,7 +2,6 @@
 per-generation progress + final result stream. A FakeTunerRunner backs unit tests."""
 import asyncio
 import json
-import math
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -46,19 +45,15 @@ def _parse_population(p: dict) -> PopulationStatsWire:
     )
 
 
-def _bin_edge(v: float | None) -> float:
-    # The Rust side's top histogram bin is open-ended (bin_hi = f64::INFINITY).
-    # serde_json can't represent Infinity in JSON, so it serializes as `null`;
-    # map that back to math.inf rather than widening the wire model to Optional.
-    return math.inf if v is None else v
-
-
 def _parse_profile(p: dict) -> RunProfileWire:
     dist = p["distribution"]
     tail = p["tail"]
+    # binHi for the open-ended top bin arrives as JSON null (Rust's f64::INFINITY,
+    # which serde_json can't encode); pass it straight through as None so the wire
+    # stays JSON-safe (see HistogramBinWire.bin_hi). binLo is never Infinity.
     return RunProfileWire(
         distribution=WinDistributionWire(
-            bins=[HistogramBinWire(bin_lo=_bin_edge(b["binLo"]), bin_hi=_bin_edge(b["binHi"]),
+            bins=[HistogramBinWire(bin_lo=b["binLo"], bin_hi=b["binHi"],
                                    base=b["base"], feature=b["feature"])
                   for b in dist.get("bins", [])],
             zero_count=dist["zeroCount"],

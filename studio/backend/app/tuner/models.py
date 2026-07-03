@@ -56,7 +56,11 @@ def _default_population_stats() -> "PopulationStatsWire":
 
 class HistogramBinWire(_WireModel):
     bin_lo: float
-    bin_hi: float
+    # The Rust side's top histogram bin is open-ended (bin_hi = f64::INFINITY),
+    # which serde_json can't encode and emits as JSON null. Carry that through as
+    # None end-to-end rather than materializing math.inf, which would make
+    # json.dumps(..., allow_nan=False) — as Starlette's JSONResponse does — raise.
+    bin_hi: float | None = None
     base: int
     feature: int
 
