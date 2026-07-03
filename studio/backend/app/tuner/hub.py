@@ -55,6 +55,19 @@ class TunerHub:
                  "bestRtp": p.best_rtp, "bestVolatility": p.best_volatility},
                 room=game_id,
             )
+            # Ephemeral enriched frame for the (live) analytics Evolution tab.
+            # Not persisted — the durable run doc still lands via record_run
+            # at completion. Same room/sio as tuning_progress, just a richer shape.
+            await self._sio.emit(
+                "analytics_progress",
+                {"gameId": game_id, "generation": p.generation,
+                 "maxGenerations": p.max_generations,
+                 "best": {"fitness": p.best_fitness, "rtp": p.best_rtp,
+                          "volatility": p.best_volatility},
+                 "population": p.population.model_dump(by_alias=True, mode="json"),
+                 "geneAgreement": p.gene_agreement},
+                room=game_id,
+            )
 
         pending: list[asyncio.Task] = []
         loop = asyncio.get_running_loop()
