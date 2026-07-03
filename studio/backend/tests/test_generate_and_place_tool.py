@@ -44,10 +44,11 @@ class _GeneratingAssetStore:
         if asset.slot:
             self._by_slot[asset.slot] = asset
 
-    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None):
+    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None, params=None):
         asset = Asset(
             id=f"a{len(self.created) + 1}", game_id=game_id, name=name, prompt=prompt,
             width=width, height=height, workflow=workflow, slot=slot,
+            params=params,
             generations=[], selected_generation_id=None,
         )
         self.created.append(asset)
@@ -147,6 +148,45 @@ async def test_generate_and_place_no_image_after_generation_places_nothing(mongo
     assert "no image" in out.lower()
     doc = await store.get_document("g1")
     assert doc is None or "spr.background" not in doc.get("nodes", {})
+    await mongo_db["game_scenes"].delete_many({})
+
+
+@pytest.mark.asyncio
+async def test_generate_and_place_uses_dev_workflow_and_role_params(mongo_db):
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    assets = _GeneratingAssetStore()
+    asset_hub = _FakeAssetHub(assets)
+    ctx = ToolContext("r1", "g1", assets, asset_hub, scene_store=store, scene_hub=hub)
+
+    await build_generate_and_place_tool(ctx).ainvoke(
+        {"description": 'wordmark "AI"', "role": "logo", "transparent": True, "slot": "logo"})
+
+    asset = await assets.get_by_slot("g1", "logo")
+    assert asset.workflow == "dev-transparent"
+    assert asset.params is not None and asset.params.cfg == 2.0        # logo profile
+    assert asset.params.negative != ""
+    assert "legible" in asset.prompt.lower()                          # role boilerplate folded in
+    await mongo_db["game_scenes"].delete_many({})
+
+
+@pytest.mark.asyncio
+async def test_generate_and_place_opaque_selects_dev_opaque(mongo_db):
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    assets = _GeneratingAssetStore()
+    asset_hub = _FakeAssetHub(assets)
+    ctx = ToolContext("r1", "g1", assets, asset_hub, scene_store=store, scene_hub=hub)
+
+    await build_generate_and_place_tool(ctx).ainvoke(
+        {"description": "a graveyard", "role": "background", "transparent": False,
+         "slot": "bg", "fit": "cover", "z_index": 0})
+
+    asset = await assets.get_by_slot("g1", "bg")
+    assert asset.workflow == "dev-opaque"
+    assert asset.params.upscale is True                              # background is a hero role
     await mongo_db["game_scenes"].delete_many({})
 
 

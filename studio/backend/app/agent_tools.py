@@ -14,6 +14,8 @@ from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.layout.bind import bind
 from app.scene.layout.intent import read_intent
 from app.scene.layout.plan import ScenePlan, canonical_role
+from app.assets.models import GenParams
+from app.assets.recipes import profile_for, build_asset_prompt
 from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
@@ -48,6 +50,29 @@ class ToolContext:
     region_override_store: object = None
 
 
+async def _art_direction(ctx: "ToolContext") -> str:
+    if ctx.gdd_store is None:
+        return ""
+    intent = await read_intent(ctx.gdd_store, ctx.game_id)
+    return intent.art_direction
+
+
+def _dev_workflow(transparent: bool) -> str:
+    return "dev-transparent" if transparent else "dev-opaque"
+
+
+async def _recipe_generation(ctx, *, description, style, role, transparent):
+    """Build (prompt, workflow, GenParams) for one generation from the role recipe +
+    the game's art direction. Shared by both generate verbs."""
+    art = await _art_direction(ctx)
+    base_desc = description if not style else f"{description}, {style} style"
+    prompt = build_asset_prompt(role, art, base_desc)
+    prof = profile_for(role)
+    params = GenParams(negative=prof.negative, steps=prof.steps,
+                       guidance=prof.guidance, cfg=prof.cfg, upscale=prof.upscale)
+    return prompt, _dev_workflow(transparent), params
+
+
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     async def generate_asset(
         description: str,
@@ -55,13 +80,14 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         size: str = "512x512",
         transparent: bool = True,
         slot: str = "",
+        role: str = "",
     ) -> str:
-        prompt = description if not style else f"{description}, {style} style"
+        prompt, workflow, params = await _recipe_generation(
+            ctx, description=description, style=style, role=role, transparent=transparent)
         width, height = (int(x) for x in size.lower().split("x", 1))
-        workflow = "schnell-transparent" if transparent else "schnell-opaque"
         asset = await ctx.asset_store.create_asset(
             ctx.game_id, description[:40] or "asset", prompt, width, height, workflow,
-            slot=slot or None,
+            slot=slot or None, params=params,
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
         tag = f" (slot {slot})" if slot else ""
@@ -74,6 +100,7 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
             "Generate a game image from a text description and add it to the Asset Board. "
             "size is 'WIDTHxHEIGHT' (default 512x512); set transparent=false for an opaque "
             "background/scene. Pass slot='<id>' to tie a symbol's art to its design slot."
+            " Pass role='background'|'logo'|'reels'|'spin'|... to select the generation recipe (model params, negatives, upscale)."
         ),
     )
 
@@ -290,12 +317,12 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             if not description:
                 return ("Pass a description to generate the element, or a slot that "
                         "already has art to place.")
-            prompt = description if not style else f"{description}, {style} style"
+            prompt, workflow, params = await _recipe_generation(
+                ctx, description=description, style=style, role=role, transparent=transparent)
             width, height = (int(v) for v in size.lower().split("x", 1))
-            workflow = "schnell-transparent" if transparent else "schnell-opaque"
             created = await ctx.asset_store.create_asset(
                 ctx.game_id, description[:40] or "asset", prompt, width, height,
-                workflow, slot=slot or None,
+                workflow, slot=slot or None, params=params,
             )
             await ctx.asset_hub.generate_and_wait(ctx.game_id, created.id)
             asset = await ctx.asset_store.get_asset(created.id)
