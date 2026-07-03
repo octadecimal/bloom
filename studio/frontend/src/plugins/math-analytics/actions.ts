@@ -39,8 +39,10 @@ export function selectRun(runId: string): void {
   analyticsSlice().selectedRunId.set(runId);
 }
 
-/** Pin the Evolution scrubber to a specific generation (see `reducers.ts#scrubTo`). */
+/** Pin the Evolution scrubber to a specific generation (see `reducers.ts#scrubTo`).
+ * `{ noproxy: true }` avoids feeding a tracking Proxy back into `.set()` — see the
+ * detailed note in `socketClient.ts` on the same read-reduce-write shape. */
 export function scrub(generation: number): void {
   const s = analyticsSlice();
-  s.set(scrubTo(s.get() as IAnalyticsState, generation) as never);
+  s.set(scrubTo(s.get({ noproxy: true }) as IAnalyticsState, generation) as never);
 }

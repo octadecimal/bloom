@@ -35,12 +35,21 @@ export function createAnalyticsSocket() {
         population: p.population,
         geneAgreement: p.geneAgreement,
       };
-      const next = progressFrame(analyticsSlice().get() as IAnalyticsState, frame);
+      // `{ noproxy: true }` is required here: this read feeds a pure reducer whose
+      // result is `.set()` straight back into the same slice. A bare `.get()` returns
+      // a tracking Proxy meant for React's render-time dependency tracking; spreading
+      // it (`progressFrame`'s `{ ...state, frames }`) and writing it back creates a
+      // self-referencing proxy chain in the store that recurses forever on the next
+      // `.get()` (`RangeError: Maximum call stack size exceeded` under real rapid-fire
+      // generation frames). Mirrors the noproxy convention every other
+      // read-reduce-write call site in the app already follows (gdd/actions.ts,
+      // llm-chat/socketClient.ts, assets/socketClient.ts, ...).
+      const next = progressFrame(analyticsSlice().get({ noproxy: true }) as IAnalyticsState, frame);
       analyticsSlice().set(next as never);
     });
     sock.on('run_complete', (p: { gameId: string; run: IMathRun }) => {
       if (!isActive(p.gameId)) return;
-      const next = runLoaded(analyticsSlice().get() as IAnalyticsState, p.run);
+      const next = runLoaded(analyticsSlice().get({ noproxy: true }) as IAnalyticsState, p.run);
       analyticsSlice().set(next as never);
     });
   }
