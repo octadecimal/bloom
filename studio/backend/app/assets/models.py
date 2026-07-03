@@ -25,6 +25,7 @@ class GenParams(_WireModel):
     guidance: Optional[float] = None
     cfg: Optional[float] = None
     upscale: bool = False
+    cut_cells: bool = False  # reels: cut the transparent play windows post-generation
 
 
 class Asset(_WireModel):

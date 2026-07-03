@@ -60,8 +60,10 @@ pub fn render_report(out: &TuneOutcome) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::outcome::{GenSnapshot, TuneOutcome, TuningTrace, Verdict};
+    use crate::outcome::{GenSnapshot, RunProfile, TuneOutcome, TuningTrace, Verdict};
+    use crate::telemetry::population_stats;
     use bloom_math::mechanics::slots::{Paytable, SlotModel};
+    use bloom_simulator::profile::WinDistribution;
     use bloom_simulator::target::Metrics;
 
     fn outcome(verdict: Verdict) -> TuneOutcome {
@@ -92,10 +94,26 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
+                    population: population_stats(&[-0.5]),
+                    gene_agreement: vec![1.0],
                 }],
                 population: 24,
                 search_candidate_count: 20_000,
                 final_candidate_count: 200_000,
+            },
+            profile: RunProfile {
+                distribution: WinDistribution {
+                    bins: vec![],
+                    zero_count: 0,
+                },
+                tail: bloom_simulator::profile::TailMetrics {
+                    max_win: 0.0,
+                    p_ge_100x: 0.0,
+                    p_losing_spin: 0.0,
+                    longest_dead_streak: 0,
+                    bonus_trigger_rate: 0.0,
+                },
+                rtp_convergence: vec![],
             },
         }
     }

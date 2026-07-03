@@ -9,6 +9,7 @@ import { openGame, closeGame } from '../../plugins/game/actions';
 import { openGameSim, closeGameSim } from '../../plugins/simulator/actions';
 import { openGameTuner, closeGameTuner } from '../../plugins/tuner/actions';
 import { openGameConfig, closeGameConfig } from '../../plugins/game-config/actions';
+import { openGameAnalytics, closeGameAnalytics } from '../../plugins/math-analytics/actions';
 import { notify } from '../../lib/notify';
 import { ActiveRoomProvider } from './activeRoom';
 import { Workbench } from '../Workbench';
@@ -37,6 +38,7 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
           if (found.gameId) void openGameSim(found.gameId);
           if (found.gameId) void openGameTuner(found.gameId);
           if (found.gameId) void openGameConfig(found.gameId);
+          if (found.gameId) void openGameAnalytics(found.gameId);
           setState('valid');
         } else {
           setState('invalid');
@@ -58,6 +60,7 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
       closeGameSim();
       closeGameTuner();
       closeGameConfig();
+      closeGameAnalytics();
     },
     [],
   );

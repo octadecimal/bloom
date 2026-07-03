@@ -53,3 +53,10 @@ def test_build_asset_prompt_dedupes_and_skips_empty_parts():
     out = build_asset_prompt("background", art_direction="", description="a graveyard")
     assert out.startswith("a graveyard")
     assert ", ," not in out and not out.endswith(", ")
+
+
+def test_reels_profile_cuts_cells_and_other_roles_do_not():
+    assert profile_for("reels").cut_cells is True
+    assert profile_for("reel_frame").cut_cells is True  # alias
+    for role in ("background", "logo", "spin", "symbol_wild"):
+        assert profile_for(role).cut_cells is False

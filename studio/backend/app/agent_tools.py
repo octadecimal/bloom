@@ -70,7 +70,8 @@ async def _recipe_generation(ctx, *, description, style, role, transparent):
     prompt = build_asset_prompt(role, art, base_desc)
     prof = profile_for(role)
     params = GenParams(negative=prof.negative, steps=prof.steps,
-                       guidance=prof.guidance, cfg=prof.cfg, upscale=prof.upscale)
+                       guidance=prof.guidance, cfg=prof.cfg, upscale=prof.upscale,
+                       cut_cells=prof.cut_cells)
     return prompt, _dev_workflow(transparent), params
 
 

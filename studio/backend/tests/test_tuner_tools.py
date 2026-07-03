@@ -152,6 +152,12 @@ class _FakeSio:
     async def emit(self, event, data, **kw): self.events.append((event, data))
 
 
+class _FakeAnalyticsHub:
+    def __init__(self): self.recorded = []
+    async def record_run(self, game_id, params, result, duration_ms):
+        self.recorded.append((game_id, params, result, duration_ms))
+
+
 def _metrics(rtp): return MetricsWire(rtp=rtp, volatility=8.0, hit_frequency=0.3,
                                       base_rtp=rtp, feature_rtp=0.0, bonus_hit_rates=[])
 
@@ -162,7 +168,7 @@ def _tune_ctx(mongo_db, *, result):
     gdd = _StubGddStore({"rtp": "0.94", "volatility": "high"})   # no bonuses needed
     runner = FakeTunerRunner(
         progress=[TuneProgress(1, 40, 0.5, 0.90, 8.0)], result=result)
-    hub = TunerHub(_FakeSio(), tuner, sim, runner, gdd)
+    hub = TunerHub(_FakeSio(), tuner, sim, runner, gdd, _FakeAnalyticsHub())
     return ToolContext("r1", "g1", None, None, gdd_store=gdd,
                        sim_store=sim, tuner_store=tuner, tuner_hub=hub)
 

@@ -12,6 +12,7 @@ import { gameConfig } from './game-config';
 import { sceneGraph } from './scene-graph';
 import { propertyInspector } from './property-inspector';
 import { regionOverrides } from './region-overrides';
+import { mathAnalytics } from './math-analytics';
 
 export const PLUGINS: IPlugin[] = [
   sceneStorePlugin,
@@ -27,4 +28,5 @@ export const PLUGINS: IPlugin[] = [
   sceneGraph,
   propertyInspector,
   regionOverrides,
+  mathAnalytics,
 ];

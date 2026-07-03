@@ -56,6 +56,40 @@
   --sym-9: #d873b8;
   --sym-10: #9aa2ad;
 
+  /* Math Analytics chart color roles — dark-only today (the app is dark-only), one
+     categorical hue per identity + one neutral for "no win" + one reference-band
+     fill. Validated (lightness/chroma/CVD/contrast) against --surface (#131417)
+     via the dataviz skill's scripts/validate_palette.js; distinct from --accent
+     (rationed for interaction, never chart identity) and from the status trio
+     above (tail risk is an identity role here, not a status). */
+  --chart-base: #3987e5; /* base-game wins */
+  --chart-feature: #199e70; /* feature/bonus wins */
+  --chart-tail: #e66767; /* rare tail wins (>=100x) */
+  --chart-series-1: #d55181; /* single-series lines (RTP convergence); Compare's first overlay slot */
+  /* --chart-series-2..5 (Task 15) — the remaining Compare selection slots (cap
+     MAX_COMPARE_SELECTION = 5, state.ts#chartSeriesToken), one per RunSelector
+     chip / Compare overlay series. First-pass categorical spread across hue,
+     clear of the reserved red/orange/amber band (--accent/--warning/--chart-tail)
+     and of --chart-base/--chart-feature's blue/green; not yet run through the
+     dataviz skill's validate_palette.js (no line/band chart consumed these until
+     Task 16 — revisit there if a perceptual collision shows up). */
+  --chart-series-2: #8b6fe0; /* violet */
+  --chart-series-3: #2bb8c4; /* teal */
+  --chart-series-4: #a8c93f; /* chartreuse */
+  --chart-series-5: #c77fd4; /* orchid */
+  --chart-target-band: rgba(155, 155, 164, 0.16); /* target/reference band fill on line charts */
+  --chart-loss: var(--hairline-strong); /* losing-spin / zero-count column — neutral, not identity */
+
+  /* Evolution tab (live GA telemetry) — same hue family as --chart-series-1 for
+     the fitness-landscape spread bands (a translucent tint of the best-fitness
+     line's own color reads as "this line's uncertainty"), plus a dedicated
+     cold→hot ramp for the gene-convergence heatmap. */
+  --chart-population-band: rgba(213, 81, 129, 0.1); /* fitness min–max spread fill (light) */
+  --chart-iqr-band: rgba(213, 81, 129, 0.24); /* fitness q1–q3 interquartile fill (denser) */
+  --chart-playhead: var(--accent); /* scrubber/generation playhead — an interaction cue, not a data identity, so it rides the rationed accent */
+  --chart-gene-cold: #4c5fd9; /* low per-gene population agreement — indigo */
+  --chart-gene-hot: #e0a63c; /* high per-gene population agreement (converged) — amber */
+
   /* Type */
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
@@ -112,6 +146,21 @@
   --color-sym-8: var(--sym-8);
   --color-sym-9: var(--sym-9);
   --color-sym-10: var(--sym-10);
+  --color-chart-base: var(--chart-base);
+  --color-chart-feature: var(--chart-feature);
+  --color-chart-tail: var(--chart-tail);
+  --color-chart-series-1: var(--chart-series-1);
+  --color-chart-series-2: var(--chart-series-2);
+  --color-chart-series-3: var(--chart-series-3);
+  --color-chart-series-4: var(--chart-series-4);
+  --color-chart-series-5: var(--chart-series-5);
+  --color-chart-target-band: var(--chart-target-band);
+  --color-chart-loss: var(--chart-loss);
+  --color-chart-population-band: var(--chart-population-band);
+  --color-chart-iqr-band: var(--chart-iqr-band);
+  --color-chart-playhead: var(--chart-playhead);
+  --color-chart-gene-cold: var(--chart-gene-cold);
+  --color-chart-gene-hot: var(--chart-gene-hot);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
@@ -390,4 +439,13 @@ body {
 }
 .bloom-md img {
   max-width: 100%;
+}
+
+/* Fill-to-pane tab root: the pane fills the Dockview group with no inner scroll
+   (the Math Analytics "Report" tab is the sole intentional exception, opted out
+   locally). See docs/superpowers/specs/2026-07-02-math-analytics-dashboard-design.md. */
+.bloom-tab-fill {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }

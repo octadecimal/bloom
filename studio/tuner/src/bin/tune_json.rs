@@ -6,7 +6,8 @@ use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::{HitRateBand, TargetSpec};
 use bloom_tuner::config::{GeneBounds, TunerConfig, Weights};
 use bloom_tuner::genetic::tune_with_progress;
-use bloom_tuner::outcome::{GenSnapshot, TuneOutcome, Verdict};
+use bloom_tuner::outcome::{GenSnapshot, RunProfile, TuneOutcome, Verdict};
+use bloom_tuner::telemetry::PopulationStats;
 use serde::Deserialize;
 use serde_json::json;
 use std::fs;
@@ -63,6 +64,43 @@ struct ConfigJson {
     weights: WeightsJson,
 }
 
+fn pop_json(p: &PopulationStats) -> serde_json::Value {
+    json!({
+        "min": p.min,
+        "q1": p.q1,
+        "median": p.median,
+        "q3": p.q3,
+        "max": p.max,
+        "mean": p.mean,
+        "diversity": p.diversity,
+    })
+}
+
+fn profile_json(p: &RunProfile) -> serde_json::Value {
+    json!({
+        "distribution": {
+            "bins": p.distribution.bins.iter().map(|b| json!({
+                "binLo": b.bin_lo,
+                "binHi": b.bin_hi,
+                "base": b.base,
+                "feature": b.feature,
+            })).collect::<Vec<_>>(),
+            "zeroCount": p.distribution.zero_count,
+        },
+        "tail": {
+            "maxWin": p.tail.max_win,
+            "pGE100x": p.tail.p_ge_100x,
+            "pLosingSpin": p.tail.p_losing_spin,
+            "longestDeadStreak": p.tail.longest_dead_streak,
+            "bonusTriggerRate": p.tail.bonus_trigger_rate,
+        },
+        "rtpConvergence": p.rtp_convergence.iter().map(|r| json!({
+            "n": r.n,
+            "realizedRtp": r.realized_rtp,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 fn progress_line(snap: &GenSnapshot, max_generations: usize) -> String {
     json!({
         "type": "progress",
@@ -71,6 +109,8 @@ fn progress_line(snap: &GenSnapshot, max_generations: usize) -> String {
         "bestFitness": snap.best_fitness,
         "bestRtp": snap.best_rtp,
         "bestVolatility": snap.best_volatility,
+        "population": pop_json(&snap.population),
+        "geneAgreement": snap.gene_agreement,
     })
     .to_string()
 }
@@ -103,6 +143,8 @@ fn result_line(out: &TuneOutcome) -> String {
                 "bestFitness": s.best_fitness,
                 "bestRtp": s.best_rtp,
                 "bestVolatility": s.best_volatility,
+                "population": pop_json(&s.population),
+                "geneAgreement": s.gene_agreement,
             })
         })
         .collect();
@@ -120,6 +162,7 @@ fn result_line(out: &TuneOutcome) -> String {
         },
         "missed": missed,
         "trace": trace,
+        "profile": profile_json(&out.profile),
     })
     .to_string()
 }
@@ -212,8 +255,10 @@ fn main() {
 mod tests {
     use super::*;
     use bloom_math::mechanics::slots::{Paytable, SlotModel};
+    use bloom_simulator::profile::{HistogramBin, RtpPoint, WinDistribution};
     use bloom_simulator::target::Metrics;
-    use bloom_tuner::outcome::{BandMiss, GenSnapshot, TuningTrace};
+    use bloom_tuner::outcome::{BandMiss, GenSnapshot, RunProfile, TuningTrace};
+    use bloom_tuner::telemetry::population_stats;
 
     fn outcome(verdict: Verdict) -> TuneOutcome {
         TuneOutcome {
@@ -243,10 +288,34 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
+                    population: population_stats(&[-0.9, -0.5, -0.1]),
+                    gene_agreement: vec![0.8, 0.6],
                 }],
                 population: 8,
                 search_candidate_count: 1000,
                 final_candidate_count: 1000,
+            },
+            profile: RunProfile {
+                distribution: WinDistribution {
+                    bins: vec![HistogramBin {
+                        bin_lo: 5.0,
+                        bin_hi: 10.0,
+                        base: 3,
+                        feature: 1,
+                    }],
+                    zero_count: 7,
+                },
+                tail: bloom_simulator::profile::TailMetrics {
+                    max_win: 120.0,
+                    p_ge_100x: 0.02,
+                    p_losing_spin: 0.6,
+                    longest_dead_streak: 9,
+                    bonus_trigger_rate: 0.05,
+                },
+                rtp_convergence: vec![RtpPoint {
+                    n: 1000,
+                    realized_rtp: 0.95,
+                }],
             },
         }
     }
@@ -259,6 +328,8 @@ mod tests {
             best_rtp: 0.85,
             best_volatility: 2.1,
             best_bonus_hit_rates: vec![],
+            population: population_stats(&[-0.25]),
+            gene_agreement: vec![1.0],
         };
         let v: serde_json::Value = serde_json::from_str(&progress_line(&snap, 40)).unwrap();
         assert_eq!(v["type"], "progress");
@@ -296,5 +367,55 @@ mod tests {
         assert_eq!(v["verdict"], "near_miss");
         assert_eq!(v["missed"][0]["metric"], "rtp");
         assert_eq!(v["missed"][0]["bandLo"], 0.89);
+    }
+
+    #[test]
+    fn progress_line_carries_population_stats() {
+        let snap = GenSnapshot {
+            generation: 3,
+            best_fitness: -0.25,
+            best_rtp: 0.85,
+            best_volatility: 2.1,
+            best_bonus_hit_rates: vec![],
+            population: bloom_tuner::telemetry::PopulationStats {
+                min: -0.9,
+                q1: -0.7,
+                median: -0.5,
+                q3: -0.3,
+                max: -0.1,
+                mean: -0.5,
+                diversity: 0.4,
+            },
+            gene_agreement: vec![0.8, 0.6],
+        };
+        let v: serde_json::Value = serde_json::from_str(&progress_line(&snap, 40)).unwrap();
+        assert_eq!(v["population"]["diversity"], 0.4);
+        assert_eq!(v["geneAgreement"][0], 0.8);
+    }
+
+    #[test]
+    fn result_line_carries_profile_block() {
+        let v: serde_json::Value =
+            serde_json::from_str(&result_line(&outcome(Verdict::Pass))).unwrap();
+        assert!(v["profile"]["distribution"]["bins"].is_array());
+        assert!(v["profile"]["tail"]["maxWin"].is_number());
+        assert!(v["profile"]["rtpConvergence"].is_array());
+        assert!(v["trace"][0]["population"].is_object());
+
+        // Lock the exact camelCase wire contract the Python/TS layers key off:
+        // concrete values, not just presence, catch a misspelled/renamed key.
+        assert_eq!(v["profile"]["tail"]["pGE100x"], 0.02);
+        assert_eq!(v["profile"]["tail"]["maxWin"], 120.0);
+        assert_eq!(v["profile"]["tail"]["pLosingSpin"], 0.6);
+        assert_eq!(v["profile"]["tail"]["longestDeadStreak"], 9);
+        assert_eq!(v["profile"]["tail"]["bonusTriggerRate"], 0.05);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["binLo"], 5.0);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["binHi"], 10.0);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["base"], 3);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["feature"], 1);
+        assert_eq!(v["profile"]["distribution"]["zeroCount"], 7);
+        assert_eq!(v["profile"]["rtpConvergence"][0]["n"], 1000);
+        assert_eq!(v["profile"]["rtpConvergence"][0]["realizedRtp"], 0.95);
+        assert_eq!(v["trace"][0]["geneAgreement"][0], 0.8);
     }
 }
