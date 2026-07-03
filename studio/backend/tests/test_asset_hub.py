@@ -422,3 +422,29 @@ async def test_run_forwards_params_into_the_graph(mongo_db, tmp_path):
     assert graph["3"]["inputs"]["steps"] == 28 and graph["3"]["inputs"]["cfg"] == 2.0
     assert graph["7"]["inputs"]["text"] == "blurry"
     assert graph["11"]["inputs"]["guidance"] == 3.0
+
+
+@pytest.mark.asyncio
+async def test_run_cuts_reel_cells_when_params_flag_set(mongo_db, tmp_path):
+    from io import BytesIO
+    from PIL import Image
+    from app.assets.models import GenParams
+
+    buf = BytesIO(); Image.new("RGBA", (500, 300), (200, 160, 40, 255)).save(buf, "PNG")
+    png = buf.getvalue()
+
+    class CapturingProvider:
+        async def generate(self, graph):
+            yield ProgressEvent(value=1, max=1)
+            yield ImageEvent(data=png)
+
+    store = AssetStore(mongo_db)
+    hub = AssetHub(FakeSio(), store, CapturingProvider(), MediaStore(tmp_path))
+    a = await store.create_asset("g", "reels", "p", 500, 300, "dev-transparent",
+                                 params=GenParams(cut_cells=True))
+    await hub.generate_and_wait("g", a.id)
+    got = await store.get_asset(a.id)
+    saved = Image.open(tmp_path / got.generations[-1].image_ref.removeprefix("/media/")).convert("RGBA")
+    alpha = saved.getchannel("A")
+    assert alpha.getpixel((250, 150)) == 0   # a cell window is now transparent
+    assert alpha.getpixel((3, 150)) == 255   # the frame border stays opaque
