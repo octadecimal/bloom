@@ -15,11 +15,7 @@ export function SymbolsSection() {
   return (
     <div data-testid="gc-section-symbols" className="flex flex-col gap-1 p-3">
       {model.symbols.map((sym) => (
-        <div
-          key={sym.id}
-          data-testid={`gc-symbol-row-${sym.id}`}
-          className="flex items-center gap-2 rounded-lg border border-border bg-raised px-2.5 py-1.5"
-        >
+        <div key={sym.id} data-testid={`gc-symbol-row-${sym.id}`} className="flex items-center gap-2 rounded-lg border border-border bg-raised px-2.5 py-1.5">
           <span className="flex items-center gap-1">
             {SWATCHES.map((sw) => (
               <button
