@@ -1,6 +1,7 @@
 import asyncio
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
@@ -73,6 +74,40 @@ async def _recipe_generation(ctx, *, description, style, role, transparent):
     return prompt, _dev_workflow(transparent), params
 
 
+def _load_asset_bytes(media_dir: str, image_ref: str) -> bytes | None:
+    rel = image_ref.removeprefix("/media/")
+    p = Path(media_dir) / rel
+    return p.read_bytes() if p.exists() else None
+
+
+async def _run_direct_floor(ctx, *, asset_id, role, description, transparent) -> list[str]:
+    """Critique the freshly-generated asset and bounded-regenerate a dud. Returns the
+    floor's notes. No-op (empty) when no asset critic is wired."""
+    if ctx.asset_critic is None:
+        return []
+    from app.scene.asset_floor import run_asset_floor
+    settings = get_settings()
+
+    async def judge(attempt: int):
+        asset = await ctx.asset_store.get_asset(asset_id)
+        ref = asset.generations[-1].image_ref if asset.generations else ""
+        image = _load_asset_bytes(settings.media_dir, ref) if ref else None
+        if not image:
+            return AssetVerdict(ok=False, action="keep", reason="no image to review")
+        return await ctx.asset_critic.critique(AssetCritiqueRequest(
+            image_png=image, role=role, description=description, theme="",
+            transparent=transparent, attempt=attempt))
+
+    async def regenerate():
+        await ctx.asset_hub.generate_and_wait(ctx.game_id, asset_id)
+
+    res = await run_asset_floor(
+        judge=judge, regenerate=regenerate, role=role or "asset",
+        asset_regen_retries=settings.asset_regen_retries,
+        regen_left=settings.asset_floor_regen_budget)
+    return res.notes
+
+
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     async def generate_asset(
         description: str,
@@ -90,8 +125,13 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
             slot=slot or None, params=params,
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
+        notes = await _run_direct_floor(
+            ctx, asset_id=asset.id, role=role, description=description,
+            transparent=transparent)
         tag = f" (slot {slot})" if slot else ""
-        return f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the Asset Board."
+        suffix = (" " + "; ".join(notes)) if notes else ""
+        return (f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the "
+                f"Asset Board.{suffix}")
 
     return StructuredTool.from_function(
         coroutine=generate_asset,
@@ -325,6 +365,8 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
                 workflow, slot=slot or None, params=params,
             )
             await ctx.asset_hub.generate_and_wait(ctx.game_id, created.id)
+            await _run_direct_floor(ctx, asset_id=created.id, role=role,
+                                    description=description, transparent=transparent)
             asset = await ctx.asset_store.get_asset(created.id)
 
         # 3. place it immediately, so the scene fills in element-by-element.

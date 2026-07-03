@@ -195,3 +195,46 @@ def test_factory_registers_generate_and_place():
     assert "generate_and_place" in f.known_tool_names()
     ctx = ToolContext("r1", "g1", None, None)
     assert f.build(["generate_and_place"], ctx)[0].name == "generate_and_place"
+
+
+@pytest.mark.asyncio
+async def test_generate_asset_regenerates_a_dud_via_the_floor(mongo_db, tmp_path, monkeypatch):
+    """With an asset critic wired, a fresh generation that the critic flags 'regenerate'
+    is bounded-regenerated; the asset ends with 2 generations (dud + keep)."""
+    from io import BytesIO
+    from PIL import Image
+    from app.assets.hub import AssetHub
+    from app.assets.media import MediaStore
+    from app.assets.store import AssetStore
+    from app.assets.comfy import ProgressEvent, ImageEvent
+    from app.scene.asset_critic import ReplayAssetCritic
+    from app.agent_tools import build_generate_asset_tool
+
+    # media_dir must equal the dir MediaStore writes to, so the floor can load the bytes
+    monkeypatch.setenv("MEDIA_DIR", str(tmp_path))
+
+    # a rich transparent PNG that PASSES asset_heuristic -> the cassette decides the verdict
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    for x in range(64):
+        for y in range(32):
+            img.putpixel((x, y), (x * 4 % 256, y * 8 % 256, 128, 255))
+    _buf = BytesIO(); img.save(_buf, format="PNG"); rich_png = _buf.getvalue()
+
+    class _RichProvider:
+        async def generate(self, graph):
+            yield ProgressEvent(value=1, max=1)
+            yield ImageEvent(data=rich_png)
+
+    store = AssetStore(mongo_db)
+    hub = AssetHub(_SilentSio(), store, _RichProvider(), MediaStore(tmp_path))
+    critic = ReplayAssetCritic({"logo": [
+        {"ok": False, "action": "regenerate", "reason": "garbled"},
+        {"ok": True, "action": "keep"},
+    ]})
+    ctx = ToolContext("r1", "g1", store, hub, asset_critic=critic)
+
+    await build_generate_asset_tool(ctx).ainvoke(
+        {"description": "wordmark", "role": "logo", "slot": "logo"})
+
+    asset = await store.get_by_slot("g1", "logo")
+    assert len(asset.generations) == 2  # dud + regenerated keep
