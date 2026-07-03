@@ -65,3 +65,12 @@ def test_none_params_leave_baked_values_untouched():
     # dev-transparent bakes steps=24, guidance=3.5
     assert out["3"]["inputs"]["steps"] == 24
     assert out["11"]["inputs"]["guidance"] == 3.5
+
+
+def test_dev_opaque_workflow_loads_with_guidance_and_no_rmbg():
+    g = build_graph("dev-opaque", prompt="p", width=128, height=128, seed=3)
+    assert g["6"]["inputs"]["text"] == "p"
+    assert "11" in g  # FluxGuidance present (dev)
+    class_types = {n.get("class_type") for n in g.values()}
+    assert "BiRefNetRMBG" not in class_types  # opaque: no background removal
+    assert "SaveImage" in class_types

@@ -7,6 +7,7 @@ WORKFLOWS = {
     "schnell-opaque": "ai_slots_neon.json",
     "schnell-transparent": "ai_slots_transparent.json",
     "dev-transparent": "ai_slots_dev_transparent.json",
+    "dev-opaque": "ai_slots_dev_opaque.json",
 }
 
 _WORKFLOW_DIR = Path(__file__).parent / "workflows"

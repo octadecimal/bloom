@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 Status = Literal["idle", "queued", "generating", "done", "error"]
-Workflow = Literal["schnell-opaque", "schnell-transparent", "dev-transparent"]
+Workflow = Literal["schnell-opaque", "schnell-transparent", "dev-transparent", "dev-opaque"]
 
 
 class _WireModel(BaseModel):
