@@ -1,16 +1,7 @@
 from app.scene.layout.template import (
     TEMPLATE_VERSION, RoleRegion, canvas_for, template_for,
     BACKGROUND, REELS, LOGO, SPIN, FLOURISH_LEFT, FLOURISH_RIGHT,
-    METER_LEFT, METER_RIGHT, MULTIPLIER,
 )
-
-
-def _left(r):
-    return r.cx - r.w * r.anchor_x
-
-
-def _right(r):
-    return r.cx + r.w * (1 - r.anchor_x)
 
 
 def test_template_version_is_pinned_int():
@@ -25,28 +16,16 @@ def test_canvas_orientation():
 
 def test_landscape_template_has_all_roles():
     t = template_for("landscape")
-    assert set(t) == {BACKGROUND, REELS, LOGO, SPIN, FLOURISH_LEFT, FLOURISH_RIGHT,
-                      METER_LEFT, METER_RIGHT, MULTIPLIER}
+    assert set(t) == {BACKGROUND, REELS, LOGO, SPIN, FLOURISH_LEFT, FLOURISH_RIGHT}
 
 
-def test_meters_flank_the_logo_horizontally_clear_of_it():
-    t = template_for("landscape")
-    logo = t[LOGO]
-    ml, mr = t[METER_LEFT], t[METER_RIGHT]
-    # left meter sits entirely left of the logo box; right meter entirely right of it
-    assert _right(ml) <= _left(logo) + 1e-9
-    assert _left(mr) >= _right(logo) - 1e-9
-    # both live in the top band (above the reels), matching the logo band
-    assert ml.cy < t[REELS].cy and mr.cy < t[REELS].cy
-    assert abs(ml.cy - logo.cy) < 0.12 and abs(mr.cy - logo.cy) < 0.12
-
-
-def test_multiplier_is_on_the_left_beside_the_reels():
-    t = template_for("landscape")
-    mult, reels = t[MULTIPLIER], t[REELS]
-    # multiplier sits left of the reels box, vertically around the reels
-    assert _right(mult) <= _left(reels) + 1e-9
-    assert abs(mult.cy - reels.cy) < 0.25
+def test_hud_roles_have_no_fixed_region_judge_owns_them():
+    # meters / multiplier are placed by the composition judge from the rendered
+    # frame, NOT pinned to a template region.
+    for orient in ("landscape", "portrait"):
+        roles = set(template_for(orient))
+        assert "meter_left" not in roles and "meter_right" not in roles
+        assert "multiplier" not in roles
 
 
 def test_background_is_full_bleed_cover_at_back():

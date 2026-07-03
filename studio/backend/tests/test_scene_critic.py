@@ -195,6 +195,17 @@ def test_critic_system_prompt_is_slot_aware():
     assert "window" in low  # look-behind constraint
 
 
+def test_critic_owns_hud_placement_and_fixes_occlusion():
+    from app.scene.critic import CRITIC_SYSTEM_PROMPT
+
+    low = CRITIC_SYSTEM_PROMPT.lower()
+    # the judge must catch elements hidden behind / overlapping others in the frame
+    assert "occlud" in low or "hidden" in low or "overlap" in low
+    # HUD elements have NO fixed region — the judge positions them from the frame
+    assert "hud" in low or "meter" in low
+    assert "no" in low and ("planned region" in low or "fixed region" in low)
+
+
 def test_critique_request_carries_edit_history_default_empty():
     req = CritiqueRequest(frame_png=b"", scene={}, target_handle="logo", window=["logo"])
     assert req.edit_history == {}

@@ -18,11 +18,10 @@ LOGO = "logo"
 SPIN = "spin"
 FLOURISH_LEFT = "flourish_left"
 FLOURISH_RIGHT = "flourish_right"
-# HUD: two top meters (free-spins-remaining on the left, bonus-win on the right)
-# flanking the logo, and a bonus-multiplier counter on the left beside the reels.
-METER_LEFT = "meter_left"
-METER_RIGHT = "meter_right"
-MULTIPLIER = "multiplier"
+# NOTE: HUD elements (meters, multiplier counters, badges) intentionally have NO
+# fixed template region. Their ideal spot depends on what else is in the scene and
+# where the logo/reels actually landed, so the composition judge (SceneCritic)
+# places them from the RENDERED frame — see CRITIC_SYSTEM_PROMPT.
 
 
 @dataclass(frozen=True)
@@ -45,11 +44,6 @@ _LANDSCAPE = (
     RoleRegion(SPIN, 0.5, 0.90, 0.13, 0.13, z=50),
     RoleRegion(FLOURISH_LEFT, 0.085, 0.55, 0.17, 0.72, z=30),
     RoleRegion(FLOURISH_RIGHT, 0.915, 0.55, 0.17, 0.72, z=30),
-    # meters flank the logo in the top corners (clear of the logo box x[0.24,0.76]);
-    # multiplier sits on the left, beside the reels box (reels left edge = 0.19).
-    RoleRegion(METER_LEFT, 0.13, 0.12, 0.22, 0.14, z=35),
-    RoleRegion(METER_RIGHT, 0.87, 0.12, 0.22, 0.14, z=35),
-    RoleRegion(MULTIPLIER, 0.10, 0.54, 0.15, 0.42, z=30),
 )
 
 _PORTRAIT = (
@@ -59,11 +53,6 @@ _PORTRAIT = (
     RoleRegion(SPIN, 0.5, 0.88, 0.20, 0.11, z=50),
     RoleRegion(FLOURISH_LEFT, 0.12, 0.50, 0.20, 0.60, z=30),
     RoleRegion(FLOURISH_RIGHT, 0.88, 0.50, 0.20, 0.60, z=30),
-    # portrait logo is near full-width, so meters ride a strip just below it;
-    # multiplier on the left flank.
-    RoleRegion(METER_LEFT, 0.28, 0.20, 0.42, 0.07, z=35),
-    RoleRegion(METER_RIGHT, 0.72, 0.20, 0.42, 0.07, z=35),
-    RoleRegion(MULTIPLIER, 0.13, 0.44, 0.20, 0.24, z=30),
 )
 
 _TEMPLATES = {
