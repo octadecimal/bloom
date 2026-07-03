@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     provider_mode: Literal["live", "replay"] = "live"
     replay_token_delay: float = 0.0
     comfyui_url: str = "http://127.0.0.1:8188"
+    upscale_model: str = "4x-UltraSharp.pth"  # filename in ComfyUI/models/upscale_models
     media_dir: str = "var/media"
     simulator_bin: str = ""  # optional path to a prebuilt curate_json; "" => cargo run
     tuner_bin: str = ""  # optional path to a prebuilt tune_json; "" => cargo run

@@ -74,3 +74,26 @@ def test_dev_opaque_workflow_loads_with_guidance_and_no_rmbg():
     class_types = {n.get("class_type") for n in g.values()}
     assert "BiRefNetRMBG" not in class_types  # opaque: no background removal
     assert "SaveImage" in class_types
+
+
+def test_upscale_inserts_chain_and_rewires_consumer_transparent():
+    g = build_graph("dev-transparent", prompt="p", width=256, height=256, seed=1,
+                    upscale=True, upscale_model="4x-UltraSharp.pth")
+    class_types = {n["class_type"] for n in g.values()}
+    assert {"UpscaleModelLoader", "ImageUpscaleWithModel", "ImageScale"} <= class_types
+    scale_id = next(k for k, n in g.items() if n["class_type"] == "ImageScale")
+    assert g["10"]["inputs"]["image"] == [scale_id, 0]  # RMBG now reads the upscaled image
+    assert g[scale_id]["inputs"]["width"] == 256 and g[scale_id]["inputs"]["height"] == 256
+
+
+def test_upscale_false_is_byte_identical_to_no_upscale():
+    import json
+    a = build_graph("dev-transparent", prompt="p", width=256, height=256, seed=1)
+    b = build_graph("dev-transparent", prompt="p", width=256, height=256, seed=1, upscale=False)
+    assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+
+
+def test_upscale_opaque_rewires_saveimage():
+    g = build_graph("dev-opaque", prompt="p", width=128, height=128, seed=1, upscale=True)
+    scale_id = next(k for k, n in g.items() if n["class_type"] == "ImageScale")
+    assert g["9"]["inputs"]["images"] == [scale_id, 0]  # SaveImage reads the upscaled image

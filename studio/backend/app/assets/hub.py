@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.assets.comfy import ImageEvent, ProgressEvent
 from app.assets.graph import build_graph, random_seed
+from app.config import get_settings
 from app.assets.models import asset_wire
 from app.scene.rebind import rebind_asset_textures
 
@@ -81,6 +82,8 @@ class AssetHub:
             steps=p.steps if p else None,
             guidance=p.guidance if p else None,
             cfg=p.cfg if p else None,
+            upscale=bool(p.upscale) if p else False,
+            upscale_model=get_settings().upscale_model,
         )
 
         await self._store.set_status(asset_id, "generating")
