@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.assets.comfy import ImageEvent, ProgressEvent
 from app.assets.graph import build_graph, random_seed
+from app.assets.reel_cells import cut_reel_cells
 from app.config import get_settings
 from app.assets.models import asset_wire
 from app.scene.rebind import rebind_asset_textures
@@ -107,6 +108,11 @@ class AssetHub:
         finally:
             async with self._lock(game_id):
                 self._active.pop(game_id, None)
+
+        # reels: background removal leaves the enclosed cells opaque, so cut the
+        # transparent play windows geometrically (theme-agnostic) before saving.
+        if image_bytes and asset.params is not None and asset.params.cut_cells:
+            image_bytes = cut_reel_cells(image_bytes)
 
         gen_id = uuid4().hex
         image_ref = self._media.save(game_id, asset_id, gen_id, image_bytes)

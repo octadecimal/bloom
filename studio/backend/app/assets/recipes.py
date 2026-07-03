@@ -24,6 +24,7 @@ class Profile:
     negative: str
     upscale: bool
     positive: str
+    cut_cells: bool = False  # reels: geometrically cut the transparent play windows
 
 
 _STANDARD = Profile(
@@ -49,7 +50,7 @@ _PROFILES: dict[str, Profile] = {
     # column dividers and cell structure — not a bare border with an empty middle
     # (the failure mode that dogged earlier iterations).
     "reels": Profile(
-        steps=28, guidance=3.5, cfg=1.0, negative="", upscale=True,
+        steps=28, guidance=3.5, cfg=1.0, negative="", upscale=True, cut_cells=True,
         positive="complete ornate slot machine reel frame, a full rectangular frame "
                  "enclosing a 5 column by 3 row grid, clear vertical column dividers "
                  "and cell borders forming 15 empty symbol cells, solid decorative "
