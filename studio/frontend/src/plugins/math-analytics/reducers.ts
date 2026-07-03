@@ -1,4 +1,4 @@
-import type { IAnalyticsState, IGenFrame, IMathRun } from './state';
+import { MAX_COMPARE_SELECTION, type IAnalyticsState, type IGenFrame, type IMathRun } from './state';
 
 function framesFromTrace(run: IMathRun): IGenFrame[] {
   return run.trace.map((t) => ({
@@ -46,4 +46,32 @@ export function progressFrame(state: IAnalyticsState, frame: IGenFrame): IAnalyt
 /** Pin the Evolution scrubber to a specific generation, leaving `'live'` mode. */
 export function scrubTo(state: IAnalyticsState, generation: number): IAnalyticsState {
   return { ...state, selectedGeneration: generation };
+}
+
+/** Task 15 brief's name for `runsLoaded` above — same transition ("store the
+ * fetched history list, newest-first"), re-exported under the requested name
+ * rather than duplicated. See task-15-report.md. */
+export const historyLoaded = runsLoaded;
+
+/** Multi-select toggle for the Compare tab's `selectedRunIds` (RunSelector,
+ * "multi" mode). Toggling an already-selected id removes it (selection order
+ * of the remaining ids is preserved). Toggling a new id appends it — unless the
+ * cap is already reached, in which case the toggle is a no-op: the new id is
+ * neither added nor does it evict an existing selection (a user hits the cap by
+ * deselecting one of the current five first). */
+export function toggleRunSelected(state: IAnalyticsState, runId: string): IAnalyticsState {
+  const selected = state.selectedRunIds;
+  if (selected.includes(runId)) {
+    return { ...state, selectedRunIds: selected.filter((id) => id !== runId) };
+  }
+  if (selected.length >= MAX_COMPARE_SELECTION) return state;
+  return { ...state, selectedRunIds: [...selected, runId] };
+}
+
+/** Single-select for the header/active-run selector (RunSelector, "single"
+ * mode) — replaces `selectedRunId` outright, same field the Math Profile tab
+ * already reads via `selectedRun()` (state.ts). Wholly independent of
+ * `selectedRunIds` (Compare's multi-select, above). */
+export function selectRun(state: IAnalyticsState, runId: string): IAnalyticsState {
+  return { ...state, selectedRunId: runId };
 }

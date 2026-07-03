@@ -117,6 +117,13 @@ export interface IAnalyticsState {
   activeGameId: string | null;
   runs: IMathRun[];
   selectedRunId: string | null;
+  /** Multi-select for the Compare tab (Task 16) — up to `MAX_COMPARE_SELECTION`
+   * run ids, kept in *selection order* (not history order): position `i` drives
+   * that run's chip/series color via `chartSeriesToken(i)` (see below). Wholly
+   * independent of `selectedRunId`, the header/active-run single-select that
+   * already drives Math Profile — a run can be Compare-selected without being
+   * the active one, and vice versa. */
+  selectedRunIds: string[];
   loadStatus: 'idle' | 'loading' | 'error';
   /** Per-generation Evolution frames — live-appended from `analytics_progress`
    * while a tune runs, or replayed wholesale from `IMathRun.trace` once a run
@@ -132,10 +139,32 @@ export function makeInitialState(): IAnalyticsState {
     activeGameId: null,
     runs: [],
     selectedRunId: null,
+    selectedRunIds: [],
     loadStatus: 'idle',
     frames: [],
     selectedGeneration: 'live',
   };
+}
+
+/** Compare's multi-select cap (`reducers.ts#toggleRunSelected`) — also the
+ * number of distinct chart-identity colors below, so every selectable run
+ * always gets its own color. */
+export const MAX_COMPARE_SELECTION = 5;
+
+// One `--chart-series-N` CSS var per Compare selection slot (styles.css). A
+// first-pass categorical palette spread across hue, avoiding the reserved
+// red/orange/amber band (--accent, --warning, --chart-tail all live there) and
+// staying clear of --chart-base/--chart-feature's blue/green. Good enough for
+// the RunSelector's chip swatches; if Task 16's actual overlay lines expose
+// perceptual collisions, re-validate via the dataviz skill's
+// scripts/validate_palette.js and adjust here (the seam is this one array).
+const CHART_SERIES_TOKENS = ['--chart-series-1', '--chart-series-2', '--chart-series-3', '--chart-series-4', '--chart-series-5'] as const;
+
+/** The CSS custom-property name for a Compare selection's color identity, by
+ * position in `selectedRunIds` (0-indexed). Cycles defensively past the palette
+ * length, though callers should never exceed `MAX_COMPARE_SELECTION`. */
+export function chartSeriesToken(index: number): string {
+  return CHART_SERIES_TOKENS[index % CHART_SERIES_TOKENS.length];
 }
 
 export const analyticsHooks = makePluginHooks<IAnalyticsState>(MATH_ANALYTICS_PLUGIN_ID);

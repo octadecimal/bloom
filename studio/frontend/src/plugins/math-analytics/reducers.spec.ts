@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { runLoaded, runsLoaded, progressFrame, scrubTo } from './reducers';
-import { makeInitialState, currentFrame } from './state';
+import { runLoaded, runsLoaded, historyLoaded, toggleRunSelected, selectRun, progressFrame, scrubTo } from './reducers';
+import { makeInitialState, currentFrame, MAX_COMPARE_SELECTION } from './state';
 import type { IMathRun, IGenFrame, IGenSnapshot } from './state';
 
 function run(id: string, trace: IGenSnapshot[] = []): IMathRun {
@@ -134,5 +134,75 @@ describe('runsLoaded', () => {
   it('selects null when the history is empty', () => {
     const next = runsLoaded(makeInitialState(), []);
     expect(next.selectedRunId).toBeNull();
+  });
+});
+
+// `historyLoaded` is the Task 15 brief's name for this same transition — Task 10
+// already shipped it as `runsLoaded` to back the Math Profile tab's active-run
+// pointer. Re-exported under the requested name rather than duplicating the
+// reducer (see task-15-report.md for the rationale).
+describe('historyLoaded', () => {
+  it('is runsLoaded — replaces the run history and selects the newest run', () => {
+    const next = historyLoaded(makeInitialState(), [run('r2'), run('r1')]);
+    expect(next.runs.map((r) => r.id)).toEqual(['r2', 'r1']);
+    expect(next.selectedRunId).toBe('r2');
+  });
+
+  it('is the same function reference as runsLoaded', () => {
+    expect(historyLoaded).toBe(runsLoaded);
+  });
+});
+
+describe('toggleRunSelected', () => {
+  it('adds an unselected run id to selectedRunIds', () => {
+    const next = toggleRunSelected(makeInitialState(), 'r1');
+    expect(next.selectedRunIds).toEqual(['r1']);
+  });
+
+  it('appends further ids in selection order', () => {
+    let state = toggleRunSelected(makeInitialState(), 'r1');
+    state = toggleRunSelected(state, 'r2');
+    expect(state.selectedRunIds).toEqual(['r1', 'r2']);
+  });
+
+  it('removes an already-selected run id (toggle off)', () => {
+    let state = toggleRunSelected(makeInitialState(), 'r1');
+    state = toggleRunSelected(state, 'r2');
+    state = toggleRunSelected(state, 'r1');
+    expect(state.selectedRunIds).toEqual(['r2']);
+  });
+
+  it('does not add a run beyond MAX_COMPARE_SELECTION, and keeps the existing selection intact', () => {
+    let state = { ...makeInitialState(), selectedRunIds: ['r1', 'r2', 'r3', 'r4', 'r5'] };
+    expect(state.selectedRunIds).toHaveLength(MAX_COMPARE_SELECTION);
+    const next = toggleRunSelected(state, 'r6');
+    expect(next.selectedRunIds).toEqual(['r1', 'r2', 'r3', 'r4', 'r5']);
+  });
+
+  it('still allows removing a selection while at the cap', () => {
+    const state = { ...makeInitialState(), selectedRunIds: ['r1', 'r2', 'r3', 'r4', 'r5'] };
+    const next = toggleRunSelected(state, 'r3');
+    expect(next.selectedRunIds).toEqual(['r1', 'r2', 'r4', 'r5']);
+  });
+
+  it('does not mutate other state fields', () => {
+    const state = { ...makeInitialState(), selectedRunId: 'r9', runs: [run('r9')] };
+    const next = toggleRunSelected(state, 'r1');
+    expect(next.selectedRunId).toBe('r9');
+    expect(next.runs).toEqual([run('r9')]);
+  });
+});
+
+describe('selectRun (reducer)', () => {
+  it('single-selects the given run id, replacing any prior selection', () => {
+    const state = { ...makeInitialState(), selectedRunId: 'r1' };
+    const next = selectRun(state, 'r2');
+    expect(next.selectedRunId).toBe('r2');
+  });
+
+  it('does not touch selectedRunIds (independent from Compare multi-select)', () => {
+    const state = { ...makeInitialState(), selectedRunIds: ['r5'] };
+    const next = selectRun(state, 'r2');
+    expect(next.selectedRunIds).toEqual(['r5']);
   });
 });

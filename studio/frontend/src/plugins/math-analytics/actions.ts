@@ -1,7 +1,7 @@
 import { analyticsSlice, makeInitialState, type IAnalyticsState } from './state';
 import { fetchRuns } from './restClient';
 import { analyticsSock } from './socketClient';
-import { scrubTo } from './reducers';
+import { scrubTo, selectRun as selectRunReducer, toggleRunSelected as toggleRunSelectedReducer } from './reducers';
 
 /** Connects the lazily-created analytics socket (mirrors `initTuner`). Joining/
  * leaving the per-game room happens in `openGameAnalytics`/`closeGameAnalytics`
@@ -35,8 +35,20 @@ export function closeGameAnalytics(): void {
   analyticsSlice().set(makeInitialState());
 }
 
+/** Header/active-run single-select (RunSelector, "single" mode) — drives Math
+ * Profile via `selectedRun()` (state.ts). Delegates to the pure `selectRun`
+ * reducer (mirrors `scrub`/`scrubTo` below) so the transition has reducer-level
+ * test coverage instead of only an end-to-end one. */
 export function selectRun(runId: string): void {
-  analyticsSlice().selectedRunId.set(runId);
+  const s = analyticsSlice();
+  s.set(selectRunReducer(s.get({ noproxy: true }) as IAnalyticsState, runId) as never);
+}
+
+/** Compare multi-select toggle (RunSelector, "multi" mode) — see
+ * `reducers.ts#toggleRunSelected` for the add/remove/cap behavior. */
+export function toggleRunSelected(runId: string): void {
+  const s = analyticsSlice();
+  s.set(toggleRunSelectedReducer(s.get({ noproxy: true }) as IAnalyticsState, runId) as never);
 }
 
 /** Pin the Evolution scrubber to a specific generation (see `reducers.ts#scrubTo`).

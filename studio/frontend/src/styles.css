@@ -54,6 +54,17 @@
   --chart-feature: #199e70; /* feature/bonus wins */
   --chart-tail: #e66767; /* rare tail wins (>=100x) */
   --chart-series-1: #d55181; /* single-series lines (RTP convergence); Compare's first overlay slot */
+  /* --chart-series-2..5 (Task 15) — the remaining Compare selection slots (cap
+     MAX_COMPARE_SELECTION = 5, state.ts#chartSeriesToken), one per RunSelector
+     chip / Compare overlay series. First-pass categorical spread across hue,
+     clear of the reserved red/orange/amber band (--accent/--warning/--chart-tail)
+     and of --chart-base/--chart-feature's blue/green; not yet run through the
+     dataviz skill's validate_palette.js (no line/band chart consumed these until
+     Task 16 — revisit there if a perceptual collision shows up). */
+  --chart-series-2: #8b6fe0; /* violet */
+  --chart-series-3: #2bb8c4; /* teal */
+  --chart-series-4: #a8c93f; /* chartreuse */
+  --chart-series-5: #c77fd4; /* orchid */
   --chart-target-band: rgba(155, 155, 164, 0.16); /* target/reference band fill on line charts */
   --chart-loss: var(--hairline-strong); /* losing-spin / zero-count column — neutral, not identity */
 
@@ -117,6 +128,10 @@
   --color-chart-feature: var(--chart-feature);
   --color-chart-tail: var(--chart-tail);
   --color-chart-series-1: var(--chart-series-1);
+  --color-chart-series-2: var(--chart-series-2);
+  --color-chart-series-3: var(--chart-series-3);
+  --color-chart-series-4: var(--chart-series-4);
+  --color-chart-series-5: var(--chart-series-5);
   --color-chart-target-band: var(--chart-target-band);
   --color-chart-loss: var(--chart-loss);
   --color-chart-population-band: var(--chart-population-band);
