@@ -162,13 +162,20 @@ pub fn tune_with_progress(
         let bm = measure(&simulate(&best_model, &seeds));
 
         let fitnesses: Vec<f64> = scored.iter().map(|(_, f)| *f).collect();
-        let decoded: Vec<SlotModel> = scored.iter().map(|(gn, _)| decode(gn, seed_model)).collect();
+        let decoded: Vec<SlotModel> = scored
+            .iter()
+            .map(|(gn, _)| decode(gn, seed_model))
+            .collect();
         // one column per tunable gene dimension: mean payout, and (if present) the first
         // bonus's spins / multiplier / min_count. Guarded for models without bonuses.
         let col_payout: Vec<f64> = decoded
             .iter()
             .map(|m| {
-                m.paytable.entries.iter().map(|e| e.payout as f64).sum::<f64>()
+                m.paytable
+                    .entries
+                    .iter()
+                    .map(|e| e.payout as f64)
+                    .sum::<f64>()
                     / m.paytable.entries.len().max(1) as f64
             })
             .collect();
@@ -178,9 +185,9 @@ pub fn tune_with_progress(
                 decoded
                     .iter()
                     .map(|m| match &m.bonuses[0] {
-                        bloom_math::mechanics::slots::BonusFeature::FreeSpins { config, .. } => {
-                            config.spins_awarded as f64
-                        }
+                        bloom_math::mechanics::slots::BonusFeature::FreeSpins {
+                            config, ..
+                        } => config.spins_awarded as f64,
                     })
                     .collect(),
             );
@@ -188,9 +195,9 @@ pub fn tune_with_progress(
                 decoded
                     .iter()
                     .map(|m| match &m.bonuses[0] {
-                        bloom_math::mechanics::slots::BonusFeature::FreeSpins { config, .. } => {
-                            config.multiplier as f64
-                        }
+                        bloom_math::mechanics::slots::BonusFeature::FreeSpins {
+                            config, ..
+                        } => config.multiplier as f64,
                     })
                     .collect(),
             );
@@ -198,9 +205,9 @@ pub fn tune_with_progress(
                 decoded
                     .iter()
                     .map(|m| match &m.bonuses[0] {
-                        bloom_math::mechanics::slots::BonusFeature::FreeSpins { trigger, .. } => {
-                            trigger.min_count as f64
-                        }
+                        bloom_math::mechanics::slots::BonusFeature::FreeSpins {
+                            trigger, ..
+                        } => trigger.min_count as f64,
                     })
                     .collect(),
             );
@@ -452,11 +459,21 @@ mod tests {
     fn snapshots_carry_population_stats_and_profile_is_present() {
         let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
         // every generation snapshot has population stats + one agreement value per gene dim
-        assert!(out.trace.snapshots.iter().all(|s| s.population.max >= s.population.min));
-        assert!(out.trace.snapshots.iter().all(|s| !s.gene_agreement.is_empty()));
+        assert!(out
+            .trace
+            .snapshots
+            .iter()
+            .all(|s| s.population.max >= s.population.min));
+        assert!(out
+            .trace
+            .snapshots
+            .iter()
+            .all(|s| !s.gene_agreement.is_empty()));
         // end-of-tune profile exists and its histogram covers the fixed bins
-        assert_eq!(out.profile.distribution.bins.len(),
-                   bloom_simulator::profile::log_bins().len() - 1);
+        assert_eq!(
+            out.profile.distribution.bins.len(),
+            bloom_simulator::profile::log_bins().len() - 1
+        );
         assert!(out.profile.tail.p_losing_spin >= 0.0 && out.profile.tail.p_losing_spin <= 1.0);
         assert!(out.profile.rtp_convergence.last().is_some());
     }
