@@ -135,16 +135,24 @@ test('Evolution tab streams a real tune live and the scrubber replays it', async
   await expect(page.getByTestId('fitness-landscape')).toBeVisible();
   await expect(page.getByTestId('gene-heatmap')).toBeVisible();
 
+  // IMPORTANT — gate on the FROZEN run before reading any value off the scrubber. The
+  // scrubber becomes visible on the FIRST `analytics_progress` frame (generation 0),
+  // long before the run freezes: the backend emits one `analytics_progress` per
+  // generation and the live playhead advances Gen 1/1 → Gen 2/2 → … as they stream. Only
+  // `run_complete` pins the playhead to the final generation as "Paused" (not "Live") —
+  // see reducers.ts#runLoaded. So this retrying `toContainText('Paused')` is what waits
+  // for the frozen end-state; capturing `max` / the "Gen N/N" label mid-stream would race
+  // the advancing live playhead (a non-retrying `maxGen` read could catch gen 0, and a
+  // captured "Gen 2/2" would never match once the label advanced to Gen 8/8).
+  await expect(scrubber).toContainText('Paused');
+
   const slider = scrubber.getByRole('slider');
   const maxGen = Number(await slider.getAttribute('max'));
   expect(maxGen).toBeGreaterThan(0); // multiple generations recorded, not just gen 0
 
-  // `run_complete` freezes the playhead onto the final generation (not `'live'`) —
-  // see reducers.ts#runLoaded — so once the run is done the scrubber reads "Paused"
-  // pinned at the last generation, not "Live".
+  // Frozen playhead sits on the final generation.
   const genLabel = scrubber.locator('span').first();
   await expect(genLabel).toHaveText(`Gen ${maxGen}/${maxGen}`);
-  await expect(scrubber).toContainText('Paused');
 
   // Scrub back to the earliest generation and assert the rendered view changes.
   await slider.focus();
