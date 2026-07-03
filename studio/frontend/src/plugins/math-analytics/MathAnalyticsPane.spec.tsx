@@ -9,6 +9,14 @@ vi.mock('./charts/UPlotChart', () => ({
   UPlotChart: ({ className }: { className?: string }) => <div data-testid="uplot-chart-stub" className={className} />,
 }));
 
+const openGameAnalytics = vi.fn();
+vi.mock('./actions', () => ({
+  openGameAnalytics: (id: string) => openGameAnalytics(id),
+  closeGameAnalytics: vi.fn(),
+  initAnalytics: vi.fn(),
+  selectRun: vi.fn(),
+}));
+
 function run(id: string): IMathRun {
   return {
     id,
@@ -29,12 +37,25 @@ function run(id: string): IMathRun {
 
 beforeEach(() => {
   rootStore.plugins.nested(MATH_ANALYTICS_PLUGIN_ID).set(makeInitialState() as never);
+  openGameAnalytics.mockReset();
 });
 
 describe('MathAnalyticsPane', () => {
   it('shows a no-game placeholder when no game is open', () => {
     render(<MathAnalyticsPane {...({} as never)} />);
     expect(screen.getByTestId('analytics-no-game')).toBeTruthy();
+  });
+
+  it('refreshes the run history when the pane opens for a game (mirrors tuner issue #82)', () => {
+    analyticsSlice().activeGameId.set('g1');
+    analyticsSlice().loadStatus.set('idle');
+    render(<MathAnalyticsPane {...({} as never)} />);
+    expect(openGameAnalytics).toHaveBeenCalledWith('g1');
+  });
+
+  it('does not refresh when no game is open', () => {
+    render(<MathAnalyticsPane {...({} as never)} />);
+    expect(openGameAnalytics).not.toHaveBeenCalled();
   });
 
   it('shows a loading state while runs are loading', () => {

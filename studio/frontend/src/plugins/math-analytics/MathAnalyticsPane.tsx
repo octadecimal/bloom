@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { analyticsHooks, selectedRun, type IAnalyticsState } from './state';
 import { MathProfileTab } from './tabs/MathProfileTab';
+import { openGameAnalytics } from './actions';
 
 type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
 
@@ -27,6 +28,13 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
   const s = analyticsHooks.usePluginState();
   const [activeTab, setActiveTab] = useState<ITabId>('profile');
   const activeGameId = s.activeGameId.get();
+
+  // Re-fetch the run history every time the pane opens for a game, so it reflects a
+  // tune that completed while the pane was closed (this slice is REST-only, no live
+  // socket relay yet — see actions.ts — mirrors the Tuner pane's issue #82 fix).
+  useEffect(() => {
+    if (activeGameId) void openGameAnalytics(activeGameId);
+  }, [activeGameId]);
 
   if (!activeGameId) {
     return (
