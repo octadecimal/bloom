@@ -4,6 +4,7 @@
 
 pub mod curate;
 pub mod measure;
+pub mod profile;
 pub mod run;
 pub mod seedgen;
 pub mod target;

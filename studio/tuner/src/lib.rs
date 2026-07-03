@@ -9,6 +9,7 @@ pub mod genetic;
 pub mod genome;
 pub mod outcome;
 pub mod report;
+pub mod telemetry;
 pub mod validate;
 
 pub use genetic::{tune_with_progress, GeneticTuner};

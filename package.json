@@ -15,6 +15,8 @@
     "cmdk": "^1.1.1",
     "dockview-react": "^6.6.1",
     "fuse.js": "^7.4.2",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.21.0",
     "pixi.js": "^8.19.0",
     "react": "18.3.1",
@@ -24,7 +26,8 @@
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@nx/devkit": "23.0.0",

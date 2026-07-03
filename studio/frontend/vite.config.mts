@@ -38,6 +38,7 @@ export default defineConfig(() => {
         '/games': { target, changeOrigin: true },
         '/assets': { target, changeOrigin: true },
         '/media': { target, changeOrigin: true },
+        '/analytics': { target, changeOrigin: true },
       },
     },
     preview: { port: frontend, host: '0.0.0.0' },

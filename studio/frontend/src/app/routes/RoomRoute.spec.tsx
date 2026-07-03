@@ -15,6 +15,8 @@ const openGameSim = vi.fn();
 const closeGameSim = vi.fn();
 const openGameTuner = vi.fn();
 const closeGameTuner = vi.fn();
+const openGameAnalytics = vi.fn();
+const closeGameAnalytics = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
@@ -38,6 +40,10 @@ vi.mock('../../plugins/tuner/actions', () => ({
   openGameTuner: (id: string) => openGameTuner(id),
   closeGameTuner: () => closeGameTuner(),
 }));
+vi.mock('../../plugins/math-analytics/actions', () => ({
+  openGameAnalytics: (id: string) => openGameAnalytics(id),
+  closeGameAnalytics: () => closeGameAnalytics(),
+}));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
 vi.mock('../Workbench', () => ({
   Workbench: ({ roomContext }: { roomContext?: React.ReactNode }) => <div data-testid="workbench">{roomContext}WB</div>,
@@ -60,6 +66,8 @@ beforeEach(() => {
   closeGameSim.mockReset();
   openGameTuner.mockReset();
   closeGameTuner.mockReset();
+  openGameAnalytics.mockReset();
+  closeGameAnalytics.mockReset();
   error.mockReset();
 });
 
@@ -125,5 +133,27 @@ describe('RoomRoute', () => {
     await screen.findByTestId('workbench');
     unmount();
     expect(closeGame).toHaveBeenCalled();
+  });
+
+  it('valid room with a gameId → opens the math analytics pane for that game', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: 'g1', createdAt: 't' }]);
+    render(tree('/room/r1'));
+    expect(await screen.findByTestId('workbench')).toBeInTheDocument();
+    expect(openGameAnalytics).toHaveBeenCalledWith('g1');
+  });
+
+  it('valid room without a gameId → openGameAnalytics is NOT called', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: null, createdAt: 't' }]);
+    render(tree('/room/r1'));
+    expect(await screen.findByTestId('workbench')).toBeInTheDocument();
+    expect(openGameAnalytics).not.toHaveBeenCalled();
+  });
+
+  it('unmount → closeGameAnalytics is called', async () => {
+    getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: 'g1', createdAt: 't' }]);
+    const { unmount } = render(tree('/room/r1'));
+    await screen.findByTestId('workbench');
+    unmount();
+    expect(closeGameAnalytics).toHaveBeenCalled();
   });
 });

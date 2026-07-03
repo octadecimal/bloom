@@ -4,14 +4,21 @@ import asyncio
 import json
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
 
 from app.simulator.models import MetricsWire
 from app.subprocess_guard import watch_proc_tree
-from app.tuner.models import BandMissWire, GenSnapshotWire, TuneResult
+from app.tuner.models import (
+    BandMissWire, GenSnapshotWire, HistogramBinWire, PopulationStatsWire,
+    RtpPointWire, RunProfileWire, TailWire, TuneResult, WinDistributionWire,
+)
+
+
+def _empty_population() -> PopulationStatsWire:
+    return PopulationStatsWire(min=0.0, q1=0.0, median=0.0, q3=0.0, max=0.0, mean=0.0, diversity=0.0)
 
 
 @dataclass
@@ -21,10 +28,59 @@ class TuneProgress:
     best_fitness: float
     best_rtp: float
     best_volatility: float
+    # Enriched telemetry (Task 7). Defaulted so existing positional
+    # construction sites (5 args) keep working.
+    population: PopulationStatsWire = field(default_factory=_empty_population)
+    gene_agreement: list[float] = field(default_factory=list)
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_population(p: dict) -> PopulationStatsWire:
+    return PopulationStatsWire(
+        min=p["min"], q1=p["q1"], median=p["median"], q3=p["q3"],
+        max=p["max"], mean=p["mean"], diversity=p["diversity"],
+    )
+
+
+def _parse_profile(p: dict) -> RunProfileWire:
+    dist = p["distribution"]
+    tail = p["tail"]
+    # binHi for the open-ended top bin arrives as JSON null (Rust's f64::INFINITY,
+    # which serde_json can't encode); pass it straight through as None so the wire
+    # stays JSON-safe (see HistogramBinWire.bin_hi). binLo is never Infinity.
+    return RunProfileWire(
+        distribution=WinDistributionWire(
+            bins=[HistogramBinWire(bin_lo=b["binLo"], bin_hi=b["binHi"],
+                                   base=b["base"], feature=b["feature"])
+                  for b in dist.get("bins", [])],
+            zero_count=dist["zeroCount"],
+        ),
+        tail=TailWire(
+            max_win=tail["maxWin"], p_ge100x=tail["pGE100x"],
+            p_losing_spin=tail["pLosingSpin"],
+            longest_dead_streak=tail["longestDeadStreak"],
+            bonus_trigger_rate=tail["bonusTriggerRate"],
+        ),
+        rtp_convergence=[RtpPointWire(n=r["n"], realized_rtp=r["realizedRtp"])
+                        for r in p.get("rtpConvergence", [])],
+    )
+
+
+def _parse_snapshot(s: dict) -> GenSnapshotWire:
+    kwargs = dict(
+        generation=s["generation"], best_fitness=s["bestFitness"],
+        best_rtp=s["bestRtp"], best_volatility=s["bestVolatility"],
+    )
+    # Safe on older cassettes that predate the enriched telemetry: fall back
+    # to GenSnapshotWire's own defaults (zeroed population, empty agreement).
+    if "population" in s:
+        kwargs["population"] = _parse_population(s["population"])
+    if "geneAgreement" in s:
+        kwargs["gene_agreement"] = s["geneAgreement"]
+    return GenSnapshotWire(**kwargs)
 
 
 def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
@@ -36,13 +92,13 @@ def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
         bonus_hit_rates=m.get("bonusHitRates", []),
     )
     verdict = d["verdict"]  # "pass" | "near_miss"
+    profile_d = d.get("profile")
     return TuneResult(
         status=verdict, verdict=verdict, tuned_model=d.get("model"), metrics=metrics,
         missed=[BandMissWire(metric=x["metric"], measured=x["measured"],
                              band_lo=x["bandLo"], band_hi=x["bandHi"]) for x in d.get("missed", [])],
-        trace=[GenSnapshotWire(generation=s["generation"], best_fitness=s["bestFitness"],
-                               best_rtp=s["bestRtp"], best_volatility=s["bestVolatility"])
-               for s in d.get("trace", [])],
+        trace=[_parse_snapshot(s) for s in d.get("trace", [])],
+        profile=_parse_profile(profile_d) if profile_d else None,
         failure=None, ran_at=ran_at,
     )
 
@@ -105,10 +161,16 @@ class SubprocessTunerRunner:
                     except json.JSONDecodeError:
                         continue
                     if obj.get("type") == "progress":
-                        on_progress(TuneProgress(
+                        kwargs = dict(
                             generation=obj["generation"], max_generations=obj["maxGenerations"],
                             best_fitness=obj["bestFitness"], best_rtp=obj["bestRtp"],
-                            best_volatility=obj["bestVolatility"]))
+                            best_volatility=obj["bestVolatility"],
+                        )
+                        if "population" in obj:
+                            kwargs["population"] = _parse_population(obj["population"])
+                        if "geneAgreement" in obj:
+                            kwargs["gene_agreement"] = obj["geneAgreement"]
+                        on_progress(TuneProgress(**kwargs))
                     elif obj.get("type") == "result":
                         result = parse_tune_result_line(line, ran_at=ran_at)
                 done.set()

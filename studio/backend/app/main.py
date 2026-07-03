@@ -9,6 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.agent_tools import ToolFactory
+from app.analytics.hub import AnalyticsHub
+from app.analytics.rest import router as analytics_router
+from app.analytics.sockets import register_analytics_handlers
+from app.analytics.store import MathRunStore
 from app.assets.comfy import build_provider as build_comfy_provider
 from app.assets.hub import AssetHub
 from app.assets.media import MediaStore
@@ -107,7 +111,9 @@ def build(settings: Settings) -> AppContext:
     sim_store = SlotModelStore(mongo[settings.mongo_db])
     sim_hub = CurationHub(sio, sim_store, build_curation_runner(settings), gdd_store)
     tuner_store = TunerStore(mongo[settings.mongo_db])
-    tuner_hub = TunerHub(sio, tuner_store, sim_store, build_tuner_runner(settings), gdd_store)
+    math_run_store = MathRunStore(mongo[settings.mongo_db])
+    analytics_hub = AnalyticsHub(sio, math_run_store)
+    tuner_hub = TunerHub(sio, tuner_store, sim_store, build_tuner_runner(settings), gdd_store, analytics_hub)
 
     run_store = RunStore(mongo[settings.mongo_db])
     fastapi_app.state.run_store = run_store
@@ -147,6 +153,8 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.sim_hub = sim_hub
     fastapi_app.state.tuner_store = tuner_store
     fastapi_app.state.tuner_hub = tuner_hub
+    fastapi_app.state.math_run_store = math_run_store
+    fastapi_app.state.analytics_hub = analytics_hub
     fastapi_app.state.scene_store = scene_store
     fastapi_app.state.scene_hub = scene_hub
     fastapi_app.state.region_override_store = region_override_store
@@ -158,6 +166,7 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(sim_router)
     fastapi_app.include_router(tuner_router)
+    fastapi_app.include_router(analytics_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
@@ -167,6 +176,7 @@ def build(settings: Settings) -> AppContext:
     register_scene_handlers(sio, scene_hub, capture_broker, sim_store, spin_runner)
     register_sim_handlers(sio, sim_hub)
     register_tuner_handlers(sio, tuner_hub)
+    register_analytics_handlers(sio, analytics_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
