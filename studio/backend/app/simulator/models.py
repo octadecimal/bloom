@@ -34,6 +34,7 @@ class SlotModelDoc(_WireModel):
     game_id: str
     model: dict
     params: CurationParams
+    presentation: dict = {}  # editor-side symbol labels/colors; opaque here
     result: CurationResult | None = None
     created_at: str
     updated_at: str

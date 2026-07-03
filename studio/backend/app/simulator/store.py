@@ -22,8 +22,12 @@ def _from_doc(raw: dict) -> SlotModelDoc:
 
 
 class SlotModelStore:
-    def __init__(self, db):
+    def __init__(self, db, on_change=None):
+        # on_change: async (doc: SlotModelDoc, source: str) -> None; fired after any
+        # model/presentation write. Wired to a socket emit in main.py — the store
+        # itself stays socket-free.
         self._docs = db["slot_models"]
+        self._on_change = on_change
 
     async def get(self, game_id: str) -> SlotModelDoc | None:
         raw = await self._docs.find_one({"game_id": game_id})
@@ -42,15 +46,22 @@ class SlotModelStore:
         return doc
 
     async def put(self, game_id: str, *, model: dict | None = None,
-                  params: CurationParams | None = None) -> SlotModelDoc:
+                  params: CurationParams | None = None,
+                  presentation: dict | None = None,
+                  source: str = "api") -> SlotModelDoc:
         await self.get_or_seed(game_id)
         fields: dict = {"updated_at": _now()}
         if model is not None:
             fields["model"] = model
         if params is not None:
             fields["params"] = params.model_dump(mode="json")
+        if presentation is not None:
+            fields["presentation"] = presentation
         await self._docs.update_one({"game_id": game_id}, {"$set": fields})
-        return await self.get(game_id)
+        doc = await self.get(game_id)
+        if self._on_change is not None and (model is not None or presentation is not None):
+            await self._on_change(doc, source)
+        return doc
 
     async def save_result(self, game_id: str, result: CurationResult) -> SlotModelDoc:
         await self.get_or_seed(game_id)
