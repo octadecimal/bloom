@@ -255,7 +255,7 @@ fn main() {
 mod tests {
     use super::*;
     use bloom_math::mechanics::slots::{Paytable, SlotModel};
-    use bloom_simulator::profile::WinDistribution;
+    use bloom_simulator::profile::{HistogramBin, RtpPoint, WinDistribution};
     use bloom_simulator::target::Metrics;
     use bloom_tuner::outcome::{BandMiss, GenSnapshot, RunProfile, TuningTrace};
     use bloom_tuner::telemetry::population_stats;
@@ -288,8 +288,8 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
-                    population: population_stats(&[-0.5]),
-                    gene_agreement: vec![1.0],
+                    population: population_stats(&[-0.9, -0.5, -0.1]),
+                    gene_agreement: vec![0.8, 0.6],
                 }],
                 population: 8,
                 search_candidate_count: 1000,
@@ -297,17 +297,25 @@ mod tests {
             },
             profile: RunProfile {
                 distribution: WinDistribution {
-                    bins: vec![],
-                    zero_count: 0,
+                    bins: vec![HistogramBin {
+                        bin_lo: 5.0,
+                        bin_hi: 10.0,
+                        base: 3,
+                        feature: 1,
+                    }],
+                    zero_count: 7,
                 },
                 tail: bloom_simulator::profile::TailMetrics {
-                    max_win: 0.0,
-                    p_ge_100x: 0.0,
-                    p_losing_spin: 0.0,
-                    longest_dead_streak: 0,
-                    bonus_trigger_rate: 0.0,
+                    max_win: 120.0,
+                    p_ge_100x: 0.02,
+                    p_losing_spin: 0.6,
+                    longest_dead_streak: 9,
+                    bonus_trigger_rate: 0.05,
                 },
-                rtp_convergence: vec![],
+                rtp_convergence: vec![RtpPoint {
+                    n: 1000,
+                    realized_rtp: 0.95,
+                }],
             },
         }
     }
@@ -393,5 +401,21 @@ mod tests {
         assert!(v["profile"]["tail"]["maxWin"].is_number());
         assert!(v["profile"]["rtpConvergence"].is_array());
         assert!(v["trace"][0]["population"].is_object());
+
+        // Lock the exact camelCase wire contract the Python/TS layers key off:
+        // concrete values, not just presence, catch a misspelled/renamed key.
+        assert_eq!(v["profile"]["tail"]["pGE100x"], 0.02);
+        assert_eq!(v["profile"]["tail"]["maxWin"], 120.0);
+        assert_eq!(v["profile"]["tail"]["pLosingSpin"], 0.6);
+        assert_eq!(v["profile"]["tail"]["longestDeadStreak"], 9);
+        assert_eq!(v["profile"]["tail"]["bonusTriggerRate"], 0.05);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["binLo"], 5.0);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["binHi"], 10.0);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["base"], 3);
+        assert_eq!(v["profile"]["distribution"]["bins"][0]["feature"], 1);
+        assert_eq!(v["profile"]["distribution"]["zeroCount"], 7);
+        assert_eq!(v["profile"]["rtpConvergence"][0]["n"], 1000);
+        assert_eq!(v["profile"]["rtpConvergence"][0]["realizedRtp"], 0.95);
+        assert_eq!(v["trace"][0]["geneAgreement"][0], 0.8);
     }
 }
