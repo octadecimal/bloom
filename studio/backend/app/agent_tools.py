@@ -1,6 +1,7 @@
 import asyncio
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import interrupt
@@ -14,6 +15,8 @@ from app.scene.compose_loop import BuildElement, FrameCorrection, run_compose
 from app.scene.layout.bind import bind
 from app.scene.layout.intent import read_intent
 from app.scene.layout.plan import ScenePlan, canonical_role
+from app.assets.models import GenParams
+from app.assets.recipes import profile_for, build_asset_prompt
 from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
@@ -48,6 +51,73 @@ class ToolContext:
     region_override_store: object = None
 
 
+async def _art_direction(ctx: "ToolContext") -> str:
+    if ctx.gdd_store is None:
+        return ""
+    intent = await read_intent(ctx.gdd_store, ctx.game_id)
+    return intent.art_direction
+
+
+def _dev_workflow(transparent: bool) -> str:
+    return "dev-transparent" if transparent else "dev-opaque"
+
+
+async def _recipe_generation(ctx, *, description, style, role, transparent):
+    """Build (prompt, workflow, GenParams) for one generation from the role recipe +
+    the game's art direction. Shared by both generate verbs."""
+    art = await _art_direction(ctx)
+    base_desc = description if not style else f"{description}, {style} style"
+    prompt = build_asset_prompt(role, art, base_desc)
+    prof = profile_for(role)
+    params = GenParams(negative=prof.negative, steps=prof.steps,
+                       guidance=prof.guidance, cfg=prof.cfg, upscale=prof.upscale)
+    return prompt, _dev_workflow(transparent), params
+
+
+def _load_asset_bytes(media_dir: str, image_ref: str) -> bytes | None:
+    rel = image_ref.removeprefix("/media/")
+    p = Path(media_dir) / rel
+    return p.read_bytes() if p.exists() else None
+
+
+async def _run_direct_floor(ctx, *, asset_id, role, description) -> list[str]:
+    """Critique the freshly-generated asset and bounded-regenerate a dud. Returns the
+    floor's notes. No-op (empty) when no asset critic is wired."""
+    if ctx.asset_critic is None:
+        return []
+    from app.scene.asset_floor import run_asset_floor
+    settings = get_settings()
+
+    async def judge(attempt: int):
+        asset = await ctx.asset_store.get_asset(asset_id)
+        ref = asset.generations[-1].image_ref if asset.generations else ""
+        image = _load_asset_bytes(settings.media_dir, ref) if ref else None
+        if not image:
+            return AssetVerdict(ok=False, action="keep", reason="no image to review")
+        # Judge by the asset's ACTUAL transparency (mirrors the compose gate's
+        # critique_asset) — the generator may not honor the requested flag, and the
+        # critic must grade the image as it really is, not as it was asked for.
+        return await ctx.asset_critic.critique(AssetCritiqueRequest(
+            image_png=image, role=role, description=description, theme="",
+            transparent=_image_has_transparency(image), attempt=attempt))
+
+    async def regenerate():
+        await ctx.asset_hub.generate_and_wait(ctx.game_id, asset_id)
+
+    res = await run_asset_floor(
+        judge=judge, regenerate=regenerate, role=role or "asset",
+        asset_regen_retries=settings.asset_regen_retries,
+        regen_left=settings.asset_floor_regen_budget)
+    # add_generation only auto-selects the FIRST generation, so after a regen the
+    # dud (#1) is still selected. The floor judges the newest generation, so make it
+    # the selected one — otherwise the rejected asset is what gets placed/displayed.
+    if res.regens_spent:
+        asset = await ctx.asset_store.get_asset(asset_id)
+        if asset and asset.generations:
+            await ctx.asset_store.select_generation(asset_id, asset.generations[-1].id)
+    return res.notes
+
+
 def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
     async def generate_asset(
         description: str,
@@ -55,17 +125,22 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
         size: str = "512x512",
         transparent: bool = True,
         slot: str = "",
+        role: str = "",
     ) -> str:
-        prompt = description if not style else f"{description}, {style} style"
+        prompt, workflow, params = await _recipe_generation(
+            ctx, description=description, style=style, role=role, transparent=transparent)
         width, height = (int(x) for x in size.lower().split("x", 1))
-        workflow = "schnell-transparent" if transparent else "schnell-opaque"
         asset = await ctx.asset_store.create_asset(
             ctx.game_id, description[:40] or "asset", prompt, width, height, workflow,
-            slot=slot or None,
+            slot=slot or None, params=params,
         )
         await ctx.asset_hub.generate_and_wait(ctx.game_id, asset.id)
+        notes = await _run_direct_floor(
+            ctx, asset_id=asset.id, role=role, description=description)
         tag = f" (slot {slot})" if slot else ""
-        return f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the Asset Board."
+        suffix = (" " + "; ".join(notes)) if notes else ""
+        return (f"Generated '{asset.name}' (asset {asset.id}){tag} and added it to the "
+                f"Asset Board.{suffix}")
 
     return StructuredTool.from_function(
         coroutine=generate_asset,
@@ -74,6 +149,7 @@ def build_generate_asset_tool(ctx: ToolContext) -> BaseTool:
             "Generate a game image from a text description and add it to the Asset Board. "
             "size is 'WIDTHxHEIGHT' (default 512x512); set transparent=false for an opaque "
             "background/scene. Pass slot='<id>' to tie a symbol's art to its design slot."
+            " Pass role='background'|'logo'|'reels'|'spin'|... to select the generation recipe (model params, negatives, upscale)."
         ),
     )
 
@@ -290,14 +366,16 @@ def build_generate_and_place_tool(ctx: ToolContext) -> BaseTool:
             if not description:
                 return ("Pass a description to generate the element, or a slot that "
                         "already has art to place.")
-            prompt = description if not style else f"{description}, {style} style"
+            prompt, workflow, params = await _recipe_generation(
+                ctx, description=description, style=style, role=role, transparent=transparent)
             width, height = (int(v) for v in size.lower().split("x", 1))
-            workflow = "schnell-transparent" if transparent else "schnell-opaque"
             created = await ctx.asset_store.create_asset(
                 ctx.game_id, description[:40] or "asset", prompt, width, height,
-                workflow, slot=slot or None,
+                workflow, slot=slot or None, params=params,
             )
             await ctx.asset_hub.generate_and_wait(ctx.game_id, created.id)
+            await _run_direct_floor(ctx, asset_id=created.id, role=role,
+                                    description=description)
             asset = await ctx.asset_store.get_asset(created.id)
 
         # 3. place it immediately, so the scene fills in element-by-element.

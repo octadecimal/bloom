@@ -72,3 +72,13 @@ async def test_delete(mongo_db):
     a = await _mk(store)
     await store.delete_asset(a.id)
     assert await store.get_asset(a.id) is None
+
+
+@pytest.mark.asyncio
+async def test_create_asset_persists_params(mongo_db):
+    from app.assets.models import GenParams
+    store = AssetStore(mongo_db)
+    a = await store.create_asset("g", "logo", "p", 64, 64, "dev-transparent",
+                                 params=GenParams(steps=28, upscale=True))
+    got = await store.get_asset(a.id)
+    assert got.params.steps == 28 and got.params.upscale is True

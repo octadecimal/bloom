@@ -235,6 +235,19 @@ async def test_unloadable_asset_surfaces_visible_note_not_asset_ok():
     assert not any("logo: asset ok" in n for n in result.notes)
 
 
+@pytest.mark.asyncio
+async def test_asset_gate_regen_then_keep_still_converges_after_extraction():
+    from app.scene.asset_critic import AssetVerdict
+    deps = FakeDeps({}, asset_verdicts={"logo": [
+        AssetVerdict(ok=False, action="regenerate", reason="garbled"),
+        AssetVerdict(ok=True, action="keep"),
+    ]})
+    result = await run_compose([_el("logo")], "pirate", deps)
+    assert deps.regens == ["logo"]
+    assert result.assets_regenerated == 1 and result.regens_spent == 1
+    assert any("regenerated (attempt 1)" in n for n in result.notes)
+
+
 def test_bounds_and_result_have_new_quality_fields():
     b = ComposeBounds()
     assert b.asset_regen_retries == 2

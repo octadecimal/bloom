@@ -395,3 +395,30 @@ async def test_request_generation_auto_select_rebinds_scene(mongo_db, tmp_path):
         game_id,
         {"kind": "setProp", "id": "tex.wild", "path": "src", "value": newest.image_ref},
     )
+
+
+@pytest.mark.asyncio
+async def test_run_forwards_params_into_the_graph(mongo_db, tmp_path):
+    """The fake comfy records the graph it received; assert dev params are patched onto it."""
+    from app.assets.models import GenParams
+
+    class CapturingProvider:
+        def __init__(self):
+            self.last_graph = None
+
+        async def generate(self, graph):
+            self.last_graph = graph
+            yield ProgressEvent(value=1, max=1)
+            yield ImageEvent(data=_FAKE_PNG)
+
+    store = AssetStore(mongo_db)
+    comfy = CapturingProvider()
+    sio = FakeSio()
+    hub = AssetHub(sio, store, comfy, MediaStore(tmp_path))
+    a = await store.create_asset("g", "logo", "a wordmark", 64, 64, "dev-transparent",
+                                 params=GenParams(negative="blurry", steps=28, guidance=3.0, cfg=2.0))
+    await hub.generate_and_wait("g", a.id)
+    graph = comfy.last_graph
+    assert graph["3"]["inputs"]["steps"] == 28 and graph["3"]["inputs"]["cfg"] == 2.0
+    assert graph["7"]["inputs"]["text"] == "blurry"
+    assert graph["11"]["inputs"]["guidance"] == 3.0

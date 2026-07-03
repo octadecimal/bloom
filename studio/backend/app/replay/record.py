@@ -11,7 +11,10 @@ from app.replay.cassette import DEFAULT_FIXTURES_DIR
 
 LLM_PROMPT = "Reply with exactly: PONG"
 COMFY_DIMS = (512, 512)
-COMFY_WORKFLOW = "schnell-transparent"
+# Record against the product's real default path (flux-dev); the on-disk cassette
+# is a workflow-agnostic PNG + progress trace, so replay is unaffected, but a live
+# `just record-fixtures` now captures the dev graph the generate verbs actually use.
+COMFY_WORKFLOW = "dev-transparent"
 
 
 async def _record_llm(settings, out: Path) -> None:

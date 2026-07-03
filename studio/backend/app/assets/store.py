@@ -27,10 +27,11 @@ class AssetStore:
     def __init__(self, db):
         self._assets = db["assets"]
 
-    async def create_asset(self, game_id, name, prompt, width, height, workflow, seed=None, category=None, slot=None) -> Asset:
+    async def create_asset(self, game_id, name, prompt, width, height, workflow, seed=None, category=None, slot=None, params=None) -> Asset:
         asset = Asset(
             id=uuid4().hex, game_id=game_id, name=name, category=category, slot=slot,
             prompt=prompt, width=width, height=height, workflow=workflow, seed=seed,
+            params=params,
         )
         await self._assets.insert_one(_to_doc(asset))
         return asset

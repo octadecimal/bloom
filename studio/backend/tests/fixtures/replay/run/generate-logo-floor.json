@@ -1,0 +1,15 @@
+{
+  "prompt": "generate a pirate logo and run it through the asset floor",
+  "tool_calls": [
+    {
+      "name": "generate_asset",
+      "args": {
+        "description": "an ornate PIRATE FORTUNE logo wordmark, transparent cutout",
+        "role": "logo",
+        "slot": "logo",
+        "transparent": true
+      }
+    }
+  ],
+  "final": ["All set — ", "I generated the logo; the asset floor regenerated it once before it passed."]
+}

@@ -52,3 +52,46 @@ async def test_generate_streams_status_progress_completed(live_server):
         assert img.status_code == 200 and img.content.startswith(b"\x89PNG") and len(img.content) > 5000
 
     await client.disconnect()
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_direct_generate_logo_regenerates_via_the_floor(live_server):
+    """A direct agent 'generate a logo' runs the MANDATORY asset floor end-to-end:
+    the logo critic cassette (asset/logo.json) flags the first generation 'regenerate'
+    and keeps the regenerated one, so the board's logo asset ends with 2 generations
+    (dud + keep). Proves the C2.4 direct-path gate fires in the real agent run."""
+    async with httpx.AsyncClient(base_url=live_server) as http:
+        room = (await http.post("/rooms", json={"name": "Asset Floor E2E"})).json()
+    room_id, game_id = room["id"], room["gameId"]
+
+    client = socketio.AsyncClient()
+    run_completions: list[dict] = []
+    client.on("run_completed", lambda d: run_completions.append(d))
+
+    await client.connect(live_server, auth={"displayName": "Designer"})
+    await client.emit("join_room", {"roomId": room_id})
+    await client.emit("join_scene", {"gameId": game_id})
+    await asyncio.sleep(0.3)
+    await client.emit("send_prompt", {
+        "roomId": room_id,
+        "text": "generate a pirate logo and run it through the asset floor",
+    })
+
+    deadline = asyncio.get_running_loop().time() + 60
+    while not run_completions and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.05)
+    assert run_completions, "run_completed not received within 60 s"
+    assert run_completions[0]["status"] == "completed", run_completions
+
+    # the board's logo asset went through the floor: dud + regenerated keep = 2 generations
+    async with httpx.AsyncClient(base_url=live_server) as http:
+        assets = (await http.get(f"/games/{game_id}/assets")).json()
+    logo = next((a for a in assets if a.get("slot") == "logo"), None)
+    assert logo is not None, f"no logo asset on the board: {assets}"
+    assert len(logo["generations"]) == 2, logo
+    # the floor must SELECT the regenerated (newest) generation, not leave the
+    # rejected dud (#1) selected — the selected one is what gets placed/displayed.
+    assert logo["selectedGenerationId"] == logo["generations"][-1]["id"], logo
+
+    await client.disconnect()

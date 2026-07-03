@@ -60,11 +60,11 @@ async def test_generate_asset_size_and_opaque(mongo_db):
     await tool.ainvoke({"description": "a forest", "size": "1024x576", "transparent": False})
     asset = (await store.list_assets("g1"))[0]
     assert (asset.width, asset.height) == (1024, 576)
-    assert asset.workflow == "schnell-opaque"
+    assert asset.workflow == "dev-opaque"
 
 
 @pytest.mark.asyncio
-async def test_generate_asset_defaults_unchanged(mongo_db):
+async def test_generate_asset_defaults_to_dev_transparent(mongo_db):
     store = AssetStore(mongo_db)
     factory = ToolFactory(store, FakeHub(store))
     ctx = ToolContext("r1", "g1", store, store and FakeHub(store))
@@ -72,7 +72,7 @@ async def test_generate_asset_defaults_unchanged(mongo_db):
     await tool.ainvoke({"description": "a knight"})
     asset = (await store.list_assets("g1"))[0]
     assert (asset.width, asset.height) == (512, 512)
-    assert asset.workflow == "schnell-transparent"
+    assert asset.workflow == "dev-transparent"
 
 
 @pytest.mark.asyncio
@@ -199,7 +199,7 @@ from app.agent_tools import build_generate_asset_tool
 class _RecordingAssetStore:
     def __init__(self):
         self.created = None
-    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None):
+    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None, params=None):
         from app.assets.models import Asset
         self.created = {"slot": slot, "name": name}
         return Asset(id="a1", game_id=game_id, name=name, prompt=prompt,

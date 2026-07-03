@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.assets.comfy import ImageEvent, ProgressEvent
 from app.assets.graph import build_graph, random_seed
+from app.config import get_settings
 from app.assets.models import asset_wire
 from app.scene.rebind import rebind_asset_textures
 
@@ -74,7 +75,16 @@ class AssetHub:
     async def _run(self, game_id: str, asset_id: str) -> None:
         asset = await self._store.get_asset(asset_id)
         seed = asset.seed if asset.seed is not None else random_seed()
-        graph = build_graph(asset.workflow, asset.prompt, asset.width, asset.height, seed)
+        p = asset.params
+        graph = build_graph(
+            asset.workflow, asset.prompt, asset.width, asset.height, seed,
+            negative=(p.negative or None) if p else None,
+            steps=p.steps if p else None,
+            guidance=p.guidance if p else None,
+            cfg=p.cfg if p else None,
+            upscale=bool(p.upscale) if p else False,
+            upscale_model=get_settings().upscale_model,
+        )
 
         await self._store.set_status(asset_id, "generating")
         await self._emit_status(game_id, asset_id, "generating")

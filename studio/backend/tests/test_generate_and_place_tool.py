@@ -44,10 +44,11 @@ class _GeneratingAssetStore:
         if asset.slot:
             self._by_slot[asset.slot] = asset
 
-    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None):
+    async def create_asset(self, game_id, name, prompt, width, height, workflow, slot=None, params=None):
         asset = Asset(
             id=f"a{len(self.created) + 1}", game_id=game_id, name=name, prompt=prompt,
             width=width, height=height, workflow=workflow, slot=slot,
+            params=params,
             generations=[], selected_generation_id=None,
         )
         self.created.append(asset)
@@ -150,8 +151,90 @@ async def test_generate_and_place_no_image_after_generation_places_nothing(mongo
     await mongo_db["game_scenes"].delete_many({})
 
 
+@pytest.mark.asyncio
+async def test_generate_and_place_uses_dev_workflow_and_role_params(mongo_db):
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    assets = _GeneratingAssetStore()
+    asset_hub = _FakeAssetHub(assets)
+    ctx = ToolContext("r1", "g1", assets, asset_hub, scene_store=store, scene_hub=hub)
+
+    await build_generate_and_place_tool(ctx).ainvoke(
+        {"description": 'wordmark "AI"', "role": "logo", "transparent": True, "slot": "logo"})
+
+    asset = await assets.get_by_slot("g1", "logo")
+    assert asset.workflow == "dev-transparent"
+    assert asset.params is not None and asset.params.cfg == 2.0        # logo profile
+    assert asset.params.negative != ""
+    assert "legible" in asset.prompt.lower()                          # role boilerplate folded in
+    await mongo_db["game_scenes"].delete_many({})
+
+
+@pytest.mark.asyncio
+async def test_generate_and_place_opaque_selects_dev_opaque(mongo_db):
+    await mongo_db["game_scenes"].delete_many({})
+    store = GameSceneStore(mongo_db)
+    hub = GameSceneHub(_SilentSio(), store)
+    assets = _GeneratingAssetStore()
+    asset_hub = _FakeAssetHub(assets)
+    ctx = ToolContext("r1", "g1", assets, asset_hub, scene_store=store, scene_hub=hub)
+
+    await build_generate_and_place_tool(ctx).ainvoke(
+        {"description": "a graveyard", "role": "background", "transparent": False,
+         "slot": "bg", "fit": "cover", "z_index": 0})
+
+    asset = await assets.get_by_slot("g1", "bg")
+    assert asset.workflow == "dev-opaque"
+    assert asset.params.upscale is True                              # background is a hero role
+    await mongo_db["game_scenes"].delete_many({})
+
+
 def test_factory_registers_generate_and_place():
     f = ToolFactory(asset_store=None, asset_hub=None)
     assert "generate_and_place" in f.known_tool_names()
     ctx = ToolContext("r1", "g1", None, None)
     assert f.build(["generate_and_place"], ctx)[0].name == "generate_and_place"
+
+
+@pytest.mark.asyncio
+async def test_generate_asset_regenerates_a_dud_via_the_floor(mongo_db, tmp_path, monkeypatch):
+    """With an asset critic wired, a fresh generation that the critic flags 'regenerate'
+    is bounded-regenerated; the asset ends with 2 generations (dud + keep)."""
+    from io import BytesIO
+    from PIL import Image
+    from app.assets.hub import AssetHub
+    from app.assets.media import MediaStore
+    from app.assets.store import AssetStore
+    from app.assets.comfy import ProgressEvent, ImageEvent
+    from app.scene.asset_critic import ReplayAssetCritic
+    from app.agent_tools import build_generate_asset_tool
+
+    # media_dir must equal the dir MediaStore writes to, so the floor can load the bytes
+    monkeypatch.setenv("MEDIA_DIR", str(tmp_path))
+
+    # a rich transparent PNG that PASSES asset_heuristic -> the cassette decides the verdict
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    for x in range(64):
+        for y in range(32):
+            img.putpixel((x, y), (x * 4 % 256, y * 8 % 256, 128, 255))
+    _buf = BytesIO(); img.save(_buf, format="PNG"); rich_png = _buf.getvalue()
+
+    class _RichProvider:
+        async def generate(self, graph):
+            yield ProgressEvent(value=1, max=1)
+            yield ImageEvent(data=rich_png)
+
+    store = AssetStore(mongo_db)
+    hub = AssetHub(_SilentSio(), store, _RichProvider(), MediaStore(tmp_path))
+    critic = ReplayAssetCritic({"logo": [
+        {"ok": False, "action": "regenerate", "reason": "garbled"},
+        {"ok": True, "action": "keep"},
+    ]})
+    ctx = ToolContext("r1", "g1", store, hub, asset_critic=critic)
+
+    await build_generate_asset_tool(ctx).ainvoke(
+        {"description": "wordmark", "role": "logo", "slot": "logo"})
+
+    asset = await store.get_by_slot("g1", "logo")
+    assert len(asset.generations) == 2  # dud + regenerated keep
