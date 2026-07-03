@@ -44,6 +44,19 @@
   --warning: #e7b549;
   --danger: #f0574d;
 
+  /* Math Analytics chart color roles — dark-only today (the app is dark-only), one
+     categorical hue per identity + one neutral for "no win" + one reference-band
+     fill. Validated (lightness/chroma/CVD/contrast) against --surface (#131417)
+     via the dataviz skill's scripts/validate_palette.js; distinct from --accent
+     (rationed for interaction, never chart identity) and from the status trio
+     above (tail risk is an identity role here, not a status). */
+  --chart-base: #3987e5; /* base-game wins */
+  --chart-feature: #199e70; /* feature/bonus wins */
+  --chart-tail: #e66767; /* rare tail wins (>=100x) */
+  --chart-series-1: #d55181; /* single-series lines (RTP convergence); Compare's first overlay slot */
+  --chart-target-band: rgba(155, 155, 164, 0.16); /* target/reference band fill on line charts */
+  --chart-loss: var(--hairline-strong); /* losing-spin / zero-count column — neutral, not identity */
+
   /* Type */
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
@@ -90,6 +103,12 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-chart-base: var(--chart-base);
+  --color-chart-feature: var(--chart-feature);
+  --color-chart-tail: var(--chart-tail);
+  --color-chart-series-1: var(--chart-series-1);
+  --color-chart-target-band: var(--chart-target-band);
+  --color-chart-loss: var(--chart-loss);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
@@ -368,4 +387,13 @@ body {
 }
 .bloom-md img {
   max-width: 100%;
+}
+
+/* Fill-to-pane tab root: the pane fills the Dockview group with no inner scroll
+   (the Math Analytics "Report" tab is the sole intentional exception, opted out
+   locally). See docs/superpowers/specs/2026-07-02-math-analytics-dashboard-design.md. */
+.bloom-tab-fill {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }

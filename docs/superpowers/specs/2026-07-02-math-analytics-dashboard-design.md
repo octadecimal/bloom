@@ -123,15 +123,15 @@ whether the model is later curated into a `.pkg`.
 - `progress` line gains: `fitnessMin/Mean/Q1/Median/Q3/Max`, `diversity`,
   `geneAgreement` (map or ordered array of gene → 0–1).
 - `result` line gains: `profile: { histogram: [{binLo, binHi, base, feature}],
-  tail: { maxWin, pGE100x, pLosingSpin, longestDeadStreak, bonusTriggerRate },
-  rtpConvergence: [{ n, realizedRtp }] }`, and the per-gen `trace` entries carry
+tail: { maxWin, pGE100x, pLosingSpin, longestDeadStreak, bonusTriggerRate },
+rtpConvergence: [{ n, realizedRtp }] }`, and the per-gen `trace` entries carry
   the same enriched fields as `progress`.
 
 ### Layer 2 — Backend persistence + streaming (`app/analytics`)
 
 - **`math_runs` collection — append-only.** One document per completed tune run:
   `{ id, game_id, params, verdict, metrics, trace[], profile, tail,
-  rtp_convergence, timings, created_at }`. Indexed on `(game_id, created_at)`.
+rtp_convergence, timings, created_at }`. Indexed on `(game_id, created_at)`.
   History and Compare read this collection; a run is **never overwritten**.
   (The existing `tuner_jobs` doc remains the "current params / latest result"
   pointer for the tuner pane; `math_runs` is the historical archive.)
@@ -167,8 +167,8 @@ path added) so a tune emits enriched progress and, on completion, writes to
     homing, RTP convergence, Compare overlays) — tiny and fast under live updates.
   - **Hand-rolled SVG / CSS** for the bespoke marks (gene-convergence heatmap,
     win-distribution histogram, stat tiles) — full design-language control.
-  The seam keeps the library swappable (see the repo's "prefer proven libraries
-  behind a thin seam" principle) and lets tests target a stable interface.
+    The seam keeps the library swappable (see the repo's "prefer proven libraries
+    behind a thin seam" principle) and lets tests target a stable interface.
 - **Design language**: 4 surfaces / 2 hairlines / 3 text tiers / rationed accent;
   raw colors only via `styles.css` (the guard test blocks otherwise). Chart color
   roles (base / feature / tail / target-band / per-run series) are defined as

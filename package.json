@@ -24,7 +24,8 @@
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@nx/devkit": "23.0.0",

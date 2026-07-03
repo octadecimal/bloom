@@ -1,0 +1,87 @@
+import { useState } from 'react';
+import type { IDockviewPanelProps } from 'dockview-react';
+import { analyticsHooks, selectedRun, type IAnalyticsState } from './state';
+import { MathProfileTab } from './tabs/MathProfileTab';
+
+type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
+
+interface ITabDef {
+  id: ITabId;
+  label: string;
+  // Only Math Profile is built this task; the bar is scaffolded so Phase 2/3
+  // (Evolution / Compare / Report) slot in without reshaping the shell.
+  enabled: boolean;
+}
+
+const TABS: ITabDef[] = [
+  { id: 'profile', label: 'Math Profile', enabled: true },
+  { id: 'evolution', label: 'Evolution', enabled: false },
+  { id: 'compare', label: 'Compare', enabled: false },
+  { id: 'report', label: 'Report', enabled: false },
+];
+
+/** The Math Analytics pane shell — a header strip over a tab bar, mirroring the
+ * cockpit shape from docs/superpowers/specs/2026-07-02-math-analytics-dashboard-design.md.
+ * Read-only analytics; tuning stays on the Tuner pane. */
+export function MathAnalyticsPane(_props: IDockviewPanelProps) {
+  const s = analyticsHooks.usePluginState();
+  const [activeTab, setActiveTab] = useState<ITabId>('profile');
+  const activeGameId = s.activeGameId.get();
+
+  if (!activeGameId) {
+    return (
+      <div data-testid="analytics-no-game" className="flex h-full items-center justify-center bg-surface text-text-2">
+        Open a game to view its math analytics.
+      </div>
+    );
+  }
+
+  const loadStatus = s.loadStatus.get();
+  const run = selectedRun(s.get() as IAnalyticsState);
+
+  return (
+    <div className="flex h-full flex-col bg-surface">
+      <div className="flex flex-none items-center justify-between border-b border-hairline p-2">
+        <span className="text-sm text-text-1">Math Analytics</span>
+        {run && (
+          <span className="text-xs text-text-3">
+            {run.verdict === 'pass' ? 'PASS' : run.verdict === 'near_miss' ? 'NEAR-MISS' : ''} · {new Date(run.createdAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      <div role="tablist" className="flex flex-none gap-1 border-b border-hairline px-2">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            role="tab"
+            data-testid={`analytics-tab-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            disabled={!tab.enabled}
+            onClick={() => tab.enabled && setActiveTab(tab.id)}
+            className={`border-b-2 px-2.5 py-1.5 text-xs ${
+              activeTab === tab.id ? 'border-accent text-text-1' : 'border-transparent text-text-3'
+            } disabled:cursor-not-allowed disabled:text-text-3/60`}
+          >
+            {tab.label}
+            {!tab.enabled && <span className="ml-1 text-[9px] uppercase text-text-3">soon</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {loadStatus === 'loading' && (
+          <div data-testid="analytics-loading" className="flex h-full items-center justify-center text-text-2">
+            Loading runs…
+          </div>
+        )}
+        {loadStatus !== 'loading' && !run && (
+          <div data-testid="analytics-no-runs" className="flex h-full items-center justify-center text-text-2">
+            No tune runs recorded for this game yet.
+          </div>
+        )}
+        {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
+      </div>
+    </div>
+  );
+}

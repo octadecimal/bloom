@@ -4,7 +4,7 @@
 
 **Goal:** Build a studio plugin that visualizes how the genetic tuner converged (GA evolution, live + post-hoc) and what the final math is (win-distribution volatility curve, tail risk), with a persisted per-game run history for cross-run comparison and an exportable report.
 
-**Architecture:** Three layers. (1) Rust crates `bloom-simulator` and `bloom-tuner` emit richer *summary* telemetry — population fitness quantiles + gene agreement per generation, and a win-distribution histogram + tail metrics computed by an end-of-tune profiling simulation. (2) A Python backend appends one frozen doc per tune to an append-only `math_runs` collection and relays enriched live progress over a socket room. (3) A `math-analytics` frontend plugin renders four fill-to-pane tabs (Evolution, Math Profile, Compare, Report) via an `IChart` seam (uPlot for streaming time-series, hand-rolled SVG/CSS for bespoke marks).
+**Architecture:** Three layers. (1) Rust crates `bloom-simulator` and `bloom-tuner` emit richer _summary_ telemetry — population fitness quantiles + gene agreement per generation, and a win-distribution histogram + tail metrics computed by an end-of-tune profiling simulation. (2) A Python backend appends one frozen doc per tune to an append-only `math_runs` collection and relays enriched live progress over a socket room. (3) A `math-analytics` frontend plugin renders four fill-to-pane tabs (Evolution, Math Profile, Compare, Report) via an `IChart` seam (uPlot for streaming time-series, hand-rolled SVG/CSS for bespoke marks).
 
 **Tech Stack:** Rust (existing crates, `rayon`, `serde_json`, NDJSON CLIs), Python (FastAPI, `python-socketio`, Motor/MongoDB, pydantic), TypeScript/React (Vite, Dockview, uPlot, Vitest, Playwright).
 
@@ -25,21 +25,25 @@
 ## File Structure
 
 **Rust — `bloom-simulator` (`studio/simulator/src/`)**
+
 - Create `profile.rs` — `WinDistribution`, `TailMetrics`, `RtpConvergence`, and `profile()` / `rtp_convergence()` over `&[RoundSample]`. One responsibility: turn a sample population into presentation-ready distribution/tail/convergence summaries.
 - Modify `lib.rs` — `pub mod profile;` and re-exports.
 
 **Rust — `bloom-tuner` (`studio/tuner/src/`)**
+
 - Create `telemetry.rs` — `PopulationStats` (fitness quantiles + diversity) and `gene_agreement()` over a scored population. One responsibility: summarize a generation's population.
 - Modify `outcome.rs` — extend `GenSnapshot` with population fields; add `profile: RunProfile` to `TuneOutcome`.
 - Modify `genetic.rs` — compute population stats per generation; run the end-of-tune profiling sim.
 - Modify `src/bin/tune_json.rs` — emit the enriched `progress` and `result` NDJSON.
 
 **Python — `studio/backend/app/analytics/`** (new package, mirrors `app/tuner/`)
+
 - `__init__.py`, `models.py` (`MathRunDoc`, `WinDistributionWire`, `TailWire`, `RtpPointWire`, `PopulationStatsWire`), `store.py` (`MathRunStore`, append-only), `rest.py` (`GET /analytics/runs`, `GET /analytics/runs/{id}`), `hub.py` (`AnalyticsHub`), `sockets.py` (`join_analytics`/`leave_analytics`).
 - Modify `app/tuner/models.py`, `app/tuner/runner.py`, `app/tuner/hub.py` — carry the enriched fields end-to-end and hand the finished run to `AnalyticsHub`.
 - Modify the app composition root (wherever `TunerHub`/routers/sockets are constructed) to build and register the analytics store/hub/router/socket handlers.
 
 **TypeScript — `studio/frontend/src/plugins/math-analytics/`** (new plugin, mirrors `plugins/tuner/`)
+
 - `index.ts`, `state.ts`, `actions.ts`, `reducers.ts`, `restClient.ts`, `socketClient.ts`, `config.ts`, `MathAnalyticsPane.tsx`, plus tab components `tabs/EvolutionTab.tsx`, `tabs/MathProfileTab.tsx`, `tabs/CompareTab.tsx`, `tabs/ReportTab.tsx`, and `charts/` (the `IChart` seam + adapters). Each with a `.spec` sibling.
 - Modify `plugins/index.ts` — register the plugin.
 - Modify `styles.css` — chart color-role tokens.
@@ -53,11 +57,13 @@ Delivers the enabling Rust telemetry, end-of-tune profiling, `math_runs` persist
 ### Task 1: `bloom-simulator` win-distribution + tail profiling
 
 **Files:**
+
 - Create: `studio/simulator/src/profile.rs`
 - Modify: `studio/simulator/src/lib.rs`
 - Test: inline `#[cfg(test)]` in `profile.rs`
 
 **Interfaces:**
+
 - Consumes: `crate::measure::RoundSample { seed:u64, payout:u64, base_payout:u64, feature_payout:u64, feature_triggers:Vec<bool> }` (existing).
 - Produces:
   - `pub struct HistogramBin { pub bin_lo: f64, pub bin_hi: f64, pub base: u64, pub feature: u64 }` (counts of rounds whose total-payout multiplier falls in `[bin_lo, bin_hi)`, split by whether `feature_payout > 0`).
@@ -210,10 +216,12 @@ git commit -m "feat(simulator): win-distribution histogram + tail metrics over s
 ### Task 2: `bloom-simulator` RTP-convergence series
 
 **Files:**
+
 - Modify: `studio/simulator/src/profile.rs`
 - Test: inline `#[cfg(test)]` in `profile.rs`
 
 **Interfaces:**
+
 - Produces:
   - `pub struct RtpPoint { pub n: usize, pub realized_rtp: f64 }`
   - `pub fn rtp_convergence(samples: &[RoundSample], points: usize) -> Vec<RtpPoint>` — cumulative mean payout at `points` log-spaced sample sizes from `~100` to `samples.len()` (deduped, ascending, last point = full sample).
@@ -292,11 +300,13 @@ git commit -m "feat(simulator): realized-RTP convergence series for sampling-tru
 ### Task 3: `bloom-tuner` per-generation population telemetry
 
 **Files:**
+
 - Create: `studio/tuner/src/telemetry.rs`
 - Modify: `studio/tuner/src/lib.rs` (`pub mod telemetry;`)
 - Test: inline `#[cfg(test)]` in `telemetry.rs`
 
 **Interfaces:**
+
 - Consumes: the per-generation scored population, expressed as fitness values `&[f64]` and decoded genomes for gene agreement.
 - Produces:
   - `pub struct PopulationStats { pub min: f64, pub q1: f64, pub median: f64, pub q3: f64, pub max: f64, pub mean: f64, pub diversity: f64 }`
@@ -411,11 +421,13 @@ git commit -m "feat(tuner): population fitness quantiles, diversity, and gene-ag
 ### Task 4: Wire population telemetry + end-of-tune profiling into the GA
 
 **Files:**
+
 - Modify: `studio/tuner/src/outcome.rs`
 - Modify: `studio/tuner/src/genetic.rs`
 - Test: inline tests in `genetic.rs` (extend the existing test module)
 
 **Interfaces:**
+
 - Extend `GenSnapshot` with: `pub population: crate::telemetry::PopulationStats`, `pub gene_agreement: Vec<f64>`. (Keep existing fields.)
 - Add to `TuneOutcome`: `pub profile: RunProfile`, where
   `pub struct RunProfile { pub distribution: bloom_simulator::profile::WinDistribution, pub tail: bloom_simulator::profile::TailMetrics, pub rtp_convergence: Vec<bloom_simulator::profile::RtpPoint> }`.
@@ -477,6 +489,7 @@ pub struct RunProfile {                // NEW
 Add `pub profile: RunProfile,` to `TuneOutcome`.
 
 In `genetic.rs`:
+
 - Add imports: `use crate::telemetry::{population_stats, gene_agreement}; use bloom_simulator::profile::profile; use crate::outcome::RunProfile;`
 - Where the snapshot is built (after `scored.sort_by(...)`), compute stats from the scored population and gene agreement from decoded genomes:
 
@@ -536,10 +549,12 @@ git commit -m "feat(tuner): attach population telemetry per generation and end-o
 ### Task 5: `tune_json` emits enriched progress + result NDJSON
 
 **Files:**
+
 - Modify: `studio/tuner/src/bin/tune_json.rs`
 - Test: inline `#[cfg(test)]` in `tune_json.rs` (extend existing shape tests)
 
 **Interfaces:**
+
 - `progress` line gains: `population: { min, q1, median, q3, max, mean, diversity }`, `geneAgreement: [f64]`.
 - `result` line gains: `trace[i]` entries with the same `population`/`geneAgreement`, and a top-level
   `profile: { distribution: { bins: [{binLo, binHi, base, feature}], zeroCount }, tail: { maxWin, pGE100x, pLosingSpin, longestDeadStreak, bonusTriggerRate }, rtpConvergence: [{n, realizedRtp}] }`.
@@ -598,11 +613,13 @@ git commit -m "feat(tuner): emit enriched population + profile telemetry over ND
 ### Task 6: Backend wire models for enriched telemetry + `math_runs`
 
 **Files:**
+
 - Modify: `studio/backend/app/tuner/models.py` (extend `GenSnapshotWire`, `TuneResult`)
 - Create: `studio/backend/app/analytics/__init__.py`, `studio/backend/app/analytics/models.py`
 - Test: `studio/backend/tests/test_analytics_models.py`
 
 **Interfaces (pydantic, `_WireModel` base = `alias_generator=to_camel, populate_by_name=True`):**
+
 - `PopulationStatsWire(min, q1, median, q3, max, mean, diversity: float)`
 - `HistogramBinWire(bin_lo, bin_hi: float; base, feature: int)`
 - `WinDistributionWire(bins: list[HistogramBinWire]; zero_count: int)`
@@ -657,10 +674,12 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 ### Task 7: Backend tuner runner parses the enriched result
 
 **Files:**
+
 - Modify: `studio/backend/app/tuner/runner.py` (`parse_tune_result_line`, `TuneProgress`, `_drain_stdout`)
 - Test: `studio/backend/tests/test_tuner_runner_parse.py`
 
 **Interfaces:**
+
 - `TuneProgress` gains `population: PopulationStatsWire`, `gene_agreement: list[float]`.
 - `parse_tune_result_line` maps the `profile` block → `RunProfileWire` and per-trace `population`/`geneAgreement` → `GenSnapshotWire`.
 
@@ -675,10 +694,12 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 ### Task 8: `MathRunStore` (append-only) + REST
 
 **Files:**
+
 - Create: `studio/backend/app/analytics/store.py`, `studio/backend/app/analytics/rest.py`
 - Test: `studio/backend/tests/test_analytics_store.py`, `studio/backend/tests/test_analytics_rest.py`
 
 **Interfaces:**
+
 - `MathRunStore(db)` over collection `math_runs`:
   - `async append(self, run: MathRunDoc) -> MathRunDoc` — inserts (never updates); `_id` from `id`.
   - `async list_for_game(self, game_id: str, limit: int = 50) -> list[MathRunDoc]` — newest first by `created_at`.
@@ -697,11 +718,13 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 ### Task 9: `AnalyticsHub` — write a run on tune completion
 
 **Files:**
+
 - Create: `studio/backend/app/analytics/hub.py`, `studio/backend/app/analytics/sockets.py`
 - Modify: `studio/backend/app/tuner/hub.py` (hand the finished result to the analytics hub), and the app composition root (construct + register store/hub/router/sockets)
 - Test: `studio/backend/tests/test_analytics_hub.py`
 
 **Interfaces:**
+
 - `AnalyticsHub(sio, math_run_store)`:
   - `async record_run(self, game_id: str, params: TuningParams, result: TuneResult, duration_ms: int) -> MathRunDoc` — builds a `MathRunDoc` (new uuid, `created_at` from an injected clock, `profile`/`trace` copied from `result`), `append`s it, and emits `run_complete` `{gameId, run: math_run_wire(doc)}` to room `game_id`. Only records `pass`/`near_miss` (skip `error`).
   - `async attach_subscriber(self, game_id, sid)` — join room; if a latest run exists, emit it to `sid` (mirrors `TunerHub.attach_subscriber`).
@@ -719,11 +742,13 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 ### Task 10: Frontend `math-analytics` plugin scaffold + `IChart` seam + Math Profile tab
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/math-analytics/{index.ts,state.ts,actions.ts,reducers.ts,restClient.ts,config.ts}` and `.spec` siblings; `charts/IChart.ts`, `charts/UPlotChart.tsx`, `charts/Histogram.tsx`, `charts/StatTiles.tsx`; `tabs/MathProfileTab.tsx`; `MathAnalyticsPane.tsx`.
 - Modify: `studio/frontend/src/plugins/index.ts` (register), `studio/frontend/src/styles.css` (chart color tokens), `studio/frontend/package.json` (add `uplot`).
 - Test: `.spec.tsx`/`.spec.ts` for reducers, restClient, MathProfileTab, and the chart adapters.
 
 **Interfaces:**
+
 - `IMathRun` TS type mirrors `MathRunDoc` wire (camelCase).
 - `restClient.fetchRuns(gameId): Promise<IMathRun[]>`, `fetchRun(id): Promise<IMathRun>`.
 - `IChart` seam: `interface IChart { mount(el: HTMLElement, data: IChartData): void; update(data: IChartData): void; destroy(): void }` with a uPlot-backed impl for line/band series and hand-rolled SVG components (`Histogram`, `StatTiles`, gene heatmap) for bespoke marks. Keep uPlot construction behind the seam so tests target `IChart`, not uPlot.
@@ -740,6 +765,7 @@ git commit -m "feat(backend): wire models for enriched tuner telemetry and math_
 ### Task 11: e2e — Math Profile renders from a seeded run
 
 **Files:**
+
 - Create: `studio/frontend/e2e/math-analytics-profile.spec.ts`
 - Create/modify: replay fixture seeding a `math_runs` doc for the e2e game (mirror how other panes seed replay state; see [[e2e-scene-seeding-and-board-gotchas]] and `tests/fixtures`).
 
@@ -762,6 +788,7 @@ Delivers the enriched live progress relay and the **Evolution** tab (live + scru
 ### Task 12: Analytics live progress relay
 
 **Files:**
+
 - Modify: `studio/backend/app/tuner/hub.py` (also emit enriched progress on the analytics room) or add a thin relay in `AnalyticsHub`
 - Test: `studio/backend/tests/test_analytics_live.py`
 
@@ -776,11 +803,13 @@ Delivers the enriched live progress relay and the **Evolution** tab (live + scru
 ### Task 13: Evolution tab (live) — fitness landscape, homing, gene heatmap, scrubber
 
 **Files:**
+
 - Create: `studio/frontend/src/plugins/math-analytics/tabs/EvolutionTab.tsx`, `charts/FitnessLandscape.tsx` (uPlot band+line), `charts/GeneHeatmap.tsx` (SVG/CSS), `charts/Scrubber.tsx`; `socketClient.ts` (+ `.spec`).
 - Modify: `state.ts`/`reducers.ts`/`actions.ts` (append live frames; `selectedGeneration` for the scrubber).
 - Test: `.spec` for the reducer (append frame, scrub selects a generation), FitnessLandscape adapter, EvolutionTab render.
 
 **Interfaces:**
+
 - `socketClient` subscribes `join_analytics`, listens `analytics_progress` → dispatch `progressFrame`, `run_complete` → dispatch `runLoaded`.
 - Reducer keeps `frames: IGenFrame[]` and `selectedGeneration: number | 'live'`; the scrubber sets `selectedGeneration`; charts render the selected frame (or the latest when live).
 
