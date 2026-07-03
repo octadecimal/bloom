@@ -19,6 +19,17 @@ _ALIASES = {
     "left_flourish": "flourish_left", "ornament_left": "flourish_left",
     "flourish_right": "flourish_right", "flourish-right": "flourish_right",
     "right_flourish": "flourish_right", "ornament_right": "flourish_right",
+    # HUD meters: free-spins-remaining rides the left slot, bonus-win the right.
+    "meter_left": "meter_left", "left_meter": "meter_left",
+    "free_spins": "meter_left", "free_spins_meter": "meter_left",
+    "freespins": "meter_left", "spins_meter": "meter_left",
+    "spins_remaining": "meter_left",
+    "meter_right": "meter_right", "right_meter": "meter_right",
+    "bonus_win": "meter_right", "bonus_win_meter": "meter_right",
+    "win_meter": "meter_right", "bonus_meter": "meter_right",
+    # bonus multiplier counter (left of the reels).
+    "multiplier": "multiplier", "multiplier_counter": "multiplier",
+    "bonus_multiplier": "multiplier", "mult": "multiplier",
 }
 
 

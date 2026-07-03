@@ -14,6 +14,18 @@ def test_canonical_role_aliases():
     assert canonical_role("totally-unknown") is None
 
 
+def test_hud_meter_and_multiplier_aliases():
+    # the two top meters (free-spins-remaining left, bonus-win right) + the left multiplier
+    assert canonical_role("meter_left") == "meter_left"
+    assert canonical_role("free_spins") == "meter_left"
+    assert canonical_role("free_spins_meter") == "meter_left"
+    assert canonical_role("meter_right") == "meter_right"
+    assert canonical_role("bonus_win") == "meter_right"
+    assert canonical_role("bonus_win_meter") == "meter_right"
+    assert canonical_role("multiplier") == "multiplier"
+    assert canonical_role("multiplier_counter") == "multiplier"
+
+
 def test_resolve_region_places_anchor_center_in_pixels():
     reels = template_for("landscape")[REELS]            # cx=0.5, cy=0.55, w=0.62, h=0.60
     pr = resolve_region(reels, (1280, 720))
