@@ -1,15 +1,20 @@
-import { analyticsSlice, makeInitialState } from './state';
+import { analyticsSlice, makeInitialState, type IAnalyticsState } from './state';
 import { fetchRuns } from './restClient';
+import { analyticsSock } from './socketClient';
+import { scrubTo } from './reducers';
 
-/** No live socket in this slice (post-hoc, REST-only) — reserved for the Phase 2
- * live-progress relay (`analytics_progress` / `run_complete`), see
- * docs/superpowers/plans/2026-07-02-math-analytics-dashboard.md Task 12/13. */
-export function initAnalytics(): void {}
+/** Connects the lazily-created analytics socket (mirrors `initTuner`). Joining/
+ * leaving the per-game room happens in `openGameAnalytics`/`closeGameAnalytics`
+ * below, once a game is actually open. */
+export function initAnalytics(): void {
+  analyticsSock().connect();
+}
 
 export async function openGameAnalytics(gameId: string): Promise<void> {
   const s = analyticsSlice();
   s.activeGameId.set(gameId);
   s.loadStatus.set('loading');
+  analyticsSock().joinAnalytics(gameId);
   try {
     // `runsLoaded` (reducers.ts) expresses this same transition as a pure
     // function over `IAnalyticsState`, tested independently — applying it here
@@ -25,9 +30,17 @@ export async function openGameAnalytics(gameId: string): Promise<void> {
 }
 
 export function closeGameAnalytics(): void {
+  const prev = analyticsSlice().activeGameId.get();
+  if (prev) analyticsSock().leaveAnalytics(prev);
   analyticsSlice().set(makeInitialState());
 }
 
 export function selectRun(runId: string): void {
   analyticsSlice().selectedRunId.set(runId);
+}
+
+/** Pin the Evolution scrubber to a specific generation (see `reducers.ts#scrubTo`). */
+export function scrub(generation: number): void {
+  const s = analyticsSlice();
+  s.set(scrubTo(s.get() as IAnalyticsState, generation) as never);
 }

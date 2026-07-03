@@ -56,6 +56,18 @@ export interface IGenSnapshot {
   geneAgreement: number[];
 }
 
+/** One live (or replayed post-hoc) per-generation frame — the shape carried by
+ * the `analytics_progress` socket event and, post-hoc, derived from `IMathRun.trace`
+ * (see `reducers.ts#progressFrame` / `runLoaded`). Mirrors `IGenSnapshot` minus the
+ * `generation` duplication, grouping the scalar "best" trio together for the
+ * Evolution tab's charts. */
+export interface IGenFrame {
+  generation: number;
+  best: { fitness: number; rtp: number; volatility: number };
+  population: IPopulationStats;
+  geneAgreement: number[];
+}
+
 export interface IHistogramBin {
   binLo: number;
   // The open-ended top bin's binHi is `null` on the wire (Rust's f64::INFINITY
@@ -106,6 +118,13 @@ export interface IAnalyticsState {
   runs: IMathRun[];
   selectedRunId: string | null;
   loadStatus: 'idle' | 'loading' | 'error';
+  /** Per-generation Evolution frames — live-appended from `analytics_progress`
+   * while a tune runs, or replayed wholesale from `IMathRun.trace` once a run
+   * freezes (`reducers.ts#runLoaded`). Always generation-ordered. */
+  frames: IGenFrame[];
+  /** The Evolution scrubber's playhead. `'live'` tracks the newest frame as it
+   * arrives; scrubbing pins it to a specific generation (see `reducers.ts#scrubTo`). */
+  selectedGeneration: number | 'live';
 }
 
 export function makeInitialState(): IAnalyticsState {
@@ -114,6 +133,8 @@ export function makeInitialState(): IAnalyticsState {
     runs: [],
     selectedRunId: null,
     loadStatus: 'idle',
+    frames: [],
+    selectedGeneration: 'live',
   };
 }
 
@@ -129,4 +150,13 @@ export function selectedRun(state: IAnalyticsState): IMathRun | null {
     if (found) return found;
   }
   return state.runs[0] ?? null;
+}
+
+/** The frame the Evolution charts' playhead points at: the newest frame in
+ * `'live'` mode, or the frame matching a scrubbed generation (falling back to
+ * the newest frame if the exact generation isn't present). */
+export function currentFrame(state: Pick<IAnalyticsState, 'frames' | 'selectedGeneration'>): IGenFrame | null {
+  if (state.frames.length === 0) return null;
+  if (state.selectedGeneration === 'live') return state.frames[state.frames.length - 1];
+  return state.frames.find((f) => f.generation === state.selectedGeneration) ?? state.frames[state.frames.length - 1];
 }

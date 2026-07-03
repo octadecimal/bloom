@@ -12,11 +12,38 @@ function cssVar(name: string): string {
   return value || 'currentColor';
 }
 
-function toAlignedData(data: IChartData): uPlot.AlignedData {
-  return [data.x, ...data.series.map((s) => s.values)] as unknown as uPlot.AlignedData;
+/** Each `IChartBand` becomes two hidden columns appended after the plain
+ * series — hi first, then lo — matched 1:1 with the hidden `uPlot.Series`
+ * entries `toOptions` appends in the same order, and wired together by
+ * `bandSeriesIndices` below. Exported (alongside `toOptions`) so band support
+ * can be unit-tested directly: jsdom has no canvas, so a real uPlot instance
+ * can never be mounted in tests — see UPlotChart.spec.tsx. */
+export function toAlignedData(data: IChartData): uPlot.AlignedData {
+  const bandColumns = (data.bands ?? []).flatMap((b) => [b.hiValues, b.loValues]);
+  return [data.x, ...data.series.map((s) => s.values), ...bandColumns] as unknown as uPlot.AlignedData;
 }
 
-function toOptions(data: IChartData, width: number, height: number): uPlot.Options {
+/** The [hi, lo] `uPlot.Series` index pair for the Nth band, given how many
+ * plain series precede the band columns in `toAlignedData`/`toOptions`. */
+function bandSeriesIndices(seriesCount: number, bandIndex: number): [number, number] {
+  const hi = 1 + seriesCount + bandIndex * 2; // +1 for the x column at index 0
+  return [hi, hi + 1];
+}
+
+export function toOptions(data: IChartData, width: number, height: number): uPlot.Options {
+  const bandDefs = data.bands ?? [];
+  // uPlot fills a band between two *series* (not raw data) — see uPlot.Band's
+  // "top edge" / "bottom edge" contract. The hi/lo edges are real series so the
+  // fill has values to work from, but hidden (transparent stroke, no points):
+  // the band's fill IS their visual representation, drawn by uPlot's own band
+  // renderer, not a stroked line.
+  const bandSeries: uPlot.Series[] = bandDefs.flatMap((b) => [
+    { label: b.label ? `${b.label} (hi)` : undefined, stroke: 'transparent', width: 0, points: { show: false } },
+    { label: b.label ? `${b.label} (lo)` : undefined, stroke: 'transparent', width: 0, points: { show: false } },
+  ]);
+  const bands: uPlot.Band[] | undefined =
+    bandDefs.length > 0 ? bandDefs.map((b, i) => ({ series: bandSeriesIndices(data.series.length, i), fill: cssVar(b.colorVar) })) : undefined;
+
   return {
     width,
     height,
@@ -34,7 +61,9 @@ function toOptions(data: IChartData, width: number, height: number): uPlot.Optio
         dash: s.dash ? [6, 4] : undefined,
         points: { show: false },
       })),
+      ...bandSeries,
     ],
+    bands,
     legend: { show: data.series.length > 1 },
   };
 }

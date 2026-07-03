@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { analyticsHooks, selectedRun, type IAnalyticsState } from './state';
+import { analyticsHooks, selectedRun, type IAnalyticsState, type IGenFrame } from './state';
 import { MathProfileTab } from './tabs/MathProfileTab';
-import { openGameAnalytics } from './actions';
+import { EvolutionTab } from './tabs/EvolutionTab';
+import { openGameAnalytics, scrub } from './actions';
 
 type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
 
 interface ITabDef {
   id: ITabId;
   label: string;
-  // Only Math Profile is built this task; the bar is scaffolded so Phase 2/3
-  // (Evolution / Compare / Report) slot in without reshaping the shell.
+  // Math Profile (Task 10) and Evolution (Task 13) are built; the bar stays
+  // scaffolded so Phase 3 (Compare / Report) slots in without reshaping the shell.
   enabled: boolean;
 }
 
 const TABS: ITabDef[] = [
   { id: 'profile', label: 'Math Profile', enabled: true },
-  { id: 'evolution', label: 'Evolution', enabled: false },
+  { id: 'evolution', label: 'Evolution', enabled: true },
   { id: 'compare', label: 'Compare', enabled: false },
   { id: 'report', label: 'Report', enabled: false },
 ];
@@ -46,6 +47,13 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
 
   const loadStatus = s.loadStatus.get();
   const run = selectedRun(s.get() as IAnalyticsState);
+  const frames = s.frames.get() as IGenFrame[];
+  const selectedGeneration = s.selectedGeneration.get();
+  // Evolution has data whenever frames exist — which happens before any run has
+  // ever persisted (frames stream live via `analytics_progress` during a game's
+  // very first tune) as well as post-hoc (frames replayed from a frozen run's
+  // trace). Math Profile, by contrast, only ever has data once a run exists.
+  const hasEvolutionData = frames.length > 0;
 
   return (
     <div className="flex h-full flex-col bg-surface">
@@ -83,12 +91,13 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
             Loading runs…
           </div>
         )}
-        {loadStatus !== 'loading' && !run && (
+        {loadStatus !== 'loading' && !run && !hasEvolutionData && (
           <div data-testid="analytics-no-runs" className="flex h-full items-center justify-center text-text-2">
             No tune runs recorded for this game yet.
           </div>
         )}
         {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
+        {loadStatus !== 'loading' && activeTab === 'evolution' && <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />}
       </div>
     </div>
   );

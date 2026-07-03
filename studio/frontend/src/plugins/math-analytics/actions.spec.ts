@@ -9,6 +9,15 @@ vi.mock('./restClient', () => ({
   fetchRun: vi.fn(),
 }));
 
+// Avoid pulling in the real socket.io client at module load (mirrors the tuner
+// plugin's actions.spec.ts).
+const connect = vi.fn();
+const joinAnalytics = vi.fn();
+const leaveAnalytics = vi.fn();
+vi.mock('./socketClient', () => ({
+  analyticsSock: () => ({ connect, joinAnalytics, leaveAnalytics }),
+}));
+
 import { openGameAnalytics, closeGameAnalytics } from './actions';
 
 function run(id: string): IMathRun {
@@ -18,6 +27,9 @@ function run(id: string): IMathRun {
 beforeEach(() => {
   rootStore.plugins.nested(MATH_ANALYTICS_PLUGIN_ID).set(makeInitialState() as never);
   fetchRuns.mockReset();
+  connect.mockReset();
+  joinAnalytics.mockReset();
+  leaveAnalytics.mockReset();
 });
 
 describe('openGameAnalytics', () => {
@@ -39,6 +51,12 @@ describe('openGameAnalytics', () => {
     await openGameAnalytics('g1');
     expect(analyticsSlice().loadStatus.get()).toBe('error');
   });
+
+  it('joins the analytics socket room for the game', async () => {
+    fetchRuns.mockResolvedValue([]);
+    await openGameAnalytics('g1');
+    expect(joinAnalytics).toHaveBeenCalledWith('g1');
+  });
 });
 
 describe('closeGameAnalytics', () => {
@@ -49,5 +67,17 @@ describe('closeGameAnalytics', () => {
     expect(analyticsSlice().activeGameId.get()).toBeNull();
     expect(analyticsSlice().runs.get()).toEqual([]);
     expect(analyticsSlice().selectedRunId.get()).toBeNull();
+  });
+
+  it('leaves the analytics socket room for the previously-active game', async () => {
+    fetchRuns.mockResolvedValue([]);
+    await openGameAnalytics('g1');
+    closeGameAnalytics();
+    expect(leaveAnalytics).toHaveBeenCalledWith('g1');
+  });
+
+  it('does not emit leave when no game was active', () => {
+    closeGameAnalytics();
+    expect(leaveAnalytics).not.toHaveBeenCalled();
   });
 });
