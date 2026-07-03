@@ -740,9 +740,13 @@ def build_compose_scene_tool(ctx: ToolContext) -> BaseTool:
             "a whole build ('make a pirate game with a background and a logo') or a "
             "single add ('add a treasure chest bottom-right'). Do NOT use it to "
             "change something already on screen — that is adjust_element / "
-            "regenerate_element. Element positions come from the game's layout plan "
-            "(you choose each element's role/slot — background, logo, reels, spin, "
-            "flourish_left, flourish_right — not its x/y)."
+            "regenerate_element. Element positions come from the game's layout plan, "
+            "so use the CANONICAL role names (not ad-hoc ones) so each element lands "
+            "in its planned region: background, logo, reels, spin, flourish_left, "
+            "flourish_right, and the HUD roles meter_left (e.g. free-spins-remaining, "
+            "top-left), meter_right (e.g. bonus-win, top-right) and multiplier (a "
+            "counter on the left, beside the reels). You choose each element's "
+            "role/slot — not its x/y."
         ),
     )
 

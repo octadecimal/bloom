@@ -249,3 +249,15 @@ from app.agent_tools import rebuild_scene_core
 async def test_rebuild_scene_core_reports_no_critic():
     ctx = ToolContext(room_id="", game_id="g1", asset_store=None, asset_hub=None)
     assert "no critic" in (await rebuild_scene_core(ctx)).lower()
+
+
+from app.agent_tools import build_compose_scene_tool
+
+
+def test_compose_scene_advertises_canonical_hud_roles():
+    """The agent should reach for the canonical HUD roles (which have template
+    regions) rather than inventing ad-hoc role names that miss the layout plan."""
+    tool = build_compose_scene_tool(ToolContext("r1", "g1", None, None))
+    desc = tool.description.lower()
+    assert "meter_left" in desc and "meter_right" in desc
+    assert "multiplier" in desc

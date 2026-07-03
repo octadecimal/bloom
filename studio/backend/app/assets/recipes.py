@@ -44,10 +44,17 @@ _PROFILES: dict[str, Profile] = {
         positive="bold premium logo wordmark, large clean legible lettering, "
                  "glossy 3D, clean cutout on plain background, studio render",
     ),
+    # The reel frame is the paramount slot element: a HERO role (upscale) whose
+    # prompt demands a COMPLETE 5x3 frame — full enclosing border with vertical
+    # column dividers and cell structure — not a bare border with an empty middle
+    # (the failure mode that dogged earlier iterations).
     "reels": Profile(
-        steps=24, guidance=3.5, cfg=1.0, negative="", upscale=False,
-        positive="clean slot reel frame UI, crisp edges, ornate border, "
-                 "transparent center, premium",
+        steps=28, guidance=3.5, cfg=1.0, negative="", upscale=True,
+        positive="complete ornate slot machine reel frame, a full rectangular frame "
+                 "enclosing a 5 column by 3 row grid, clear vertical column dividers "
+                 "and cell borders forming 15 empty symbol cells, solid decorative "
+                 "side posts with top and bottom rails, transparent empty cells, "
+                 "sharp crisp edges, premium game UI, centered",
     ),
     "spin": Profile(
         steps=20, guidance=3.5, cfg=1.0, negative="", upscale=False,
