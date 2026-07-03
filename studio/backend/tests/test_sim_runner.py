@@ -2,8 +2,8 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from app.simulator.models import MetricsWire, CurationResult
-from app.simulator.runner import (
+from app.math.models import MetricsWire, CurationResult
+from app.math.runners.curate import (
     CurationProgress, FakeCurationRunner, SubprocessCurationRunner,
     parse_result_line,
 )

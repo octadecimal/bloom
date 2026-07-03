@@ -9,10 +9,6 @@ from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.agent_tools import ToolFactory
-from app.analytics.hub import AnalyticsHub
-from app.analytics.rest import router as analytics_router
-from app.analytics.sockets import register_analytics_handlers
-from app.analytics.store import MathRunStore
 from app.assets.comfy import build_provider as build_comfy_provider
 from app.assets.hub import AssetHub
 from app.assets.media import MediaStore
@@ -33,16 +29,12 @@ from app.scene.layout.overrides import RegionOverrideStore
 from app.scene.sockets import register_scene_handlers
 from app.scene.reels_spin import build_spin_runner
 from app.scene.store import GameSceneStore
-from app.simulator.store import SlotModelStore
-from app.simulator.hub import CurationHub
-from app.simulator.runner import build_curation_runner
-from app.simulator.sockets import register_sim_handlers
-from app.simulator.rest import router as sim_router
-from app.tuner.store import TunerStore
-from app.tuner.hub import TunerHub
-from app.tuner.runner import build_tuner_runner
-from app.tuner.sockets import register_tuner_handlers
-from app.tuner.rest import router as tuner_router
+from app.math.hub import MathHub
+from app.math.rest import router as math_router
+from app.math.runners.curate import build_curation_runner
+from app.math.runners.tune import build_tuner_runner
+from app.math.sockets import register_math_handlers
+from app.math.store import MathRunStore, MathStore
 from app.presence import PresenceRegistry
 from app.providers import build_provider, build_chat_model
 from app.rest import router
@@ -109,27 +101,25 @@ def build(settings: Settings) -> AppContext:
     gdd_hub = GddHub(sio, gdd_store)
 
     async def _on_slot_model_change(doc, source: str) -> None:
-        # Single choke point: every model/presentation write (editor PUT, tuner
-        # apply, agent tools) reaches any open Game Config pane via the game room.
+        # Single choke point: every model/presentation/locks write (editor PUT,
+        # tuner apply, template apply, agent tools) reaches any open pane.
         await sio.emit(
             "slot_model_changed",
             {"gameId": doc.game_id, "updatedAt": doc.updated_at, "source": source},
             room=doc.game_id,
         )
 
-    sim_store = SlotModelStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
-    sim_hub = CurationHub(sio, sim_store, build_curation_runner(settings), gdd_store)
-    tuner_store = TunerStore(mongo[settings.mongo_db])
+    math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
     math_run_store = MathRunStore(mongo[settings.mongo_db])
-    analytics_hub = AnalyticsHub(sio, math_run_store)
-    tuner_hub = TunerHub(sio, tuner_store, sim_store, build_tuner_runner(settings), gdd_store, analytics_hub)
+    math_hub = MathHub(sio, math_store, math_run_store,
+                       build_curation_runner(settings), build_tuner_runner(settings),
+                       gdd_store)
 
     run_store = RunStore(mongo[settings.mongo_db])
     fastapi_app.state.run_store = run_store
     tool_factory = ToolFactory(asset_store, asset_hub, gdd_store=gdd_store, gdd_hub=gdd_hub,
                                scene_store=scene_store, scene_hub=scene_hub,
-                               sim_store=sim_store, tuner_store=tuner_store,
-                               tuner_hub=tuner_hub)
+                               math_store=math_store, math_hub=math_hub)
     skill_registry = SkillRegistry(Path(settings.skills_dir), tool_factory.known_tool_names())
     skill_registry.load()
     turn_runner = TurnRunner(lambda model: build_chat_model(settings, model), tool_factory)
@@ -146,7 +136,7 @@ def build(settings: Settings) -> AppContext:
         asset_store=asset_store, asset_hub=asset_hub,
         gdd_store=gdd_store, gdd_hub=gdd_hub,
         scene_store=scene_store, scene_hub=scene_hub,
-        sim_store=sim_store, tuner_store=tuner_store, tuner_hub=tuner_hub,
+        math_store=math_store, math_hub=math_hub,
         scene_critic=scene_critic, capture_broker=capture_broker,
         asset_critic=asset_critic,
         scene_art_critic=scene_art_critic,
@@ -158,12 +148,9 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.asset_store = asset_store
     fastapi_app.state.gdd_store = gdd_store
     fastapi_app.state.skill_registry = skill_registry
-    fastapi_app.state.sim_store = sim_store
-    fastapi_app.state.sim_hub = sim_hub
-    fastapi_app.state.tuner_store = tuner_store
-    fastapi_app.state.tuner_hub = tuner_hub
+    fastapi_app.state.math_store = math_store
+    fastapi_app.state.math_hub = math_hub
     fastapi_app.state.math_run_store = math_run_store
-    fastapi_app.state.analytics_hub = analytics_hub
     fastapi_app.state.scene_store = scene_store
     fastapi_app.state.scene_hub = scene_hub
     fastapi_app.state.region_override_store = region_override_store
@@ -173,19 +160,15 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.asset_critic = asset_critic
     fastapi_app.state.scene_art_critic = scene_art_critic
     fastapi_app.include_router(assets_router)
-    fastapi_app.include_router(sim_router)
-    fastapi_app.include_router(tuner_router)
-    fastapi_app.include_router(analytics_router)
+    fastapi_app.include_router(math_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
     fastapi_app.state.capture_broker = capture_broker
     spin_runner = build_spin_runner(settings)
-    register_scene_handlers(sio, scene_hub, capture_broker, sim_store, spin_runner)
-    register_sim_handlers(sio, sim_hub)
-    register_tuner_handlers(sio, tuner_hub)
-    register_analytics_handlers(sio, analytics_hub)
+    register_scene_handlers(sio, scene_hub, capture_broker, math_store, spin_runner)
+    register_math_handlers(sio, math_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 

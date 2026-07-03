@@ -105,7 +105,7 @@ def test_repo_skills_dir_loads_background():
     from app.config import get_settings
     from app.gdd.models import GDD_TOOL_NAMES
     from app.scene.document import SCENE_TOOL_NAMES
-    from app.tuner.models import TUNER_TOOL_NAMES
+    from app.math.models import TUNER_TOOL_NAMES
 
     reg = SkillRegistry(
         Path(get_settings().skills_dir),
@@ -215,7 +215,7 @@ def test_manage_assets_skill_loads_with_asset_tools():
     from app.config import get_settings
     from app.gdd.models import GDD_TOOL_NAMES
     from app.scene.document import SCENE_TOOL_NAMES
-    from app.tuner.models import TUNER_TOOL_NAMES
+    from app.math.models import TUNER_TOOL_NAMES
 
     reg = SkillRegistry(
         Path(get_settings().skills_dir),

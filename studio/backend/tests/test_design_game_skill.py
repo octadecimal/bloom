@@ -3,7 +3,7 @@ from pathlib import Path
 from app.skills import SkillRegistry
 from app.gdd.models import GDD_TOOL_NAMES
 from app.scene.document import SCENE_TOOL_NAMES
-from app.tuner.models import TUNER_TOOL_NAMES
+from app.math.models import TUNER_TOOL_NAMES
 
 SKILLS_DIR = Path(__file__).resolve().parents[3] / "skills"
 

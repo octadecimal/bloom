@@ -11,30 +11,6 @@ from pathlib import Path
 from typing import Protocol
 from app.subprocess_guard import watch_proc_tree
 
-# A valid slots@1 model used when a game has no realized SlotModel yet, so the
-# feature is demoable before a GDD->realize/tune cycle. 3 reels x 3 rows.
-DEMO_SLOT_MODEL: dict = {
-    "symbols": [
-        {"id": 0, "role": "normal"},
-        {"id": 1, "role": "normal"},
-        {"id": 2, "role": "normal"},
-        {"id": 9, "role": "scatter"},
-    ],
-    "reels": [
-        [0, 1, 2, 0, 1, 2, 9, 0, 1, 2],
-        [0, 1, 2, 0, 1, 2, 9, 0, 1, 2],
-        [0, 1, 2, 0, 1, 2, 9, 0, 1, 2],
-    ],
-    "rows": 3,
-    "paylines": [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-    "paytable": {"entries": [
-        {"symbol": 0, "count": 3, "payout": 5},
-        {"symbol": 1, "count": 3, "payout": 3},
-        {"symbol": 2, "count": 3, "payout": 2},
-    ]},
-    "bonuses": [],
-}
-
 # Repo root = .../app/scene/reels_spin.py -> parents[4]. Verify on first run.
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 

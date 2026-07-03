@@ -11,8 +11,8 @@ import math
 import pytest
 
 from app.config import get_settings
-from app.simulator.realize import realize_slot_model
-from app.simulator.runner import CurationProgress, SubprocessCurationRunner
+from app.math.realize import realize_slot_model
+from app.math.runners.curate import CurationProgress, SubprocessCurationRunner
 
 _MATH = {"reels": 5, "rows": 3, "payline_mode": "lines", "payline_count": 5}
 _SYMBOLS = {"symbols": [

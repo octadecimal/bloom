@@ -2,7 +2,7 @@
 (needs the cargo toolchain). Deterministic + offline — no cassettes."""
 import pytest
 from app.config import get_settings
-from app.simulator.runner import SubprocessCurationRunner, CurationProgress
+from app.math.runners.curate import SubprocessCurationRunner, CurationProgress
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
