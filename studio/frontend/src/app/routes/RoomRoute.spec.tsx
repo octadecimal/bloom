@@ -15,6 +15,8 @@ const openGameSim = vi.fn();
 const closeGameSim = vi.fn();
 const openGameTuner = vi.fn();
 const closeGameTuner = vi.fn();
+const openGameConfig = vi.fn();
+const closeGameConfig = vi.fn();
 const error = vi.fn();
 vi.mock('../../plugins/llm-chat/restClient', () => ({ getRooms: () => getRooms() }));
 vi.mock('../../plugins/llm-chat/actions', () => ({ openRoom: (id: string) => openRoom(id), closeRoom: () => closeRoom() }));
@@ -38,6 +40,11 @@ vi.mock('../../plugins/tuner/actions', () => ({
   openGameTuner: (id: string) => openGameTuner(id),
   closeGameTuner: () => closeGameTuner(),
 }));
+vi.mock('../../plugins/game-config/actions', () => ({
+  openGameConfig: (id: string) => openGameConfig(id),
+  closeGameConfig: () => closeGameConfig(),
+  initGameConfig: vi.fn(),
+}));
 vi.mock('../../lib/notify', () => ({ notify: { error: (m: string) => error(m), info: vi.fn() } }));
 vi.mock('../Workbench', () => ({
   Workbench: ({ roomContext }: { roomContext?: React.ReactNode }) => <div data-testid="workbench">{roomContext}WB</div>,
@@ -60,6 +67,8 @@ beforeEach(() => {
   closeGameSim.mockReset();
   openGameTuner.mockReset();
   closeGameTuner.mockReset();
+  openGameConfig.mockReset();
+  closeGameConfig.mockReset();
   error.mockReset();
 });
 

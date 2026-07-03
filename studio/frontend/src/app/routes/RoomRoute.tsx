@@ -8,6 +8,7 @@ import { openGameDocs, closeGameDocs } from '../../plugins/gdd/actions';
 import { openGame, closeGame } from '../../plugins/game/actions';
 import { openGameSim, closeGameSim } from '../../plugins/simulator/actions';
 import { openGameTuner, closeGameTuner } from '../../plugins/tuner/actions';
+import { openGameConfig, closeGameConfig } from '../../plugins/game-config/actions';
 import { notify } from '../../lib/notify';
 import { ActiveRoomProvider } from './activeRoom';
 import { Workbench } from '../Workbench';
@@ -35,6 +36,7 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
           if (found.gameId) openGame(found.gameId);
           if (found.gameId) void openGameSim(found.gameId);
           if (found.gameId) void openGameTuner(found.gameId);
+          if (found.gameId) void openGameConfig(found.gameId);
           setState('valid');
         } else {
           setState('invalid');
@@ -55,6 +57,7 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
       closeGame();
       closeGameSim();
       closeGameTuner();
+      closeGameConfig();
     },
     [],
   );

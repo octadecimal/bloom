@@ -8,6 +8,7 @@ import { gdd } from './gdd';
 import { game } from './game';
 import { simulator } from './simulator';
 import { tuner } from './tuner';
+import { gameConfig } from './game-config';
 import { sceneGraph } from './scene-graph';
 import { propertyInspector } from './property-inspector';
 import { regionOverrides } from './region-overrides';
@@ -22,6 +23,7 @@ export const PLUGINS: IPlugin[] = [
   game,
   simulator,
   tuner,
+  gameConfig,
   sceneGraph,
   propertyInspector,
   regionOverrides,
