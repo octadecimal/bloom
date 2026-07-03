@@ -134,6 +134,18 @@ mod tests {
     }
 
     #[test]
+    fn mixed_base_and_feature_round_is_attributed_to_feature_by_total_multiplier() {
+        // total 60x, of which 40 base + 20 feature -> bin [50,100) as FEATURE
+        let pop = vec![RoundSample {
+            seed: 0, payout: 60, base_payout: 40, feature_payout: 20, feature_triggers: vec![true],
+        }];
+        let (dist, _) = profile(&pop, 1);
+        let bin = dist.bins.iter().find(|b| b.bin_lo == 50.0).unwrap();
+        assert_eq!(bin.feature, 1);
+        assert_eq!(bin.base, 0);
+    }
+
+    #[test]
     fn rtp_convergence_is_ascending_log_spaced_and_ends_at_full_mean() {
         let pop: Vec<RoundSample> = (0..10_000)
             .map(|i| RoundSample { seed: i, payout: (i % 2), base_payout: (i % 2),
