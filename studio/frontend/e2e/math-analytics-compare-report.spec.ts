@@ -152,19 +152,32 @@ test('Compare overlays two runs and Report scrolls + exports', async ({ page, re
   // Observable end-state, not a dispatched event: both overlay charts + the
   // delta table actually reflect two runs.
   //
-  // `data-series-count` is a plain React-rendered attribute on OverlayLines
-  // (charts/OverlayLines.tsx) — added because the real uPlot legend is NOT a
-  // reliable series-count signal here: `legend.show` is fixed at chart
-  // *construction* time (UPlotChart.tsx#toOptions) and does not re-evaluate on
-  // a later `setData`. Selecting runs one at a time (as above) mounts the
-  // chart at 1 series before the second selection brings it to 2, so the
-  // legend's own DOM would stay hidden even once two series are plotted.
+  // The load-bearing assertion is the REAL uPlot render, not a React-only
+  // proxy: selecting runs one at a time mounts the chart at 1 series, then a
+  // second selection must bring it to 2 — which requires `createUPlotChart`'s
+  // shape-change rebuild (UPlotChart.tsx#update) to actually fire, since
+  // uPlot fixes series count (and `legend.show`) at *construction* time and
+  // `plot.setData` alone cannot add a rendered line or a legend row. uPlot's
+  // legend renders one `.u-series` row per configured series INCLUDING the
+  // hidden x-axis series at index 0 (see uPlot's `initLegendRow`, which only
+  // skips row 0 for multi-value/non-live/mode-2 legends — none of which apply
+  // here), so N plotted data series -> N + 1 `.u-series` rows. Confirmed by
+  // reading uPlot's source (node_modules/uplot/dist/uPlot.esm.js) rather than
+  // guessing at the DOM shape. `data-series-count` is kept as a secondary,
+  // cheap-to-read signal, but is NOT the assertion that proves the fix.
   const rtpOverlay = page.getByTestId('compare-rtp-overlay');
   const volOverlay = page.getByTestId('compare-vol-overlay');
   await expect(rtpOverlay).toBeVisible();
   await expect(volOverlay).toBeVisible();
   await expect(rtpOverlay).toHaveAttribute('data-series-count', '2');
   await expect(volOverlay).toHaveAttribute('data-series-count', '2');
+
+  // Real rendered-line signal: 2 data series -> 3 `.u-series` legend rows
+  // (x-axis row + one per plotted run). This is the assertion that actually
+  // fails on the pre-fix bug (it would read 2, i.e. only the x row + the
+  // first-selected run's row, since the 2nd run's line/legend never render).
+  await expect(rtpOverlay.locator('.u-legend .u-series')).toHaveCount(3);
+  await expect(volOverlay.locator('.u-legend .u-series')).toHaveCount(3);
 
   const deltaTable = page.getByTestId('delta-table');
   await expect(deltaTable).toBeVisible();

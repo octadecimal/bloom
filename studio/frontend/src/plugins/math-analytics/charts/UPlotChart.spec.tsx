@@ -1,7 +1,33 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
-import { UPlotChart, toAlignedData, toOptions } from './UPlotChart';
+import uPlot from 'uplot';
+import { UPlotChart, createUPlotChart, toAlignedData, toOptions } from './UPlotChart';
 import type { IChart, IChartData } from './IChart';
+
+// `createUPlotChart` (the real `IChart` adapter, as opposed to the fake used
+// below) is exercised directly against a mocked `uplot` constructor — jsdom
+// has no canvas, so a *real* uPlot instance can never be mounted (see the
+// module comment on `toAlignedData`), but the shape-change rebuild logic
+// (Compare-tab bug fix) lives entirely in `createUPlotChart`'s `update`, so it
+// needs to observe real construct/destroy calls, not a black-box `IChart`
+// fake that has no internal uPlot of its own.
+vi.mock('uplot', () => {
+  class FakeUPlot {
+    static instances: FakeUPlot[] = [];
+    destroy = vi.fn();
+    setData = vi.fn();
+    constructor(
+      public opts: unknown,
+      public data: unknown,
+      public el: unknown,
+    ) {
+      FakeUPlot.instances.push(this);
+    }
+  }
+  return { default: FakeUPlot };
+});
+
+type FakeUPlotCtor = { instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn> }[] };
 
 // Tests target the `IChart` seam via an injected fake factory — never the real
 // uPlot instance (canvas isn't available in jsdom, and the point of the seam is
@@ -46,6 +72,91 @@ describe('UPlotChart', () => {
     const { chart } = fakeChart();
     const { container } = render(<UPlotChart data={DATA} factory={() => chart} className="h-40" />);
     expect(container.querySelector('.h-40')).toBeTruthy();
+  });
+});
+
+// Regression coverage for the Compare-tab overlay bug: uPlot fixes its series
+// (and derived options like `legend.show`) at *construction* time, so
+// `plot.setData` can silently drop or misalign columns when the caller's
+// series/band count changes after mount (`OverlayLines` mounts one chart,
+// then selecting a 2nd/3rd Compare run only added a data column — no 2nd
+// line, no legend). `createUPlotChart#update` must detect that shape change
+// and destroy+rebuild instead.
+describe('createUPlotChart (shape-change rebuild)', () => {
+  beforeEach(() => {
+    (uPlot as unknown as FakeUPlotCtor).instances = [];
+  });
+
+  it('destroys and reconstructs the uPlot instance when the series count changes', () => {
+    const chart = createUPlotChart();
+    const el = document.createElement('div');
+    chart.mount(el, DATA); // 1 series
+
+    const ctor = uPlot as unknown as FakeUPlotCtor;
+    expect(ctor.instances).toHaveLength(1);
+    const first = ctor.instances[0];
+
+    const twoSeries: IChartData = {
+      ...DATA,
+      series: [...DATA.series, { label: 'Run 2', values: [0.4, 0.5, 0.6], colorVar: '--chart-series-2' }],
+    };
+    chart.update(twoSeries);
+
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+    expect(ctor.instances).toHaveLength(2); // a fresh instance was constructed
+    expect(ctor.instances[1].setData).not.toHaveBeenCalled(); // built directly from data, not fed via setData
+  });
+
+  it('destroys and reconstructs when a band is added even with the same series count', () => {
+    const chart = createUPlotChart();
+    const el = document.createElement('div');
+    chart.mount(el, DATA); // 1 series, 0 bands
+
+    const ctor = uPlot as unknown as FakeUPlotCtor;
+    const first = ctor.instances[0];
+
+    const withBand: IChartData = {
+      ...DATA,
+      bands: [{ loValues: [0, 0, 0], hiValues: [1, 1, 1], colorVar: '--chart-population-band' }],
+    };
+    chart.update(withBand);
+
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+    expect(ctor.instances).toHaveLength(2);
+  });
+
+  it('does NOT recreate the instance when the series count is unchanged, only values differ', () => {
+    const chart = createUPlotChart();
+    const el = document.createElement('div');
+    chart.mount(el, DATA);
+
+    const ctor = uPlot as unknown as FakeUPlotCtor;
+    const first = ctor.instances[0];
+
+    const sameShapeNewValues: IChartData = { ...DATA, series: [{ ...DATA.series[0], values: [0.9, 0.8, 0.7] }] };
+    chart.update(sameShapeNewValues);
+
+    expect(first.destroy).not.toHaveBeenCalled();
+    expect(ctor.instances).toHaveLength(1); // no rebuild
+    expect(first.setData).toHaveBeenCalledTimes(1); // fast path
+  });
+
+  it('shrinking the series count (deselecting runs) also triggers a rebuild, not a mismatched setData', () => {
+    const chart = createUPlotChart();
+    const el = document.createElement('div');
+    const twoSeries: IChartData = {
+      ...DATA,
+      series: [...DATA.series, { label: 'Run 2', values: [0.4, 0.5, 0.6], colorVar: '--chart-series-2' }],
+    };
+    chart.mount(el, twoSeries);
+
+    const ctor = uPlot as unknown as FakeUPlotCtor;
+    const first = ctor.instances[0];
+
+    chart.update(DATA); // back down to 1 series
+
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+    expect(ctor.instances).toHaveLength(2);
   });
 });
 

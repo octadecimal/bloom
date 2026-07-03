@@ -68,21 +68,50 @@ export function toOptions(data: IChartData, width: number, height: number): uPlo
   };
 }
 
+/** uPlot's series (and derived options like `legend.show`) are fixed at
+ * construction time — `plot.setData` can only change data *values*, never add
+ * or remove series/bands. A "shape" is the (series count, band count) pair
+ * that determines how many `uPlot.Series` entries `toOptions` declares; when
+ * it changes, `setData` would either silently drop the extra series (fewer
+ * columns than configured) or throw (uPlot indexes `data[i]` for every
+ * configured series, and a missing column is `undefined`). */
+function shapeOf(data: IChartData): string {
+  return `${data.series.length}:${data.bands?.length ?? 0}`;
+}
+
 /** The uPlot-backed `IChart` implementation. Construction stays behind this factory
  * so components (and their tests) depend only on `IChart`. */
 export function createUPlotChart(width = 600, height = 220): IChart {
   let plot: uPlot | null = null;
+  let mountEl: HTMLElement | null = null;
+  let shape = '';
+
+  function build(el: HTMLElement, data: IChartData) {
+    plot = new uPlot(toOptions(data, el.clientWidth || width, height), toAlignedData(data), el);
+    shape = shapeOf(data);
+  }
+
   return {
     mount(el, data) {
-      plot = new uPlot(toOptions(data, el.clientWidth || width, height), toAlignedData(data), el);
+      mountEl = el;
+      build(el, data);
     },
     update(data) {
-      if (!plot) return;
+      if (!plot || !mountEl) return;
+      if (shapeOf(data) !== shape) {
+        // Series/band count changed since construction — rebuild the uPlot
+        // instance from scratch (new options + data) rather than feeding
+        // `setData` a mismatched column count.
+        plot.destroy();
+        build(mountEl, data);
+        return;
+      }
       plot.setData(toAlignedData(data));
     },
     destroy() {
       plot?.destroy();
       plot = null;
+      mountEl = null;
     },
   };
 }
