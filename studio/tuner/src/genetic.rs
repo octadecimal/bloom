@@ -6,11 +6,13 @@
 use crate::config::TunerConfig;
 use crate::fitness::{band_misses, fitness};
 use crate::genome::{decode, encode, repair, Genome};
-use crate::outcome::{GenSnapshot, TuneOutcome, TuningTrace, Verdict};
+use crate::outcome::{GenSnapshot, RunProfile, TuneOutcome, TuningTrace, Verdict};
+use crate::telemetry::{gene_agreement, population_stats};
 use crate::Tuner;
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_math::rng::SplitMix64;
 use bloom_simulator::measure::{measure, simulate};
+use bloom_simulator::profile::profile;
 use bloom_simulator::run::verify;
 use bloom_simulator::seedgen::generate_seeds;
 use bloom_simulator::target::TargetSpec;
@@ -158,12 +160,60 @@ pub fn tune_with_progress(
 
         let best_model = decode(&scored[0].0, seed_model);
         let bm = measure(&simulate(&best_model, &seeds));
+
+        let fitnesses: Vec<f64> = scored.iter().map(|(_, f)| *f).collect();
+        let decoded: Vec<SlotModel> = scored.iter().map(|(gn, _)| decode(gn, seed_model)).collect();
+        // one column per tunable gene dimension: mean payout, and (if present) the first
+        // bonus's spins / multiplier / min_count. Guarded for models without bonuses.
+        let col_payout: Vec<f64> = decoded
+            .iter()
+            .map(|m| {
+                m.paytable.entries.iter().map(|e| e.payout as f64).sum::<f64>()
+                    / m.paytable.entries.len().max(1) as f64
+            })
+            .collect();
+        let mut cols = vec![col_payout];
+        if decoded.iter().all(|m| !m.bonuses.is_empty()) {
+            cols.push(
+                decoded
+                    .iter()
+                    .map(|m| match &m.bonuses[0] {
+                        bloom_math::mechanics::slots::BonusFeature::FreeSpins { config, .. } => {
+                            config.spins_awarded as f64
+                        }
+                    })
+                    .collect(),
+            );
+            cols.push(
+                decoded
+                    .iter()
+                    .map(|m| match &m.bonuses[0] {
+                        bloom_math::mechanics::slots::BonusFeature::FreeSpins { config, .. } => {
+                            config.multiplier as f64
+                        }
+                    })
+                    .collect(),
+            );
+            cols.push(
+                decoded
+                    .iter()
+                    .map(|m| match &m.bonuses[0] {
+                        bloom_math::mechanics::slots::BonusFeature::FreeSpins { trigger, .. } => {
+                            trigger.min_count as f64
+                        }
+                    })
+                    .collect(),
+            );
+        }
+
         let snap = GenSnapshot {
             generation: g,
             best_fitness: scored[0].1,
             best_rtp: bm.rtp,
             best_volatility: bm.volatility,
             best_bonus_hit_rates: bm.bonus_hit_rates.clone(),
+            population: population_stats(&fitnesses),
+            gene_agreement: gene_agreement(&cols),
         };
         on_progress(&snap);
         snapshots.push(snap);
@@ -207,13 +257,16 @@ pub fn tune_with_progress(
     let (best_genome, _) = best.expect("at least one generation always runs");
     let model = decode(&best_genome, seed_model);
     let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
-    let metrics = measure(&simulate(&model, &final_seeds));
+    let final_samples = simulate(&model, &final_seeds);
+    let metrics = measure(&final_samples);
     let verdict = match verify(&metrics, target) {
         Ok(()) => Verdict::Pass,
         Err(_) => Verdict::NearMiss {
             missed: band_misses(&metrics, target),
         },
     };
+    let (distribution, tail) = profile(&final_samples, 1);
+    let rtp_convergence = bloom_simulator::profile::rtp_convergence(&final_samples, 24);
 
     TuneOutcome {
         model,
@@ -226,6 +279,11 @@ pub fn tune_with_progress(
             population: cfg.population,
             search_candidate_count: cfg.search_candidate_count,
             final_candidate_count: cfg.final_candidate_count,
+        },
+        profile: RunProfile {
+            distribution,
+            tail,
+            rtp_convergence,
         },
     }
 }
@@ -388,5 +446,27 @@ mod tests {
         // One callback per generation, in order 0..generations_run.
         assert_eq!(gens.len(), out.trace.generations_run);
         assert_eq!(gens, (0..out.trace.generations_run).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn snapshots_carry_population_stats_and_profile_is_present() {
+        let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        // every generation snapshot has population stats + one agreement value per gene dim
+        assert!(out.trace.snapshots.iter().all(|s| s.population.max >= s.population.min));
+        assert!(out.trace.snapshots.iter().all(|s| !s.gene_agreement.is_empty()));
+        // end-of-tune profile exists and its histogram covers the fixed bins
+        assert_eq!(out.profile.distribution.bins.len(),
+                   bloom_simulator::profile::log_bins().len() - 1);
+        assert!(out.profile.tail.p_losing_spin >= 0.0 && out.profile.tail.p_losing_spin <= 1.0);
+        assert!(out.profile.rtp_convergence.last().is_some());
+    }
+
+    #[test]
+    fn telemetry_does_not_change_the_deterministic_result() {
+        let a = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        let b = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        assert_eq!(a.model, b.model);
+        assert_eq!(a.metrics.rtp, b.metrics.rtp);
+        assert_eq!(a.profile.tail.max_win, b.profile.tail.max_win);
     }
 }

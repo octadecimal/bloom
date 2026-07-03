@@ -212,8 +212,10 @@ fn main() {
 mod tests {
     use super::*;
     use bloom_math::mechanics::slots::{Paytable, SlotModel};
+    use bloom_simulator::profile::WinDistribution;
     use bloom_simulator::target::Metrics;
-    use bloom_tuner::outcome::{BandMiss, GenSnapshot, TuningTrace};
+    use bloom_tuner::outcome::{BandMiss, GenSnapshot, RunProfile, TuningTrace};
+    use bloom_tuner::telemetry::population_stats;
 
     fn outcome(verdict: Verdict) -> TuneOutcome {
         TuneOutcome {
@@ -243,10 +245,26 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
+                    population: population_stats(&[-0.5]),
+                    gene_agreement: vec![1.0],
                 }],
                 population: 8,
                 search_candidate_count: 1000,
                 final_candidate_count: 1000,
+            },
+            profile: RunProfile {
+                distribution: WinDistribution {
+                    bins: vec![],
+                    zero_count: 0,
+                },
+                tail: bloom_simulator::profile::TailMetrics {
+                    max_win: 0.0,
+                    p_ge_100x: 0.0,
+                    p_losing_spin: 0.0,
+                    longest_dead_streak: 0,
+                    bonus_trigger_rate: 0.0,
+                },
+                rtp_convergence: vec![],
             },
         }
     }
@@ -259,6 +277,8 @@ mod tests {
             best_rtp: 0.85,
             best_volatility: 2.1,
             best_bonus_hit_rates: vec![],
+            population: population_stats(&[-0.25]),
+            gene_agreement: vec![1.0],
         };
         let v: serde_json::Value = serde_json::from_str(&progress_line(&snap, 40)).unwrap();
         assert_eq!(v["type"], "progress");

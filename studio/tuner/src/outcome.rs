@@ -1,6 +1,7 @@
 //! What a tuning run returns: the tuned model, its full-fidelity metrics, a
 //! PASS/near-miss verdict, and the search trace (for the audit report).
 
+use crate::telemetry::PopulationStats;
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::Metrics;
 
@@ -26,6 +27,17 @@ pub struct GenSnapshot {
     pub best_rtp: f64,
     pub best_volatility: f64,
     pub best_bonus_hit_rates: Vec<f64>,
+    pub population: PopulationStats,
+    pub gene_agreement: Vec<f64>,
+}
+
+/// End-of-tune math profile over the final full-fidelity sample population —
+/// the same samples used to measure the returned metrics.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RunProfile {
+    pub distribution: bloom_simulator::profile::WinDistribution,
+    pub tail: bloom_simulator::profile::TailMetrics,
+    pub rtp_convergence: Vec<bloom_simulator::profile::RtpPoint>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,4 +56,5 @@ pub struct TuneOutcome {
     pub metrics: Metrics,
     pub verdict: Verdict,
     pub trace: TuningTrace,
+    pub profile: RunProfile,
 }
