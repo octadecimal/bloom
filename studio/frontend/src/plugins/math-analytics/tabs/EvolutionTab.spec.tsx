@@ -2,12 +2,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { EvolutionTab } from './EvolutionTab';
 import type { IGenFrame } from '../state';
+import type { IChartData } from '../charts/IChart';
 
 // Composition test, not a chart-rendering test — real uPlot needs a canvas 2D
 // context jsdom doesn't provide (mirrors MathProfileTab.spec.tsx). GeneHeatmap
-// and Scrubber are hand-rolled SVG/CSS/inputs and need no stub.
+// and Scrubber are hand-rolled SVG/CSS/inputs and need no stub. The stub
+// surfaces each chart's series labels so tests can assert what the homing
+// charts feed the seam without a real uPlot instance.
 vi.mock('../charts/UPlotChart', () => ({
-  UPlotChart: ({ className }: { className?: string }) => <div data-testid="uplot-chart-stub" className={className} />,
+  UPlotChart: ({ className, data }: { className?: string; data: IChartData }) => (
+    <div data-testid="uplot-chart-stub" className={className} data-series-labels={data.series.map((s) => s.label).join('|')} />
+  ),
 }));
 
 function frame(generation: number): IGenFrame {
@@ -35,6 +40,20 @@ describe('EvolutionTab', () => {
     render(<EvolutionTab frames={FRAMES} selectedGeneration="live" onScrub={vi.fn()} />);
     const root = screen.getByTestId('evolution-tab');
     expect(root.className).toContain('bloom-tab-fill');
+  });
+
+  it('draws only the real best-value convergence line on each homing chart (no tautological reference line)', () => {
+    render(<EvolutionTab frames={FRAMES} selectedGeneration="live" onScrub={vi.fn()} />);
+    for (const [testId, label] of [
+      ['rtp-homing', 'Best RTP'],
+      ['vol-homing', 'Best volatility'],
+    ] as const) {
+      const stub = screen.getByTestId(testId).querySelector('[data-testid="uplot-chart-stub"]');
+      const labels = stub?.getAttribute('data-series-labels');
+      // Exactly one series — the real best line — and nothing implying a target.
+      expect(labels).toBe(label);
+      expect(labels).not.toMatch(/latest|target/i);
+    }
   });
 
   it('the gene heatmap has one row per gene dimension', () => {

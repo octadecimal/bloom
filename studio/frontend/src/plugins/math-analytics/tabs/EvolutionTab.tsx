@@ -41,19 +41,17 @@ export function EvolutionTab({ frames, selectedGeneration, onScrub }: IEvolution
   );
 }
 
-/** Best-RTP curving toward its target. The wire (`analytics_progress` /
- * `IGenSnapshot`) carries no target-band bounds — only the best-of-generation
- * scalar — so, mirroring MathProfileTab's RtpConvergenceChart (same
- * constraint, same precedent), the current run's own latest measured RTP is
- * drawn as a dashed reference line rather than a fabricated band. */
+/** Best-of-generation RTP as the search homes in over generations — the real,
+ * informative signal. The `analytics_progress` wire carries no target-band
+ * bounds (only the best-of-generation scalar), so there is intentionally NO
+ * reference line here: drawing one at the run's own latest value would be
+ * tautological (the best line always terminates on it) and would falsely imply
+ * convergence-to-a-target. Rendering a genuine target band is a tracked
+ * fast-follow, gated on the wire growing target bounds. */
 function RtpHoming({ frames }: { frames: IGenFrame[] }) {
-  const latest = frames[frames.length - 1]?.best.rtp ?? 0;
   const data: IChartData = {
     x: frames.map((f) => f.generation),
-    series: [
-      { label: 'Best RTP', values: frames.map((f) => f.best.rtp), colorVar: '--chart-series-1' },
-      { label: 'Latest RTP', values: frames.map(() => latest), colorVar: '--chart-target-band', dash: true },
-    ],
+    series: [{ label: 'Best RTP', values: frames.map((f) => f.best.rtp), colorVar: '--chart-series-1' }],
     xLabel: 'Generation',
     yLabel: 'RTP',
   };
@@ -65,16 +63,12 @@ function RtpHoming({ frames }: { frames: IGenFrame[] }) {
   );
 }
 
-/** Best-volatility curving toward its target — same shape and constraint as
- * RtpHoming above. */
+/** Best-of-generation volatility as the search homes in — same real signal and
+ * same no-fabricated-target constraint as RtpHoming above. */
 function VolHoming({ frames }: { frames: IGenFrame[] }) {
-  const latest = frames[frames.length - 1]?.best.volatility ?? 0;
   const data: IChartData = {
     x: frames.map((f) => f.generation),
-    series: [
-      { label: 'Best volatility', values: frames.map((f) => f.best.volatility), colorVar: '--chart-series-1' },
-      { label: 'Latest volatility', values: frames.map(() => latest), colorVar: '--chart-target-band', dash: true },
-    ],
+    series: [{ label: 'Best volatility', values: frames.map((f) => f.best.volatility), colorVar: '--chart-series-1' }],
     xLabel: 'Generation',
     yLabel: 'Volatility',
   };
