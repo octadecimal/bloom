@@ -5,7 +5,7 @@
 
 use crate::config::TunerConfig;
 use crate::fitness::{band_misses, fitness};
-use crate::genome::{decode, encode, repair, Genome};
+use crate::genome::{decode, encode_with_locks, repair, Genome};
 use crate::outcome::{GenSnapshot, RunProfile, TuneOutcome, TuningTrace, Verdict};
 use crate::telemetry::{gene_agreement, population_stats};
 use crate::Tuner;
@@ -123,7 +123,7 @@ pub fn tune_with_progress(
     on_progress: &mut dyn FnMut(&GenSnapshot),
 ) -> TuneOutcome {
     let mut rng = SplitMix64::new(cfg.master_seed);
-    let base = encode(seed_model);
+    let base = encode_with_locks(seed_model, &cfg.locks);
 
     // Initial population: the seed model + mutated variants.
     let mut pop: Vec<Genome> = (0..cfg.population)
@@ -486,5 +486,62 @@ mod tests {
         assert_eq!(a.model, b.model);
         assert_eq!(a.metrics.rtp, b.metrics.rtp);
         assert_eq!(a.profile.tail.max_win, b.profile.tail.max_win);
+    }
+
+    fn cfg_locked(master_seed: u64, locks: SectionLocks) -> TunerConfig {
+        TunerConfig {
+            locks,
+            ..cfg(master_seed)
+        }
+    }
+
+    #[test]
+    fn locked_reels_stay_byte_identical_across_a_full_tune() {
+        // toy(1) is detuned (RTP ~0.5); payouts alone can reach 0.9 exactly
+        // (sym2 pays 5 with the seed composition), so a reels-locked run must
+        // still pass — with the reels untouched.
+        let seed = toy(1);
+        let c = cfg_locked(
+            7,
+            SectionLocks {
+                reels: true,
+                ..Default::default()
+            },
+        );
+        let out = GeneticTuner.tune(&seed, &target_09(), &c);
+        assert_eq!(out.model.reels, seed.reels);
+        assert!(
+            matches!(out.verdict, Verdict::Pass),
+            "verdict was {:?}",
+            out.verdict
+        );
+    }
+
+    #[test]
+    fn locked_paytable_stays_byte_identical_across_a_full_tune() {
+        let seed = toy(1);
+        let c = cfg_locked(
+            7,
+            SectionLocks {
+                paytable: true,
+                ..Default::default()
+            },
+        );
+        let out = GeneticTuner.tune(&seed, &target_09(), &c);
+        assert_eq!(out.model.paytable, seed.paytable);
+    }
+
+    #[test]
+    fn locked_run_is_deterministic_per_lock_set() {
+        let seed = toy(1);
+        let locks = SectionLocks {
+            reels: true,
+            ..Default::default()
+        };
+        let a = GeneticTuner.tune(&seed, &target_09(), &cfg_locked(2026, locks.clone()));
+        let b = GeneticTuner.tune(&seed, &target_09(), &cfg_locked(2026, locks));
+        assert_eq!(a.model, b.model);
+        assert_eq!(a.metrics.rtp, b.metrics.rtp);
+        assert_eq!(a.trace.generations_run, b.trace.generations_run);
     }
 }
