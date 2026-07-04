@@ -28,6 +28,9 @@ export interface IChartData {
   yLabel?: string;
   /** Log-scale the x-axis (win-distribution / RTP-convergence sample-size axes). */
   logX?: boolean;
+  /** Draw a dashed vertical playhead at this data-space x value (the Evolution
+   * scrubber's generation). Rendered by the adapter inside the plot area. */
+  playheadX?: number;
 }
 
 export interface IChart {

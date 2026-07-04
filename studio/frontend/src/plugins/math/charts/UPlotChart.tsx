@@ -30,7 +30,7 @@ function bandSeriesIndices(seriesCount: number, bandIndex: number): [number, num
   return [hi, hi + 1];
 }
 
-export function toOptions(data: IChartData, width: number, height: number): uPlot.Options {
+export function toOptions(data: IChartData, width: number, height: number, playheadX?: () => number | undefined): uPlot.Options {
   const bandDefs = data.bands ?? [];
   // uPlot fills a band between two *series* (not raw data) — see uPlot.Band's
   // "top edge" / "bottom edge" contract. The hi/lo edges are real series so the
@@ -65,6 +65,26 @@ export function toOptions(data: IChartData, width: number, height: number): uPlo
     ],
     bands,
     legend: { show: data.series.length > 1 },
+    hooks: playheadX
+      ? {
+          draw: [
+            (u: uPlot) => {
+              const xVal = playheadX();
+              if (xVal == null) return;
+              const x = u.valToPos(xVal, 'x', true);
+              const { ctx, bbox } = u;
+              ctx.save();
+              ctx.strokeStyle = cssVar('--chart-playhead');
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath();
+              ctx.moveTo(x, bbox.top);
+              ctx.lineTo(x, bbox.top + bbox.height);
+              ctx.stroke();
+              ctx.restore();
+            },
+          ],
+        }
+      : undefined,
   };
 }
 
@@ -88,14 +108,16 @@ export function createUPlotChart(): IChart {
   let mountEl: HTMLElement | null = null;
   let shape = '';
   let ro: ResizeObserver | null = null;
+  let current: IChartData | null = null;
 
   function sizeOf(el: HTMLElement): { width: number; height: number } {
     return { width: el.clientWidth || 600, height: el.clientHeight || 220 };
   }
 
   function build(el: HTMLElement, data: IChartData) {
+    current = data;
     const { width, height } = sizeOf(el);
-    plot = new uPlot(toOptions(data, width, height), toAlignedData(data), el);
+    plot = new uPlot(toOptions(data, width, height, () => current?.playheadX), toAlignedData(data), el);
     shape = shapeOf(data);
   }
 
@@ -114,6 +136,7 @@ export function createUPlotChart(): IChart {
     },
     update(data) {
       if (!plot || !mountEl) return;
+      current = data;
       if (shapeOf(data) !== shape) {
         // Series/band count changed since construction — rebuild the uPlot
         // instance from scratch (new options + data) rather than feeding
@@ -130,6 +153,7 @@ export function createUPlotChart(): IChart {
       plot?.destroy();
       plot = null;
       mountEl = null;
+      current = null;
     },
   };
 }

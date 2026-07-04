@@ -34,35 +34,27 @@ export function buildFitnessLandscapeData(frames: IGenFrame[]): IChartData {
   };
 }
 
-/** Playhead position as a percentage along the generation timeline: the right
- * edge while `'live'`, or the scrubbed generation's index otherwise. */
-export function playheadPercent(frames: IGenFrame[], selectedGeneration: number | 'live'): number {
-  if (frames.length <= 1) return 0;
-  if (selectedGeneration === 'live') return 100;
-  const idx = frames.findIndex((f) => f.generation === selectedGeneration);
-  if (idx < 0) return 100;
-  return (idx / (frames.length - 1)) * 100;
+/** The generation the playhead marks: the scrubbed generation when it exists,
+ * otherwise the newest recorded one (live mode, or a stale scrub position
+ * after frames reset). Undefined with no frames. */
+export function playheadGeneration(frames: IGenFrame[], selectedGeneration: number | 'live'): number | undefined {
+  if (frames.length === 0) return undefined;
+  if (selectedGeneration !== 'live' && frames.some((f) => f.generation === selectedGeneration)) return selectedGeneration;
+  return frames[frames.length - 1].generation;
 }
 
 /** Hero chart of the Evolution tab — see docs/superpowers/specs/2026-07-02-math-analytics-dashboard-design.md
  * Tab 1 §1. The line + bands render through the `IChart`/`UPlotChart` seam; the
- * playhead is a plain positioned overlay (percentage along the timeline), kept
- * out of uPlot entirely rather than teaching the seam about cursor state. */
+ * playhead rides inside the chart as `IChartData.playheadX` (drawn by the
+ * adapter at the true data-space position — an overlay div can't know uPlot's
+ * axis gutter; see docs/superpowers/specs/2026-07-04-math-evolution-visual-polish-design.md §2). */
 export function FitnessLandscape({ frames, selectedGeneration }: IFitnessLandscapeProps) {
-  const data = buildFitnessLandscapeData(frames);
-  const left = playheadPercent(frames, selectedGeneration);
+  const data: IChartData = { ...buildFitnessLandscapeData(frames), playheadX: playheadGeneration(frames, selectedGeneration) };
 
   return (
     <div data-testid="fitness-landscape" className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2">
       <span className="flex-none px-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-2">Fitness landscape</span>
-      <div className="relative min-h-0 flex-1">
-        <UPlotChart data={data} className="h-full w-full" />
-        <div
-          data-testid="fitness-landscape-playhead"
-          className="pointer-events-none absolute inset-y-0 border-l border-dashed"
-          style={{ left: `${left}%`, borderColor: 'var(--chart-playhead)' }}
-        />
-      </div>
+      <UPlotChart data={data} className="min-h-0 flex-1" />
     </div>
   );
 }
