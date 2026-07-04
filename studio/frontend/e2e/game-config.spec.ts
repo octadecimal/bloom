@@ -181,3 +181,47 @@ test('a fresh game is born with the default template (never empty)', async ({ pa
   expect(doc.model.reels).toHaveLength(5);
   expect(doc.model.paytable.entries.length).toBeGreaterThan(0);
 });
+
+test('padlock toggle persists via PUT and survives a reload', async ({ page, request }) => {
+  const roomName = `gc ${Date.now()}`;
+  const gameId = await setupGame(page, request, 'ivy', roomName);
+  await openGameConfig(page);
+  await page.getByTestId('gc-tab-paytable').click();
+  await page.getByTestId('gc-lock-paytable').click();
+  await expect(page.getByTestId('gc-sync-pill')).toContainText('saved', { timeout: 5_000 });
+
+  // persisted end-state via GET (repo testing rule)
+  const resp = await request.get(`${BACKEND}/games/${gameId}/slot-model`);
+  expect(resp.ok()).toBeTruthy();
+  const doc = (await resp.json()) as { locks?: { reels: boolean; paytable: boolean; bonus: boolean } };
+  expect(doc.locks).toEqual({ reels: false, paytable: true, bonus: false });
+
+  // survives reload: the URL persists the room (see assets.spec.ts / skill-run.spec.ts
+  // reload patterns), so a reload lands directly back in the room, not the room picker.
+  await page.reload();
+  await expect(page.getByTestId('chat-room-pane')).toBeVisible();
+  await openGameConfig(page);
+  await expect(page.getByTestId('gc-tab-lock-paytable')).toBeVisible();
+  await page.getByTestId('gc-tab-paytable').click();
+  await expect(page.getByTestId('gc-lock-paytable')).toContainText('Locked');
+});
+
+test('apply template overwrites unlocked sections and keeps locked ones', async ({ page, request }) => {
+  const gameId = await setupGame(page, request, 'jon', `gc ${Date.now()}`);
+  await openGameConfig(page);
+  await page.getByTestId('gc-tab-paytable').click();
+  await page.getByTestId('gc-lock-paytable').click();
+  await expect(page.getByTestId('gc-sync-pill')).toContainText('saved', { timeout: 5_000 });
+
+  await page.getByTestId('gc-apply-template').click();
+  await page.getByTestId('gc-template-select').selectOption('video-5x3');
+  await expect(page.getByTestId('gc-template-protected')).toContainText('paytable');
+  await page.getByTestId('gc-template-confirm').click();
+
+  // template landed and the pane reconciled: video-5x3 is 5 reels x 3 rows
+  await expect(page.getByTestId('gc-stat-window')).toHaveText('3 × 5', { timeout: 5_000 });
+
+  const doc = await getModelDoc(request, gameId);
+  expect(doc.model.reels).toHaveLength(5); // overwritten by the template
+  expect(doc.model.paytable.entries).toEqual(MODEL.paytable.entries); // lock-protected
+});
