@@ -152,6 +152,9 @@ class TuneResult(_WireModel):
     trace: list[GenSnapshotWire] = Field(default_factory=list)
     profile: RunProfileWire | None = None
     failure: str | None = None
+    # Why the GA loop ended: "feasible" | "stagnated" | "budget" (None on
+    # cassettes/results that predate it).
+    stop_reason: str | None = None
     ran_at: str
 
 
@@ -205,6 +208,7 @@ class MathRunDoc(_WireModel):
     profile: RunProfileWire | None = None
     verify: CurationResult | None = None  # NEW: independent curate pass on the winner
     locks: SectionLocks | None = None  # SP3: lock set the run was tuned with
+    stop_reason: str | None = None  # why the GA ended: feasible/stagnated/budget
     created_at: str
     duration_ms: int | None = None
 

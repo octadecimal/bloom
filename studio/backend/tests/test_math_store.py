@@ -63,6 +63,44 @@ async def test_save_tune_result_persists_without_broadcast(mongo_db):
 
 
 @pytest.mark.asyncio
+async def test_get_or_seed_never_duplicates_under_concurrency(mongo_db):
+    # The live DB grew twin docs (created 1ms apart) from the old
+    # check-then-insert race; the unique index must make that impossible.
+    import asyncio
+    store = MathStore(mongo_db)
+    docs = await asyncio.gather(*[store.get_or_seed("g-race") for _ in range(8)])
+    assert len({d.id for d in docs}) == 1
+    n = await mongo_db["slot_models"].count_documents({"game_id": "g-race"})
+    assert n == 1
+
+
+def _raw_doc(_id: str, game_id: str) -> dict:
+    return {
+        "_id": _id, "game_id": game_id, "model": {"reels": [[0]]},
+        "params": default_params().model_dump(mode="json"),
+        "tuner_params": default_tuning_params().model_dump(mode="json"),
+        "locks": SectionLocks().model_dump(mode="json"),
+        "presentation": {}, "result": None, "tune_result": None,
+        "created_at": "t0", "updated_at": "t0",
+    }
+
+
+@pytest.mark.asyncio
+async def test_existing_duplicate_docs_are_healed_keeping_the_first(mongo_db):
+    # Pre-existing race twins: the natural-first doc is the one every read and
+    # update_one has always hit, so healing must keep IT and drop the twin.
+    # Model the pre-fix DB: no unique index yet (it survives across tests).
+    await mongo_db["slot_models"].drop_indexes()
+    await mongo_db["slot_models"].insert_one(_raw_doc("first", "g-dupe"))
+    await mongo_db["slot_models"].insert_one(_raw_doc("twin", "g-dupe"))
+    store = MathStore(mongo_db)
+    doc = await store.get("g-dupe")
+    assert doc.id == "first"
+    n = await mongo_db["slot_models"].count_documents({"game_id": "g-dupe"})
+    assert n == 1
+
+
+@pytest.mark.asyncio
 async def test_save_result_persists_curation(mongo_db):
     store = MathStore(mongo_db)
     await store.get_or_seed("g-cur")

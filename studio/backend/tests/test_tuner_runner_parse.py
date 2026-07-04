@@ -56,6 +56,19 @@ def test_parse_result_maps_trace_population_and_gene_agreement():
     assert result.trace[0].gene_agreement == [0.8, 0.6]
 
 
+def test_parse_result_maps_stop_reason():
+    line = json.loads(_enriched_result_line())
+    line["stopReason"] = "stagnated"
+    result = parse_tune_result_line(json.dumps(line), ran_at="t")
+    assert result.stop_reason == "stagnated"
+
+
+def test_parse_result_without_stop_reason_defaults_to_none():
+    # Backward-compat: older cassettes predate stopReason.
+    result = parse_tune_result_line(_enriched_result_line(), ran_at="t")
+    assert result.stop_reason is None
+
+
 def test_parse_result_without_profile_or_population_still_parses():
     # Backward-compat: an older cassette without the enriched fields shouldn't blow up;
     # pydantic defaults (empty profile=None, zeroed population) should kick in.
