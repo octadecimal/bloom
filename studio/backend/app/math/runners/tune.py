@@ -103,6 +103,14 @@ def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
     )
 
 
+def parse_tune_error_line(obj: dict, *, ran_at: str) -> TuneResult:
+    """A structured {"type":"error"} frame from the binary (e.g. all sections
+    locked) — same shape the runner synthesizes for crashes/watchdog kills."""
+    return TuneResult(status="error", verdict=None, tuned_model=None, metrics=None,
+                      missed=[], trace=[],
+                      failure=obj.get("message") or "tuner error", ran_at=ran_at)
+
+
 class TunerRunner(Protocol):
     async def run(self, seed_model: dict, target: dict, config: dict,
                   on_progress: Callable[[TuneProgress], None]) -> TuneResult: ...
@@ -173,6 +181,8 @@ class SubprocessTunerRunner:
                         on_progress(TuneProgress(**kwargs))
                     elif obj.get("type") == "result":
                         result = parse_tune_result_line(line, ran_at=ran_at)
+                    elif obj.get("type") == "error":
+                        result = parse_tune_error_line(obj, ran_at=ran_at)
                 done.set()
 
             async def _watchdog() -> None:

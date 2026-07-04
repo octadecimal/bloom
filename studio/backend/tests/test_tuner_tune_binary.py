@@ -44,3 +44,15 @@ async def test_real_tune_converges_to_pass():
     assert abs(res.metrics.rtp - 0.9) <= 0.02
     assert seen and seen[0].generation == 0  # streamed at least one generation
     assert res.tuned_model is not None
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_all_locked_returns_structured_error():
+    from app.math.models import SectionLocks
+    config = build_config(_fast_params(), derive_bounds(DETUNED),
+                          SectionLocks(reels=True, paytable=True, bonus=True))
+    runner = SubprocessTunerRunner(get_settings())
+    res = await runner.run(DETUNED, TARGET_09, config, on_progress=lambda p: None)
+    assert res.status == "error"
+    assert "locked" in (res.failure or "")

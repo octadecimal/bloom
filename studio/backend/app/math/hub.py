@@ -121,7 +121,7 @@ class MathHub:
                                  room=game_id)
             return None
 
-        config = build_config(doc.tuner_params, derive_bounds(model))
+        config = build_config(doc.tuner_params, derive_bounds(model), doc.locks)
 
         async def on_progress(p):
             await self._sio.emit(

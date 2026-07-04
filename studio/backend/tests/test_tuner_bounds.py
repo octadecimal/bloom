@@ -35,4 +35,17 @@ def test_build_config_emits_snake_case_rust_contract():
         "master_seed", "population", "max_generations", "elitism",
         "mutation_rate", "crossover_rate", "stagnation_window",
         "search_candidate_count", "final_candidate_count", "bounds", "weights",
+        "locks",
     }
+
+
+def test_build_config_carries_locks():
+    from app.math.models import SectionLocks
+    cfg = build_config(default_tuning_params(), derive_bounds({}),
+                       SectionLocks(paytable=True))
+    assert cfg["locks"] == {"reels": False, "paytable": True, "bonus": False}
+
+
+def test_build_config_defaults_locks_unlocked():
+    cfg = build_config(default_tuning_params(), derive_bounds({}))
+    assert cfg["locks"] == {"reels": False, "paytable": False, "bonus": False}
