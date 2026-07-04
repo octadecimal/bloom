@@ -169,12 +169,16 @@ test('full contract: edit target, generate to PASS, apply, Game Config reflects'
   await page.getByTestId('analytics-tab-evolution').click();
   await page.getByTestId('generate-button').click();
 
-  // Live: "tuning gen N/M" streams while the GA runs. With FAST_TUNER_PARAMS on
-  // this toy model the whole run can complete in well under a second, so the
-  // in-flight text may never survive to be observed — assert the durable proof
-  // that frames streamed (the scrubber, which frames leave populated even after
-  // the run finishes) rather than racing a transient status string.
-  await expect(page.getByTestId('generate-status')).toBeVisible({ timeout: 10_000 });
+  // Live proof, not just a post-hoc artifact: `run_complete` overwrites `frames`
+  // wholesale from the persisted trace (reducers.ts#runLoaded), so a scrubber-
+  // visible check alone passes even if nothing streamed live. Catch the
+  // transient "tuning gen N/M" text (GenerateBar.tsx) with a tight poll — the
+  // deleted math-analytics-evolution.spec.ts confirmed this exact DETUNED model
+  // + FAST_TUNER_PARAMS + masterSeed 7 reliably runs 9 generations (0..8) before
+  // reaching PASS, so there's a real multi-frame window here, not a sub-second
+  // race.
+  await expect.poll(() => page.getByTestId('generate-status').innerText(), { intervals: [50], timeout: 5_000 }).toContain('tuning gen');
+
   await expect(page.getByTestId('scrubber')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('generate-status')).toContainText('done', { timeout: 120_000 });
 
