@@ -54,6 +54,16 @@ def test_loop_safe_runner_spawns_subprocess_on_selector_loop():
     assert seen == ["hi"]
 
 
+def test_loop_safe_runner_accepts_on_progress_as_keyword():
+    """MathHub passes on_progress as a KEYWORD argument on both call sites —
+    the wrapper must accept the hub's real call shape, not just positional."""
+    seen: list[str] = []
+    result = _run_on_selector_loop(
+        LoopSafeRunner(SubprocessInner()).run(on_progress=seen.append))
+    assert result == "ok"
+    assert seen == ["hi"]
+
+
 def test_loop_safe_runner_is_passthrough_on_subprocess_capable_loops():
     """On a loop that supports subprocesses the wrapper must not add a thread
     hop — the inner coroutine runs on the caller's own loop."""

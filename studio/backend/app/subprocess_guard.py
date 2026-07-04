@@ -21,20 +21,21 @@ class LoopSafeRunner:
     marshals the sync progress callback back to the caller's loop; on
     subprocess-capable loops it is a pure passthrough.
 
-    The last positional argument of `run` must be the sync on_progress
-    callable — true for both CurationRunner and TunerRunner protocols.
+    `on_progress` — the sync progress callable, passed as a keyword by
+    MathHub or as the last positional argument — is the only argument the
+    wrapper interprets; everything else is forwarded verbatim.
     """
 
     def __init__(self, inner):
         self._inner = inner
 
-    async def run(self, *args):
+    async def run(self, *args, on_progress=None):
+        if on_progress is None:
+            *args, on_progress = args
         loop = asyncio.get_running_loop()
         if not (sys.platform == "win32"
                 and isinstance(loop, asyncio.SelectorEventLoop)):
-            return await self._inner.run(*args)
-
-        *head, on_progress = args
+            return await self._inner.run(*args, on_progress=on_progress)
 
         def relay(p):  # called on the worker thread's loop
             loop.call_soon_threadsafe(on_progress, p)
@@ -47,7 +48,8 @@ class LoopSafeRunner:
             inner_loop = asyncio.ProactorEventLoop()
             try:
                 result.append(
-                    inner_loop.run_until_complete(self._inner.run(*head, relay)))
+                    inner_loop.run_until_complete(
+                        self._inner.run(*args, on_progress=relay)))
             except BaseException as exc:  # surfaced on the caller's loop below
                 error.append(exc)
             finally:
