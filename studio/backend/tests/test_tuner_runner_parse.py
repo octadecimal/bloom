@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.tuner.runner import SubprocessTunerRunner, TuneProgress, parse_tune_result_line
+from app.math.runners.tune import SubprocessTunerRunner, TuneProgress, parse_tune_result_line
 
 
 def _enriched_result_line() -> str:

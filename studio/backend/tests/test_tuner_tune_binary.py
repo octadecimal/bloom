@@ -3,9 +3,9 @@ unit gate (needs the cargo toolchain). Deterministic + offline — no cassettes.
 Build first for speed: `cargo build --release -p bloom-tuner --bin tune_json`."""
 import pytest
 from app.config import get_settings
-from app.tuner.bounds import derive_bounds, build_config
-from app.tuner.models import default_tuning_params
-from app.tuner.runner import SubprocessTunerRunner, TuneProgress
+from app.math.bounds import derive_bounds, build_config
+from app.math.models import default_tuning_params
+from app.math.runners.tune import SubprocessTunerRunner, TuneProgress
 
 # Detuned: sym2 pays 1 -> RTP ~0.5. Target 0.9 -> the tuner must raise payouts.
 DETUNED = {

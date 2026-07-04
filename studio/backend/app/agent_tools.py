@@ -21,8 +21,8 @@ from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
-from app.simulator.targets import derive_target, TargetGap
-from app.tuner.models import TuningParams
+from app.math.targets import derive_target, TargetGap
+from app.math.models import TuningParams
 
 
 @dataclass
@@ -35,9 +35,8 @@ class ToolContext:
     gdd_hub: object = None
     scene_store: object = None
     scene_hub: object = None
-    sim_store: object = None
-    tuner_store: object = None
-    tuner_hub: object = None
+    math_store: object = None
+    math_hub: object = None
     # Vision-compose Plan 4: the compose-loop orchestrator (compose_scene tool)
     # grades the rendered frame and edits placement. The critic judges; the
     # capture broker fetches the real engine frame (Plans 2 & 3).
@@ -1277,12 +1276,11 @@ def build_realize_symbol_tool(ctx: ToolContext) -> BaseTool:
 
 def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
     async def read_tuner_setup() -> str:
-        sim_doc = await ctx.sim_store.get_or_seed(ctx.game_id)
+        sim_doc = await ctx.math_store.get_or_seed(ctx.game_id)
         model = sim_doc.model or {}
         num_bonuses = len(model.get("bonuses", []) or [])
         paytable = (model.get("paytable") or {}).get("entries") or []
-        tuner_doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
-        p = tuner_doc.params
+        p = sim_doc.tuner_params
 
         gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
         math_model = getattr(gdd, "data", {}) if gdd is not None else {}
@@ -1296,7 +1294,7 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
         except TargetGap as gap:
             target_line = f"target: UNAVAILABLE — {gap.message}"
 
-        result = tuner_doc.result
+        result = sim_doc.tune_result
         if result is None:
             result_line = "last result: no tune has run yet"
         else:
@@ -1365,8 +1363,8 @@ def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
             if w_val is not None and w_val < 0:
                 return f"'{w_key}' must be >= 0 (got {w_val}); no change made."
 
-        doc = await ctx.tuner_store.get_or_seed(ctx.game_id)
-        data = doc.params.model_dump()
+        doc = await ctx.math_store.get_or_seed(ctx.game_id)
+        data = doc.tuner_params.model_dump()
         for key, v in scalars.items():
             if v is not None:
                 data[key] = v
@@ -1380,7 +1378,7 @@ def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
         data["weights"] = weights
 
         updated = TuningParams.model_validate(data)
-        await ctx.tuner_store.put(ctx.game_id, params=updated)
+        await ctx.math_store.put(ctx.game_id, tuner_params=updated)
         return (
             f"Updated tuner GA params: population {updated.population}, "
             f"generations {updated.max_generations}, seed {updated.master_seed}, "
@@ -1403,7 +1401,7 @@ def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
 
 def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
     async def tune_slot_model() -> str:
-        sim_doc = await ctx.sim_store.get_or_seed(ctx.game_id)
+        sim_doc = await ctx.math_store.get_or_seed(ctx.game_id)
         model = sim_doc.model or {}
         num_bonuses = len(model.get("bonuses", []) or [])
         gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
@@ -1414,13 +1412,17 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
             return (f"Cannot tune: {gap.message}. Complete the GDD math-model intent "
                     f"(RTP, volatility, bonus rate) first, then tune again.")
 
-        before = await ctx.tuner_store.get(ctx.game_id)
-        before_ran = before.result.ran_at if (before and before.result) else None
+        before_ran = sim_doc.tune_result.ran_at if sim_doc.tune_result else None
 
-        await ctx.tuner_hub.request_tune(ctx.game_id)   # runs GA, streams to the pane
+        # Full pipeline: GA tune + automatic verify pass on the winner. The
+        # tool's report text is unchanged (replay cassettes are prompt-keyed).
+        ok = await ctx.math_hub.generate(ctx.game_id)
+        if not ok:
+            return ("A math run is already in progress for this game — wait for "
+                    "it to finish, then tune again.")
 
-        after = await ctx.tuner_store.get(ctx.game_id)
-        result = after.result if after else None
+        after = await ctx.math_store.get(ctx.game_id)
+        result = after.tune_result if after else None
         if result is None or result.ran_at == before_ran:
             return ("The tune did not produce a result — check the Tuner pane or the "
                     "backend logs for a failure.")
@@ -1454,8 +1456,8 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
 
 def build_apply_tuned_model_tool(ctx: ToolContext) -> BaseTool:
     async def apply_tuned_model() -> str:
-        doc = await ctx.tuner_store.get(ctx.game_id)
-        tuned = doc.result.tuned_model if (doc and doc.result) else None
+        doc = await ctx.math_store.get(ctx.game_id)
+        tuned = doc.tune_result.tuned_model if (doc and doc.tune_result) else None
         if not tuned:
             return "No tuned model to apply yet — run a tune first."
         label = ("Apply the tuned model to the slot model? This overwrites the "
@@ -1464,7 +1466,7 @@ def build_apply_tuned_model_tool(ctx: ToolContext) -> BaseTool:
             {"tool": "apply_tuned_model", "args": {}, "label": label})
         if decision != "approve":
             return "Apply declined by the user; the slot model is unchanged."
-        await ctx.sim_store.put(ctx.game_id, model=tuned, source="tuner")
+        await ctx.math_store.put(ctx.game_id, model=tuned, source="tuner")
         return ("Applied the tuned model to the slot model. Re-curate (in the "
                 "Simulator) to confirm it still passes.")
 
@@ -1511,16 +1513,15 @@ class ToolFactory:
 
     def __init__(self, asset_store, asset_hub, gdd_store=None, gdd_hub=None,
                  scene_store=None, scene_hub=None,
-                 sim_store=None, tuner_store=None, tuner_hub=None):
+                 math_store=None, math_hub=None):
         self._asset_store = asset_store
         self._asset_hub = asset_hub
         self._gdd_store = gdd_store
         self._gdd_hub = gdd_hub
         self._scene_store = scene_store
         self._scene_hub = scene_hub
-        self._sim_store = sim_store
-        self._tuner_store = tuner_store
-        self._tuner_hub = tuner_hub
+        self._math_store = math_store
+        self._math_hub = math_hub
 
     def known_tool_names(self) -> set[str]:
         return set(self._BUILDERS)

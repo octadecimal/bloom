@@ -1,5 +1,5 @@
-from app.tuner.bounds import derive_bounds, build_config
-from app.tuner.models import default_tuning_params
+from app.math.bounds import derive_bounds, build_config
+from app.math.models import default_tuning_params
 
 
 def test_derive_bounds_scales_payout_ceiling_to_existing_payouts():

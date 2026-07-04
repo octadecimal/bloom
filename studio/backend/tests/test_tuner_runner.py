@@ -3,11 +3,11 @@ from types import SimpleNamespace
 
 import pytest
 from app.config import Settings
-from app.tuner.runner import (
+from app.math.runners.tune import (
     TuneProgress, FakeTunerRunner, SubprocessTunerRunner, parse_tune_result_line,
 )
-from app.tuner.models import TuneResult
-from app.simulator.models import MetricsWire
+from app.math.models import TuneResult
+from app.math.models import MetricsWire
 
 
 def _runner(*, mem_cap_mb=4096.0, timeout_s=600.0, poll_s=0.05):

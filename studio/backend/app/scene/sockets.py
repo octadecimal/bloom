@@ -1,6 +1,6 @@
 import secrets
 from app.scene.document import OpError
-from app.scene.reels_spin import DEMO_SLOT_MODEL, derive_reels_config, map_grid
+from app.scene.reels_spin import derive_reels_config, map_grid
 
 # Default canvas used when a game has no Root yet (idempotent: ensure_root keeps
 # an existing Root's canvas).
@@ -54,9 +54,10 @@ def register_scene_handlers(sio, hub, broker, model_store, spin_runner):
             broker.resolve_capture(data.get("captureId"), png)
 
     async def _model_for(game_id: str) -> dict:
-        doc = await model_store.get(game_id)
-        model = doc.model if doc is not None else None
-        return model if model else DEMO_SLOT_MODEL
+        # get_or_seed guarantees a complete template model — a game's model is
+        # never {} (spec decision 5), so the old DEMO fallback is gone.
+        doc = await model_store.get_or_seed(game_id)
+        return doc.model
 
     @sio.on("scene_add_module")
     async def scene_add_module(sid, data):

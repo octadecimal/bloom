@@ -1,6 +1,6 @@
 import pytest
-from app.simulator.models import default_params
-from app.simulator.targets import (
+from app.math.models import default_params
+from app.math.targets import (
     parse_ratio, normalize_percent, derive_target, TargetGap,
 )
 

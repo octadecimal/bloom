@@ -1,4 +1,4 @@
-from app.simulator.realize import (
+from app.math.realize import (
     RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
     _realize_reels, _all_patterns, _first_n_patterns, _realize_paylines,
     _realize_paytable, _realize_bonuses, realize_slot_model,

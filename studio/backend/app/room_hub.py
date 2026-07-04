@@ -27,9 +27,8 @@ class RoomHub:
         gdd_hub=None,
         scene_store=None,
         scene_hub=None,
-        sim_store=None,
-        tuner_store=None,
-        tuner_hub=None,
+        math_store=None,
+        math_hub=None,
         scene_critic=None,
         capture_broker=None,
         asset_critic=None,
@@ -49,9 +48,8 @@ class RoomHub:
         self._gdd_hub = gdd_hub
         self._scene_store = scene_store
         self._scene_hub = scene_hub
-        self._sim_store = sim_store
-        self._tuner_store = tuner_store
-        self._tuner_hub = tuner_hub
+        self._math_store = math_store
+        self._math_hub = math_hub
         self._scene_critic = scene_critic
         self._capture_broker = capture_broker
         self._asset_critic = asset_critic
@@ -298,8 +296,7 @@ class RoomHub:
         ctx = ToolContext(room_id, room.game_id, self._asset_store, self._asset_hub,
                          gdd_store=self._gdd_store, gdd_hub=self._gdd_hub,
                          scene_store=self._scene_store, scene_hub=self._scene_hub,
-                         sim_store=self._sim_store, tuner_store=self._tuner_store,
-                         tuner_hub=self._tuner_hub,
+                         math_store=self._math_store, math_hub=self._math_hub,
                          scene_critic=self._scene_critic,
                          capture_broker=self._capture_broker,
                          asset_critic=self._asset_critic,
