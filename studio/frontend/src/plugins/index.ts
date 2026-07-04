@@ -6,8 +6,6 @@ import { llmChat } from './llm-chat';
 import { assets } from './assets';
 import { gdd } from './gdd';
 import { game } from './game';
-import { simulator } from './simulator';
-import { tuner } from './tuner';
 import { gameConfig } from './game-config';
 import { sceneGraph } from './scene-graph';
 import { propertyInspector } from './property-inspector';
@@ -22,8 +20,6 @@ export const PLUGINS: IPlugin[] = [
   assets,
   gdd,
   game,
-  simulator,
-  tuner,
   gameConfig,
   sceneGraph,
   propertyInspector,

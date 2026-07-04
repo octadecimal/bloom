@@ -11,10 +11,6 @@ const openGame = vi.fn();
 const closeGame = vi.fn();
 const openGameDocs = vi.fn();
 const closeGameDocs = vi.fn();
-const openGameSim = vi.fn();
-const closeGameSim = vi.fn();
-const openGameTuner = vi.fn();
-const closeGameTuner = vi.fn();
 const openGameConfig = vi.fn();
 const closeGameConfig = vi.fn();
 const openGameMath = vi.fn();
@@ -33,14 +29,6 @@ vi.mock('../../plugins/game/actions', () => ({
 vi.mock('../../plugins/gdd/actions', () => ({
   openGameDocs: (id: string) => openGameDocs(id),
   closeGameDocs: () => closeGameDocs(),
-}));
-vi.mock('../../plugins/simulator/actions', () => ({
-  openGameSim: (id: string) => openGameSim(id),
-  closeGameSim: () => closeGameSim(),
-}));
-vi.mock('../../plugins/tuner/actions', () => ({
-  openGameTuner: (id: string) => openGameTuner(id),
-  closeGameTuner: () => closeGameTuner(),
 }));
 vi.mock('../../plugins/game-config/actions', () => ({
   openGameConfig: (id: string) => openGameConfig(id),
@@ -69,10 +57,6 @@ beforeEach(() => {
   closeGame.mockReset();
   openGameDocs.mockReset();
   closeGameDocs.mockReset();
-  openGameSim.mockReset();
-  closeGameSim.mockReset();
-  openGameTuner.mockReset();
-  closeGameTuner.mockReset();
   openGameConfig.mockReset();
   closeGameConfig.mockReset();
   openGameMath.mockReset();

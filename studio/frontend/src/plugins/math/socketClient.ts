@@ -19,8 +19,7 @@ interface IAnalyticsProgressWire {
   geneAgreement: number[];
 }
 
-/** Mirrors `plugins/tuner/socketClient.ts` (`createTunerSocket`): a single
- * lazily-connected socket, `join_analytics`/`leave_analytics` room lifecycle,
+/** A single lazily-connected socket, `join_analytics`/`leave_analytics` room lifecycle,
  * and every handler guarded by `isActive(gameId)` so events for a game the
  * user has since navigated away from are dropped. `analytics_progress` is
  * ephemeral (streamed, never persisted); `run_complete` carries the frozen,
