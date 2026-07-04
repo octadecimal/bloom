@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import uPlot from 'uplot';
 import { UPlotChart, createUPlotChart, toAlignedData, toOptions } from './UPlotChart';
@@ -16,6 +16,7 @@ vi.mock('uplot', () => {
     static instances: FakeUPlot[] = [];
     destroy = vi.fn();
     setData = vi.fn();
+    setSize = vi.fn();
     constructor(
       public opts: unknown,
       public data: unknown,
@@ -27,7 +28,7 @@ vi.mock('uplot', () => {
   return { default: FakeUPlot };
 });
 
-type FakeUPlotCtor = { instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn> }[] };
+type FakeUPlotCtor = { instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn>; setSize: ReturnType<typeof vi.fn>; opts: uPlot.Options }[] };
 
 // Tests target the `IChart` seam via an injected fake factory — never the real
 // uPlot instance (canvas isn't available in jsdom, and the point of the seam is
@@ -206,5 +207,82 @@ describe('band support', () => {
   it('omits the bands option entirely when data has no bands', () => {
     const opts = toOptions(DATA, 400, 200);
     expect(opts.bands ?? []).toEqual([]);
+  });
+});
+
+// The adapter must size the chart from its real container — and re-size it on
+// every container resize (Dockview panes resize constantly). jsdom has neither
+// canvas nor ResizeObserver, so the observer is faked and fired by hand.
+describe('createUPlotChart (container-driven sizing)', () => {
+  class FakeResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    observed: Element[] = [];
+    disconnected = false;
+    constructor(public cb: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this);
+    }
+    observe(el: Element) {
+      this.observed.push(el);
+    }
+    unobserve() {}
+    disconnect() {
+      this.disconnected = true;
+    }
+  }
+
+  beforeEach(() => {
+    (uPlot as unknown as FakeUPlotCtor).instances = [];
+    FakeResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function sizedEl(width: number, height: number): HTMLElement {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { value: width, configurable: true });
+    Object.defineProperty(el, 'clientHeight', { value: height, configurable: true });
+    return el;
+  }
+
+  it('builds the chart at the mount element size, not a hard-coded 220px height', () => {
+    const chart = createUPlotChart();
+    chart.mount(sizedEl(800, 143), DATA);
+    const opts = (uPlot as unknown as FakeUPlotCtor).instances[0].opts;
+    expect(opts.width).toBe(800);
+    expect(opts.height).toBe(143);
+  });
+
+  it('falls back to 600x220 when the element has no measured size yet', () => {
+    const chart = createUPlotChart();
+    chart.mount(document.createElement('div'), DATA);
+    const opts = (uPlot as unknown as FakeUPlotCtor).instances[0].opts;
+    expect(opts.width).toBe(600);
+    expect(opts.height).toBe(220);
+  });
+
+  it('observes the mount element and setSizes the plot when it resizes', () => {
+    const chart = createUPlotChart();
+    const el = sizedEl(800, 143);
+    chart.mount(el, DATA);
+
+    const ro = FakeResizeObserver.instances[0];
+    expect(ro.observed).toEqual([el]);
+
+    Object.defineProperty(el, 'clientWidth', { value: 500, configurable: true });
+    Object.defineProperty(el, 'clientHeight', { value: 90, configurable: true });
+    ro.cb([], ro as unknown as ResizeObserver);
+
+    const instance = (uPlot as unknown as FakeUPlotCtor).instances[0];
+    expect(instance.setSize).toHaveBeenCalledWith({ width: 500, height: 90 });
+  });
+
+  it('disconnects the observer on destroy', () => {
+    const chart = createUPlotChart();
+    chart.mount(sizedEl(800, 143), DATA);
+    chart.destroy();
+    expect(FakeResizeObserver.instances[0].disconnected).toBe(true);
   });
 });

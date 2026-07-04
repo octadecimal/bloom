@@ -80,14 +80,22 @@ function shapeOf(data: IChartData): string {
 }
 
 /** The uPlot-backed `IChart` implementation. Construction stays behind this factory
- * so components (and their tests) depend only on `IChart`. */
-export function createUPlotChart(width = 600, height = 220): IChart {
+ * so components (and their tests) depend only on `IChart`. Size always comes from
+ * the mount element (600x220 only as a zero-size fallback), and a ResizeObserver
+ * keeps the canvas matched to the container across Dockview pane resizes. */
+export function createUPlotChart(): IChart {
   let plot: uPlot | null = null;
   let mountEl: HTMLElement | null = null;
   let shape = '';
+  let ro: ResizeObserver | null = null;
+
+  function sizeOf(el: HTMLElement): { width: number; height: number } {
+    return { width: el.clientWidth || 600, height: el.clientHeight || 220 };
+  }
 
   function build(el: HTMLElement, data: IChartData) {
-    plot = new uPlot(toOptions(data, el.clientWidth || width, height), toAlignedData(data), el);
+    const { width, height } = sizeOf(el);
+    plot = new uPlot(toOptions(data, width, height), toAlignedData(data), el);
     shape = shapeOf(data);
   }
 
@@ -95,6 +103,14 @@ export function createUPlotChart(width = 600, height = 220): IChart {
     mount(el, data) {
       mountEl = el;
       build(el, data);
+      // jsdom (vitest) has no ResizeObserver; guard so non-resize tests can
+      // mount without stubbing it. Real browsers always take this branch.
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => {
+          if (plot && mountEl) plot.setSize(sizeOf(mountEl));
+        });
+        ro.observe(el);
+      }
     },
     update(data) {
       if (!plot || !mountEl) return;
@@ -109,6 +125,8 @@ export function createUPlotChart(width = 600, height = 220): IChart {
       plot.setData(toAlignedData(data));
     },
     destroy() {
+      ro?.disconnect();
+      ro = null;
       plot?.destroy();
       plot = null;
       mountEl = null;
