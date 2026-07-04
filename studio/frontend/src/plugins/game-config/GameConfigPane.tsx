@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { gameConfigHooks } from './state';
+import { Lock, LockOpen } from 'lucide-react';
+import { toggleLock } from './actions';
+import { gameConfigHooks, type ISectionLocks } from './state';
 import type { ISlotModel } from './model';
 import { deriveStats } from './reducers';
 import { validateModel, type GcTab } from './validate';
@@ -20,6 +22,12 @@ const TABS: { key: GcTab; label: string }[] = [
   { key: 'bonus', label: 'Bonus' },
   { key: 'json', label: 'JSON' },
 ];
+
+const LOCKABLE: Partial<Record<GcTab, keyof ISectionLocks>> = {
+  reels: 'reels',
+  paytable: 'paytable',
+  bonus: 'bonus',
+};
 
 const SECTIONS: Record<GcTab, () => ReactElement> = {
   symbols: SymbolsSection,
@@ -57,6 +65,7 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
   const stats = deriveStats(model);
   const issues = validateModel(model);
   const activeTab = s.activeTab.get();
+  const locks = s.locks.get({ noproxy: true }) as ISectionLocks;
   const sync = s.sync.get();
   const syncLabel =
     sync === 'saving' ? 'saving…' : sync === 'external' ? `updated externally · ${s.externalSource.get() ?? ''}` : sync === 'error' ? 'save failed' : 'saved';
@@ -86,6 +95,7 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
         {TABS.map((t) => {
           const count = issues.filter((i) => i.tab === t.key).length;
           const active = t.key === activeTab;
+          const lockKey = LOCKABLE[t.key];
           return (
             <button
               key={t.key}
@@ -97,9 +107,30 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
             >
               {t.label}
               {count > 0 && <span data-testid={`gc-tab-dot-${t.key}`} className="h-1.5 w-1.5 rounded-full bg-warning" />}
+              {lockKey && locks[lockKey] && <Lock data-testid={`gc-tab-lock-${t.key}`} className="h-3 w-3 text-text-3" />}
             </button>
           );
         })}
+        {(() => {
+          const lockKey = LOCKABLE[activeTab];
+          if (!lockKey) return null;
+          const locked = locks[lockKey];
+          return (
+            <button
+              data-testid={`gc-lock-${lockKey}`}
+              title={
+                locked
+                  ? 'Locked against automation (GA, templates) — still editable by hand. Click to unlock.'
+                  : 'Lock this section against automation (GA, templates). Humans can always edit.'
+              }
+              onClick={() => toggleLock(lockKey)}
+              className={`ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs ${locked ? 'text-warning' : 'text-text-2'} hover:bg-raised hover:text-text-1`}
+            >
+              {locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+              {locked ? 'Locked' : 'Lock'}
+            </button>
+          );
+        })()}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

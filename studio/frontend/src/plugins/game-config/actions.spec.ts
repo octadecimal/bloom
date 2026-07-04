@@ -23,6 +23,7 @@ import {
   applyModelFromJson,
   flushPendingSave,
   handleModelChanged,
+  toggleLock,
 } from './actions';
 
 const MODEL: ISlotModel = {
@@ -34,8 +35,8 @@ const MODEL: ISlotModel = {
   bonuses: [],
 };
 
-function doc(model: unknown, updatedAt: string, presentation: unknown = { symbols: {} }) {
-  return { id: 'd1', gameId: 'g1', model, presentation, updatedAt };
+function doc(model: unknown, updatedAt: string, presentation: unknown = { symbols: {} }, locks?: unknown) {
+  return { id: 'd1', gameId: 'g1', model, presentation, updatedAt, ...(locks ? { locks } : {}) };
 }
 
 describe('game-config actions', () => {
@@ -143,5 +144,28 @@ describe('game-config actions', () => {
     expect(s.externalSource.get()).toBe('tuner');
     await vi.advanceTimersByTimeAsync(EXTERNAL_FLASH_MS + 10);
     expect(s.sync.get()).toBe('saved');
+  });
+
+  it('openGameConfig hydrates locks, defaulting to all-unlocked when absent', async () => {
+    await open(); // doc without locks
+    expect(gameConfigSlice().locks.get({ noproxy: true })).toEqual({ reels: false, paytable: false, bonus: false });
+    getSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, { reels: true, paytable: false, bonus: false }));
+    await openGameConfig('g1');
+    expect(gameConfigSlice().locks.reels.get()).toBe(true);
+  });
+
+  it('toggleLock flips the lock and debounce-PUTs locks only', async () => {
+    await open();
+    putSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+    toggleLock('paytable');
+    expect(gameConfigSlice().locks.paytable.get()).toBe(true);
+    expect(gameConfigSlice().sync.get()).toBe('saving');
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 10);
+    expect(putSlotModel).toHaveBeenCalledTimes(1);
+    const [, patch] = putSlotModel.mock.calls[0];
+    expect(patch.locks).toEqual({ reels: false, paytable: true, bonus: false });
+    expect(patch.model).toBeUndefined();
+    expect(patch.source).toBe('editor');
+    expect(gameConfigSlice().sync.get()).toBe('saved');
   });
 });

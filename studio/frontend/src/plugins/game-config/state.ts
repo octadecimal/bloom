@@ -11,10 +11,21 @@ export const GAME_CONFIG_PLUGIN_ID = 'game-config';
 export type GcLens = 'strip' | 'composition';
 export type GcSync = 'idle' | 'saving' | 'saved' | 'external' | 'error';
 
+export interface ISectionLocks {
+  reels: boolean;
+  paytable: boolean;
+  bonus: boolean;
+}
+
+export function defaultLocks(): ISectionLocks {
+  return { reels: false, paytable: false, bonus: false };
+}
+
 export interface IGameConfigState {
   activeGameId: string | null;
   model: ISlotModel | null;
   presentation: IPresentation;
+  locks: ISectionLocks;
   jsonDraft: string;
   jsonError: string | null;
   activeTab: GcTab;
@@ -31,6 +42,7 @@ export function makeInitialState(): IGameConfigState {
     activeGameId: null,
     model: null,
     presentation: emptyPresentation(),
+    locks: defaultLocks(),
     jsonDraft: '',
     jsonError: null,
     activeTab: 'symbols',
