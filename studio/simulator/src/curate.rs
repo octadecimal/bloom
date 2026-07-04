@@ -16,6 +16,11 @@ pub enum CurateError {
     /// Hitting the target would move realized RTP further than the honesty
     /// guardrail allows — that is a model-tuning problem, not a curation one.
     OutsideCorrectionBand { needed: f64, band: f64 },
+    /// The greedy swap search hit its iteration backstop without converging.
+    /// Expected to be unreachable (each accepted swap strictly shrinks an
+    /// integer distance, so the loop terminates on its own); this is a defensive
+    /// guard so freeze_pool can never hang, whatever the candidate set.
+    DidNotConverge { realized: f64, target: f64 },
 }
 
 /// Freeze a faithful pool of `target.pool_size` seeds from `samples`
@@ -48,10 +53,23 @@ pub fn freeze_pool(
         });
     }
 
+    // Backstop against a runaway loop. Each accepted swap strictly reduces an
+    // integer-valued distance (|sum - target*pool_size|), so convergence needs
+    // at most O(samples.len()) swaps; the cap only ever fires on a pathological
+    // candidate set and turns a hang into an honest curate error.
+    let cap = samples.len().saturating_mul(2).max(1);
+    let mut iters = 0usize;
+
     loop {
         let r = realized(sum);
         if (r - target.rtp_target).abs() <= target.rtp_tolerance {
             break;
+        }
+        if iters >= cap {
+            return Err(CurateError::DidNotConverge {
+                realized: r,
+                target: target.rtp_target,
+            });
         }
 
         let raise = r < target.rtp_target;
@@ -84,18 +102,23 @@ pub fn freeze_pool(
 
         let out_payout = samples[pidx].payout;
         let in_payout = samples[ridx].payout;
-        let helps = if raise {
-            in_payout > out_payout
-        } else {
-            in_payout < out_payout
-        };
-        if !helps {
+        let new_sum = sum - out_payout + in_payout;
+
+        // Accept only swaps that move realized RTP strictly closer to target.
+        // The greedy "most extreme" pick can overshoot for high-volatility
+        // models — one jackpot swap dwarfs pool_size * rtp_tolerance — flipping
+        // the raise/lower decision so the same pair swaps back forever. Stopping
+        // on the first non-improving swap breaks that cycle and keeps the
+        // closest pool reached. (This also subsumes the old wrong-direction
+        // guard: a swap that moves away from target never shrinks the distance.)
+        if (realized(new_sum) - target.rtp_target).abs() >= (r - target.rtp_target).abs() {
             break;
         }
 
         pool[pi] = ridx;
         reserve[ri] = pidx;
-        sum = sum - out_payout + in_payout;
+        sum = new_sum;
+        iters += 1;
     }
 
     Ok(Pool {
@@ -154,6 +177,30 @@ mod tests {
             "got {}",
             pool.realized_rtp
         );
+    }
+
+    #[test]
+    fn terminates_on_oscillating_jackpot_swaps() {
+        // High-volatility signature: a single candidate's payout delta (3) dwarfs
+        // pool_size * rtp_tolerance (2 * 0.01 = 0.02). The faithful pool [0,3]
+        // realizes 1.5 (target 1.0, out of tolerance) and every available swap
+        // overshoots to 0.0, flipping the raise/lower decision — the greedy
+        // "most extreme" rule then swaps the same pair back forever. freeze_pool
+        // MUST terminate rather than hang.
+        let samples = vec![sample(0, 0), sample(1, 3), sample(2, 0), sample(3, 3)];
+        let target = TargetSpec {
+            rtp_tolerance: 0.01,
+            ..spec(2, 1.0)
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(freeze_pool(&samples, &target, 1.0));
+        });
+        let result = rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("freeze_pool must terminate, not hang");
+        assert!(result.is_ok(), "expected a frozen pool, got {result:?}");
     }
 
     #[test]
