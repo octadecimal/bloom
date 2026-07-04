@@ -3,8 +3,65 @@ numerically-degenerate model can drive the kernel into unbounded memory; the
 watchdog polls the subprocess tree and hard-kills it the instant resident memory
 or wall-clock crosses a cap. Used by both the simulator and tuner runners."""
 import asyncio
+import sys
+import threading
 
 import psutil
+
+
+class LoopSafeRunner:
+    """Make a Subprocess*Runner work on loops that cannot spawn subprocesses.
+
+    Under `uvicorn --reload` on Windows the app runs on a SelectorEventLoop
+    (the reloader's listen-socket handoff forces it), and
+    asyncio.create_subprocess_exec raises NotImplementedError there — so a
+    live-stack Generate/Verify died instantly while the replay stack (no
+    --reload) was fine. On such loops this wrapper runs the inner runner's
+    whole coroutine on a private ProactorEventLoop in a worker thread and
+    marshals the sync progress callback back to the caller's loop; on
+    subprocess-capable loops it is a pure passthrough.
+
+    `on_progress` — the sync progress callable, passed as a keyword by
+    MathHub or as the last positional argument — is the only argument the
+    wrapper interprets; everything else is forwarded verbatim.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    async def run(self, *args, on_progress=None):
+        if on_progress is None:
+            *args, on_progress = args
+        loop = asyncio.get_running_loop()
+        if not (sys.platform == "win32"
+                and isinstance(loop, asyncio.SelectorEventLoop)):
+            return await self._inner.run(*args, on_progress=on_progress)
+
+        def relay(p):  # called on the worker thread's loop
+            loop.call_soon_threadsafe(on_progress, p)
+
+        result: list = []
+        error: list[BaseException] = []
+        ready = asyncio.Event()
+
+        def worker():
+            inner_loop = asyncio.ProactorEventLoop()
+            try:
+                result.append(
+                    inner_loop.run_until_complete(
+                        self._inner.run(*args, on_progress=relay)))
+            except BaseException as exc:  # surfaced on the caller's loop below
+                error.append(exc)
+            finally:
+                inner_loop.close()
+                loop.call_soon_threadsafe(ready.set)
+
+        threading.Thread(target=worker, daemon=True,
+                         name="loop-safe-runner").start()
+        await ready.wait()
+        if error:
+            raise error[0]
+        return result[0]
 
 
 def proc_tree_rss_mb(pid: int) -> float:
