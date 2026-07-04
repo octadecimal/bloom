@@ -1,4 +1,27 @@
-import { MAX_COMPARE_SELECTION, type IMathState, type IGenFrame, type IMathRun } from './state';
+import { MAX_COMPARE_SELECTION, type IMathState, type IGenFrame, type IMathRun, type ICurationResult, type ISectionLocks } from './state';
+
+/** The result strip is PINNED TO LATEST (spec: tabs = analysis, strip = current
+ * state): newest of the last recorded generate run vs the last verify-only
+ * curation of the stored model. Never the RunSelector's browsed run. */
+export type IOutcome = { kind: 'run'; run: IMathRun } | { kind: 'verify'; result: ICurationResult } | null;
+
+export function latestOutcome(state: Pick<IMathState, 'runs' | 'verifyResult'>): IOutcome {
+  const run = state.runs[0] ?? null; // runs are newest-first (runLoaded prepends)
+  const verify = state.verifyResult;
+  if (run && verify) return verify.ranAt > run.createdAt ? { kind: 'verify', result: verify } : { kind: 'run', run };
+  if (run) return { kind: 'run', run };
+  return verify ? { kind: 'verify', result: verify } : null;
+}
+
+export function outcomeVerdict(outcome: IOutcome): 'pass' | 'fail' | 'near_miss' | 'error' | null {
+  if (!outcome) return null;
+  if (outcome.kind === 'verify') return outcome.result.status;
+  return outcome.run.verify ? outcome.run.verify.status : outcome.run.verdict;
+}
+
+export function allLocked(locks: ISectionLocks | null): boolean {
+  return !!locks && locks.reels && locks.paytable && locks.bonus;
+}
 
 /** Derives per-generation Evolution frames from a persisted run's trace —
  * exported for reuse by ReportTab (Task 17), which stacks the GA-evolution and

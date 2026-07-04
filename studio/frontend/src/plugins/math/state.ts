@@ -101,6 +101,63 @@ export interface IRunProfile {
   rtpConvergence: IRtpPoint[];
 }
 
+export interface ISectionLocks {
+  reels: boolean;
+  paytable: boolean;
+  bonus: boolean;
+}
+
+export interface ICurationParams {
+  poolSize: number;
+  candidateCount: number;
+  masterSeed: number;
+  rtpTolerance: number;
+  realizedCorrectionBand: number;
+  bonusRateTolerance: number;
+}
+
+export interface ICurationResult {
+  status: 'pass' | 'fail' | 'error';
+  metrics: IMetrics;
+  realizedRtp: number | null;
+  poolSize: number | null;
+  failure: string | null;
+  ranAt: string;
+}
+
+export interface IBandMiss {
+  metric: string;
+  measured: number;
+  bandLo: number;
+  bandHi: number;
+}
+
+export interface ITuneResult {
+  status: 'pass' | 'near_miss' | 'error';
+  verdict: 'pass' | 'near_miss' | null;
+  tunedModel: unknown | null;
+  metrics: IMetrics | null;
+  missed: IBandMiss[];
+  failure: string | null;
+  ranAt: string;
+}
+
+/** Snake_case on the wire — `derive_target` returns a plain dict (no camel aliasing). */
+export interface ITargetSpec {
+  rtp_target: number;
+  rtp_tolerance: number;
+  volatility_min: number;
+  volatility_max: number;
+  bonus_hit_rate_bands: { min: number; max: number }[];
+}
+
+/** Raw editable strings mirrored from the GDD math-model `data` dict. */
+export interface ITargetFields {
+  rtp: string;
+  volatility: string;
+  bonusHitRate: string;
+}
+
 export interface IMathRun {
   id: string;
   gameId: string;
@@ -111,6 +168,8 @@ export interface IMathRun {
   profile: IRunProfile | null;
   createdAt: string;
   durationMs: number | null;
+  verify: ICurationResult | null;
+  locks: ISectionLocks | null;
 }
 
 export interface IMathState {
@@ -132,6 +191,28 @@ export interface IMathState {
   /** The Evolution scrubber's playhead. `'live'` tracks the newest frame as it
    * arrives; scrubbing pins it to a specific generation (see `reducers.ts#scrubTo`). */
   selectedGeneration: number | 'live';
+  // target strip
+  targetFields: ITargetFields | null;
+  gddWatermark: string;
+  derivedTarget: ITargetSpec | null;
+  targetGap: string | null;
+  targetSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
+  // generate pipeline
+  genStatus: 'idle' | 'tuning' | 'verifying' | 'done' | 'failed';
+  genProgress: { generation: number; maxGenerations: number } | null;
+  genFailure: string | null;
+  // verify-only (curation of the stored model)
+  verifyStatus: 'idle' | 'running' | 'pass' | 'fail' | 'error';
+  verifyProgress: { phase: string; done: number | null; total: number | null } | null;
+  verifyResult: ICurationResult | null;
+  verifyFailure: string | null;
+  // apply
+  tuneResult: ITuneResult | null;
+  applied: boolean;
+  // doc-derived
+  locks: ISectionLocks | null;
+  tunerParams: ITuningParams | null;
+  curationParams: ICurationParams | null;
 }
 
 export function makeInitialState(): IMathState {
@@ -143,6 +224,23 @@ export function makeInitialState(): IMathState {
     loadStatus: 'idle',
     frames: [],
     selectedGeneration: 'live',
+    targetFields: null,
+    gddWatermark: '',
+    derivedTarget: null,
+    targetGap: null,
+    targetSaveStatus: 'idle',
+    genStatus: 'idle',
+    genProgress: null,
+    genFailure: null,
+    verifyStatus: 'idle',
+    verifyProgress: null,
+    verifyResult: null,
+    verifyFailure: null,
+    tuneResult: null,
+    applied: false,
+    locks: null,
+    tunerParams: null,
+    curationParams: null,
   };
 }
 

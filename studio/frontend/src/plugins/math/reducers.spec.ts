@@ -14,6 +14,8 @@ function run(id: string, trace: IGenSnapshot[] = []): IMathRun {
     profile: null,
     createdAt: 't',
     durationMs: null,
+    verify: null,
+    locks: null,
   };
 }
 
@@ -204,5 +206,76 @@ describe('selectRun (reducer)', () => {
     const state = { ...makeInitialState(), selectedRunIds: ['r5'] };
     const next = selectRun(state, 'r2');
     expect(next.selectedRunIds).toEqual(['r5']);
+  });
+});
+
+// Helpers for outcome reducer tests — complete IMathRun + ICurationResult literals.
+function makeRun(overrides: Partial<IMathRun>): IMathRun {
+  return {
+    id: 'r1',
+    gameId: 'g1',
+    params: {} as never,
+    verdict: 'pass',
+    metrics: null,
+    trace: [],
+    profile: null,
+    createdAt: '2026-07-04T10:00:00Z',
+    durationMs: null,
+    verify: null,
+    locks: null,
+    ...overrides,
+  };
+}
+
+function makeCuration(
+  overrides?: Partial<{
+    status: 'pass' | 'fail' | 'error';
+    metrics: import('./state').IMetrics | null;
+    realizedRtp: number | null;
+    poolSize: number | null;
+    failure: string | null;
+    ranAt: string;
+  }>,
+) {
+  return {
+    status: 'pass' as const,
+    metrics: null,
+    realizedRtp: null,
+    poolSize: null,
+    failure: null,
+    ranAt: '2026-07-04T11:00:00Z',
+    ...overrides,
+  };
+}
+
+import { latestOutcome, outcomeVerdict, allLocked } from './reducers';
+
+describe('latestOutcome', () => {
+  it('returns null with no runs and no verify result', () => {
+    expect(latestOutcome({ runs: [], verifyResult: null })).toBeNull();
+  });
+  it('prefers the newest of run vs verify-only result by timestamp', () => {
+    const run = makeRun({ id: 'r1', createdAt: '2026-07-04T10:00:00Z' });
+    const verify = makeCuration({ ranAt: '2026-07-04T11:00:00Z' });
+    expect(latestOutcome({ runs: [run], verifyResult: verify })).toEqual({ kind: 'verify', result: verify });
+    const older = makeCuration({ ranAt: '2026-07-04T09:00:00Z' });
+    expect(latestOutcome({ runs: [run], verifyResult: older })).toEqual({ kind: 'run', run });
+  });
+});
+
+describe('outcomeVerdict', () => {
+  it('uses the independent verify verdict of a run when present, else the GA verdict', () => {
+    const failedVerify = makeRun({ verdict: 'pass', verify: makeCuration({ status: 'fail' }) });
+    expect(outcomeVerdict({ kind: 'run', run: failedVerify })).toBe('fail');
+    const noVerify = makeRun({ verdict: 'near_miss', verify: null });
+    expect(outcomeVerdict({ kind: 'run', run: noVerify })).toBe('near_miss');
+  });
+});
+
+describe('allLocked', () => {
+  it('is true only when all three sections are locked', () => {
+    expect(allLocked({ reels: true, paytable: true, bonus: true })).toBe(true);
+    expect(allLocked({ reels: true, paytable: true, bonus: false })).toBe(false);
+    expect(allLocked(null)).toBe(false);
   });
 });

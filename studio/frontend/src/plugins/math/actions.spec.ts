@@ -21,7 +21,19 @@ vi.mock('./socketClient', () => ({
 import { openGameMath, closeGameMath } from './actions';
 
 function run(id: string): IMathRun {
-  return { id, gameId: 'g1', params: {} as never, verdict: 'pass', metrics: null, trace: [], profile: null, createdAt: 't', durationMs: null };
+  return {
+    id,
+    gameId: 'g1',
+    params: {} as never,
+    verdict: 'pass',
+    metrics: null,
+    trace: [],
+    profile: null,
+    createdAt: 't',
+    durationMs: null,
+    verify: null,
+    locks: null,
+  };
 }
 
 beforeEach(() => {

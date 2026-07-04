@@ -38,6 +38,8 @@ function run(id: string): IMathRun {
     profile: null,
     createdAt: 't',
     durationMs: null,
+    verify: null,
+    locks: null,
   };
 }
 
