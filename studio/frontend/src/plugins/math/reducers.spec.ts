@@ -1,7 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { runLoaded, runsLoaded, historyLoaded, toggleRunSelected, selectRun, progressFrame, scrubTo } from './reducers';
+import {
+  runLoaded,
+  runsLoaded,
+  historyLoaded,
+  toggleRunSelected,
+  selectRun,
+  progressFrame,
+  scrubTo,
+  latestOutcome,
+  outcomeVerdict,
+  allLocked,
+} from './reducers';
 import { makeInitialState, currentFrame, MAX_COMPARE_SELECTION } from './state';
-import type { IMathRun, IGenFrame, IGenSnapshot } from './state';
+import type { IMathRun, IGenFrame, IGenSnapshot, ICurationResult } from './state';
 
 function run(id: string, trace: IGenSnapshot[] = []): IMathRun {
   return {
@@ -227,19 +238,10 @@ function makeRun(overrides: Partial<IMathRun>): IMathRun {
   };
 }
 
-function makeCuration(
-  overrides?: Partial<{
-    status: 'pass' | 'fail' | 'error';
-    metrics: import('./state').IMetrics | null;
-    realizedRtp: number | null;
-    poolSize: number | null;
-    failure: string | null;
-    ranAt: string;
-  }>,
-) {
+function makeCuration(overrides?: Partial<ICurationResult>): ICurationResult {
   return {
-    status: 'pass' as const,
-    metrics: null,
+    status: 'pass',
+    metrics: { rtp: 0, volatility: 0, hitFrequency: 0, baseRtp: 0, featureRtp: 0, bonusHitRates: [] },
     realizedRtp: null,
     poolSize: null,
     failure: null,
@@ -247,8 +249,6 @@ function makeCuration(
     ...overrides,
   };
 }
-
-import { latestOutcome, outcomeVerdict, allLocked } from './reducers';
 
 describe('latestOutcome', () => {
   it('returns null with no runs and no verify result', () => {

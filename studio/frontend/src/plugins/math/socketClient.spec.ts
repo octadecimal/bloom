@@ -52,7 +52,7 @@ beforeEach(() => {
   mathSlice().activeGameId.set('g1');
 });
 
-describe('analytics socketClient', () => {
+describe('math socketClient', () => {
   it('appends a live frame for the active game on analytics_progress', () => {
     createMathSocket().connect();
     handlers['analytics_progress']({

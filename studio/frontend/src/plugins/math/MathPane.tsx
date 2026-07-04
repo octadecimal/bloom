@@ -29,9 +29,10 @@ const TABS: ITabDef[] = [
   { id: 'report', label: 'Report', enabled: true },
 ];
 
-/** The Math Analytics pane shell — a header strip over a tab bar, mirroring the
+/** The unified Math pane shell — a header strip over a tab bar, mirroring the
  * cockpit shape from docs/superpowers/specs/2026-07-02-math-analytics-dashboard-design.md.
- * Read-only analytics; tuning stays on the Tuner pane. */
+ * Generate/verify/apply live in the strips around these tabs; the tabs
+ * themselves stay read-only analytics. */
 export function MathPane(_props: IDockviewPanelProps) {
   const s = mathHooks.usePluginState();
   const [activeTab, setActiveTab] = useState<ITabId>('profile');

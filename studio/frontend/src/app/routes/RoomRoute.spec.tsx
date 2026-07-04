@@ -128,7 +128,7 @@ describe('RoomRoute', () => {
     expect(closeGame).toHaveBeenCalled();
   });
 
-  it('valid room with a gameId → opens the math analytics pane for that game', async () => {
+  it('valid room with a gameId → opens the math pane for that game', async () => {
     getRooms.mockResolvedValue([{ id: 'r1', name: 'A', model: 'm', gameId: 'g1', createdAt: 't' }]);
     render(tree('/room/r1'));
     expect(await screen.findByTestId('workbench')).toBeInTheDocument();
