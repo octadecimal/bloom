@@ -121,7 +121,7 @@ class MathHub:
                                  room=game_id)
             return None
 
-        config = build_config(doc.tuner_params, derive_bounds(model))
+        config = build_config(doc.tuner_params, derive_bounds(model), doc.locks)
 
         async def on_progress(p):
             await self._sio.emit(
@@ -183,6 +183,10 @@ class MathHub:
             return False
         self._active.add(game_id)
         return True
+
+    def is_active(self, game_id: str) -> bool:
+        """A generate pipeline currently holds this game's reservation."""
+        return game_id in self._active
 
     async def _status(self, game_id: str, phase: str) -> None:
         await self._sio.emit("generate_status",

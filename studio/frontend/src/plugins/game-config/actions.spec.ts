@@ -5,9 +5,11 @@ import type { ISlotModel } from './model';
 
 const putSlotModel = vi.fn();
 const getSlotModel = vi.fn();
+const applyTemplate = vi.fn();
 vi.mock('./restClient', () => ({
   putSlotModel: (...a: unknown[]) => putSlotModel(...a),
   getSlotModel: (...a: unknown[]) => getSlotModel(...a),
+  applyTemplate: (...a: unknown[]) => applyTemplate(...a),
 }));
 vi.mock('./socketClient', () => ({
   gameConfigSock: () => ({ connect: vi.fn(), disconnect: vi.fn(), join: vi.fn(), leave: vi.fn() }),
@@ -23,6 +25,8 @@ import {
   applyModelFromJson,
   flushPendingSave,
   handleModelChanged,
+  toggleLock,
+  applyTemplateToGame,
 } from './actions';
 
 const MODEL: ISlotModel = {
@@ -34,8 +38,8 @@ const MODEL: ISlotModel = {
   bonuses: [],
 };
 
-function doc(model: unknown, updatedAt: string, presentation: unknown = { symbols: {} }) {
-  return { id: 'd1', gameId: 'g1', model, presentation, updatedAt };
+function doc(model: unknown, updatedAt: string, presentation: unknown = { symbols: {} }, locks?: unknown) {
+  return { id: 'd1', gameId: 'g1', model, presentation, updatedAt, ...(locks ? { locks } : {}) };
 }
 
 describe('game-config actions', () => {
@@ -43,6 +47,7 @@ describe('game-config actions', () => {
     vi.useFakeTimers();
     putSlotModel.mockReset();
     getSlotModel.mockReset();
+    applyTemplate.mockReset();
     rootStore.plugins.nested(GAME_CONFIG_PLUGIN_ID).set(makeInitialState() as never);
   });
   afterEach(() => {
@@ -143,5 +148,70 @@ describe('game-config actions', () => {
     expect(s.externalSource.get()).toBe('tuner');
     await vi.advanceTimersByTimeAsync(EXTERNAL_FLASH_MS + 10);
     expect(s.sync.get()).toBe('saved');
+  });
+
+  it('openGameConfig hydrates locks, defaulting to all-unlocked when absent', async () => {
+    await open(); // doc without locks
+    expect(gameConfigSlice().locks.get({ noproxy: true })).toEqual({ reels: false, paytable: false, bonus: false });
+    getSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, { reels: true, paytable: false, bonus: false }));
+    await openGameConfig('g1');
+    expect(gameConfigSlice().locks.reels.get()).toBe(true);
+  });
+
+  it('toggleLock flips the lock and debounce-PUTs locks only', async () => {
+    await open();
+    putSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+    toggleLock('paytable');
+    expect(gameConfigSlice().locks.paytable.get()).toBe(true);
+    expect(gameConfigSlice().sync.get()).toBe('saving');
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 10);
+    expect(putSlotModel).toHaveBeenCalledTimes(1);
+    const [, patch] = putSlotModel.mock.calls[0];
+    expect(patch.locks).toEqual({ reels: false, paytable: true, bonus: false });
+    expect(patch.model).toBeUndefined();
+    expect(patch.source).toBe('editor');
+    expect(gameConfigSlice().sync.get()).toBe('saved');
+  });
+
+  it('applyTemplateToGame hydrates the returned doc and swallows the template socket echo', async () => {
+    await open();
+    const merged = { ...MODEL, rows: 5 };
+    applyTemplate.mockResolvedValue(doc(merged, 't3', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+    await applyTemplateToGame('video-5x3');
+    expect(applyTemplate).toHaveBeenCalledWith('g1', 'video-5x3');
+    const s = gameConfigSlice();
+    expect(s.model.rows.get()).toBe(5);
+    expect(s.watermark.get()).toBe('t3');
+    expect(s.sync.get()).toBe('saved');
+    // the slot_model_changed echo (source "template", same updatedAt) must not re-hydrate
+    handleModelChanged({ gameId: 'g1', updatedAt: 't3', source: 'template' });
+    expect(getSlotModel).toHaveBeenCalledTimes(1); // only the open() call
+    expect(s.sync.get()).toBe('saved');
+  });
+
+  it('applyTemplateToGame flushes a pending debounced lock save before applying the template', async () => {
+    await open();
+    putSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+    const applied = { ...MODEL, rows: 3 };
+    applyTemplate.mockResolvedValue(doc(applied, 't3', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+
+    toggleLock('paytable'); // starts the debounce; do NOT advance timers past it
+    await applyTemplateToGame('video-5x3');
+
+    expect(putSlotModel).toHaveBeenCalledTimes(1);
+    const [, patch] = putSlotModel.mock.calls[0];
+    expect(patch.locks.paytable).toBe(true);
+    expect(putSlotModel.mock.invocationCallOrder[0]).toBeLessThan(applyTemplate.mock.invocationCallOrder[0]);
+
+    const s = gameConfigSlice();
+    expect(s.model.rows.get()).toBe(3);
+    expect(s.watermark.get()).toBe('t3');
+  });
+
+  it('a failed applyTemplateToGame sets sync=error', async () => {
+    await open();
+    applyTemplate.mockRejectedValue(new Error('boom'));
+    await applyTemplateToGame('classic-3x3');
+    expect(gameConfigSlice().sync.get()).toBe('error');
   });
 });

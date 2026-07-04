@@ -311,3 +311,31 @@ async def test_request_tune_emits_analytics_progress_then_run_complete(mongo_db)
     assert names.index("run_complete") > max(
         i for i, n in enumerate(names) if n == "analytics_progress"
     )
+
+
+class _ConfigCapturingTunerRunner:
+    def __init__(self, result):
+        self._result = result
+        self.config: dict | None = None
+
+    async def run(self, seed_model, target, config, on_progress):
+        self.config = config
+        return self._result
+
+
+@pytest.mark.asyncio
+async def test_request_tune_passes_doc_locks_into_tuner_config(mongo_db):
+    from app.math.models import SectionLocks
+    store = MathStore(mongo_db)
+    await store.put("g1", model={"bonuses": []}, locks=SectionLocks(reels=True))
+    run_store = MathRunStore(mongo_db)
+    runner = _ConfigCapturingTunerRunner(_pass_tune_result())
+    sio = FakeSio()
+    hub = MathHub(sio, store, run_store,
+                  FakeCurationRunner(progress=[], result=_pass_curation_result()),
+                  runner, FakeGdd({"rtp": 0.9, "volatility": "low"}))
+
+    await hub.request_tune("g1")
+
+    assert runner.config is not None
+    assert runner.config["locks"] == {"reels": True, "paytable": False, "bonus": False}

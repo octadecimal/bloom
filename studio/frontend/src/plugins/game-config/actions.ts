@@ -1,5 +1,5 @@
-import { gameConfigSlice } from './state';
-import { getSlotModel, putSlotModel, type ISlotModelWireDoc } from './restClient';
+import { gameConfigSlice, defaultLocks, type ISectionLocks } from './state';
+import { getSlotModel, putSlotModel, applyTemplate, type ISlotModelWireDoc, type IPutSlotModelPatch } from './restClient';
 import { normalizeModel, type ISlotModel } from './model';
 import { normalizePresentation, type IPresentation } from './presentation';
 import { gameConfigSock, setModelChangedHandler, type IModelChangedEvent } from './socketClient';
@@ -9,7 +9,7 @@ export const EXTERNAL_FLASH_MS = 4000;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
-let dirty = { model: false, presentation: false };
+let dirty = { model: false, presentation: false, locks: false };
 
 export function initGameConfig(): void {
   gameConfigSock().connect();
@@ -21,6 +21,7 @@ function hydrateDoc(doc: ISlotModelWireDoc): void {
   const model = normalizeModel(doc.model);
   s.model.set(model);
   s.presentation.set(normalizePresentation(doc.presentation));
+  s.locks.set({ ...defaultLocks(), ...(doc.locks ?? {}) });
   s.jsonDraft.set(JSON.stringify(model, null, 2));
   s.jsonError.set(null);
   if (doc.updatedAt > s.watermark.get()) s.watermark.set(doc.updatedAt);
@@ -47,10 +48,11 @@ export function closeGameConfig(): void {
   if (flashTimer) clearTimeout(flashTimer);
   saveTimer = null;
   flashTimer = null;
-  dirty = { model: false, presentation: false };
+  dirty = { model: false, presentation: false, locks: false };
   s.activeGameId.set(null);
   s.model.set(null);
   s.presentation.set({ symbols: {} });
+  s.locks.set(defaultLocks());
   s.jsonDraft.set('');
   s.jsonError.set(null);
   s.sync.set('idle');
@@ -59,7 +61,7 @@ export function closeGameConfig(): void {
   s.loadStatus.set('idle');
 }
 
-function scheduleSave(kind: 'model' | 'presentation'): void {
+function scheduleSave(kind: 'model' | 'presentation' | 'locks'): void {
   dirty[kind] = true;
   gameConfigSlice().sync.set('saving');
   if (saveTimer) clearTimeout(saveTimer);
@@ -73,11 +75,12 @@ export async function flushPendingSave(): Promise<void> {
   }
   const s = gameConfigSlice();
   const gameId = s.activeGameId.get();
-  if (!gameId || (!dirty.model && !dirty.presentation)) return;
-  const patch: { model?: ISlotModel; presentation?: IPresentation; source: string } = { source: 'editor' };
+  if (!gameId || (!dirty.model && !dirty.presentation && !dirty.locks)) return;
+  const patch: IPutSlotModelPatch = { source: 'editor' };
   if (dirty.model) patch.model = s.model.get({ noproxy: true }) as ISlotModel;
   if (dirty.presentation) patch.presentation = s.presentation.get({ noproxy: true }) as IPresentation;
-  dirty = { model: false, presentation: false };
+  if (dirty.locks) patch.locks = s.locks.get({ noproxy: true }) as ISectionLocks;
+  dirty = { model: false, presentation: false, locks: false };
   try {
     const doc = await putSlotModel(gameId, patch);
     if (doc.updatedAt > s.watermark.get()) s.watermark.set(doc.updatedAt);
@@ -104,6 +107,12 @@ export function applyPresentation(fn: (p: IPresentation) => IPresentation): void
   scheduleSave('presentation');
 }
 
+export function toggleLock(section: keyof ISectionLocks): void {
+  const s = gameConfigSlice();
+  s.locks[section].set(!s.locks[section].get());
+  scheduleSave('locks');
+}
+
 /** JSON tab Apply. Returns false (and sets jsonError) on a parse failure. */
 export function applyModelFromJson(text: string): boolean {
   const s = gameConfigSlice();
@@ -117,6 +126,21 @@ export function applyModelFromJson(text: string): boolean {
   s.jsonError.set(null);
   applyModel(() => normalizeModel(parsed));
   return true;
+}
+
+/** Apply-template confirm. Hydrating the POST response advances the watermark,
+ * so the source:"template" socket echo is swallowed (no external flash here). */
+export async function applyTemplateToGame(name: string): Promise<void> {
+  const s = gameConfigSlice();
+  const gameId = s.activeGameId.get();
+  if (!gameId) return;
+  await flushPendingSave(); // land any pending lock/model/presentation PUT before the template merge reads persisted state
+  try {
+    hydrateDoc(await applyTemplate(gameId, name));
+    s.sync.set('saved');
+  } catch {
+    s.sync.set('error');
+  }
 }
 
 export function handleModelChanged(p: IModelChangedEvent): void {

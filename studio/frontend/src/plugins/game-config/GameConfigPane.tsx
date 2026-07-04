@@ -1,10 +1,14 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { gameConfigHooks } from './state';
+import { Lock, LockOpen } from 'lucide-react';
+import { toggleLock } from './actions';
+import { gameConfigHooks, type ISectionLocks } from './state';
 import type { ISlotModel } from './model';
 import { deriveStats } from './reducers';
 import { validateModel, type GcTab } from './validate';
 import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
+import { Button } from '../../components/ui/button';
+import { TemplateDialog } from './TemplateDialog';
 import { SymbolsSection } from './sections/SymbolsSection';
 import { ReelsSection } from './sections/ReelsSection';
 import { PaylinesSection } from './sections/PaylinesSection';
@@ -20,6 +24,12 @@ const TABS: { key: GcTab; label: string }[] = [
   { key: 'bonus', label: 'Bonus' },
   { key: 'json', label: 'JSON' },
 ];
+
+const LOCKABLE: Partial<Record<GcTab, keyof ISectionLocks>> = {
+  reels: 'reels',
+  paytable: 'paytable',
+  bonus: 'bonus',
+};
 
 const SECTIONS: Record<GcTab, () => ReactElement> = {
   symbols: SymbolsSection,
@@ -43,6 +53,7 @@ function Stat({ label, value, testId }: { label: string; value: string; testId: 
 
 export function GameConfigPane(_props: IDockviewPanelProps) {
   const s = gameConfigHooks.usePluginState();
+  const [templateOpen, setTemplateOpen] = useState(false);
   const activeGameId = s.activeGameId.get();
   const model = s.model.get({ noproxy: true }) as ISlotModel | null;
 
@@ -57,6 +68,7 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
   const stats = deriveStats(model);
   const issues = validateModel(model);
   const activeTab = s.activeTab.get();
+  const locks = s.locks.get({ noproxy: true }) as ISectionLocks;
   const sync = s.sync.get();
   const syncLabel =
     sync === 'saving' ? 'saving…' : sync === 'external' ? `updated externally · ${s.externalSource.get() ?? ''}` : sync === 'error' ? 'save failed' : 'saved';
@@ -71,6 +83,9 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
         <Stat label="Lines" value={String(stats.paylineCount)} testId="gc-stat-lines" />
         <Stat label="Strips" value={stats.stripLengths.join(', ')} testId="gc-stat-strips" />
         <span className="ml-auto inline-flex items-center gap-2">
+          <Button data-testid="gc-apply-template" variant="outline" size="sm" onClick={() => setTemplateOpen(true)}>
+            Apply template…
+          </Button>
           {issues.length > 0 && (
             <StatusPill data-testid="gc-issues-pill" tone="warning">
               {issues.length} issue{issues.length === 1 ? '' : 's'}
@@ -86,6 +101,7 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
         {TABS.map((t) => {
           const count = issues.filter((i) => i.tab === t.key).length;
           const active = t.key === activeTab;
+          const lockKey = LOCKABLE[t.key];
           return (
             <button
               key={t.key}
@@ -97,14 +113,36 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
             >
               {t.label}
               {count > 0 && <span data-testid={`gc-tab-dot-${t.key}`} className="h-1.5 w-1.5 rounded-full bg-warning" />}
+              {lockKey && locks[lockKey] && <Lock data-testid={`gc-tab-lock-${t.key}`} className="h-3 w-3 text-text-3" />}
             </button>
           );
         })}
+        {(() => {
+          const lockKey = LOCKABLE[activeTab];
+          if (!lockKey) return null;
+          const locked = locks[lockKey];
+          return (
+            <button
+              data-testid={`gc-lock-${lockKey}`}
+              title={
+                locked
+                  ? 'Locked against automation (GA, templates) — still editable by hand. Click to unlock.'
+                  : 'Lock this section against automation (GA, templates). Humans can always edit.'
+              }
+              onClick={() => toggleLock(lockKey)}
+              className={`ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs ${locked ? 'text-warning' : 'text-text-2'} hover:bg-raised hover:text-text-1`}
+            >
+              {locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+              {locked ? 'Locked' : 'Lock'}
+            </button>
+          );
+        })()}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
         <Section />
       </div>
+      <TemplateDialog open={templateOpen} onOpenChange={setTemplateOpen} locks={locks} />
     </div>
   );
 }

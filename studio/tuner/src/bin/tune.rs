@@ -6,7 +6,7 @@
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::{HitRateBand, TargetSpec};
-use bloom_tuner::config::{GeneBounds, TunerConfig, Weights};
+use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
 use bloom_tuner::outcome::Verdict;
 use bloom_tuner::report::render_report;
 use bloom_tuner::{GeneticTuner, Tuner};
@@ -50,6 +50,16 @@ struct WeightsJson {
     hit_rate: f64,
 }
 
+#[derive(Deserialize, Default)]
+struct LocksJson {
+    #[serde(default)]
+    reels: bool,
+    #[serde(default)]
+    paytable: bool,
+    #[serde(default)]
+    bonus: bool,
+}
+
 #[derive(Deserialize)]
 struct ConfigJson {
     master_seed: u64,
@@ -63,6 +73,8 @@ struct ConfigJson {
     final_candidate_count: usize,
     bounds: BoundsJson,
     weights: WeightsJson,
+    #[serde(default)]
+    locks: LocksJson,
 }
 
 fn main() {
@@ -121,6 +133,11 @@ fn main() {
             rtp: cj.weights.rtp,
             volatility: cj.weights.volatility,
             hit_rate: cj.weights.hit_rate,
+        },
+        locks: SectionLocks {
+            reels: cj.locks.reels,
+            paytable: cj.locks.paytable,
+            bonus: cj.locks.bonus,
         },
     };
 

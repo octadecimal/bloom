@@ -2,7 +2,7 @@
 bloom-tuner `tune_json` binary reads. Pure; no IO. Gene bounds are DERIVED from
 the seed model (not user-edited) — the payout ceiling scales to the model's own
 payouts so the search can both raise and lower them."""
-from app.math.models import TuningParams
+from app.math.models import SectionLocks, TuningParams
 
 
 def derive_bounds(model: dict) -> dict:
@@ -21,7 +21,9 @@ def derive_bounds(model: dict) -> dict:
     }
 
 
-def build_config(params: TuningParams, bounds: dict) -> dict:
+def build_config(params: TuningParams, bounds: dict,
+                 locks: SectionLocks | None = None) -> dict:
+    lk = locks or SectionLocks()
     return {
         "master_seed": params.master_seed,
         "population": params.population,
@@ -38,4 +40,5 @@ def build_config(params: TuningParams, bounds: dict) -> dict:
             "volatility": params.weights.volatility,
             "hit_rate": params.weights.hit_rate,
         },
+        "locks": {"reels": lk.reels, "paytable": lk.paytable, "bonus": lk.bonus},
     }

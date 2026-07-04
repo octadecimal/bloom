@@ -173,3 +173,15 @@ async def test_drain_stdout_builds_progress_population_and_gene_agreement():
     assert seen[0].population.diversity == pytest.approx(0.42)
     assert seen[0].population.median == pytest.approx(-0.5)
     assert seen[0].gene_agreement == [0.8, 0.6]
+
+
+def test_parse_tune_error_line_maps_message_to_failure():
+    from app.math.runners.tune import parse_tune_error_line
+    res = parse_tune_error_line(
+        {"type": "error", "message": "everything is locked — nothing to tune"},
+        ran_at="t")
+    assert res.status == "error"
+    assert res.verdict is None
+    assert res.tuned_model is None
+    assert "locked" in res.failure
+    assert res.ran_at == "t"

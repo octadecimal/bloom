@@ -42,4 +42,21 @@ pub struct TunerConfig {
     pub final_candidate_count: usize,
     pub bounds: GeneBounds,
     pub weights: Weights,
+    pub locks: SectionLocks,
+}
+
+/// Section-level automation locks. A locked group's genes are omitted from the
+/// genome entirely (the search space genuinely shrinks); `decode` copies that
+/// group verbatim from the seed model. Locks constrain automation, never humans.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SectionLocks {
+    pub reels: bool,
+    pub paytable: bool,
+    pub bonus: bool,
+}
+
+impl SectionLocks {
+    pub fn all_locked(&self) -> bool {
+        self.reels && self.paytable && self.bonus
+    }
 }
