@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from app.math.bounds import build_config, derive_bounds
 from app.math.models import (
-    CurationResult, MathRunDoc, TuneResult, TuningParams,
+    CurationResult, MathRunDoc, SectionLocks, TuneResult, TuningParams,
     math_run_wire, sim_wire, tuner_view,
 )
 from app.math.targets import derive_target, TargetGap
@@ -198,7 +198,9 @@ class MathHub:
             # Capture the params tuned WITH (from the doc at pipeline start), so
             # a user editing GA params mid-pipeline can't mislabel the run's
             # provenance — matches what request_tune records on its own path.
-            params = (await self._store.get_or_seed(game_id)).tuner_params
+            doc0 = await self._store.get_or_seed(game_id)
+            params = doc0.tuner_params
+            locks = doc0.locks
             started = time.monotonic()
             result = await self.request_tune(game_id, record=False)
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -208,7 +210,7 @@ class MathHub:
             await self._status(game_id, "verifying")
             verify = await self._verify_tuned(game_id, result.tuned_model)
             await self.record_run(game_id, params, result, duration_ms,
-                                  verify=verify)
+                                  verify=verify, locks=locks)
             await self._status(game_id, "done")
             return True
         except Exception:
@@ -243,13 +245,14 @@ class MathHub:
     # ── run recording (was AnalyticsHub.record_run, + verify) ───────────────
     async def record_run(self, game_id: str, params: TuningParams,
                          result: TuneResult, duration_ms: int,
-                         verify: CurationResult | None = None) -> MathRunDoc | None:
+                         verify: CurationResult | None = None,
+                         locks: SectionLocks | None = None) -> MathRunDoc | None:
         if result.status not in ("pass", "near_miss"):
             return None
         doc = MathRunDoc(
             id=str(uuid.uuid4()), game_id=game_id, params=params,
             verdict=result.verdict, metrics=result.metrics, trace=result.trace,
-            profile=result.profile, verify=verify,
+            profile=result.profile, verify=verify, locks=locks,
             created_at=_now(), duration_ms=duration_ms,
         )
         saved = await self._runs.append(doc)

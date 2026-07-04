@@ -204,6 +204,7 @@ class MathRunDoc(_WireModel):
     trace: list[GenSnapshotWire] = Field(default_factory=list)
     profile: RunProfileWire | None = None
     verify: CurationResult | None = None  # NEW: independent curate pass on the winner
+    locks: SectionLocks | None = None  # SP3: lock set the run was tuned with
     created_at: str
     duration_ms: int | None = None
 

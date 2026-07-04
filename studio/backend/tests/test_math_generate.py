@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.math.hub import MathHub
-from app.math.models import CurationResult, MetricsWire, TuneResult
+from app.math.models import CurationResult, MetricsWire, SectionLocks, TuneResult
 from app.math.runners.curate import FakeCurationRunner
 from app.math.runners.tune import FakeTunerRunner
 from app.math.store import MathRunStore, MathStore
@@ -230,3 +230,17 @@ async def test_generate_failed_verify_still_persists_run_with_done_phase(mongo_d
     assert docs[0].verdict == "pass"
     assert docs[0].verify.status == "fail"
     assert sio.phases() == ["tuning", "verifying", "done"]
+
+
+@pytest.mark.asyncio
+async def test_generate_snapshots_locks_onto_the_run(mongo_db):
+    sio = FakeSio()
+    hub, store, runs = _hub(mongo_db, sio,
+                            tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
+                            curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    await store.put("g1", locks=SectionLocks(bonus=True))
+    ok = await hub.generate("g1")
+    assert ok is True
+    saved = (await runs.list_for_game("g1"))[0]
+    assert saved.locks is not None
+    assert saved.locks.bonus is True and saved.locks.reels is False and saved.locks.paytable is False
