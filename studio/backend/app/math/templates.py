@@ -1,7 +1,7 @@
 """Named starter SlotModels. A fresh game is seeded with DEFAULT_TEMPLATE so a
-game's model is never {}. The video-5x3 / high-vol-5x4 literals are frozen
-tuner output (tools/freeze_template.py, Task 7) so each template lands near its
-stated target out of the box."""
+game's model is never {}. All three literals (classic-3x3 / video-5x3 /
+high-vol-5x4) are frozen tuner output (tools/freeze_template.py, Task 7) so each
+template lands near its stated target out of the box."""
 import copy
 
 from app.math.models import SectionLocks

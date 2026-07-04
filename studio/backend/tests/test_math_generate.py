@@ -193,6 +193,28 @@ async def test_generate_unexpected_exception_emits_failed_and_releases_reservati
 
 
 @pytest.mark.asyncio
+async def test_generate_records_params_from_pipeline_start_not_post_verify_reread(mongo_db):
+    """Provenance: the run records the params the tune actually ran WITH, even if
+    the user edits GA params mid-pipeline. We capture them at pipeline start, not
+    by re-reading the doc after verify."""
+    from app.math.models import default_tuning_params
+    sio = FakeSio()
+    gated = GatedTunerRunner(_pass_tune())
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=gated,
+                            curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    # Doc starts with default population (24); a user edits it mid-tune to 99.
+    task = asyncio.create_task(hub.generate("g1"))
+    await asyncio.sleep(0)                    # let it reserve, capture params, park
+    edited = default_tuning_params()
+    edited.population = 99
+    await store.put("g1", tuner_params=edited)
+    gated.gate.set()
+    assert await task is True
+    docs = await runs.list_for_game("g1")
+    assert docs[0].params.population == 24    # tuned-with value, not the mid-run edit
+
+
+@pytest.mark.asyncio
 async def test_generate_failed_verify_still_persists_run_with_done_phase(mongo_db):
     """Verify failing is not a pipeline failure: the pipeline finished (phase
     ends 'done', not 'failed') and the run is persisted with the failing

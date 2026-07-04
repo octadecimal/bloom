@@ -117,6 +117,29 @@ async def test_legacy_doc_without_tuner_jobs_gets_defaults(mongo_db):
 
 
 @pytest.mark.asyncio
+async def test_legacy_doc_with_empty_model_backfills_default_template(mongo_db):
+    # A pre-existing dev doc: the old SlotModelStore.get_or_seed stamped model={}
+    # on first touch. This one is ALREADY migrated (has tuner_params) but still
+    # carries the empty model — the deleted DEMO fallback used to make {} spinnable,
+    # so without a backfill the spin path feeds {} to spin_json and throws.
+    await mongo_db["slot_models"].insert_one({
+        "_id": "empty1", "game_id": "g-empty", "model": {},
+        "params": default_params().model_dump(mode="json"),
+        "tuner_params": default_tuning_params().model_dump(mode="json"),
+        "tune_result": None,
+        "locks": SectionLocks().model_dump(mode="json"),
+        "presentation": {}, "result": None,
+        "created_at": "t0", "updated_at": "t0",
+    })
+    store = MathStore(mongo_db)
+    doc = await store.get("g-empty")
+    assert doc.model == templates.default_model()   # never {}: spin path stays safe
+    # And it persisted, not just returned:
+    raw = await mongo_db["slot_models"].find_one({"game_id": "g-empty"})
+    assert raw["model"] == templates.default_model()
+
+
+@pytest.mark.asyncio
 async def test_math_run_store_appends_and_lists_newest_first(mongo_db):
     from app.math.models import MathRunDoc
     store = MathRunStore(mongo_db)

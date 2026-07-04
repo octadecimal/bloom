@@ -44,6 +44,13 @@ class MathStore:
             return None
         if "tuner_params" not in raw:
             raw = await self._migrate_legacy_tuner(raw)
+        if not raw.get("model"):
+            # Legacy dev docs (old SlotModelStore.get_or_seed stamped model={})
+            # must never reach the spin path empty — the DEMO fallback that made
+            # {} spinnable is gone. Backfill the default template idempotently.
+            model = templates.default_model()
+            await self._docs.update_one({"_id": raw["_id"]}, {"$set": {"model": model}})
+            raw = {**raw, "model": model}
         return _from_doc(raw)
 
     async def _migrate_legacy_tuner(self, raw: dict) -> dict:

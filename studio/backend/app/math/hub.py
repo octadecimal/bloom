@@ -191,6 +191,10 @@ class MathHub:
     async def _generate_reserved(self, game_id: str) -> bool:
         try:
             await self._status(game_id, "tuning")
+            # Capture the params tuned WITH (from the doc at pipeline start), so
+            # a user editing GA params mid-pipeline can't mislabel the run's
+            # provenance — matches what request_tune records on its own path.
+            params = (await self._store.get_or_seed(game_id)).tuner_params
             started = time.monotonic()
             result = await self.request_tune(game_id, record=False)
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -199,8 +203,7 @@ class MathHub:
                 return True
             await self._status(game_id, "verifying")
             verify = await self._verify_tuned(game_id, result.tuned_model)
-            doc = await self._store.get(game_id)
-            await self.record_run(game_id, doc.tuner_params, result, duration_ms,
+            await self.record_run(game_id, params, result, duration_ms,
                                   verify=verify)
             await self._status(game_id, "done")
             return True
