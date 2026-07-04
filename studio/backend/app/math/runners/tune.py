@@ -99,7 +99,7 @@ def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
                              band_lo=x["bandLo"], band_hi=x["bandHi"]) for x in d.get("missed", [])],
         trace=[_parse_snapshot(s) for s in d.get("trace", [])],
         profile=_parse_profile(profile_d) if profile_d else None,
-        failure=None, ran_at=ran_at,
+        failure=None, stop_reason=d.get("stopReason"), ran_at=ran_at,
     )
 
 

@@ -33,6 +33,7 @@ function baseRun(overrides: Partial<IMathRun> = {}): IMathRun {
     durationMs: null,
     verify: null,
     locks: null,
+    stopReason: null,
     ...overrides,
   };
 }
@@ -106,6 +107,32 @@ describe('ResultStrip', () => {
   it('does not show math-applied when applied is false', () => {
     render(<ResultStrip />);
     expect(screen.queryByTestId('math-applied')).toBeNull();
+  });
+
+  it('shows why the GA stopped, with the generation count', () => {
+    const snap = (generation: number) => ({
+      generation,
+      bestFitness: -0.1,
+      bestRtp: 0.9,
+      bestVolatility: 3,
+      population: { min: -1, q1: -0.7, median: -0.5, q3: -0.3, max: -0.1, mean: -0.5, diversity: 0.4 },
+      geneAgreement: [1],
+    });
+    mathSlice().runs.set([baseRun({ verdict: 'near_miss', stopReason: 'stagnated', trace: [snap(0), snap(1), snap(2)] })]);
+    render(<ResultStrip />);
+    expect(screen.getByTestId('result-stop-reason').textContent).toBe('stagnated after 3 generations');
+  });
+
+  it('labels a feasible stop as target reached', () => {
+    mathSlice().runs.set([baseRun({ stopReason: 'feasible' })]);
+    render(<ResultStrip />);
+    expect(screen.getByTestId('result-stop-reason').textContent).toContain('target reached');
+  });
+
+  it('omits the stop reason for runs that predate it', () => {
+    mathSlice().runs.set([baseRun()]);
+    render(<ResultStrip />);
+    expect(screen.queryByTestId('result-stop-reason')).toBeNull();
   });
 
   it('shows the measured RTP with a target band derived from derivedTarget', () => {

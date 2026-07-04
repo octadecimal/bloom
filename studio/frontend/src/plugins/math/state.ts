@@ -170,6 +170,8 @@ export interface IMathRun {
   durationMs: number | null;
   verify: ICurationResult | null;
   locks: ISectionLocks | null;
+  /** Why the GA ended: 'feasible' | 'stagnated' | 'budget' (null on runs that predate it). */
+  stopReason: string | null;
 }
 
 export interface IMathState {

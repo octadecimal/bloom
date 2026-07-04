@@ -6,6 +6,8 @@ read-only as the lazy-migration source."""
 import uuid
 from datetime import datetime, timezone
 
+from pymongo.errors import DuplicateKeyError
+
 from app.math import templates
 from app.math.models import (
     CurationParams, CurationResult, MathRunDoc, SectionLocks, SlotModelDoc,
@@ -37,8 +39,29 @@ class MathStore:
         self._docs = db["slot_models"]
         self._legacy_tuner_jobs = db["tuner_jobs"]  # migration source only
         self._on_change = on_change
+        self._indexed = False
+
+    async def _ensure_unique_index(self) -> None:
+        """One-time per process: heal race-twin docs (the old check-then-insert
+        get_or_seed could double-insert), keeping the natural-first doc — the one
+        every unsorted find_one/update_one has always hit — then enforce
+        uniqueness at the DB level so the race is impossible from here on."""
+        if self._indexed:
+            return
+        seen: set[str] = set()
+        twins: list = []
+        async for raw in self._docs.find({}, {"game_id": 1}):
+            if raw["game_id"] in seen:
+                twins.append(raw["_id"])
+            else:
+                seen.add(raw["game_id"])
+        if twins:
+            await self._docs.delete_many({"_id": {"$in": twins}})
+        await self._docs.create_index("game_id", unique=True)
+        self._indexed = True
 
     async def get(self, game_id: str) -> SlotModelDoc | None:
+        await self._ensure_unique_index()
         raw = await self._docs.find_one({"game_id": game_id})
         if raw is None:
             return None
@@ -82,7 +105,11 @@ class MathStore:
             result=None, tune_result=None,
             created_at=now, updated_at=now,
         )
-        await self._docs.insert_one(_to_doc(doc))
+        try:
+            await self._docs.insert_one(_to_doc(doc))
+        except DuplicateKeyError:
+            # A concurrent get_or_seed won the insert; theirs is the doc.
+            return await self.get(game_id)
         return doc
 
     async def put(self, game_id: str, *, model: dict | None = None,

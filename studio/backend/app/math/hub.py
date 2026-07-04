@@ -243,6 +243,7 @@ class MathHub:
             id=str(uuid.uuid4()), game_id=game_id, params=params,
             verdict=result.verdict, metrics=result.metrics, trace=result.trace,
             profile=result.profile, verify=verify, locks=locks,
+            stop_reason=result.stop_reason,
             created_at=_now(), duration_ms=duration_ms,
         )
         saved = await self._runs.append(doc)

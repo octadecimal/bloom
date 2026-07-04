@@ -73,7 +73,7 @@ def _metrics():
 
 def _pass_tune():
     return TuneResult(status="pass", verdict="pass", tuned_model={"rows": 7},
-                      metrics=_metrics(), ran_at="t1")
+                      metrics=_metrics(), ran_at="t1", stop_reason="feasible")
 
 
 def _pass_curation():
@@ -105,6 +105,19 @@ async def test_generate_runs_tune_then_verify_and_persists_one_run(mongo_db):
     assert (await store.get("g1")).tune_result.tuned_model == {"rows": 7}
     assert sio.phases() == ["tuning", "verifying", "done"]
     assert sio.count("run_complete") == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_records_the_tuners_stop_reason(mongo_db):
+    from app.math.models import math_run_wire
+    sio = FakeSio()
+    hub, _, runs = _hub(mongo_db, sio,
+                        tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
+                        curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    await hub.generate("g1")
+    docs = await runs.list_for_game("g1")
+    assert docs[0].stop_reason == "feasible"
+    assert math_run_wire(docs[0])["stopReason"] == "feasible"
 
 
 @pytest.mark.asyncio

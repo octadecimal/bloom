@@ -25,6 +25,17 @@ export function ResultStrip() {
   const lockedSections = runLocks ? (['reels', 'paytable', 'bonus'] as const).filter((k) => runLocks[k]) : [];
   const failedVerdict = verdict === 'fail' || verdict === 'error';
 
+  const stopReason = outcome?.kind === 'run' ? outcome.run.stopReason : null;
+  const generations = outcome?.kind === 'run' ? outcome.run.trace.length : 0;
+  const stopLabel =
+    stopReason === 'feasible'
+      ? `target reached in ${generations} generation${generations === 1 ? '' : 's'}`
+      : stopReason === 'stagnated'
+        ? `stagnated after ${generations} generations`
+        : stopReason === 'budget'
+          ? `generation budget exhausted (${generations})`
+          : null;
+
   return (
     <div className="flex-none border-t border-hairline p-2 text-xs">
       <div className="flex items-center gap-2">
@@ -32,6 +43,11 @@ export function ResultStrip() {
         <span data-testid="result-verdict" className={`text-sm font-semibold ${badgeClass}`}>
           {badge}
         </span>
+        {stopLabel && (
+          <span data-testid="result-stop-reason" className="text-text-3">
+            {stopLabel}
+          </span>
+        )}
         {lockedSections.length > 0 && (
           <span data-testid="result-lock-chips" className="text-text-3">
             locked: {lockedSections.join(', ')}
