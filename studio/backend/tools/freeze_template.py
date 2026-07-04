@@ -42,6 +42,10 @@ TEMPLATE_TARGETS: dict[str, dict] = {
 
 
 async def main(name: str, lock_names: list[str]) -> None:
+    unknown = set(lock_names) - set(SectionLocks.model_fields)
+    if unknown:
+        raise SystemExit(f"unknown lock section(s): {', '.join(sorted(unknown))} "
+                         f"(valid: {', '.join(SectionLocks.model_fields)})")
     seed = templates.get_model(name)
     target = TEMPLATE_TARGETS[name]
     params = default_tuning_params().model_copy(update={"max_generations": 160})
