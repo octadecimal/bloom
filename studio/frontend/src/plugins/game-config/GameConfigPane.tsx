@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { Lock, LockOpen } from 'lucide-react';
 import { toggleLock } from './actions';
@@ -7,6 +7,8 @@ import type { ISlotModel } from './model';
 import { deriveStats } from './reducers';
 import { validateModel, type GcTab } from './validate';
 import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
+import { Button } from '../../components/ui/button';
+import { TemplateDialog } from './TemplateDialog';
 import { SymbolsSection } from './sections/SymbolsSection';
 import { ReelsSection } from './sections/ReelsSection';
 import { PaylinesSection } from './sections/PaylinesSection';
@@ -51,6 +53,7 @@ function Stat({ label, value, testId }: { label: string; value: string; testId: 
 
 export function GameConfigPane(_props: IDockviewPanelProps) {
   const s = gameConfigHooks.usePluginState();
+  const [templateOpen, setTemplateOpen] = useState(false);
   const activeGameId = s.activeGameId.get();
   const model = s.model.get({ noproxy: true }) as ISlotModel | null;
 
@@ -80,6 +83,9 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
         <Stat label="Lines" value={String(stats.paylineCount)} testId="gc-stat-lines" />
         <Stat label="Strips" value={stats.stripLengths.join(', ')} testId="gc-stat-strips" />
         <span className="ml-auto inline-flex items-center gap-2">
+          <Button data-testid="gc-apply-template" variant="outline" size="sm" onClick={() => setTemplateOpen(true)}>
+            Apply template…
+          </Button>
           {issues.length > 0 && (
             <StatusPill data-testid="gc-issues-pill" tone="warning">
               {issues.length} issue{issues.length === 1 ? '' : 's'}
@@ -136,6 +142,7 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
       <div className="min-h-0 flex-1 overflow-auto">
         <Section />
       </div>
+      <TemplateDialog open={templateOpen} onOpenChange={setTemplateOpen} locks={locks} />
     </div>
   );
 }

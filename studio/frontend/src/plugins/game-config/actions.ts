@@ -1,5 +1,5 @@
 import { gameConfigSlice, defaultLocks, type ISectionLocks } from './state';
-import { getSlotModel, putSlotModel, type ISlotModelWireDoc, type IPutSlotModelPatch } from './restClient';
+import { getSlotModel, putSlotModel, applyTemplate, type ISlotModelWireDoc, type IPutSlotModelPatch } from './restClient';
 import { normalizeModel, type ISlotModel } from './model';
 import { normalizePresentation, type IPresentation } from './presentation';
 import { gameConfigSock, setModelChangedHandler, type IModelChangedEvent } from './socketClient';
@@ -126,6 +126,20 @@ export function applyModelFromJson(text: string): boolean {
   s.jsonError.set(null);
   applyModel(() => normalizeModel(parsed));
   return true;
+}
+
+/** Apply-template confirm. Hydrating the POST response advances the watermark,
+ * so the source:"template" socket echo is swallowed (no external flash here). */
+export async function applyTemplateToGame(name: string): Promise<void> {
+  const s = gameConfigSlice();
+  const gameId = s.activeGameId.get();
+  if (!gameId) return;
+  try {
+    hydrateDoc(await applyTemplate(gameId, name));
+    s.sync.set('saved');
+  } catch {
+    s.sync.set('error');
+  }
 }
 
 export function handleModelChanged(p: IModelChangedEvent): void {

@@ -37,3 +37,13 @@ export async function putSlotModel(gameId: string, patch: IPutSlotModelPatch): P
     }),
   );
 }
+
+export async function applyTemplate(gameId: string, name: string): Promise<ISlotModelWireDoc> {
+  return okJson<ISlotModelWireDoc>(
+    await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/apply-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  );
+}
