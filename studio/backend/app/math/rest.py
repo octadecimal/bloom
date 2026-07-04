@@ -93,12 +93,6 @@ async def put_tuner(game_id: str, body: PutTunerBody, request: Request) -> dict:
     return tuner_view(doc)
 
 
-@router.get("/games/{game_id}/tuner/seed")
-async def get_tuner_seed(game_id: str, request: Request) -> dict:
-    doc = await request.app.state.math_store.get_or_seed(game_id)
-    return {"model": doc.model}
-
-
 @router.get("/games/{game_id}/tuner/target")
 async def get_tuner_target(game_id: str, request: Request) -> dict:
     doc = await request.app.state.math_store.get_or_seed(game_id)
@@ -110,15 +104,6 @@ async def get_tuner_target(game_id: str, request: Request) -> dict:
         return {"target": derive_target(math_model, doc.params, num_bonuses)}
     except TargetGap as gap:
         return {"gap": gap.message}
-
-
-@router.post("/games/{game_id}/tuner/tune", status_code=202)
-async def tune_tuner(game_id: str, request: Request) -> Response:
-    if request.app.state.math_hub.is_active(game_id):
-        raise HTTPException(status_code=409,
-                            detail="a math run is already in progress for this game")
-    asyncio.create_task(request.app.state.math_hub.request_tune(game_id))
-    return Response(status_code=202)
 
 
 @router.post("/games/{game_id}/math/generate", status_code=202)
