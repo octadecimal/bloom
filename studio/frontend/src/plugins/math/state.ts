@@ -2,7 +2,7 @@ import type { State } from '@hookstate/core';
 import { rootStore } from '../../state/rootStore';
 import { makePluginHooks } from '../../state/makePluginHooks';
 
-export const MATH_ANALYTICS_PLUGIN_ID = 'math-analytics';
+export const MATH_PLUGIN_ID = 'math';
 
 // Wire types below mirror `MathRunDoc` (studio/backend/app/analytics/models.py) —
 // camelCase, produced by `math_run_wire()`. Kept in lockstep with
@@ -113,7 +113,7 @@ export interface IMathRun {
   durationMs: number | null;
 }
 
-export interface IAnalyticsState {
+export interface IMathState {
   activeGameId: string | null;
   runs: IMathRun[];
   selectedRunId: string | null;
@@ -134,7 +134,7 @@ export interface IAnalyticsState {
   selectedGeneration: number | 'live';
 }
 
-export function makeInitialState(): IAnalyticsState {
+export function makeInitialState(): IMathState {
   return {
     activeGameId: null,
     runs: [],
@@ -176,13 +176,13 @@ export function runSeriesLabel(run: IMathRun, index: number): string {
   return `Run ${index + 1} · ${new Date(run.createdAt).toLocaleString()}`;
 }
 
-export const analyticsHooks = makePluginHooks<IAnalyticsState>(MATH_ANALYTICS_PLUGIN_ID);
+export const mathHooks = makePluginHooks<IMathState>(MATH_PLUGIN_ID);
 
-export function analyticsSlice(): State<IAnalyticsState> {
-  return rootStore.plugins.nested(MATH_ANALYTICS_PLUGIN_ID) as unknown as State<IAnalyticsState>;
+export function mathSlice(): State<IMathState> {
+  return rootStore.plugins.nested(MATH_PLUGIN_ID) as unknown as State<IMathState>;
 }
 
-export function selectedRun(state: IAnalyticsState): IMathRun | null {
+export function selectedRun(state: IMathState): IMathRun | null {
   if (state.selectedRunId) {
     const found = state.runs.find((r) => r.id === state.selectedRunId);
     if (found) return found;
@@ -193,7 +193,7 @@ export function selectedRun(state: IAnalyticsState): IMathRun | null {
 /** The frame the Evolution charts' playhead points at: the newest frame in
  * `'live'` mode, or the frame matching a scrubbed generation (falling back to
  * the newest frame if the exact generation isn't present). */
-export function currentFrame(state: Pick<IAnalyticsState, 'frames' | 'selectedGeneration'>): IGenFrame | null {
+export function currentFrame(state: Pick<IMathState, 'frames' | 'selectedGeneration'>): IGenFrame | null {
   if (state.frames.length === 0) return null;
   if (state.selectedGeneration === 'live') return state.frames[state.frames.length - 1];
   return state.frames.find((f) => f.generation === state.selectedGeneration) ?? state.frames[state.frames.length - 1];

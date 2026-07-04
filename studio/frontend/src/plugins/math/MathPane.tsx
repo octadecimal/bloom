@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
-import { analyticsHooks, selectedRun, type IAnalyticsState, type IGenFrame, type IMathRun } from './state';
+import { mathHooks, selectedRun, type IMathState, type IGenFrame, type IMathRun } from './state';
 import { MathProfileTab } from './tabs/MathProfileTab';
 import { EvolutionTab } from './tabs/EvolutionTab';
 import { CompareTab } from './tabs/CompareTab';
 import { ReportTab } from './tabs/ReportTab';
-import { openGameAnalytics, scrub, toggleRunSelected } from './actions';
+import { openGameMath, scrub, toggleRunSelected } from './actions';
 
 type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
 
@@ -27,8 +27,8 @@ const TABS: ITabDef[] = [
 /** The Math Analytics pane shell — a header strip over a tab bar, mirroring the
  * cockpit shape from docs/superpowers/specs/2026-07-02-math-analytics-dashboard-design.md.
  * Read-only analytics; tuning stays on the Tuner pane. */
-export function MathAnalyticsPane(_props: IDockviewPanelProps) {
-  const s = analyticsHooks.usePluginState();
+export function MathPane(_props: IDockviewPanelProps) {
+  const s = mathHooks.usePluginState();
   const [activeTab, setActiveTab] = useState<ITabId>('profile');
   const activeGameId = s.activeGameId.get();
 
@@ -36,19 +36,19 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
   // tune that completed while the pane was closed (this slice is REST-only, no live
   // socket relay yet — see actions.ts — mirrors the Tuner pane's issue #82 fix).
   useEffect(() => {
-    if (activeGameId) void openGameAnalytics(activeGameId);
+    if (activeGameId) void openGameMath(activeGameId);
   }, [activeGameId]);
 
   if (!activeGameId) {
     return (
-      <div data-testid="analytics-no-game" className="flex h-full items-center justify-center bg-surface text-text-2">
+      <div data-testid="math-no-game" className="flex h-full items-center justify-center bg-surface text-text-2">
         Open a game to view its math analytics.
       </div>
     );
   }
 
   const loadStatus = s.loadStatus.get();
-  const run = selectedRun(s.get() as IAnalyticsState);
+  const run = selectedRun(s.get() as IMathState);
   const runs = s.runs.get() as IMathRun[];
   const selectedRunIds = s.selectedRunIds.get() as string[];
   const frames = s.frames.get() as IGenFrame[];
@@ -62,7 +62,7 @@ export function MathAnalyticsPane(_props: IDockviewPanelProps) {
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex flex-none items-center justify-between border-b border-hairline p-2">
-        <span className="text-sm text-text-1">Math Analytics</span>
+        <span className="text-sm text-text-1">Math</span>
         {run && (
           <span className="text-xs text-text-3">
             {run.verdict === 'pass' ? 'PASS' : run.verdict === 'near_miss' ? 'NEAR-MISS' : ''} · {new Date(run.createdAt).toLocaleString()}

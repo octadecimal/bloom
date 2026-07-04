@@ -1,4 +1,4 @@
-import { MAX_COMPARE_SELECTION, type IAnalyticsState, type IGenFrame, type IMathRun } from './state';
+import { MAX_COMPARE_SELECTION, type IMathState, type IGenFrame, type IMathRun } from './state';
 
 /** Derives per-generation Evolution frames from a persisted run's trace —
  * exported for reuse by ReportTab (Task 17), which stacks the GA-evolution and
@@ -18,7 +18,7 @@ export function framesFromTrace(run: IMathRun): IGenFrame[] {
  * whatever ephemeral `analytics_progress` frames streamed in during the tune
  * (the doc is the post-hoc source of truth — live frames are never persisted),
  * and the playhead is pinned to the final generation instead of `'live'`. */
-export function runLoaded(state: IAnalyticsState, run: IMathRun): IAnalyticsState {
+export function runLoaded(state: IMathState, run: IMathRun): IMathState {
   const runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
   const frames = framesFromTrace(run);
   const lastGeneration = frames.length > 0 ? frames[frames.length - 1].generation : null;
@@ -32,7 +32,7 @@ export function runLoaded(state: IAnalyticsState, run: IMathRun): IAnalyticsStat
 }
 
 /** Replace the run history (e.g. after `GET /analytics/runs`), selecting the newest run. */
-export function runsLoaded(state: IAnalyticsState, runs: IMathRun[]): IAnalyticsState {
+export function runsLoaded(state: IMathState, runs: IMathRun[]): IMathState {
   return { ...state, runs, selectedRunId: runs[0]?.id ?? null };
 }
 
@@ -42,13 +42,13 @@ export function runsLoaded(state: IAnalyticsState, runs: IMathRun[]): IAnalytics
  * no extra bookkeeping to "follow" the newest frame — `currentFrame` (state.ts)
  * resolves `'live'` dynamically — and a pinned (scrubbed) numeric playhead is left
  * untouched so a user inspecting an earlier generation isn't yanked to the edge. */
-export function progressFrame(state: IAnalyticsState, frame: IGenFrame): IAnalyticsState {
+export function progressFrame(state: IMathState, frame: IGenFrame): IMathState {
   const frames = [...state.frames.filter((f) => f.generation !== frame.generation), frame].sort((a, b) => a.generation - b.generation);
   return { ...state, frames };
 }
 
 /** Pin the Evolution scrubber to a specific generation, leaving `'live'` mode. */
-export function scrubTo(state: IAnalyticsState, generation: number): IAnalyticsState {
+export function scrubTo(state: IMathState, generation: number): IMathState {
   return { ...state, selectedGeneration: generation };
 }
 
@@ -63,7 +63,7 @@ export const historyLoaded = runsLoaded;
  * cap is already reached, in which case the toggle is a no-op: the new id is
  * neither added nor does it evict an existing selection (a user hits the cap by
  * deselecting one of the current five first). */
-export function toggleRunSelected(state: IAnalyticsState, runId: string): IAnalyticsState {
+export function toggleRunSelected(state: IMathState, runId: string): IMathState {
   const selected = state.selectedRunIds;
   if (selected.includes(runId)) {
     return { ...state, selectedRunIds: selected.filter((id) => id !== runId) };
@@ -76,6 +76,6 @@ export function toggleRunSelected(state: IAnalyticsState, runId: string): IAnaly
  * mode) — replaces `selectedRunId` outright, same field the Math Profile tab
  * already reads via `selectedRun()` (state.ts). Wholly independent of
  * `selectedRunIds` (Compare's multi-select, above). */
-export function selectRun(state: IAnalyticsState, runId: string): IAnalyticsState {
+export function selectRun(state: IMathState, runId: string): IMathState {
   return { ...state, selectedRunId: runId };
 }

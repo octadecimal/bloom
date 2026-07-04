@@ -3,7 +3,7 @@ import { fetchRuns, fetchRun } from './restClient';
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('math-analytics restClient', () => {
+describe('math restClient', () => {
   it('fetchRuns GETs /analytics/runs for the game and returns typed runs', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [{ id: 'r1', gameId: 'g1' }] });
     vi.stubGlobal('fetch', fetchMock);

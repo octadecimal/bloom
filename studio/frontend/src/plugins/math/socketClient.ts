@@ -1,11 +1,11 @@
 import { io, type Socket } from 'socket.io-client';
 import { BACKEND_URL } from './config';
-import { analyticsSlice, type IAnalyticsState, type IGenFrame, type IMathRun, type IPopulationStats } from './state';
+import { mathSlice, type IMathState, type IGenFrame, type IMathRun, type IPopulationStats } from './state';
 import { progressFrame, runLoaded } from './reducers';
 
 let sock: Socket | null = null;
 function isActive(gameId: string): boolean {
-  return analyticsSlice().activeGameId.get() === gameId;
+  return mathSlice().activeGameId.get() === gameId;
 }
 
 interface IAnalyticsProgressWire {
@@ -23,10 +23,10 @@ interface IAnalyticsProgressWire {
  * user has since navigated away from are dropped. `analytics_progress` is
  * ephemeral (streamed, never persisted); `run_complete` carries the frozen,
  * persisted `IMathRun` and is the post-hoc source of truth. */
-export function createAnalyticsSocket() {
+export function createMathSocket() {
   function connect(): void {
     if (sock) return;
-    sock = io(BACKEND_URL, { auth: { displayName: 'math-analytics' } });
+    sock = io(BACKEND_URL, { auth: { displayName: 'math' } });
     sock.on('analytics_progress', (p: IAnalyticsProgressWire) => {
       if (!isActive(p.gameId)) return;
       const frame: IGenFrame = {
@@ -44,13 +44,13 @@ export function createAnalyticsSocket() {
       // generation frames). Mirrors the noproxy convention every other
       // read-reduce-write call site in the app already follows (gdd/actions.ts,
       // llm-chat/socketClient.ts, assets/socketClient.ts, ...).
-      const next = progressFrame(analyticsSlice().get({ noproxy: true }) as IAnalyticsState, frame);
-      analyticsSlice().set(next as never);
+      const next = progressFrame(mathSlice().get({ noproxy: true }) as IMathState, frame);
+      mathSlice().set(next as never);
     });
     sock.on('run_complete', (p: { gameId: string; run: IMathRun }) => {
       if (!isActive(p.gameId)) return;
-      const next = runLoaded(analyticsSlice().get({ noproxy: true }) as IAnalyticsState, p.run);
-      analyticsSlice().set(next as never);
+      const next = runLoaded(mathSlice().get({ noproxy: true }) as IMathState, p.run);
+      mathSlice().set(next as never);
     });
   }
   function disconnect(): void {
@@ -60,13 +60,13 @@ export function createAnalyticsSocket() {
   return {
     connect,
     disconnect,
-    joinAnalytics: (gameId: string) => sock?.emit('join_analytics', { gameId }),
-    leaveAnalytics: (gameId: string) => sock?.emit('leave_analytics', { gameId }),
+    joinMath: (gameId: string) => sock?.emit('join_analytics', { gameId }),
+    leaveMath: (gameId: string) => sock?.emit('leave_analytics', { gameId }),
   };
 }
 
-let client: ReturnType<typeof createAnalyticsSocket> | null = null;
-export function analyticsSock() {
-  if (!client) client = createAnalyticsSocket();
+let client: ReturnType<typeof createMathSocket> | null = null;
+export function mathSock() {
+  if (!client) client = createMathSocket();
   return client;
 }
