@@ -50,6 +50,16 @@ struct WeightsJson {
     hit_rate: f64,
 }
 
+#[derive(Deserialize, Default)]
+struct LocksJson {
+    #[serde(default)]
+    reels: bool,
+    #[serde(default)]
+    paytable: bool,
+    #[serde(default)]
+    bonus: bool,
+}
+
 #[derive(Deserialize)]
 struct ConfigJson {
     master_seed: u64,
@@ -63,6 +73,8 @@ struct ConfigJson {
     final_candidate_count: usize,
     bounds: BoundsJson,
     weights: WeightsJson,
+    #[serde(default)]
+    locks: LocksJson,
 }
 
 fn main() {
@@ -122,7 +134,11 @@ fn main() {
             volatility: cj.weights.volatility,
             hit_rate: cj.weights.hit_rate,
         },
-        locks: SectionLocks::default(),
+        locks: SectionLocks {
+            reels: cj.locks.reels,
+            paytable: cj.locks.paytable,
+            bonus: cj.locks.bonus,
+        },
     };
 
     if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {

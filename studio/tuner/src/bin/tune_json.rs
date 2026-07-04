@@ -1,6 +1,7 @@
 //! Streaming tuning CLI: emit NDJSON per-generation progress + a final result
 //! line on stdout. Usage: tune_json <seed_model.json> <target.json> <tuner_config.json>
 //! Pass/near-miss are valid results (exit 0); only bad input exits non-zero (2).
+//! An all-locked config emits a {"type":"error"} frame and exits 0.
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::{HitRateBand, TargetSpec};
@@ -49,6 +50,16 @@ struct WeightsJson {
     hit_rate: f64,
 }
 
+#[derive(Deserialize, Default)]
+struct LocksJson {
+    #[serde(default)]
+    reels: bool,
+    #[serde(default)]
+    paytable: bool,
+    #[serde(default)]
+    bonus: bool,
+}
+
 #[derive(Deserialize)]
 struct ConfigJson {
     master_seed: u64,
@@ -62,6 +73,8 @@ struct ConfigJson {
     final_candidate_count: usize,
     bounds: BoundsJson,
     weights: WeightsJson,
+    #[serde(default)]
+    locks: LocksJson,
 }
 
 fn pop_json(p: &PopulationStats) -> serde_json::Value {
@@ -167,6 +180,10 @@ fn result_line(out: &TuneOutcome) -> String {
     .to_string()
 }
 
+fn error_line(message: &str) -> String {
+    json!({ "type": "error", "message": message }).to_string()
+}
+
 fn emit(line: String) {
     println!("{line}");
 }
@@ -238,8 +255,17 @@ fn main() {
             volatility: cj.weights.volatility,
             hit_rate: cj.weights.hit_rate,
         },
-        locks: SectionLocks::default(),
+        locks: SectionLocks {
+            reels: cj.locks.reels,
+            paytable: cj.locks.paytable,
+            bonus: cj.locks.bonus,
+        },
     };
+
+    if cfg.locks.all_locked() {
+        emit(error_line("everything is locked — nothing to tune"));
+        return;
+    }
 
     if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {
         eprintln!("invalid input: {e}");
@@ -392,6 +418,38 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&progress_line(&snap, 40)).unwrap();
         assert_eq!(v["population"]["diversity"], 0.4);
         assert_eq!(v["geneAgreement"][0], 0.8);
+    }
+
+    const FULL_CONFIG: &str = r#"{
+        "master_seed": 7, "population": 8, "max_generations": 4, "elitism": 1,
+        "mutation_rate": 0.25, "crossover_rate": 0.9, "stagnation_window": 3,
+        "search_candidate_count": 1000, "final_candidate_count": 1000,
+        "bounds": {"payout_min": 0, "payout_max": 20, "spins_min": 1, "spins_max": 50,
+                   "multiplier_min": 1, "multiplier_max": 10,
+                   "min_count_min": 1, "min_count_max": 5},
+        "weights": {"rtp": 1.0, "volatility": 1.0, "hit_rate": 1.0}"#;
+
+    #[test]
+    fn config_json_locks_default_to_unlocked() {
+        let cj: ConfigJson = serde_json::from_str(&format!("{FULL_CONFIG}}}")).unwrap();
+        assert!(!cj.locks.reels && !cj.locks.paytable && !cj.locks.bonus);
+    }
+
+    #[test]
+    fn config_json_parses_locks() {
+        let with_locks = format!(
+            r#"{FULL_CONFIG}, "locks": {{"reels": true, "paytable": false, "bonus": true}}}}"#
+        );
+        let cj: ConfigJson = serde_json::from_str(&with_locks).unwrap();
+        assert!(cj.locks.reels && !cj.locks.paytable && cj.locks.bonus);
+    }
+
+    #[test]
+    fn error_line_shape() {
+        let v: serde_json::Value =
+            serde_json::from_str(&error_line("everything is locked — nothing to tune")).unwrap();
+        assert_eq!(v["type"], "error");
+        assert!(v["message"].as_str().unwrap().contains("locked"));
     }
 
     #[test]
