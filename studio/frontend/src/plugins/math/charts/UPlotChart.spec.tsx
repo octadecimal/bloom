@@ -357,3 +357,20 @@ describe('createUPlotChart (container-driven sizing)', () => {
     expect(FakeResizeObserver.instances[0].disconnected).toBe(true);
   });
 });
+
+// Sparkline mode: the homing tiles show a big current value + a bare line —
+// no axes, grid, legend, or cursor (small heights leave no room for gutters).
+describe('toOptions (sparkline mode)', () => {
+  it('strips axes, legend, and cursor when sparkline is set', () => {
+    const opts = toOptions({ ...DATA, sparkline: true }, 400, 80);
+    expect(opts.axes).toEqual([{ show: false }, { show: false }]);
+    expect(opts.legend).toEqual({ show: false });
+    expect(opts.cursor).toEqual({ show: false });
+  });
+
+  it('keeps full chrome on non-sparkline charts', () => {
+    const opts = toOptions(DATA, 400, 200);
+    expect((opts.axes as uPlot.Axis[])[0].show).not.toBe(false);
+    expect(opts.cursor).toBeUndefined();
+  });
+});

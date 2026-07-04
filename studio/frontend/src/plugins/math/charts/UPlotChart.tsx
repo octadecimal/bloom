@@ -44,14 +44,18 @@ export function toOptions(data: IChartData, width: number, height: number, playh
   const bands: uPlot.Band[] | undefined =
     bandDefs.length > 0 ? bandDefs.map((b, i) => ({ series: bandSeriesIndices(data.series.length, i), fill: cssVar(b.colorVar) })) : undefined;
 
+  const axes: uPlot.Axis[] = data.sparkline
+    ? [{ show: false }, { show: false }]
+    : [
+        { label: data.xLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
+        { label: data.yLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
+      ];
+
   return {
     width,
     height,
     scales: { x: { time: false, distr: data.logX ? 3 : 1 } },
-    axes: [
-      { label: data.xLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
-      { label: data.yLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
-    ],
+    axes,
     series: [
       {},
       ...data.series.map((s) => ({
@@ -64,7 +68,8 @@ export function toOptions(data: IChartData, width: number, height: number, playh
       ...bandSeries,
     ],
     bands,
-    legend: { show: data.series.length > 1 },
+    legend: { show: !data.sparkline && data.series.length > 1 },
+    cursor: data.sparkline ? { show: false } : undefined,
     hooks: playheadX
       ? {
           draw: [

@@ -31,6 +31,8 @@ export interface IChartData {
   /** Draw a dashed vertical playhead at this data-space x value (the Evolution
    * scrubber's generation). Rendered by the adapter inside the plot area. */
   playheadX?: number;
+  /** Bare-line mode for stat tiles: no axes, grid, legend, or cursor. */
+  sparkline?: boolean;
 }
 
 export interface IChart {

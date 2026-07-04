@@ -31,8 +31,15 @@ export function EvolutionTab({ frames, selectedGeneration, onScrub }: IEvolution
       <div className="grid min-h-0 grid-cols-[2fr_1fr] gap-2">
         <FitnessLandscape frames={frames} selectedGeneration={selectedGeneration} />
         <div className="grid min-h-0 grid-rows-2 gap-2">
-          <RtpHoming frames={frames} />
-          <VolHoming frames={frames} />
+          <HomingTile testId="rtp-homing" title="RTP homing" seriesLabel="Best RTP" frames={frames} pick={(f) => f.best.rtp} format={(v) => v.toFixed(4)} />
+          <HomingTile
+            testId="vol-homing"
+            title="Volatility homing"
+            seriesLabel="Best volatility"
+            frames={frames}
+            pick={(f) => f.best.volatility}
+            format={(v) => v.toFixed(3)}
+          />
         </div>
       </div>
       <GeneHeatmap frames={frames} selectedGeneration={selectedGeneration} />
@@ -41,40 +48,41 @@ export function EvolutionTab({ frames, selectedGeneration, onScrub }: IEvolution
   );
 }
 
-/** Best-of-generation RTP as the search homes in over generations — the real,
- * informative signal. The `analytics_progress` wire carries no target-band
- * bounds (only the best-of-generation scalar), so there is intentionally NO
- * reference line here: drawing one at the run's own latest value would be
- * tautological (the best line always terminates on it) and would falsely imply
- * convergence-to-a-target. Rendering a genuine target band is a tracked
- * fast-follow, gated on the wire growing target bounds. */
-function RtpHoming({ frames }: { frames: IGenFrame[] }) {
+/** Best-of-generation convergence as a stat tile: tiny label, the latest best
+ * value as the headline number, and a bare sparkline of the homing path. The
+ * `analytics_progress` wire carries no target-band bounds (only the
+ * best-of-generation scalar), so there is intentionally NO reference line:
+ * drawing one at the run's own latest value would be tautological and would
+ * falsely imply convergence-to-a-target. Rendering a genuine target band is a
+ * tracked fast-follow, gated on the wire growing target bounds. */
+function HomingTile({
+  testId,
+  title,
+  seriesLabel,
+  frames,
+  pick,
+  format,
+}: {
+  testId: string;
+  title: string;
+  seriesLabel: string;
+  frames: IGenFrame[];
+  pick: (f: IGenFrame) => number;
+  format: (v: number) => string;
+}) {
   const data: IChartData = {
     x: frames.map((f) => f.generation),
-    series: [{ label: 'Best RTP', values: frames.map((f) => f.best.rtp), colorVar: '--chart-series-1' }],
-    xLabel: 'Generation',
-    yLabel: 'RTP',
+    series: [{ label: seriesLabel, values: frames.map(pick), colorVar: '--chart-series-1' }],
+    sparkline: true,
   };
   return (
-    <div data-testid="rtp-homing" className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2">
-      <span className="flex-none px-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-2">RTP homing</span>
-      <UPlotChart data={data} className="min-h-0 flex-1" />
-    </div>
-  );
-}
-
-/** Best-of-generation volatility as the search homes in — same real signal and
- * same no-fabricated-target constraint as RtpHoming above. */
-function VolHoming({ frames }: { frames: IGenFrame[] }) {
-  const data: IChartData = {
-    x: frames.map((f) => f.generation),
-    series: [{ label: 'Best volatility', values: frames.map((f) => f.best.volatility), colorVar: '--chart-series-1' }],
-    xLabel: 'Generation',
-    yLabel: 'Volatility',
-  };
-  return (
-    <div data-testid="vol-homing" className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2">
-      <span className="flex-none px-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-2">Volatility homing</span>
+    <div data-testid={testId} className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2">
+      <div className="flex flex-none items-baseline justify-between px-0.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-text-2">{title}</span>
+        <span data-testid={`${testId}-value`} className="text-lg font-medium tabular-nums leading-none text-text-1">
+          {format(pick(frames[frames.length - 1]))}
+        </span>
+      </div>
       <UPlotChart data={data} className="min-h-0 flex-1" />
     </div>
   );
