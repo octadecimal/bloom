@@ -134,6 +134,7 @@ export async function applyTemplateToGame(name: string): Promise<void> {
   const s = gameConfigSlice();
   const gameId = s.activeGameId.get();
   if (!gameId) return;
+  await flushPendingSave(); // land any pending lock/model/presentation PUT before the template merge reads persisted state
   try {
     hydrateDoc(await applyTemplate(gameId, name));
     s.sync.set('saved');

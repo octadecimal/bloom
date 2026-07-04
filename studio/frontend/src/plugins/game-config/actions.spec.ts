@@ -189,6 +189,25 @@ describe('game-config actions', () => {
     expect(s.sync.get()).toBe('saved');
   });
 
+  it('applyTemplateToGame flushes a pending debounced lock save before applying the template', async () => {
+    await open();
+    putSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+    const applied = { ...MODEL, rows: 3 };
+    applyTemplate.mockResolvedValue(doc(applied, 't3', { symbols: {} }, { reels: false, paytable: true, bonus: false }));
+
+    toggleLock('paytable'); // starts the debounce; do NOT advance timers past it
+    await applyTemplateToGame('video-5x3');
+
+    expect(putSlotModel).toHaveBeenCalledTimes(1);
+    const [, patch] = putSlotModel.mock.calls[0];
+    expect(patch.locks.paytable).toBe(true);
+    expect(putSlotModel.mock.invocationCallOrder[0]).toBeLessThan(applyTemplate.mock.invocationCallOrder[0]);
+
+    const s = gameConfigSlice();
+    expect(s.model.rows.get()).toBe(3);
+    expect(s.watermark.get()).toBe('t3');
+  });
+
   it('a failed applyTemplateToGame sets sync=error', async () => {
     await open();
     applyTemplate.mockRejectedValue(new Error('boom'));
