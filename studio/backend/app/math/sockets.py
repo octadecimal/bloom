@@ -1,6 +1,7 @@
-"""Socket subscriptions for the remaining legacy panes (sim, analytics).
-join_tuner/leave_tuner pruned in Task 10 — the tuner pane was deleted in
-Task 9. Event names preserved."""
+"""Socket subscriptions behind the unified Math pane, keeping the legacy
+sim/analytics event names (the frontend still joins these rooms; only the
+tuner-pane events are gone). join_tuner/leave_tuner pruned in Task 10 —
+the tuner pane was deleted in Task 9."""
 
 
 def register_math_handlers(sio, hub):

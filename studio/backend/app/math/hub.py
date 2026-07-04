@@ -212,7 +212,7 @@ class MathHub:
 
     async def _verify_tuned(self, game_id: str, tuned_model: dict) -> CurationResult:
         """Independent curate pass on the WINNER (not the stored model). Does not
-        touch doc.result and emits no curation_* events — the simulator pane's
+        touch doc.result and emits no curation_* events — the Math pane's
         contract stays 'result == last curation of the stored model'."""
         doc = await self._store.get_or_seed(game_id)
         # Target re-derivation uses the STORED doc's params + the STORED model's

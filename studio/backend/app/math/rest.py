@@ -125,14 +125,6 @@ async def apply_tuner(game_id: str, request: Request) -> dict:
     return sim_wire(updated)
 
 
-@router.get("/games/{game_id}/tuner/result")
-async def get_tuner_result(game_id: str, request: Request) -> dict | None:
-    doc = await request.app.state.math_store.get(game_id)
-    if doc is None or doc.tune_result is None:
-        return None
-    return doc.tune_result.model_dump(by_alias=True, mode="json")
-
-
 # ── analytics (was app/analytics/rest.py) ───────────────────────────────────
 @router.get("/analytics/runs")
 async def list_runs(game_id: str, request: Request, limit: int = 50) -> list[dict]:
