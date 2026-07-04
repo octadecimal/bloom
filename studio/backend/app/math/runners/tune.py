@@ -14,7 +14,7 @@ from app.math.models import (
     PopulationStatsWire, RtpPointWire, RunProfileWire, TailWire, TuneResult,
     WinDistributionWire,
 )
-from app.subprocess_guard import watch_proc_tree
+from app.subprocess_guard import LoopSafeRunner, watch_proc_tree
 
 
 def _empty_population() -> PopulationStatsWire:
@@ -227,4 +227,6 @@ class FakeTunerRunner:
 
 
 def build_tuner_runner(settings) -> TunerRunner:
-    return SubprocessTunerRunner(settings)
+    # LoopSafeRunner: uvicorn --reload on Windows serves the app from a
+    # SelectorEventLoop, which cannot asyncio-spawn the tune_json subprocess.
+    return LoopSafeRunner(SubprocessTunerRunner(settings))

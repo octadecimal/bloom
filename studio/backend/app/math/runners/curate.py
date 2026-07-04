@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from app.math.models import CurationResult, MetricsWire
-from app.subprocess_guard import watch_proc_tree
+from app.subprocess_guard import LoopSafeRunner, watch_proc_tree
 
 
 @dataclass
@@ -149,4 +149,6 @@ class FakeCurationRunner:
 
 
 def build_curation_runner(settings) -> CurationRunner:
-    return SubprocessCurationRunner(settings)
+    # LoopSafeRunner: uvicorn --reload on Windows serves the app from a
+    # SelectorEventLoop, which cannot asyncio-spawn the curate_json subprocess.
+    return LoopSafeRunner(SubprocessCurationRunner(settings))
