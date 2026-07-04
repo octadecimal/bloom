@@ -2,6 +2,8 @@ import { io, type Socket } from 'socket.io-client';
 import { BACKEND_URL } from './config';
 import { mathSlice, type IMathState, type IGenFrame, type IMathRun, type IPopulationStats } from './state';
 import { progressFrame, runLoaded } from './reducers';
+import type { ISlotModelWire } from './restClient';
+import { fieldsFromGddData, refreshDoc, refreshTarget, refreshTuneResult } from './sync';
 
 let sock: Socket | null = null;
 function isActive(gameId: string): boolean {
@@ -44,6 +46,7 @@ export function createMathSocket() {
       // generation frames). Mirrors the noproxy convention every other
       // read-reduce-write call site in the app already follows (gdd/actions.ts,
       // llm-chat/socketClient.ts, assets/socketClient.ts, ...).
+      mathSlice().genProgress.set({ generation: p.generation, maxGenerations: p.maxGenerations });
       const next = progressFrame(mathSlice().get({ noproxy: true }) as IMathState, frame);
       mathSlice().set(next as never);
     });
@@ -51,6 +54,59 @@ export function createMathSocket() {
       if (!isActive(p.gameId)) return;
       const next = runLoaded(mathSlice().get({ noproxy: true }) as IMathState, p.run);
       mathSlice().set(next as never);
+    });
+    sock.on('generate_status', (p: { gameId: string; phase: 'tuning' | 'verifying' | 'done' | 'failed' }) => {
+      if (!isActive(p.gameId)) return;
+      const s = mathSlice();
+      s.genStatus.set(p.phase);
+      if (p.phase === 'tuning') {
+        // A fresh pipeline: clear the previous run's artifacts so Evolution streams live.
+        s.genFailure.set(null);
+        s.genProgress.set(null);
+        s.applied.set(false);
+        s.frames.set([]);
+        s.selectedGeneration.set('live');
+      }
+      if (p.phase === 'done') void refreshTuneResult(p.gameId);
+    });
+    sock.on('tuning_failed', (p: { gameId: string; failure?: string }) => {
+      if (!isActive(p.gameId)) return;
+      mathSlice().genFailure.set(p.failure ?? 'tune failed');
+    });
+    sock.on('curation_progress', (p: { gameId: string; phase: string; done: number | null; total: number | null }) => {
+      if (!isActive(p.gameId)) return;
+      const s = mathSlice();
+      s.verifyStatus.set('running');
+      s.verifyProgress.set({ phase: p.phase, done: p.done, total: p.total });
+      s.verifyFailure.set(null);
+    });
+    sock.on('curation_complete', (p: { gameId: string; doc: ISlotModelWire }) => {
+      if (!isActive(p.gameId)) return;
+      const s = mathSlice();
+      s.verifyResult.set(p.doc.result);
+      s.verifyStatus.set(p.doc.result ? p.doc.result.status : 'idle');
+      s.verifyProgress.set(null);
+      s.locks.set(p.doc.locks);
+      s.curationParams.set(p.doc.params);
+    });
+    sock.on('curation_failed', (p: { gameId: string; failure?: string }) => {
+      if (!isActive(p.gameId)) return;
+      const s = mathSlice();
+      s.verifyStatus.set('error');
+      s.verifyProgress.set(null);
+      s.verifyFailure.set(p.failure ?? null);
+    });
+    sock.on('slot_model_changed', (p: { gameId: string; updatedAt: string; source: string }) => {
+      if (!isActive(p.gameId)) return;
+      void refreshDoc(p.gameId); // locks toggled in Game Config, template/agent writes, Apply echo
+    });
+    sock.on('gdd_doc_updated', (p: { gameId: string; doc: { aspect: string; data: Record<string, unknown>; updatedAt: string } }) => {
+      if (!isActive(p.gameId) || p.doc.aspect !== 'math-model') return;
+      const s = mathSlice();
+      if (p.doc.updatedAt <= s.gddWatermark.get()) return; // our own echo / stale
+      s.gddWatermark.set(p.doc.updatedAt);
+      s.targetFields.set(fieldsFromGddData(p.doc.data));
+      void refreshTarget(p.gameId);
     });
   }
   function disconnect(): void {
