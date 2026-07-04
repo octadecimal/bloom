@@ -25,7 +25,7 @@
 //   4. User sends "apply it"; agent calls apply_tuned_model → interrupt() approval gate.
 //      The approval-card appears. User approves.
 //   5. Write-back assertion: GET /games/:id/slot-model confirms the model changed from
-//      the detuned seed (sym2 payout raised from 1).
+//      the detuned seed (some payout raised from the all-1s paytable).
 
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { seedLocalStorage, BACKEND_URL as BACKEND } from './helpers';
@@ -197,14 +197,15 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
 
   // -------------------------------------------------------------------------
   // 4. Assert write-back: the slot model changed from the detuned seed.
-  //    sym2.payout was 1 in the seed; the tuner raises it to hit ~90% RTP.
+  //    Every payout was 1 in the seed; the tuner raises at least one to hit
+  //    ~90% RTP. WHICH symbol gets raised is search-internal (there are two
+  //    exact solutions: sym1→2 or sym2→5), so assert the contract — the
+  //    paytable moved off the all-1s seed — not one particular solution.
   // -------------------------------------------------------------------------
   const after = await request.get(`${BACKEND}/games/${gameId}/slot-model`);
   expect(after.ok()).toBeTruthy();
   const doc = (await after.json()) as {
     model: { paytable: { entries: { symbol: number; count: number; payout: number }[] } };
   };
-  const sym2 = doc.model.paytable.entries.find((e) => e.symbol === 2);
-  expect(sym2).toBeDefined();
-  expect(sym2!.payout).toBeGreaterThan(1);
+  expect(doc.model.paytable.entries.some((e) => e.payout > 1)).toBe(true);
 });
