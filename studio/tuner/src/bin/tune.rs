@@ -6,7 +6,7 @@
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::target::{HitRateBand, TargetSpec};
-use bloom_tuner::config::{GeneBounds, TunerConfig, Weights};
+use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
 use bloom_tuner::outcome::Verdict;
 use bloom_tuner::report::render_report;
 use bloom_tuner::{GeneticTuner, Tuner};
@@ -122,6 +122,7 @@ fn main() {
             volatility: cj.weights.volatility,
             hit_rate: cj.weights.hit_rate,
         },
+        locks: SectionLocks::default(),
     };
 
     if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {

@@ -304,7 +304,7 @@ impl Tuner for GeneticTuner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{GeneBounds, TunerConfig, Weights};
+    use crate::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
     use crate::outcome::Verdict;
     use crate::Tuner;
     use bloom_math::mechanics::slots::{Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole};
@@ -388,6 +388,7 @@ mod tests {
                 volatility: 1.0,
                 hit_rate: 1.0,
             },
+            locks: SectionLocks::default(),
         }
     }
 

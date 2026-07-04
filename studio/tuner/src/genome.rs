@@ -2,7 +2,7 @@
 //! tunable levers are genes (reel composition, paytable payouts, bonus config);
 //! everything else comes from the seed model (the template) at decode time.
 
-use crate::config::GeneBounds;
+use crate::config::{GeneBounds, SectionLocks};
 use bloom_math::mechanics::slots::{
     BonusFeature, FreeSpinsConfig, Paytable, PaytableEntry, SlotModel, Symbol, TriggerSpec,
 };
@@ -85,45 +85,76 @@ fn layout(symbols: &[Symbol], counts: &[u32]) -> Vec<Symbol> {
     out
 }
 
+/// Encode only the unlocked gene groups. A locked group's genes are omitted
+/// (empty vec): mutation/crossover/repair loops then skip the group naturally,
+/// and `decode` copies it verbatim from the template.
+pub fn encode_with_locks(model: &SlotModel, locks: &SectionLocks) -> Genome {
+    let mut g = encode(model);
+    if locks.reels {
+        g.reel_counts.clear();
+    }
+    if locks.paytable {
+        g.payouts.clear();
+    }
+    if locks.bonus {
+        g.bonuses.clear();
+    }
+    g
+}
+
 pub fn decode(genome: &Genome, template: &SlotModel) -> SlotModel {
-    let reels = template
-        .reels
-        .iter()
-        .zip(&genome.reel_counts)
-        .map(|(reel, counts)| layout(&reel_symbols(reel), counts))
-        .collect();
+    // An empty gene group means the group is locked (omitted from the genome)
+    // or absent from the template: copy it verbatim from the template.
+    let reels = if genome.reel_counts.is_empty() {
+        template.reels.clone()
+    } else {
+        template
+            .reels
+            .iter()
+            .zip(&genome.reel_counts)
+            .map(|(reel, counts)| layout(&reel_symbols(reel), counts))
+            .collect()
+    };
 
-    let entries = template
-        .paytable
-        .entries
-        .iter()
-        .zip(&genome.payouts)
-        .map(|(e, &payout)| PaytableEntry {
-            symbol: e.symbol,
-            count: e.count,
-            payout,
-        })
-        .collect();
+    let entries = if genome.payouts.is_empty() {
+        template.paytable.entries.clone()
+    } else {
+        template
+            .paytable
+            .entries
+            .iter()
+            .zip(&genome.payouts)
+            .map(|(e, &payout)| PaytableEntry {
+                symbol: e.symbol,
+                count: e.count,
+                payout,
+            })
+            .collect()
+    };
 
-    let bonuses = template
-        .bonuses
-        .iter()
-        .zip(&genome.bonuses)
-        .map(|(b, g)| match b {
-            BonusFeature::FreeSpins { trigger, config } => BonusFeature::FreeSpins {
-                trigger: TriggerSpec {
-                    symbol: trigger.symbol,
-                    min_count: g.min_count,
+    let bonuses = if genome.bonuses.is_empty() {
+        template.bonuses.clone()
+    } else {
+        template
+            .bonuses
+            .iter()
+            .zip(&genome.bonuses)
+            .map(|(b, g)| match b {
+                BonusFeature::FreeSpins { trigger, config } => BonusFeature::FreeSpins {
+                    trigger: TriggerSpec {
+                        symbol: trigger.symbol,
+                        min_count: g.min_count,
+                    },
+                    config: FreeSpinsConfig {
+                        spins_awarded: g.spins_awarded,
+                        retrigger: config.retrigger,
+                        multiplier: g.multiplier,
+                        feature_reels: config.feature_reels.clone(),
+                    },
                 },
-                config: FreeSpinsConfig {
-                    spins_awarded: g.spins_awarded,
-                    retrigger: config.retrigger,
-                    multiplier: g.multiplier,
-                    feature_reels: config.feature_reels.clone(),
-                },
-            },
-        })
-        .collect();
+            })
+            .collect()
+    };
 
     SlotModel {
         symbols: template.symbols.clone(),
@@ -192,6 +223,7 @@ pub fn repair(genome: &mut Genome, template: &SlotModel, bounds: &GeneBounds) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SectionLocks;
     use bloom_math::mechanics::slots::{
         BonusFeature, FreeSpinsConfig, Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
         TriggerSpec,
@@ -332,5 +364,58 @@ mod tests {
         // and it still decodes to a structurally valid model:
         let d = decode(&g, &m);
         assert_eq!(d.reels[0].len(), m.reels[0].len());
+    }
+
+    #[test]
+    fn encode_with_locks_omits_locked_groups() {
+        let m = model();
+        let l = SectionLocks {
+            reels: true,
+            paytable: false,
+            bonus: true,
+        };
+        let g = encode_with_locks(&m, &l);
+        assert!(g.reel_counts.is_empty());
+        assert_eq!(g.payouts, encode(&m).payouts); // unlocked group intact
+        assert!(g.bonuses.is_empty());
+    }
+
+    #[test]
+    fn decode_copies_locked_groups_verbatim_from_template() {
+        // all three locked -> decode reproduces the seed model exactly,
+        // byte-for-byte (reels keep their original order, not the round-robin
+        // layout()).
+        let m = model();
+        let l = SectionLocks {
+            reels: true,
+            paytable: true,
+            bonus: true,
+        };
+        let d = decode(&encode_with_locks(&m, &l), &m);
+        assert_eq!(d, m);
+    }
+
+    #[test]
+    fn locked_group_survives_repair_of_the_rest() {
+        // reels locked; corrupt + repair the remaining genes; reels untouched.
+        let m = model();
+        let l = SectionLocks {
+            reels: true,
+            ..Default::default()
+        };
+        let mut g = encode_with_locks(&m, &l);
+        g.payouts[0] = u64::MAX;
+        repair(&mut g, &m, &bounds());
+        let d = decode(&g, &m);
+        assert_eq!(d.reels, m.reels);
+        assert!(d.paytable.entries[0].payout <= 100);
+    }
+
+    #[test]
+    fn unlocked_encode_decode_behavior_is_unchanged() {
+        // Default (no locks) must round-trip exactly as before.
+        let m = model();
+        let g = encode_with_locks(&m, &SectionLocks::default());
+        assert_eq!(g, encode(&m));
     }
 }
