@@ -6,7 +6,7 @@
 use crate::config::TunerConfig;
 use crate::fitness::{band_misses, fitness};
 use crate::genome::{decode, encode_with_locks, repair, Genome};
-use crate::outcome::{GenSnapshot, RunProfile, TuneOutcome, TuningTrace, Verdict};
+use crate::outcome::{GenSnapshot, RunProfile, StopReason, TuneOutcome, TuningTrace, Verdict};
 use crate::telemetry::{gene_agreement, population_stats};
 use crate::Tuner;
 use bloom_math::mechanics::slots::SlotModel;
@@ -51,7 +51,16 @@ fn mutate(g: &mut Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut Spl
     }
     for p in &mut g.payouts {
         if unit(rng) < cfg.mutation_rate {
-            *p = b.payout_min + (rng.next_u64() % (b.payout_max - b.payout_min + 1));
+            // Step, don't resample: a uniform jump across the whole bound span
+            // makes the search a lottery at high mutation rates. ±(1..=span/10)
+            // keeps mutation local while repair/crossover handle the rest.
+            let step_max = ((b.payout_max - b.payout_min) / 10).max(1);
+            let step = 1 + rng.next_u64() % step_max;
+            *p = if unit(rng) < 0.5 {
+                p.saturating_sub(step).max(b.payout_min)
+            } else {
+                p.saturating_add(step).min(b.payout_max)
+            };
         }
     }
     for bonus in &mut g.bonuses {
@@ -142,7 +151,19 @@ pub fn tune_with_progress(
     let mut best: Option<(Genome, f64)> = None;
     let mut stagnation = 0usize;
     let mut generations_run = 0usize;
+    let mut stop_reason = StopReason::Budget;
     let max_generations = cfg.max_generations.max(1);
+
+    // Search fitness is measured at low fidelity, so it is noisy two ways: a
+    // candidate can look in-band by luck, and cross-generation comparisons use
+    // different seed sets. Nothing below trusts it for the verdict — feasibility
+    // is confirmed at final fidelity before stopping, and the returned winner is
+    // chosen by re-measuring the end candidates on the final seeds.
+    let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
+    let final_fitness =
+        |m: &SlotModel| fitness(&measure(&simulate(m, &final_seeds)), target, &cfg.weights);
+    let mut feasible: Option<Genome> = None;
+    let mut last_top: Option<Genome> = None;
 
     for g in 0..max_generations {
         generations_run = g + 1;
@@ -235,14 +256,21 @@ pub fn tune_with_progress(
         } else {
             stagnation += 1;
         }
+        last_top = Some(scored[0].0.clone());
 
-        if scored[0].1 >= 0.0 {
+        if scored[0].1 >= 0.0 && final_fitness(&decode(&scored[0].0, seed_model)) >= 0.0 {
+            // In-band at search fidelity AND confirmed at final fidelity —
+            // a lucky low-fidelity measurement alone must not end the search.
+            feasible = Some(scored[0].0.clone());
+            stop_reason = StopReason::Feasible;
             break;
         }
         if stagnation >= cfg.stagnation_window {
+            stop_reason = StopReason::Stagnated;
             break;
         }
         if g + 1 == max_generations {
+            stop_reason = StopReason::Budget;
             break;
         }
 
@@ -261,9 +289,38 @@ pub fn tune_with_progress(
         pop = next;
     }
 
-    let (best_genome, _) = best.expect("at least one generation always runs");
-    let model = decode(&best_genome, seed_model);
-    let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
+    // Pick the winner by FINAL-fidelity fitness. On a confirmed feasible stop
+    // that's the confirmed genome; otherwise compare the (noisy) historical
+    // best, the last generation's top, and the untouched seed — so the tuner
+    // can never return a model that measures worse than its input.
+    // The raw seed model is a candidate itself (not its genome round-trip —
+    // decode(encode(seed)) may re-arrange reel strips, which measures slightly
+    // differently), so an untunable input comes back byte-identical.
+    let candidates: Vec<SlotModel> = match feasible {
+        Some(genome) => vec![decode(&genome, seed_model)],
+        None => {
+            let (best_genome, _) = best.expect("at least one generation always runs");
+            let mut v = vec![decode(&best_genome, seed_model)];
+            if let Some(top) = last_top {
+                let m = decode(&top, seed_model);
+                if !v.contains(&m) {
+                    v.push(m);
+                }
+            }
+            if !v.contains(seed_model) {
+                v.push(seed_model.clone());
+            }
+            v
+        }
+    };
+    let mut winner = (&candidates[0], final_fitness(&candidates[0]));
+    for m in &candidates[1..] {
+        let f = final_fitness(m);
+        if f > winner.1 {
+            winner = (m, f);
+        }
+    }
+    let model = winner.0.clone();
     let final_samples = simulate(&model, &final_seeds);
     let metrics = measure(&final_samples);
     let verdict = match verify(&metrics, target) {
@@ -286,6 +343,7 @@ pub fn tune_with_progress(
             population: cfg.population,
             search_candidate_count: cfg.search_candidate_count,
             final_candidate_count: cfg.final_candidate_count,
+            stop_reason,
         },
         profile: RunProfile {
             distribution,
@@ -305,7 +363,7 @@ impl Tuner for GeneticTuner {
 mod tests {
     use super::*;
     use crate::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
-    use crate::outcome::Verdict;
+    use crate::outcome::{StopReason, Verdict};
     use crate::Tuner;
     use bloom_math::mechanics::slots::{Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole};
     use bloom_simulator::target::TargetSpec;
@@ -389,6 +447,112 @@ mod tests {
                 hit_rate: 1.0,
             },
             locks: SectionLocks::default(),
+        }
+    }
+
+    #[test]
+    fn stop_reason_feasible_when_target_reached() {
+        let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        assert!(matches!(out.verdict, Verdict::Pass));
+        assert_eq!(out.trace.stop_reason, StopReason::Feasible);
+    }
+
+    #[test]
+    fn stop_reason_budget_when_max_generations_exhausted() {
+        let mut t = target_09();
+        t.rtp_target = 50.0; // unreachable with payout_max 20
+        let mut c = cfg(3);
+        c.max_generations = 3;
+        c.stagnation_window = 100; // never trips
+        let out = GeneticTuner.tune(&toy(1), &t, &c);
+        assert_eq!(out.trace.generations_run, 3);
+        assert_eq!(out.trace.stop_reason, StopReason::Budget);
+    }
+
+    #[test]
+    fn stop_reason_stagnated_when_no_improvement() {
+        let mut t = target_09();
+        t.rtp_target = 50.0; // unreachable: fitness plateaus once payouts max out
+        let mut c = cfg(3);
+        c.max_generations = 200;
+        c.stagnation_window = 3;
+        let out = GeneticTuner.tune(&toy(1), &t, &c);
+        assert!(out.trace.generations_run < 200);
+        assert_eq!(out.trace.stop_reason, StopReason::Stagnated);
+    }
+
+    /// Noisy-search config: 60-spin search fidelity is statistical noise, so a
+    /// candidate can look in-band by luck. These params force the failure mode
+    /// the studio hit live (false feasibility at low fidelity).
+    fn noisy_cfg(master_seed: u64) -> TunerConfig {
+        let mut c = cfg(master_seed);
+        c.search_candidate_count = 60;
+        c.final_candidate_count = 50_000;
+        c.max_generations = 8;
+        c
+    }
+
+    fn tight_target() -> TargetSpec {
+        let mut t = target_09();
+        t.rtp_tolerance = 0.01;
+        t
+    }
+
+    #[test]
+    fn feasible_stop_is_confirmed_at_final_fidelity() {
+        // A run that claims "feasible" must actually pass the final verify —
+        // a lucky low-fidelity measurement is not feasibility.
+        for seed in 0..20 {
+            let out = GeneticTuner.tune(&toy(1), &tight_target(), &noisy_cfg(seed));
+            if out.trace.stop_reason == StopReason::Feasible {
+                assert!(
+                    matches!(out.verdict, Verdict::Pass),
+                    "seed {seed}: stop_reason Feasible but verdict {:?}",
+                    out.verdict
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tuned_model_never_worse_than_seed_at_final_fidelity() {
+        // toy(5) is already in-band (true RTP 0.9). The tuner must never
+        // return a model that measures worse than its input at final fidelity,
+        // no matter how lucky some mutant got on the noisy search seeds.
+        let seed_model = toy(5);
+        let t = tight_target();
+        for seed in 0..20 {
+            let c = noisy_cfg(seed);
+            let out = GeneticTuner.tune(&seed_model, &t, &c);
+            let final_seeds = generate_seeds(c.master_seed ^ FINAL_SALT, c.final_candidate_count);
+            let fit = |m: &SlotModel| fitness(&measure(&simulate(m, &final_seeds)), &t, &c.weights);
+            let (out_fit, seed_fit) = (fit(&out.model), fit(&seed_model));
+            assert!(
+                out_fit >= seed_fit - 1e-12,
+                "seed {seed}: returned model final fitness {out_fit} < seed's {seed_fit}"
+            );
+        }
+    }
+
+    #[test]
+    fn payout_mutation_steps_rather_than_resamples() {
+        // With a wide payout bound, one mutation must nudge a payout (at most
+        // 10% of the span), not teleport it uniformly across the whole range.
+        let seed = toy(100);
+        let mut c = cfg(1);
+        c.bounds.payout_max = 10_000;
+        c.mutation_rate = 1.0; // force every gene to mutate
+        let mut rng = SplitMix64::new(9);
+        let span_step = (c.bounds.payout_max - c.bounds.payout_min) / 10;
+        for _ in 0..500 {
+            let mut g = encode_with_locks(&seed, &c.locks);
+            let before = g.payouts.clone();
+            mutate(&mut g, &seed, &c, &mut rng);
+            for (a, b) in before.iter().zip(&g.payouts) {
+                let moved = a.abs_diff(*b);
+                assert!(moved <= span_step, "payout jumped {moved} (> {span_step})");
+                assert!(*b >= c.bounds.payout_min && *b <= c.bounds.payout_max);
+            }
         }
     }
 

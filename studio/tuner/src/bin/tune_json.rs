@@ -176,6 +176,7 @@ fn result_line(out: &TuneOutcome) -> String {
         "missed": missed,
         "trace": trace,
         "profile": profile_json(&out.profile),
+        "stopReason": out.trace.stop_reason.as_str(),
     })
     .to_string()
 }
@@ -321,6 +322,7 @@ mod tests {
                 population: 8,
                 search_candidate_count: 1000,
                 final_candidate_count: 1000,
+                stop_reason: bloom_tuner::outcome::StopReason::Stagnated,
             },
             profile: RunProfile {
                 distribution: WinDistribution {
@@ -377,6 +379,13 @@ mod tests {
         assert!(v["missed"].as_array().unwrap().is_empty());
         assert_eq!(v["trace"].as_array().unwrap().len(), 1);
         assert_eq!(v["trace"][0]["bestFitness"], -0.5);
+    }
+
+    #[test]
+    fn result_line_carries_stop_reason() {
+        let v: serde_json::Value =
+            serde_json::from_str(&result_line(&outcome(Verdict::Pass))).unwrap();
+        assert_eq!(v["stopReason"], "stagnated"); // fixture's trace.stop_reason
     }
 
     #[test]

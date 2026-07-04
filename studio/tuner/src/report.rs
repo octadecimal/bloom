@@ -100,6 +100,7 @@ mod tests {
                 population: 24,
                 search_candidate_count: 20_000,
                 final_candidate_count: 200_000,
+                stop_reason: crate::outcome::StopReason::Feasible,
             },
             profile: RunProfile {
                 distribution: WinDistribution {

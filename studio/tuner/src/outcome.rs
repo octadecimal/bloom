@@ -40,6 +40,28 @@ pub struct RunProfile {
     pub rtp_convergence: Vec<bloom_simulator::profile::RtpPoint>,
 }
 
+/// Why the GA loop ended — surfaced to the studio so a run that stops at
+/// generation 40 of 4000 reads as "stagnated", not as a silent failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopReason {
+    /// The best candidate was confirmed in-band at final fidelity.
+    Feasible,
+    /// `stagnation_window` generations passed without improvement.
+    Stagnated,
+    /// `max_generations` exhausted.
+    Budget,
+}
+
+impl StopReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StopReason::Feasible => "feasible",
+            StopReason::Stagnated => "stagnated",
+            StopReason::Budget => "budget",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TuningTrace {
     pub master_seed: u64,
@@ -48,6 +70,7 @@ pub struct TuningTrace {
     pub population: usize,
     pub search_candidate_count: usize,
     pub final_candidate_count: usize,
+    pub stop_reason: StopReason,
 }
 
 #[derive(Debug, Clone)]
