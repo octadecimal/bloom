@@ -146,18 +146,20 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
   await expect(feed).toContainText(/verdict is above/i, { timeout: 120_000 });
 
   // -------------------------------------------------------------------------
-  // 2. Confirm the PASS verdict in the Tuner pane.
+  // 2. Confirm the PASS verdict in the Math pane.
   //    The tool RESULT ("Tuned to PASS …") is NOT shown in the chat feed (tool
-  //    results don't render there). The deterministic verdict surfaces in the Tuner
-  //    pane instead — tuning_complete is emitted by TunerHub.request_tune whether the
-  //    trigger is REST or chat. This mirrors tuner.spec.ts's PASS assertion for the
-  //    same DETUNED seed + FAST params, so PASS is deterministic here.
+  //    results don't render there). The deterministic verdict surfaces in the Math
+  //    pane instead: opening the pane re-hydrates from the persisted run/tune
+  //    result (the pane never watched this chat-driven tune live) via the same
+  //    re-hydration port that PR #99 added to the old Tuner pane. This mirrors
+  //    tuner.spec.ts's PASS assertion for the same DETUNED seed + FAST params, so
+  //    PASS is deterministic here.
   // -------------------------------------------------------------------------
   await page.getByTestId('menu-view').click();
-  await expect(page.getByTestId('view-open-tuner/viewer')).toBeVisible({ timeout: 5_000 });
-  await page.getByTestId('view-open-tuner/viewer').click();
-  await expect(page.getByTestId('tuning-status')).toContainText('PASS', { timeout: 10_000 });
-  // Opening the Tuner pane covered the chat composer. Re-activate the chat pane via
+  await expect(page.getByTestId('view-open-math/viewer')).toBeVisible({ timeout: 5_000 });
+  await page.getByTestId('view-open-math/viewer').click();
+  await expect(page.getByTestId('result-verdict')).toContainText('PASS', { timeout: 10_000 });
+  // Opening the Math pane covered the chat composer. Re-activate the chat pane via
   // the View menu (openPane is a singleton — it focuses the pane if already open) so
   // the composer is visible again for the apply turn.
   await page.getByTestId('menu-view').click();

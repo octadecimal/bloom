@@ -148,16 +148,6 @@ test('deleting a referenced symbol flags issues on the referencing tabs', async 
   await expect(page.getByTestId('gc-pt-issue-1')).toContainText('unknown symbol');
 });
 
-test('simulator pane has no textarea and links to Game Config', async ({ page, request }) => {
-  await setupGame(page, request, 'hal', `gc ${Date.now()}`);
-  await page.getByTestId('menu-view').click();
-  await page.getByTestId('view-open-simulator/viewer').click();
-  await expect(page.getByTestId('curate-button')).toBeVisible();
-  await expect(page.getByTestId('simulator-model-json')).toHaveCount(0);
-  await page.getByTestId('open-game-config-hint').click();
-  await expect(page.getByTestId('gc-tab-symbols')).toBeVisible();
-});
-
 test('a fresh game is born with the default template (never empty)', async ({ page, request }) => {
   // No slot-model PUT: the doc must self-seed with video-5x3 on first read.
   const roomName = `gc-seeded ${Date.now()}`;
