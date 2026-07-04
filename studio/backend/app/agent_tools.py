@@ -1424,7 +1424,7 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
         after = await ctx.math_store.get(ctx.game_id)
         result = after.tune_result if after else None
         if result is None or result.ran_at == before_ran:
-            return ("The tune did not produce a result — check the Tuner pane or the "
+            return ("The tune did not produce a result — check the Math pane or the "
                     "backend logs for a failure.")
 
         m = result.metrics
@@ -1436,7 +1436,7 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
         if result.status == "near_miss":
             misses = "; ".join(
                 f"{x.metric} measured {x.measured}, needs {x.band_lo}–{x.band_hi}"
-                for x in result.missed) or "see the Tuner pane"
+                for x in result.missed) or "see the Math pane"
             return (f"Tuned to NEAR-MISS — {head}. Missed: {misses}. Try raising "
                     f"candidate counts / generations, re-weighting, or relaxing the "
                     f"GDD intent, then tune again.")
@@ -1449,7 +1449,7 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
             "Run the genetic tuner on the current slot model toward the GDD design "
             "intent, to completion, and report the verdict (PASS / NEAR-MISS) with "
             "measured RTP, volatility, and hit-rates. Live convergence shows in the "
-            "Tuner pane. Does NOT apply the result — use apply_tuned_model for that."
+            "Math pane. Does NOT apply the result — use apply_tuned_model for that."
         ),
     )
 

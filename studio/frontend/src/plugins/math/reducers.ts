@@ -1,0 +1,104 @@
+import { MAX_COMPARE_SELECTION, type IMathState, type IGenFrame, type IMathRun, type ICurationResult, type ISectionLocks } from './state';
+
+/** The result strip is PINNED TO LATEST (spec: tabs = analysis, strip = current
+ * state): newest of the last recorded generate run vs the last verify-only
+ * curation of the stored model. Never the RunSelector's browsed run. */
+export type IOutcome = { kind: 'run'; run: IMathRun } | { kind: 'verify'; result: ICurationResult } | null;
+
+export function latestOutcome(state: Pick<IMathState, 'runs' | 'verifyResult'>): IOutcome {
+  const run = state.runs[0] ?? null; // runs are newest-first (runLoaded prepends)
+  const verify = state.verifyResult;
+  if (run && verify) return verify.ranAt > run.createdAt ? { kind: 'verify', result: verify } : { kind: 'run', run };
+  if (run) return { kind: 'run', run };
+  return verify ? { kind: 'verify', result: verify } : null;
+}
+
+export function outcomeVerdict(outcome: IOutcome): 'pass' | 'fail' | 'near_miss' | 'error' | null {
+  if (!outcome) return null;
+  if (outcome.kind === 'verify') return outcome.result.status;
+  return outcome.run.verify ? outcome.run.verify.status : outcome.run.verdict;
+}
+
+export function allLocked(locks: ISectionLocks | null): boolean {
+  return !!locks && locks.reels && locks.paytable && locks.bonus;
+}
+
+/** Derives per-generation Evolution frames from a persisted run's trace —
+ * exported for reuse by ReportTab (Task 17), which stacks the GA-evolution and
+ * gene-convergence charts for a run's history post-hoc, the same way `runLoaded`
+ * does when a run freezes. */
+export function framesFromTrace(run: IMathRun): IGenFrame[] {
+  return run.trace.map((t) => ({
+    generation: t.generation,
+    best: { fitness: t.bestFitness, rtp: t.bestRtp, volatility: t.bestVolatility },
+    population: t.population,
+    geneAgreement: t.geneAgreement,
+  }));
+}
+
+/** Store one run (e.g. a `run_complete` live event), selecting it if nothing is
+ * selected yet. Also freezes the Evolution tab: the persisted `trace` replaces
+ * whatever ephemeral `analytics_progress` frames streamed in during the tune
+ * (the doc is the post-hoc source of truth — live frames are never persisted),
+ * and the playhead is pinned to the final generation instead of `'live'`. */
+export function runLoaded(state: IMathState, run: IMathRun): IMathState {
+  const runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
+  const frames = framesFromTrace(run);
+  const lastGeneration = frames.length > 0 ? frames[frames.length - 1].generation : null;
+  return {
+    ...state,
+    runs,
+    selectedRunId: state.selectedRunId ?? run.id,
+    frames: frames.length > 0 ? frames : state.frames,
+    selectedGeneration: lastGeneration ?? state.selectedGeneration,
+  };
+}
+
+/** Replace the run history (e.g. after `GET /analytics/runs`), selecting the newest run. */
+export function runsLoaded(state: IMathState, runs: IMathRun[]): IMathState {
+  return { ...state, runs, selectedRunId: runs[0]?.id ?? null };
+}
+
+/** Append one live per-generation frame (`analytics_progress`), replacing any
+ * existing frame for the same generation (defends against a redelivered/duplicate
+ * socket event) and keeping frames generation-ordered. A `'live'` playhead needs
+ * no extra bookkeeping to "follow" the newest frame — `currentFrame` (state.ts)
+ * resolves `'live'` dynamically — and a pinned (scrubbed) numeric playhead is left
+ * untouched so a user inspecting an earlier generation isn't yanked to the edge. */
+export function progressFrame(state: IMathState, frame: IGenFrame): IMathState {
+  const frames = [...state.frames.filter((f) => f.generation !== frame.generation), frame].sort((a, b) => a.generation - b.generation);
+  return { ...state, frames };
+}
+
+/** Pin the Evolution scrubber to a specific generation, leaving `'live'` mode. */
+export function scrubTo(state: IMathState, generation: number): IMathState {
+  return { ...state, selectedGeneration: generation };
+}
+
+/** Task 15 brief's name for `runsLoaded` above — same transition ("store the
+ * fetched history list, newest-first"), re-exported under the requested name
+ * rather than duplicated. See task-15-report.md. */
+export const historyLoaded = runsLoaded;
+
+/** Multi-select toggle for the Compare tab's `selectedRunIds` (RunSelector,
+ * "multi" mode). Toggling an already-selected id removes it (selection order
+ * of the remaining ids is preserved). Toggling a new id appends it — unless the
+ * cap is already reached, in which case the toggle is a no-op: the new id is
+ * neither added nor does it evict an existing selection (a user hits the cap by
+ * deselecting one of the current five first). */
+export function toggleRunSelected(state: IMathState, runId: string): IMathState {
+  const selected = state.selectedRunIds;
+  if (selected.includes(runId)) {
+    return { ...state, selectedRunIds: selected.filter((id) => id !== runId) };
+  }
+  if (selected.length >= MAX_COMPARE_SELECTION) return state;
+  return { ...state, selectedRunIds: [...selected, runId] };
+}
+
+/** Single-select for the header/active-run selector (RunSelector, "single"
+ * mode) — replaces `selectedRunId` outright, same field the Math Profile tab
+ * already reads via `selectedRun()` (state.ts). Wholly independent of
+ * `selectedRunIds` (Compare's multi-select, above). */
+export function selectRun(state: IMathState, runId: string): IMathState {
+  return { ...state, selectedRunId: runId };
+}

@@ -215,6 +215,31 @@ to bottom:
 with their e2e specs (replaced — see Testing). Chat agent tool names stay
 stable; internals point at `app/math`.
 
+### SP3 brainstorm resolutions (2026-07-04)
+
+- **Approach: grow `math-analytics` into `math`.** `git mv
+plugins/math-analytics → plugins/math`; most surviving code (tabs, charts,
+  RunSelector, socket/state plumbing) already lives there. The strips are added
+  around it; `plugins/simulator` and `plugins/tuner` are deleted in the same PR.
+- **Re-hydration ported (PR #99 behavior).** Pane open fetches the last
+  persisted run/tune result so the result strip is populated and Apply is
+  enabled after out-of-pane (chat) tunes. `tuner-chat.spec.ts` is reworked to
+  assert Apply via the Math pane.
+- **Result strip pinned to latest; tabs browse freely.** The RunSelector and
+  run-history browsing carry over verbatim, but verdict/metrics/Apply always
+  reflect the latest completed run or verify — never the browsed run. Tabs =
+  analysis; strip = current state.
+- **Backend prune: dead-only.** `POST /games/{id}/tuner/tune` dies, plus any
+  route/emission with zero remaining consumers once the panes are gone
+  (candidate: `GET /games/{id}/tuner/seed` — verify during planning). Everything
+  the pane, chat tools, or replay cassettes still touch keeps its name.
+- **One additive backend change.** `record_run` snapshots the doc's `locks`
+  into the `math_runs` doc (and the `run_complete` payload) so the result strip
+  can render per-run lock chips.
+- Saved Dockview layouts referencing deleted pane ids already fall back to the
+  default layout (`layoutService` drops unknown panels), so no layout migration
+  is needed.
+
 ---
 
 ## Error handling

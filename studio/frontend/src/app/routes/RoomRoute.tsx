@@ -6,10 +6,8 @@ import { openRoom, closeRoom } from '../../plugins/llm-chat/actions';
 import { openGame as openAssetsGame, closeGame as closeAssetsGame } from '../../plugins/assets/actions';
 import { openGameDocs, closeGameDocs } from '../../plugins/gdd/actions';
 import { openGame, closeGame } from '../../plugins/game/actions';
-import { openGameSim, closeGameSim } from '../../plugins/simulator/actions';
-import { openGameTuner, closeGameTuner } from '../../plugins/tuner/actions';
 import { openGameConfig, closeGameConfig } from '../../plugins/game-config/actions';
-import { openGameAnalytics, closeGameAnalytics } from '../../plugins/math-analytics/actions';
+import { openGameMath, closeGameMath } from '../../plugins/math/actions';
 import { notify } from '../../lib/notify';
 import { ActiveRoomProvider } from './activeRoom';
 import { Workbench } from '../Workbench';
@@ -35,10 +33,8 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
           if (found.gameId) void openAssetsGame(found.gameId);
           if (found.gameId) void openGameDocs(found.gameId);
           if (found.gameId) openGame(found.gameId);
-          if (found.gameId) void openGameSim(found.gameId);
-          if (found.gameId) void openGameTuner(found.gameId);
           if (found.gameId) void openGameConfig(found.gameId);
-          if (found.gameId) void openGameAnalytics(found.gameId);
+          if (found.gameId) void openGameMath(found.gameId);
           setState('valid');
         } else {
           setState('invalid');
@@ -57,10 +53,8 @@ export function RoomRoute({ children }: { children?: ReactNode }) {
       closeAssetsGame();
       closeGameDocs();
       closeGame();
-      closeGameSim();
-      closeGameTuner();
       closeGameConfig();
-      closeGameAnalytics();
+      closeGameMath();
     },
     [],
   );

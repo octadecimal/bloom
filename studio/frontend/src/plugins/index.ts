@@ -6,13 +6,11 @@ import { llmChat } from './llm-chat';
 import { assets } from './assets';
 import { gdd } from './gdd';
 import { game } from './game';
-import { simulator } from './simulator';
-import { tuner } from './tuner';
 import { gameConfig } from './game-config';
 import { sceneGraph } from './scene-graph';
 import { propertyInspector } from './property-inspector';
 import { regionOverrides } from './region-overrides';
-import { mathAnalytics } from './math-analytics';
+import { math } from './math';
 
 export const PLUGINS: IPlugin[] = [
   sceneStorePlugin,
@@ -22,11 +20,9 @@ export const PLUGINS: IPlugin[] = [
   assets,
   gdd,
   game,
-  simulator,
-  tuner,
   gameConfig,
   sceneGraph,
   propertyInspector,
   regionOverrides,
-  mathAnalytics,
+  math,
 ];

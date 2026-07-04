@@ -1,8 +1,10 @@
 """MathHub — curation, tuning, and analytics recording over the unified doc.
 Merges app/simulator/hub.py (CurationHub), app/tuner/hub.py (TunerHub) and
-app/analytics/hub.py (AnalyticsHub). Event names are unchanged:
-curation_progress/complete/failed, tuning_progress/complete/failed,
-analytics_progress, run_complete."""
+app/analytics/hub.py (AnalyticsHub). Event names: curation_progress/complete/
+failed, tuning_failed, analytics_progress, run_complete. (Task 10 pruned the
+pane-only tuning_progress/tuning_complete emissions along with the tune/seed
+routes those panes used — request_tune is now silent on success; the
+generate pipeline's record_run emits run_complete instead.)"""
 import asyncio
 import logging
 import time
@@ -11,8 +13,8 @@ from datetime import datetime, timezone
 
 from app.math.bounds import build_config, derive_bounds
 from app.math.models import (
-    CurationResult, MathRunDoc, TuneResult, TuningParams,
-    math_run_wire, sim_wire, tuner_view,
+    CurationResult, MathRunDoc, SectionLocks, TuneResult, TuningParams,
+    math_run_wire, sim_wire,
 )
 from app.math.targets import derive_target, TargetGap
 
@@ -50,13 +52,6 @@ class MathHub:
         if doc is not None and doc.result is not None:
             await self._sio.emit("curation_complete",
                                  {"gameId": game_id, "doc": sim_wire(doc)}, to=sid)
-
-    async def attach_tuner_subscriber(self, game_id: str, sid: str) -> None:
-        await self._sio.enter_room(sid, game_id)
-        doc = await self._store.get(game_id)
-        if doc is not None and doc.tune_result is not None:
-            await self._sio.emit("tuning_complete",
-                                 {"gameId": game_id, "doc": tuner_view(doc)}, to=sid)
 
     async def attach_analytics_subscriber(self, game_id: str, sid: str) -> None:
         await self._sio.enter_room(sid, game_id)
@@ -102,15 +97,22 @@ class MathHub:
         if pending:
             await asyncio.gather(*pending)
         saved = await self._store.save_result(game_id, result)
-        event = "curation_complete" if result.status in ("pass", "fail") else "curation_failed"
-        await self._sio.emit(event, {"gameId": game_id, "doc": sim_wire(saved)},
-                             room=game_id)
+        if result.status in ("pass", "fail"):
+            await self._sio.emit("curation_complete",
+                                 {"gameId": game_id, "doc": sim_wire(saved)},
+                                 room=game_id)
+        else:
+            await self._sio.emit("curation_failed",
+                                 {"gameId": game_id,
+                                  "failure": result.failure or "curation failed"},
+                                 room=game_id)
 
     # ── tuning (was TunerHub.request_tune) ──────────────────────────────────
-    async def request_tune(self, game_id: str, *, record: bool = True) -> TuneResult | None:
-        """Run one GA tune. Returns the TuneResult (None on target gap). With
-        record=False the math_runs append is skipped — the generate pipeline
-        (Task 6) records the run itself so it can attach the verify verdict."""
+    async def request_tune(self, game_id: str) -> TuneResult | None:
+        """Run one GA tune. Returns the TuneResult (None on target gap).
+        Emits tuning_failed on gap/error; success emits nothing terminal — the
+        generate pipeline (_generate_reserved) records the run itself
+        (record_run → run_complete) so it can attach the verify verdict."""
         doc = await self._store.get_or_seed(game_id)
         model = doc.model or {}
         try:
@@ -124,12 +126,6 @@ class MathHub:
         config = build_config(doc.tuner_params, derive_bounds(model), doc.locks)
 
         async def on_progress(p):
-            await self._sio.emit(
-                "tuning_progress",
-                {"gameId": game_id, "generation": p.generation,
-                 "maxGenerations": p.max_generations, "bestFitness": p.best_fitness,
-                 "bestRtp": p.best_rtp, "bestVolatility": p.best_volatility},
-                room=game_id)
             # Ephemeral enriched frame for the (live) analytics Evolution tab.
             await self._sio.emit(
                 "analytics_progress",
@@ -147,19 +143,17 @@ class MathHub:
         def sync_progress(p):
             pending.append(loop.create_task(on_progress(p)))
 
-        started = time.monotonic()
         result = await self._tuner_runner.run(model, target, config,
                                               on_progress=sync_progress)
-        duration_ms = int((time.monotonic() - started) * 1000)
         if pending:
             await asyncio.gather(*pending)
-        saved = await self._store.save_tune_result(game_id, result)
+        await self._store.save_tune_result(game_id, result)
 
-        event = "tuning_complete" if result.status in ("pass", "near_miss") else "tuning_failed"
-        await self._sio.emit(event, {"gameId": game_id, "doc": tuner_view(saved)},
-                             room=game_id)
-        if record and result.status in ("pass", "near_miss"):
-            await self.record_run(game_id, doc.tuner_params, result, duration_ms)
+        if result.status not in ("pass", "near_miss"):
+            await self._sio.emit("tuning_failed",
+                                 {"gameId": game_id,
+                                  "failure": result.failure or "tune failed"},
+                                 room=game_id)
         return result
 
     # ── generate pipeline: tune → verify → persist (spec sub-project 1) ──────
@@ -184,10 +178,6 @@ class MathHub:
         self._active.add(game_id)
         return True
 
-    def is_active(self, game_id: str) -> bool:
-        """A generate pipeline currently holds this game's reservation."""
-        return game_id in self._active
-
     async def _status(self, game_id: str, phase: str) -> None:
         await self._sio.emit("generate_status",
                              {"gameId": game_id, "phase": phase}, room=game_id)
@@ -198,9 +188,11 @@ class MathHub:
             # Capture the params tuned WITH (from the doc at pipeline start), so
             # a user editing GA params mid-pipeline can't mislabel the run's
             # provenance — matches what request_tune records on its own path.
-            params = (await self._store.get_or_seed(game_id)).tuner_params
+            doc0 = await self._store.get_or_seed(game_id)
+            params = doc0.tuner_params
+            locks = doc0.locks
             started = time.monotonic()
-            result = await self.request_tune(game_id, record=False)
+            result = await self.request_tune(game_id)
             duration_ms = int((time.monotonic() - started) * 1000)
             if result is None or result.status not in ("pass", "near_miss"):
                 await self._status(game_id, "failed")
@@ -208,7 +200,7 @@ class MathHub:
             await self._status(game_id, "verifying")
             verify = await self._verify_tuned(game_id, result.tuned_model)
             await self.record_run(game_id, params, result, duration_ms,
-                                  verify=verify)
+                                  verify=verify, locks=locks)
             await self._status(game_id, "done")
             return True
         except Exception:
@@ -226,7 +218,7 @@ class MathHub:
 
     async def _verify_tuned(self, game_id: str, tuned_model: dict) -> CurationResult:
         """Independent curate pass on the WINNER (not the stored model). Does not
-        touch doc.result and emits no curation_* events — the simulator pane's
+        touch doc.result and emits no curation_* events — the Math pane's
         contract stays 'result == last curation of the stored model'."""
         doc = await self._store.get_or_seed(game_id)
         # Target re-derivation uses the STORED doc's params + the STORED model's
@@ -243,13 +235,14 @@ class MathHub:
     # ── run recording (was AnalyticsHub.record_run, + verify) ───────────────
     async def record_run(self, game_id: str, params: TuningParams,
                          result: TuneResult, duration_ms: int,
-                         verify: CurationResult | None = None) -> MathRunDoc | None:
+                         verify: CurationResult | None = None,
+                         locks: SectionLocks | None = None) -> MathRunDoc | None:
         if result.status not in ("pass", "near_miss"):
             return None
         doc = MathRunDoc(
             id=str(uuid.uuid4()), game_id=game_id, params=params,
             verdict=result.verdict, metrics=result.metrics, trace=result.trace,
-            profile=result.profile, verify=verify,
+            profile=result.profile, verify=verify, locks=locks,
             created_at=_now(), duration_ms=duration_ms,
         )
         saved = await self._runs.append(doc)

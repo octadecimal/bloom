@@ -1,6 +1,9 @@
 """Ported from test_sim_hub.py (2 cases), test_tuner_hub.py (3 cases),
 test_analytics_hub.py (4 cases), test_analytics_live.py (1 case) — one MathHub
-replaces CurationHub + TunerHub + AnalyticsHub; event names unchanged."""
+replaces CurationHub + TunerHub + AnalyticsHub. (Task 10: tuning_progress and
+the success-path tuning_complete were pruned along with the pane-only
+tune/seed routes — request_tune now emits tuning_failed on gap/error and
+nothing on success; run_complete is the generate pipeline's job.)"""
 import pytest
 import pytest_asyncio
 from types import SimpleNamespace
@@ -49,6 +52,15 @@ def _pass_curation_result():
         metrics=MetricsWire(rtp=0.96, volatility=4.0, hit_frequency=0.3,
                             base_rtp=0.9, feature_rtp=0.06, bonus_hit_rates=[]),
         realized_rtp=0.96, pool_size=1000, failure=None, ran_at="t")
+
+
+def _error_curation_result():
+    from app.math.models import CurationResult
+    return CurationResult(
+        status="error",
+        metrics=MetricsWire(rtp=0, volatility=0, hit_frequency=0,
+                            base_rtp=0, feature_rtp=0, bonus_hit_rates=[]),
+        realized_rtp=None, pool_size=None, failure="simulator crashed", ran_at="t")
 
 
 def _population(diversity: float) -> PopulationStatsWire:
@@ -135,9 +147,36 @@ async def test_request_curation_emits_failed_on_gdd_gap(mongo_db):
     assert "curation_failed" in names
 
 
+@pytest.mark.asyncio
+async def test_request_curation_emits_failed_shape_and_persists_on_runner_error(mongo_db):
+    """A crashed Verify-only run (runner returns status='error', not a TargetGap)
+    must still surface via curation_failed with the {gameId, failure} shape —
+    mirrors tuning_failed's shape — and the error result must still be
+    persisted (save_result runs before the emit)."""
+    store = MathStore(mongo_db)
+    await store.put("g1", model={"bonuses": []})
+    runner = FakeCurationRunner(progress=[], result=_error_curation_result())
+    sio = FakeSio()
+    run_store = MathRunStore(mongo_db)
+    hub = MathHub(sio, store, run_store, runner, FakeTunerRunner(progress=[], result=_pass_tune_result()),
+                 FakeGdd({"rtp": 0.96, "volatility": "high"}))
+
+    await hub.request_curation("g1")
+
+    event, payload, room = next(e for e in sio.events if e[0] == "curation_failed")
+    assert payload == {"gameId": "g1", "failure": "simulator crashed"}
+    assert room == "g1"
+    saved = await store.get("g1")
+    assert saved.result.status == "error"
+
+
 # ── tuning (was test_tuner_hub.py) ───────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_request_tune_emits_progress_then_complete(mongo_db):
+async def test_request_tune_saves_result_and_emits_nothing_on_success(mongo_db):
+    """request_tune no longer emits tuning_progress/tuning_complete or records
+    a run — that's the generate pipeline's job (record_run + run_complete,
+    covered in test_math_generate.py). request_tune only persists tune_result
+    and returns it; success is silent on the socket."""
     store = MathStore(mongo_db)
     await store.put("g1", model={"bonuses": []})
     run_store = MathRunStore(mongo_db)
@@ -150,16 +189,12 @@ async def test_request_tune_emits_progress_then_complete(mongo_db):
     result = await hub.request_tune("g1")
 
     names = [e[0] for e in sio.events]
-    assert "tuning_progress" in names
-    assert "tuning_complete" in names
+    assert "tuning_progress" not in names
+    assert "tuning_complete" not in names
     saved = await store.get("g1")
     assert saved.tune_result.status == "pass"
-    runs = await run_store.list_for_game("g1")
-    assert len(runs) == 1
-    assert runs[0].game_id == "g1"
-    assert runs[0].params == saved.tuner_params
+    assert await run_store.list_for_game("g1") == []
     assert result.status == "pass"
-    assert isinstance(runs[0].duration_ms, int)
 
 
 @pytest.mark.asyncio
@@ -275,7 +310,10 @@ async def test_attach_analytics_subscriber_no_emit_when_no_runs(mongo_db):
 
 # ── live analytics_progress relay (was test_analytics_live.py) ──────────────
 @pytest.mark.asyncio
-async def test_request_tune_emits_analytics_progress_then_run_complete(mongo_db):
+async def test_request_tune_emits_analytics_progress(mongo_db):
+    """run_complete is now the generate pipeline's responsibility (recorded via
+    record_run — see test_math_generate.py); request_tune alone only relays
+    the live analytics_progress frames and stays silent on success."""
     store = MathStore(mongo_db)
     await store.put("g1", model={"bonuses": []})
     run_store = MathRunStore(mongo_db)
@@ -306,11 +344,7 @@ async def test_request_tune_emits_analytics_progress_then_run_complete(mongo_db)
 
     names = [e[0] for e in sio.events]
     assert names.count("analytics_progress") == 2
-    # the enriched frames precede the persisted run; run_complete is final.
-    assert names[-1] == "run_complete"
-    assert names.index("run_complete") > max(
-        i for i, n in enumerate(names) if n == "analytics_progress"
-    )
+    assert "run_complete" not in names
 
 
 class _ConfigCapturingTunerRunner:
