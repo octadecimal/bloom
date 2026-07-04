@@ -5,7 +5,12 @@ import { MathProfileTab } from './tabs/MathProfileTab';
 import { EvolutionTab } from './tabs/EvolutionTab';
 import { CompareTab } from './tabs/CompareTab';
 import { ReportTab } from './tabs/ReportTab';
-import { openGameMath, scrub, toggleRunSelected } from './actions';
+import { TargetStrip } from './components/TargetStrip';
+import { GenerateBar } from './components/GenerateBar';
+import { ResultStrip } from './components/ResultStrip';
+import { AdvancedSection } from './components/AdvancedSection';
+import { refreshRuns, scrub, toggleRunSelected } from './actions';
+import { refreshTuneResult } from './sync';
 
 type ITabId = 'profile' | 'evolution' | 'compare' | 'report';
 
@@ -32,17 +37,20 @@ export function MathPane(_props: IDockviewPanelProps) {
   const [activeTab, setActiveTab] = useState<ITabId>('profile');
   const activeGameId = s.activeGameId.get();
 
-  // Re-fetch the run history every time the pane opens for a game, so it reflects a
-  // tune that completed while the pane was closed (this slice is REST-only, no live
-  // socket relay yet — see actions.ts — mirrors the Tuner pane's issue #82 fix).
+  // Pane (re-)open: refresh what a closed pane may have missed — the run history
+  // and the pending tuned model (issue #82 / PR #99 port). refreshTuneResult
+  // no-ops while a generate is streaming.
   useEffect(() => {
-    if (activeGameId) void openGameMath(activeGameId);
+    if (activeGameId) {
+      void refreshRuns(activeGameId);
+      void refreshTuneResult(activeGameId);
+    }
   }, [activeGameId]);
 
   if (!activeGameId) {
     return (
       <div data-testid="math-no-game" className="flex h-full items-center justify-center bg-surface text-text-2">
-        Open a game to view its math analytics.
+        Open a game to tune its math toward the GDD intent.
       </div>
     );
   }
@@ -69,6 +77,9 @@ export function MathPane(_props: IDockviewPanelProps) {
           </span>
         )}
       </div>
+
+      <TargetStrip />
+      <GenerateBar />
 
       <div role="tablist" className="flex flex-none gap-1 border-b border-hairline px-2">
         {TABS.map((tab) => (
@@ -105,6 +116,9 @@ export function MathPane(_props: IDockviewPanelProps) {
         {loadStatus !== 'loading' && activeTab === 'compare' && <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />}
         {loadStatus !== 'loading' && run && activeTab === 'report' && <ReportTab run={run} />}
       </div>
+
+      <ResultStrip />
+      <AdvancedSection />
     </div>
   );
 }

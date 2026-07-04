@@ -14,16 +14,29 @@ vi.mock('./lib/exportReport', () => ({
   exportReport: (el: HTMLElement, format: 'pdf' | 'png') => exportReport(el, format),
 }));
 
-const openGameMath = vi.fn();
+const refreshRuns = vi.fn();
 const scrub = vi.fn();
 const toggleRunSelected = vi.fn();
+const generateMath = vi.fn();
+const verifyMath = vi.fn();
+const applyMath = vi.fn();
+const editTargetField = vi.fn();
 vi.mock('./actions', () => ({
-  openGameMath: (id: string) => openGameMath(id),
+  refreshRuns: (id: string) => refreshRuns(id),
   closeGameMath: vi.fn(),
   initMath: vi.fn(),
   selectRun: vi.fn(),
   scrub: (n: number) => scrub(n),
   toggleRunSelected: (id: string) => toggleRunSelected(id),
+  generateMath: () => generateMath(),
+  verifyMath: () => verifyMath(),
+  applyMath: () => applyMath(),
+  editTargetField: (k: string, v: string) => editTargetField(k, v),
+}));
+
+const refreshTuneResult = vi.fn();
+vi.mock('./sync', () => ({
+  refreshTuneResult: (id: string) => refreshTuneResult(id),
 }));
 
 function run(id: string, trace: IMathRun['trace'] = []): IMathRun {
@@ -52,6 +65,8 @@ function run(id: string, trace: IMathRun['trace'] = []): IMathRun {
     },
     createdAt: 't',
     durationMs: null,
+    verify: null,
+    locks: null,
   };
 }
 
@@ -68,7 +83,12 @@ function snapshot(generation: number) {
 
 beforeEach(() => {
   rootStore.plugins.nested(MATH_PLUGIN_ID).set(makeInitialState() as never);
-  openGameMath.mockReset();
+  refreshRuns.mockReset();
+  refreshTuneResult.mockReset();
+  generateMath.mockReset();
+  verifyMath.mockReset();
+  applyMath.mockReset();
+  editTargetField.mockReset();
   // jsdom has no createObjectURL/revokeObjectURL by default — the Report tab's
   // export-and-download path needs both.
   (URL as unknown as { createObjectURL: () => string }).createObjectURL = vi.fn(() => 'blob:mock');
@@ -79,18 +99,32 @@ describe('MathPane', () => {
   it('shows a no-game placeholder when no game is open', () => {
     render(<MathPane {...({} as never)} />);
     expect(screen.getByTestId('math-no-game')).toBeTruthy();
+    expect(screen.getByTestId('math-no-game').textContent).toBe('Open a game to tune its math toward the GDD intent.');
   });
 
-  it('refreshes the run history when the pane opens for a game (mirrors tuner issue #82)', () => {
+  it('refreshes run history and the pending tuned model when the pane opens for a game (mirrors tuner issue #82/PR #99)', () => {
     mathSlice().activeGameId.set('g1');
     mathSlice().loadStatus.set('idle');
     render(<MathPane {...({} as never)} />);
-    expect(openGameMath).toHaveBeenCalledWith('g1');
+    expect(refreshRuns).toHaveBeenCalledWith('g1');
+    expect(refreshTuneResult).toHaveBeenCalledWith('g1');
   });
 
   it('does not refresh when no game is open', () => {
     render(<MathPane {...({} as never)} />);
-    expect(openGameMath).not.toHaveBeenCalled();
+    expect(refreshRuns).not.toHaveBeenCalled();
+    expect(refreshTuneResult).not.toHaveBeenCalled();
+  });
+
+  it('renders GenerateBar, ResultStrip and AdvancedSection around the tab bar', () => {
+    mathSlice().activeGameId.set('g1');
+    mathSlice().loadStatus.set('idle');
+    mathSlice().runs.set([run('r1')]);
+    mathSlice().selectedRunId.set('r1');
+    render(<MathPane {...({} as never)} />);
+    expect(screen.getByTestId('generate-button')).toBeTruthy();
+    expect(screen.getByTestId('result-verdict')).toBeTruthy();
+    expect(screen.getByTestId('advanced-toggle')).toBeTruthy();
   });
 
   it('shows a loading state while runs are loading', () => {
