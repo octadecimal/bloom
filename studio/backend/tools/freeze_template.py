@@ -4,6 +4,7 @@ app/math/templates.py so a fresh game is born near-target (spec decision 5).
 
 Usage (from studio/backend, cargo toolchain required):
     uv run python tools/freeze_template.py video-5x3 > video-5x3.tuned.json
+    uv run python tools/freeze_template.py high-vol-5x4 paytable bonus > hv.tuned.json  # lock sections against the GA
 """
 import asyncio
 import json
@@ -12,7 +13,7 @@ import sys
 from app.config import get_settings
 from app.math import templates
 from app.math.bounds import build_config, derive_bounds
-from app.math.models import default_tuning_params
+from app.math.models import SectionLocks, default_tuning_params
 from app.math.runners.tune import SubprocessTunerRunner
 
 TEMPLATE_TARGETS: dict[str, dict] = {
@@ -40,11 +41,12 @@ TEMPLATE_TARGETS: dict[str, dict] = {
 }
 
 
-async def main(name: str) -> None:
+async def main(name: str, lock_names: list[str]) -> None:
     seed = templates.get_model(name)
     target = TEMPLATE_TARGETS[name]
     params = default_tuning_params().model_copy(update={"max_generations": 160})
-    config = build_config(params, derive_bounds(seed))
+    locks = SectionLocks(**{n: True for n in lock_names})
+    config = build_config(params, derive_bounds(seed), locks)
     runner = SubprocessTunerRunner(get_settings())
 
     def progress(p):
@@ -61,4 +63,4 @@ async def main(name: str) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1]))
+    asyncio.run(main(sys.argv[1], sys.argv[2:]))
