@@ -157,3 +157,27 @@ test('simulator pane has no textarea and links to Game Config', async ({ page, r
   await page.getByTestId('open-game-config-hint').click();
   await expect(page.getByTestId('gc-tab-symbols')).toBeVisible();
 });
+
+test('a fresh game is born with the default template (never empty)', async ({ page, request }) => {
+  // No slot-model PUT: the doc must self-seed with video-5x3 on first read.
+  const roomName = `gc-seeded ${Date.now()}`;
+  const resp = await request.post(`${BACKEND}/rooms`, { data: { name: roomName } });
+  expect(resp.ok()).toBeTruthy();
+  const room = (await resp.json()) as { id: string; gameId: string };
+  await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username: 'eve' } }));
+  await page.goto('/');
+  await expect(page.getByTestId('room-picker')).toBeVisible();
+  await page.getByTestId('room-picker').getByText(roomName, { exact: true }).click();
+  await expect(page.getByTestId('chat-room-pane')).toBeVisible();
+  await openGameConfig(page);
+
+  // video-5x3: 5 reels x 3 rows, 7 symbols (6 normals + scatter).
+  // Window stat renders `rows × reelCount` (see GameConfigPane), so 3 rows × 5 reels → '3 × 5'.
+  await expect(page.getByTestId('gc-stat-window')).toHaveText('3 × 5');
+  await expect(page.getByTestId('gc-stat-symbols')).toHaveText('7');
+
+  // Persisted end-state, not just the UI echo (repo testing rule).
+  const doc = await getModelDoc(request, room.gameId);
+  expect(doc.model.reels).toHaveLength(5);
+  expect(doc.model.paytable.entries.length).toBeGreaterThan(0);
+});
