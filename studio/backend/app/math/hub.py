@@ -97,9 +97,15 @@ class MathHub:
         if pending:
             await asyncio.gather(*pending)
         saved = await self._store.save_result(game_id, result)
-        event = "curation_complete" if result.status in ("pass", "fail") else "curation_failed"
-        await self._sio.emit(event, {"gameId": game_id, "doc": sim_wire(saved)},
-                             room=game_id)
+        if result.status in ("pass", "fail"):
+            await self._sio.emit("curation_complete",
+                                 {"gameId": game_id, "doc": sim_wire(saved)},
+                                 room=game_id)
+        else:
+            await self._sio.emit("curation_failed",
+                                 {"gameId": game_id,
+                                  "failure": result.failure or "curation failed"},
+                                 room=game_id)
 
     # ── tuning (was TunerHub.request_tune) ──────────────────────────────────
     async def request_tune(self, game_id: str) -> TuneResult | None:

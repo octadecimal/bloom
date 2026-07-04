@@ -27,6 +27,10 @@ export const TARGET_DEBOUNCE_MS = 600;
 let targetTimer: ReturnType<typeof setTimeout> | null = null;
 
 export async function openGameMath(gameId: string): Promise<void> {
+  if (targetTimer) {
+    clearTimeout(targetTimer);
+    targetTimer = null; // room→room nav must not flush a stale debounce into the new game
+  }
   const s = mathSlice();
   s.set({ ...makeInitialState(), activeGameId: gameId, loadStatus: 'loading' } as never);
   mathSock().joinMath(gameId);
@@ -91,13 +95,18 @@ export async function flushTargetSave(): Promise<void> {
   if (fields.rtp.trim()) payload.rtp = fields.rtp.trim();
   if (fields.volatility.trim()) payload.volatility = fields.volatility.trim();
   if (fields.bonusHitRate.trim()) payload.bonus_hit_rate = fields.bonusHitRate.trim();
-  if (Object.keys(payload).length === 0) return; // nothing to persist yet
+  if (Object.keys(payload).length === 0) {
+    s.targetSaveStatus.set('idle'); // clearing all fields must not strand "saving…"
+    return;
+  }
   try {
     const doc = await putMathModelFields(gameId, payload);
+    if (s.activeGameId.get() !== gameId) return; // game switched while the PUT was in flight
     if (doc.updatedAt > s.gddWatermark.get()) s.gddWatermark.set(doc.updatedAt);
     s.targetSaveStatus.set('saved');
     await refreshTarget(gameId);
   } catch {
+    if (s.activeGameId.get() !== gameId) return;
     s.targetSaveStatus.set('error');
   }
 }

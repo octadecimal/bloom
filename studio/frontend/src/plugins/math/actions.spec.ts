@@ -255,10 +255,30 @@ describe('editTargetField / flushTargetSave (debounced GDD save)', () => {
     expect(mathSlice().targetSaveStatus.get()).toBe('error');
   });
 
-  it('flushTargetSave is a no-op when there is nothing to persist', async () => {
+  it('flushTargetSave is a no-op when there is nothing to persist, but resets targetSaveStatus to idle', async () => {
+    mathSlice().targetSaveStatus.set('saving');
     mathSlice().targetFields.set({ rtp: '', volatility: '', bonusHitRate: '' });
     await flushTargetSave();
     expect(putMathModelFields).not.toHaveBeenCalled();
+    expect(mathSlice().targetSaveStatus.get()).toBe('idle');
+  });
+
+  it('does not mutate watermark/status if activeGameId changed while the PUT was pending', async () => {
+    mathSlice().targetFields.set({ rtp: '95', volatility: '3.5', bonusHitRate: '' });
+    let resolvePut!: (v: { aspect: string; data: unknown; updatedAt: string }) => void;
+    putMathModelFields.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePut = resolve;
+      }),
+    );
+
+    const flushed = flushTargetSave();
+    mathSlice().activeGameId.set('g2');
+    resolvePut({ aspect: 'math-model', data: {}, updatedAt: 'u-stale' });
+    await flushed;
+
+    expect(mathSlice().gddWatermark.get()).not.toBe('u-stale');
+    expect(mathSlice().targetSaveStatus.get()).not.toBe('saved');
   });
 });
 

@@ -54,6 +54,15 @@ def _pass_curation_result():
         realized_rtp=0.96, pool_size=1000, failure=None, ran_at="t")
 
 
+def _error_curation_result():
+    from app.math.models import CurationResult
+    return CurationResult(
+        status="error",
+        metrics=MetricsWire(rtp=0, volatility=0, hit_frequency=0,
+                            base_rtp=0, feature_rtp=0, bonus_hit_rates=[]),
+        realized_rtp=None, pool_size=None, failure="simulator crashed", ran_at="t")
+
+
 def _population(diversity: float) -> PopulationStatsWire:
     return PopulationStatsWire(min=0.1, q1=0.2, median=0.3, q3=0.4, max=0.5,
                                mean=0.3, diversity=diversity)
@@ -136,6 +145,29 @@ async def test_request_curation_emits_failed_on_gdd_gap(mongo_db):
 
     names = [e[0] for e in sio.events]
     assert "curation_failed" in names
+
+
+@pytest.mark.asyncio
+async def test_request_curation_emits_failed_shape_and_persists_on_runner_error(mongo_db):
+    """A crashed Verify-only run (runner returns status='error', not a TargetGap)
+    must still surface via curation_failed with the {gameId, failure} shape —
+    mirrors tuning_failed's shape — and the error result must still be
+    persisted (save_result runs before the emit)."""
+    store = MathStore(mongo_db)
+    await store.put("g1", model={"bonuses": []})
+    runner = FakeCurationRunner(progress=[], result=_error_curation_result())
+    sio = FakeSio()
+    run_store = MathRunStore(mongo_db)
+    hub = MathHub(sio, store, run_store, runner, FakeTunerRunner(progress=[], result=_pass_tune_result()),
+                 FakeGdd({"rtp": 0.96, "volatility": "high"}))
+
+    await hub.request_curation("g1")
+
+    event, payload, room = next(e for e in sio.events if e[0] == "curation_failed")
+    assert payload == {"gameId": "g1", "failure": "simulator crashed"}
+    assert room == "g1"
+    saved = await store.get("g1")
+    assert saved.result.status == "error"
 
 
 # ── tuning (was test_tuner_hub.py) ───────────────────────────────────────────
