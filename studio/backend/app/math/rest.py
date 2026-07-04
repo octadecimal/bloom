@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 from app.math import templates
-from app.math.models import CurationParams, TuningParams, sim_wire, tuner_view
+from app.math.models import CurationParams, SectionLocks, TuningParams, sim_wire, tuner_view
 from app.math.models import math_run_wire
 from app.math.targets import derive_target, TargetGap
 
@@ -17,6 +17,7 @@ class PutSlotModelBody(BaseModel):
     model: dict | None = None
     params: CurationParams | None = None
     presentation: dict | None = None
+    locks: SectionLocks | None = None
     source: str = "api"
 
 
@@ -41,7 +42,7 @@ async def get_slot_model(game_id: str, request: Request) -> dict:
 async def put_slot_model(game_id: str, body: PutSlotModelBody, request: Request) -> dict:
     doc = await request.app.state.math_store.put(
         game_id, model=body.model, params=body.params,
-        presentation=body.presentation, source=body.source)
+        presentation=body.presentation, locks=body.locks, source=body.source)
     return sim_wire(doc)
 
 
@@ -113,6 +114,9 @@ async def get_tuner_target(game_id: str, request: Request) -> dict:
 
 @router.post("/games/{game_id}/tuner/tune", status_code=202)
 async def tune_tuner(game_id: str, request: Request) -> Response:
+    if request.app.state.math_hub.is_active(game_id):
+        raise HTTPException(status_code=409,
+                            detail="a math run is already in progress for this game")
     asyncio.create_task(request.app.state.math_hub.request_tune(game_id))
     return Response(status_code=202)
 

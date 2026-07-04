@@ -184,6 +184,10 @@ class MathHub:
         self._active.add(game_id)
         return True
 
+    def is_active(self, game_id: str) -> bool:
+        """A generate pipeline currently holds this game's reservation."""
+        return game_id in self._active
+
     async def _status(self, game_id: str, phase: str) -> None:
         await self._sio.emit("generate_status",
                              {"gameId": game_id, "phase": phase}, room=game_id)

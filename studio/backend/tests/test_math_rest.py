@@ -245,7 +245,7 @@ async def test_tune_kicks_off(mongo_db):
     async def _req_tune(gid):
         calls.append(gid)
 
-    hub = SimpleNamespace(request_tune=_req_tune)
+    hub = SimpleNamespace(request_tune=_req_tune, is_active=lambda gid: False)
     req = _req(math_hub=hub)
     await rest.tune_tuner("g1", req)
     await asyncio.sleep(0)
@@ -354,3 +354,62 @@ async def test_get_run_returns_doc(mongo_db):
     out = await rest.get_run("r1", req)
     assert out["id"] == "r1"
     assert out["gameId"] == "g1"
+
+
+# ── locks + tune-vs-generate guard (NEW, issue #141) ─────────────────────────
+@pytest.mark.asyncio
+async def test_put_slot_model_persists_locks_and_broadcasts(mongo_db):
+    events: list[str] = []
+
+    async def on_change(doc, source):
+        events.append(source)
+
+    store = MathStore(mongo_db, on_change=on_change)
+    await store.put("g1", model={"reels": [[0]]})
+    events.clear()
+    req = _req(math_store=store)
+
+    body = rest.PutSlotModelBody(locks=SectionLocks(paytable=True), source="editor")
+    out = await rest.put_slot_model("g1", body, req)
+
+    assert out["locks"] == {"reels": False, "paytable": True, "bonus": False}
+    assert events == ["editor"]  # a locks write broadcasts slot_model_changed
+    saved = await store.get("g1")
+    assert saved.locks.paytable is True
+
+
+@pytest.mark.asyncio
+async def test_put_slot_model_without_locks_leaves_them_untouched(mongo_db):
+    store = MathStore(mongo_db)
+    await store.put("g1", model={"reels": [[0]]}, locks=SectionLocks(reels=True))
+    req = _req(math_store=store)
+
+    out = await rest.put_slot_model("g1", rest.PutSlotModelBody(model={"reels": [[1]]}), req)
+
+    assert out["locks"] == {"reels": True, "paytable": False, "bonus": False}
+
+
+@pytest.mark.asyncio
+async def test_tune_route_returns_409_while_generate_active(mongo_db):
+    gated = _GatedTunerRunner(_pass_tune_result())
+    hub = _generate_hub(mongo_db, tuner_runner=gated)
+    req = _req(math_hub=hub)
+
+    resp = await rest.generate_math("g1", req)
+    assert resp.status_code == 202
+    await asyncio.sleep(0)  # let the pipeline reserve + park on the gate
+
+    with pytest.raises(HTTPException) as exc_info:
+        await rest.tune_tuner("g1", req)
+    assert exc_info.value.status_code == 409
+
+    gated.gate.set()
+
+
+@pytest.mark.asyncio
+async def test_tune_route_returns_202_when_idle(mongo_db):
+    hub = _generate_hub(
+        mongo_db, tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune_result()))
+    resp = await rest.tune_tuner("g1", _req(math_hub=hub))
+    assert resp.status_code == 202
+    await asyncio.sleep(0)  # let the fired task start
