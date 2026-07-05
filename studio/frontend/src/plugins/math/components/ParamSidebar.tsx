@@ -35,6 +35,7 @@ export function ParamSidebar() {
                   type="button"
                   data-testid={`param-reset-${g.id}`}
                   title={`Reset ${g.label.toLowerCase()} to defaults`}
+                  aria-label={`Reset ${g.label.toLowerCase()} to defaults`}
                   onClick={() => resetGroup(mathSlice(), g.id)}
                   className="rounded p-0.5 text-text-3 hover:bg-raised-hover hover:text-text-1"
                 >
