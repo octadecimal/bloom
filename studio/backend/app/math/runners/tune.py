@@ -113,7 +113,8 @@ def parse_tune_error_line(obj: dict, *, ran_at: str) -> TuneResult:
 
 class TunerRunner(Protocol):
     async def run(self, seed_model: dict, target: dict, config: dict,
-                  on_progress: Callable[[TuneProgress], None]) -> TuneResult: ...
+                  on_progress: Callable[[TuneProgress], None],
+                  on_spawn: Callable[[Callable[[], None]], None] | None = None) -> TuneResult: ...
 
 
 # Repo root = .../app/math/runners/tune.py -> parents[5].

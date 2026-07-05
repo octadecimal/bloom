@@ -40,7 +40,8 @@ def parse_result_line(line: str, *, ran_at: str) -> CurationResult:
 
 class CurationRunner(Protocol):
     async def run(self, model: dict, target: dict,
-                  on_progress: Callable[[CurationProgress], None]) -> CurationResult: ...
+                  on_progress: Callable[[CurationProgress], None],
+                  on_spawn: Callable[[Callable[[], None]], None] | None = None) -> CurationResult: ...
 
 
 # Repo root = .../app/math/runners/curate.py -> parents[5]. Verify on first run.
