@@ -30,7 +30,7 @@ function bandSeriesIndices(seriesCount: number, bandIndex: number): [number, num
   return [hi, hi + 1];
 }
 
-export function toOptions(data: IChartData, width: number, height: number): uPlot.Options {
+export function toOptions(data: IChartData, width: number, height: number, playheadX?: () => number | undefined): uPlot.Options {
   const bandDefs = data.bands ?? [];
   // uPlot fills a band between two *series* (not raw data) — see uPlot.Band's
   // "top edge" / "bottom edge" contract. The hi/lo edges are real series so the
@@ -44,14 +44,18 @@ export function toOptions(data: IChartData, width: number, height: number): uPlo
   const bands: uPlot.Band[] | undefined =
     bandDefs.length > 0 ? bandDefs.map((b, i) => ({ series: bandSeriesIndices(data.series.length, i), fill: cssVar(b.colorVar) })) : undefined;
 
+  const axes: uPlot.Axis[] = data.sparkline
+    ? [{ show: false }, { show: false }]
+    : [
+        { label: data.xLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
+        { label: data.yLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
+      ];
+
   return {
     width,
     height,
     scales: { x: { time: false, distr: data.logX ? 3 : 1 } },
-    axes: [
-      { label: data.xLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
-      { label: data.yLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
-    ],
+    axes,
     series: [
       {},
       ...data.series.map((s) => ({
@@ -64,7 +68,29 @@ export function toOptions(data: IChartData, width: number, height: number): uPlo
       ...bandSeries,
     ],
     bands,
-    legend: { show: data.series.length > 1 },
+    legend: { show: !data.sparkline && data.series.length > 1 },
+    cursor: data.sparkline ? { show: false } : undefined,
+    hooks: playheadX
+      ? {
+          draw: [
+            (u: uPlot) => {
+              const xVal = playheadX();
+              if (xVal == null) return;
+              const x = u.valToPos(xVal, 'x', true);
+              const { ctx, bbox } = u;
+              ctx.save();
+              ctx.lineWidth = devicePixelRatio;
+              ctx.strokeStyle = cssVar('--chart-playhead');
+              ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
+              ctx.beginPath();
+              ctx.moveTo(x, bbox.top);
+              ctx.lineTo(x, bbox.top + bbox.height);
+              ctx.stroke();
+              ctx.restore();
+            },
+          ],
+        }
+      : undefined,
   };
 }
 
@@ -80,24 +106,61 @@ function shapeOf(data: IChartData): string {
 }
 
 /** The uPlot-backed `IChart` implementation. Construction stays behind this factory
- * so components (and their tests) depend only on `IChart`. */
-export function createUPlotChart(width = 600, height = 220): IChart {
+ * so components (and their tests) depend only on `IChart`. Size always comes from
+ * the mount element (600x220 only as a zero-size fallback), and a ResizeObserver
+ * keeps the canvas matched to the container across Dockview pane resizes. */
+export function createUPlotChart(): IChart {
   let plot: uPlot | null = null;
   let mountEl: HTMLElement | null = null;
   let shape = '';
+  let ro: ResizeObserver | null = null;
+  let current: IChartData | null = null;
+
+  // uPlot's `height` option sizes the plot region only — the `.u-legend`
+  // element it renders for multi-series charts sits *below* that region,
+  // inside the same mount element. Left unaccounted for, the legend overflows
+  // the mount's `overflow-hidden` card and is permanently clipped. The legend
+  // doesn't exist until uPlot constructs into the element, so `build` below
+  // corrects the initial size with one extra `setSize` call once it appears.
+  function sizeOf(el: HTMLElement): { width: number; height: number } {
+    const legendHeight = el.querySelector<HTMLElement>('.u-legend')?.offsetHeight ?? 0;
+    const rawHeight = el.clientHeight || 220;
+    const height = legendHeight > 0 ? Math.max(rawHeight - legendHeight, 1) : rawHeight;
+    return { width: el.clientWidth || 600, height };
+  }
 
   function build(el: HTMLElement, data: IChartData) {
-    plot = new uPlot(toOptions(data, el.clientWidth || width, height), toAlignedData(data), el);
+    current = data;
+    const { width, height } = sizeOf(el);
+    plot = new uPlot(
+      toOptions(data, width, height, () => current?.playheadX),
+      toAlignedData(data),
+      el,
+    );
     shape = shapeOf(data);
+    // The legend only exists post-construction; if one rendered, re-measure
+    // and correct the size uPlot was just built with. The ResizeObserver
+    // keeps it right thereafter.
+    const legendHeight = el.querySelector<HTMLElement>('.u-legend')?.offsetHeight ?? 0;
+    if (legendHeight > 0) plot.setSize(sizeOf(el));
   }
 
   return {
     mount(el, data) {
       mountEl = el;
       build(el, data);
+      // jsdom (vitest) has no ResizeObserver; guard so non-resize tests can
+      // mount without stubbing it. Real browsers always take this branch.
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => {
+          if (plot && mountEl) plot.setSize(sizeOf(mountEl));
+        });
+        ro.observe(el);
+      }
     },
     update(data) {
       if (!plot || !mountEl) return;
+      current = data;
       if (shapeOf(data) !== shape) {
         // Series/band count changed since construction — rebuild the uPlot
         // instance from scratch (new options + data) rather than feeding
@@ -109,9 +172,12 @@ export function createUPlotChart(width = 600, height = 220): IChart {
       plot.setData(toAlignedData(data));
     },
     destroy() {
+      ro?.disconnect();
+      ro = null;
       plot?.destroy();
       plot = null;
       mountEl = null;
+      current = null;
     },
   };
 }

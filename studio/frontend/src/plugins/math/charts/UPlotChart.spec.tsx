@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import uPlot from 'uplot';
 import { UPlotChart, createUPlotChart, toAlignedData, toOptions } from './UPlotChart';
@@ -16,6 +16,7 @@ vi.mock('uplot', () => {
     static instances: FakeUPlot[] = [];
     destroy = vi.fn();
     setData = vi.fn();
+    setSize = vi.fn();
     constructor(
       public opts: unknown,
       public data: unknown,
@@ -27,7 +28,9 @@ vi.mock('uplot', () => {
   return { default: FakeUPlot };
 });
 
-type FakeUPlotCtor = { instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn> }[] };
+type FakeUPlotCtor = {
+  instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn>; setSize: ReturnType<typeof vi.fn>; opts: uPlot.Options }[];
+};
 
 // Tests target the `IChart` seam via an injected fake factory — never the real
 // uPlot instance (canvas isn't available in jsdom, and the point of the seam is
@@ -206,5 +209,195 @@ describe('band support', () => {
   it('omits the bands option entirely when data has no bands', () => {
     const opts = toOptions(DATA, 400, 200);
     expect(opts.bands ?? []).toEqual([]);
+  });
+});
+
+// The playhead is drawn by the adapter inside the plot area (a draw hook at
+// valToPos(playheadX)), not an overlay div — the old percentage overlay
+// ignored uPlot's axis gutter and drifted off the plot area. The hook reads
+// playheadX through a getter so scrubbing (which flows through `update`, not
+// a rebuild) always draws at the latest position.
+describe('toOptions (playhead draw hook)', () => {
+  beforeEach(() => {
+    (uPlot as unknown as FakeUPlotCtor).instances = [];
+  });
+
+  function fakePlot(valToPosResult: number) {
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      setLineDash: vi.fn(),
+      strokeStyle: '',
+    };
+    return {
+      ctx,
+      bbox: { top: 10, height: 100, left: 0, width: 400 },
+      valToPos: vi.fn(() => valToPosResult),
+    } as unknown as uPlot;
+  }
+
+  it('registers no draw hook when no playhead getter is passed', () => {
+    const opts = toOptions(DATA, 400, 200);
+    expect(opts.hooks?.draw ?? []).toEqual([]);
+  });
+
+  it('draws a dashed vertical line across the plot area at valToPos(playheadX)', () => {
+    const opts = toOptions(DATA, 400, 200, () => 2);
+    const draw = opts.hooks!.draw![0];
+    const u = fakePlot(123);
+    draw(u);
+    const ctx = (u as unknown as { ctx: Record<string, ReturnType<typeof vi.fn>> }).ctx;
+    expect((u.valToPos as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([2, 'x', true]);
+    expect(ctx.setLineDash).toHaveBeenCalledWith([4, 4]);
+    expect(ctx.moveTo).toHaveBeenCalledWith(123, 10);
+    expect(ctx.lineTo).toHaveBeenCalledWith(123, 110);
+    expect(ctx.stroke).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws nothing when the getter returns undefined', () => {
+    const opts = toOptions(DATA, 400, 200, () => undefined);
+    const u = fakePlot(123);
+    opts.hooks!.draw![0](u);
+    const ctx = (u as unknown as { ctx: Record<string, ReturnType<typeof vi.fn>> }).ctx;
+    expect(ctx.beginPath).not.toHaveBeenCalled();
+  });
+
+  it('the adapter wires the getter to the CURRENT data, so update() moves the playhead without a rebuild', () => {
+    const chart = createUPlotChart();
+    const el = document.createElement('div');
+    chart.mount(el, { ...DATA, playheadX: 1 });
+
+    const ctor = uPlot as unknown as FakeUPlotCtor;
+    const opts = ctor.instances[0].opts;
+    const u = fakePlot(50);
+
+    chart.update({ ...DATA, playheadX: 3 }); // scrub — same shape, no rebuild
+    expect(ctor.instances).toHaveLength(1);
+
+    opts.hooks!.draw![0](u);
+    expect((u.valToPos as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(3);
+  });
+});
+
+// The adapter must size the chart from its real container — and re-size it on
+// every container resize (Dockview panes resize constantly). jsdom has neither
+// canvas nor ResizeObserver, so the observer is faked and fired by hand.
+describe('createUPlotChart (container-driven sizing)', () => {
+  class FakeResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    observed: Element[] = [];
+    disconnected = false;
+    constructor(public cb: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this);
+    }
+    observe(el: Element) {
+      this.observed.push(el);
+    }
+    unobserve() {}
+    disconnect() {
+      this.disconnected = true;
+    }
+  }
+
+  beforeEach(() => {
+    (uPlot as unknown as FakeUPlotCtor).instances = [];
+    FakeResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function sizedEl(width: number, height: number): HTMLElement {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { value: width, configurable: true });
+    Object.defineProperty(el, 'clientHeight', { value: height, configurable: true });
+    return el;
+  }
+
+  it('builds the chart at the mount element size, not a hard-coded 220px height', () => {
+    const chart = createUPlotChart();
+    chart.mount(sizedEl(800, 143), DATA);
+    const opts = (uPlot as unknown as FakeUPlotCtor).instances[0].opts;
+    expect(opts.width).toBe(800);
+    expect(opts.height).toBe(143);
+  });
+
+  it('falls back to 600x220 when the element has no measured size yet', () => {
+    const chart = createUPlotChart();
+    chart.mount(document.createElement('div'), DATA);
+    const opts = (uPlot as unknown as FakeUPlotCtor).instances[0].opts;
+    expect(opts.width).toBe(600);
+    expect(opts.height).toBe(220);
+  });
+
+  it('observes the mount element and setSizes the plot when it resizes', () => {
+    const chart = createUPlotChart();
+    const el = sizedEl(800, 143);
+    chart.mount(el, DATA);
+
+    const ro = FakeResizeObserver.instances[0];
+    expect(ro.observed).toEqual([el]);
+
+    Object.defineProperty(el, 'clientWidth', { value: 500, configurable: true });
+    Object.defineProperty(el, 'clientHeight', { value: 90, configurable: true });
+    ro.cb([], ro as unknown as ResizeObserver);
+
+    const instance = (uPlot as unknown as FakeUPlotCtor).instances[0];
+    expect(instance.setSize).toHaveBeenCalledWith({ width: 500, height: 90 });
+  });
+
+  it('disconnects the observer on destroy', () => {
+    const chart = createUPlotChart();
+    chart.mount(sizedEl(800, 143), DATA);
+    chart.destroy();
+    expect(FakeResizeObserver.instances[0].disconnected).toBe(true);
+  });
+
+  // uPlot's `height` option sizes the plot region only — the `.u-legend`
+  // element renders *below* it, inside the same mount element. Since the plot
+  // consumes the mount's full clientHeight, the legend overflows the
+  // `overflow-hidden` card and is permanently clipped (Compare tab). The
+  // adapter must reserve legend height when sizing.
+  it('reserves space for the legend so it is not clipped by the mount element', () => {
+    const chart = createUPlotChart();
+    const el = sizedEl(800, 200);
+    const legend = document.createElement('div');
+    legend.className = 'u-legend';
+    Object.defineProperty(legend, 'offsetHeight', { value: 30, configurable: true });
+    el.appendChild(legend); // pre-appended: simulates uPlot's own legend already present
+
+    chart.mount(el, DATA);
+
+    const instance = (uPlot as unknown as FakeUPlotCtor).instances[0];
+    expect(instance.opts.height).toBe(170); // 200 - 30 legend height
+    expect(instance.setSize).toHaveBeenCalledWith({ width: 800, height: 170 });
+
+    Object.defineProperty(el, 'clientHeight', { value: 90, configurable: true });
+    const ro = FakeResizeObserver.instances[0];
+    ro.cb([], ro as unknown as ResizeObserver);
+    expect(instance.setSize).toHaveBeenLastCalledWith({ width: 800, height: 60 }); // 90 - 30
+  });
+});
+
+// Sparkline mode: the homing tiles show a big current value + a bare line —
+// no axes, grid, legend, or cursor (small heights leave no room for gutters).
+describe('toOptions (sparkline mode)', () => {
+  it('strips axes, legend, and cursor when sparkline is set', () => {
+    const opts = toOptions({ ...DATA, sparkline: true }, 400, 80);
+    expect(opts.axes).toEqual([{ show: false }, { show: false }]);
+    expect(opts.legend).toEqual({ show: false });
+    expect(opts.cursor).toEqual({ show: false });
+  });
+
+  it('keeps full chrome on non-sparkline charts', () => {
+    const opts = toOptions(DATA, 400, 200);
+    expect((opts.axes as uPlot.Axis[])[0].show).not.toBe(false);
+    expect(opts.cursor).toBeUndefined();
   });
 });

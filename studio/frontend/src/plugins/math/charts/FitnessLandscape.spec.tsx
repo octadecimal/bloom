@@ -1,10 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { FitnessLandscape, buildFitnessLandscapeData, playheadPercent } from './FitnessLandscape';
+import { FitnessLandscape, buildFitnessLandscapeData, playheadGeneration } from './FitnessLandscape';
+import type { IChartData } from './IChart';
 import type { IGenFrame } from '../state';
 
+// The stub surfaces the playheadX the component feeds the seam — the playhead
+// is drawn inside the chart by the adapter now, not as an overlay div.
 vi.mock('./UPlotChart', () => ({
-  UPlotChart: ({ className }: { className?: string }) => <div data-testid="uplot-chart-stub" className={className} />,
+  UPlotChart: ({ className, data }: { className?: string; data: IChartData }) => (
+    <div data-testid="uplot-chart-stub" className={className} data-playhead-x={data.playheadX ?? ''} />
+  ),
 }));
 
 function frame(generation: number): IGenFrame {
@@ -37,37 +42,34 @@ describe('buildFitnessLandscapeData', () => {
   });
 });
 
-describe('playheadPercent', () => {
-  it('sits at the right edge (100%) in live mode', () => {
-    expect(playheadPercent(FRAMES, 'live')).toBe(100);
+describe('playheadGeneration', () => {
+  it('is the newest generation in live mode', () => {
+    expect(playheadGeneration(FRAMES, 'live')).toBe(2);
   });
 
-  it("places the playhead at the scrubbed generation's position along the timeline", () => {
-    expect(playheadPercent(FRAMES, 1)).toBe(50);
-    expect(playheadPercent(FRAMES, 0)).toBe(0);
+  it('is the scrubbed generation when it exists in the frames', () => {
+    expect(playheadGeneration(FRAMES, 1)).toBe(1);
+    expect(playheadGeneration(FRAMES, 0)).toBe(0);
   });
 
-  it('is 0 for a single frame (no timeline to place a marker on)', () => {
-    expect(playheadPercent([frame(0)], 'live')).toBe(0);
+  it('falls back to the newest generation when the scrubbed one is unknown', () => {
+    expect(playheadGeneration(FRAMES, 99)).toBe(2);
   });
 
-  it('is 0 for an empty frame list', () => {
-    expect(playheadPercent([], 'live')).toBe(0);
+  it('is undefined with no frames (nothing to mark)', () => {
+    expect(playheadGeneration([], 'live')).toBeUndefined();
   });
 });
 
 describe('FitnessLandscape', () => {
-  it('renders the chart and a playhead marker', () => {
+  it('feeds the newest generation as playheadX in live mode', () => {
     render(<FitnessLandscape frames={FRAMES} selectedGeneration="live" />);
     expect(screen.getByTestId('fitness-landscape')).toBeTruthy();
-    expect(screen.getByTestId('uplot-chart-stub')).toBeTruthy();
-    const playhead = screen.getByTestId('fitness-landscape-playhead');
-    expect(playhead.style.left).toBe('100%');
+    expect(screen.getByTestId('uplot-chart-stub').getAttribute('data-playhead-x')).toBe('2');
   });
 
-  it('moves the playhead when a specific generation is selected', () => {
+  it('feeds the scrubbed generation as playheadX when one is selected', () => {
     render(<FitnessLandscape frames={FRAMES} selectedGeneration={1} />);
-    const playhead = screen.getByTestId('fitness-landscape-playhead');
-    expect(playhead.style.left).toBe('50%');
+    expect(screen.getByTestId('uplot-chart-stub').getAttribute('data-playhead-x')).toBe('1');
   });
 });

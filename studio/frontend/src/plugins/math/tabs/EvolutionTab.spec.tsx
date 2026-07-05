@@ -11,7 +11,12 @@ import type { IChartData } from '../charts/IChart';
 // charts feed the seam without a real uPlot instance.
 vi.mock('../charts/UPlotChart', () => ({
   UPlotChart: ({ className, data }: { className?: string; data: IChartData }) => (
-    <div data-testid="uplot-chart-stub" className={className} data-series-labels={data.series.map((s) => s.label).join('|')} />
+    <div
+      data-testid="uplot-chart-stub"
+      className={className}
+      data-series-labels={data.series.map((s) => s.label).join('|')}
+      data-sparkline={data.sparkline === true ? 'true' : 'false'}
+    />
   ),
 }));
 
@@ -73,5 +78,27 @@ describe('EvolutionTab', () => {
     render(<EvolutionTab frames={[]} selectedGeneration="live" onScrub={vi.fn()} />);
     expect(screen.getByTestId('evolution-no-data')).toBeTruthy();
     expect(screen.queryByTestId('fitness-landscape')).toBeNull();
+  });
+
+  it('renders the homing charts as sparklines with a big current-value readout', () => {
+    render(<EvolutionTab frames={FRAMES} selectedGeneration="live" onScrub={vi.fn()} />);
+    // Latest frame: rtp = 0.9 + 2*0.001 = 0.902, volatility = 2 + 2*0.01 = 2.02.
+    expect(screen.getByTestId('rtp-homing-value').textContent).toBe('0.9020');
+    expect(screen.getByTestId('vol-homing-value').textContent).toBe('2.020');
+    for (const testId of ['rtp-homing', 'vol-homing'] as const) {
+      const stub = screen.getByTestId(testId).querySelector('[data-testid="uplot-chart-stub"]');
+      expect(stub?.getAttribute('data-sparkline')).toBe('true');
+    }
+  });
+
+  it('the fitness landscape is NOT a sparkline (keeps full axes)', () => {
+    render(<EvolutionTab frames={FRAMES} selectedGeneration="live" onScrub={vi.fn()} />);
+    const stub = screen.getByTestId('fitness-landscape').querySelector('[data-testid="uplot-chart-stub"]');
+    expect(stub?.getAttribute('data-sparkline')).toBe('false');
+  });
+
+  it('gives the chart row all flexible space; heatmap and scrubber size to content', () => {
+    render(<EvolutionTab frames={FRAMES} selectedGeneration="live" onScrub={vi.fn()} />);
+    expect(screen.getByTestId('evolution-tab').className).toContain('grid-rows-[minmax(0,1fr)_auto_auto]');
   });
 });

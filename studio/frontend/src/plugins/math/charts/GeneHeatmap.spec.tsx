@@ -49,4 +49,20 @@ describe('GeneHeatmap', () => {
     expect(screen.getByTestId('gene-heatmap')).toBeTruthy();
     expect(screen.queryAllByTestId('gene-heatmap-row')).toHaveLength(0);
   });
+
+  it('sizes gene rows at a fixed 14px so the strip hugs its content', () => {
+    render(<GeneHeatmap frames={FRAMES} selectedGeneration="live" />);
+    const grid = screen.getAllByTestId('gene-heatmap-row')[0].parentElement!;
+    expect(grid.style.gridTemplateRows).toBe('repeat(3, 14px)');
+  });
+
+  it('shows the cold-to-hot legend chip', () => {
+    render(<GeneHeatmap frames={FRAMES} selectedGeneration="live" />);
+    expect(screen.getByTestId('gene-heatmap-legend')).toBeTruthy();
+  });
+
+  it('hides the legend chip when there is no gene data', () => {
+    render(<GeneHeatmap frames={[]} selectedGeneration="live" />);
+    expect(screen.queryByTestId('gene-heatmap-legend')).toBeNull();
+  });
 });
