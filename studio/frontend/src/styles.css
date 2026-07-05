@@ -449,3 +449,14 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+
+/* Radix positions every popper (Tooltip/Select/DropdownMenu/...) inside a shared
+   [data-radix-popper-content-wrapper] div. Our TooltipContent already sets
+   pointer-events: none on its own box (informational-only, must never eat a click
+   meant for something underneath), but that wrapper div still has pointer-events:
+   auto by default and sits directly behind it, so clicks land on the wrapper
+   instead of falling through to the real element. Scope the fix to tooltips only
+   (via data-slot) — Select/DropdownMenu poppers must stay interactive. */
+[data-radix-popper-content-wrapper]:has([data-slot='tooltip-content']) {
+  pointer-events: none;
+}

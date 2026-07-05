@@ -129,12 +129,8 @@ export function MathPane(_props: IDockviewPanelProps) {
               </div>
             )}
             {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
-            {loadStatus !== 'loading' && activeTab === 'evolution' && (
-              <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />
-            )}
-            {loadStatus !== 'loading' && activeTab === 'compare' && (
-              <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />
-            )}
+            {loadStatus !== 'loading' && activeTab === 'evolution' && <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />}
+            {loadStatus !== 'loading' && activeTab === 'compare' && <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />}
             {loadStatus !== 'loading' && run && activeTab === 'report' && <ReportTab run={run} />}
           </div>
 
