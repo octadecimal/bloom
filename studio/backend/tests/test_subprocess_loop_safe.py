@@ -14,7 +14,7 @@ class SubprocessInner:
     """Minimal stand-in for the real runners: spawns a subprocess via
     asyncio.create_subprocess_exec and reports progress via a sync callback."""
 
-    async def run(self, on_progress):
+    async def run(self, on_progress, on_spawn=None):
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-c", "print('hi')",
             stdout=asyncio.subprocess.PIPE,
@@ -69,7 +69,7 @@ def test_loop_safe_runner_is_passthrough_on_subprocess_capable_loops():
     hop — the inner coroutine runs on the caller's own loop."""
 
     class LoopCapturingInner:
-        async def run(self, on_progress):
+        async def run(self, on_progress, on_spawn=None):
             return asyncio.get_running_loop()
 
     async def main():
