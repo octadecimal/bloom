@@ -27,7 +27,7 @@ export function EvolutionTab({ frames, selectedGeneration, onScrub }: IEvolution
   }
 
   return (
-    <div data-testid="evolution-tab" className="bloom-tab-fill grid grid-rows-[minmax(0,1.6fr)_minmax(0,1fr)_auto] gap-2 bg-surface p-2">
+    <div data-testid="evolution-tab" className="bloom-tab-fill grid grid-rows-[minmax(0,1fr)_auto_auto] gap-2 bg-surface p-2">
       <div className="grid min-h-0 grid-cols-[2fr_1fr] gap-2">
         <FitnessLandscape frames={frames} selectedGeneration={selectedGeneration} />
         <div className="grid min-h-0 grid-rows-2 gap-2">

@@ -13,21 +13,36 @@ function selectedGenerationOf(frames: IGenFrame[], selectedGeneration: number | 
 /** Gene-convergence heatmap — hand-rolled CSS grid (bespoke mark, not the
  * `IChart` seam; see docs/design-language.md + the dataviz skill). One row per
  * tunable gene dimension (`IGenFrame.geneAgreement` index), one column per
- * generation. Cell color warms from `--chart-gene-cold` (indigo, low
- * population agreement) to `--chart-gene-hot` (amber, converged) via
- * `color-mix()` — no raw color literals in this file (the design-language
- * guard blocks that; only styles.css may declare them). */
+ * generation. Rows are fixed 14px height so the strip hugs its content; the
+ * tab's flexible space belongs to the charts. Cell color warms from
+ * `--chart-gene-cold` (indigo, low population agreement) to
+ * `--chart-gene-hot` (amber, converged) via `color-mix()` — no raw color
+ * literals in this file (the design-language guard blocks that; only styles.css
+ * may declare them). */
 export function GeneHeatmap({ frames, selectedGeneration }: IGeneHeatmapProps) {
   const geneCount = frames.reduce((max, f) => Math.max(max, f.geneAgreement.length), 0);
   const selectedGen = selectedGenerationOf(frames, selectedGeneration);
 
   return (
     <div data-testid="gene-heatmap" className="flex min-h-0 flex-col gap-1 overflow-hidden rounded-md border border-hairline bg-raised p-2">
-      <span className="flex-none text-[10px] font-semibold uppercase tracking-wide text-text-2">Gene convergence</span>
+      <div className="flex flex-none items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-text-2">Gene convergence</span>
+        {geneCount > 0 && (
+          <span className="flex items-center gap-1 text-[9px] text-text-3">
+            drifting
+            <span
+              data-testid="gene-heatmap-legend"
+              className="h-1.5 w-14 rounded-full"
+              style={{ background: 'linear-gradient(to right, var(--chart-gene-cold), var(--chart-gene-hot))' }}
+            />
+            converged
+          </span>
+        )}
+      </div>
       {geneCount === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-xs text-text-3">No gene data yet.</div>
+        <div className="flex items-center justify-center py-3 text-xs text-text-3">No gene data yet.</div>
       ) : (
-        <div className="grid min-h-0 flex-1 gap-[2px]" style={{ gridTemplateRows: `repeat(${geneCount}, minmax(0, 1fr))` }}>
+        <div className="grid gap-[2px]" style={{ gridTemplateRows: `repeat(${geneCount}, 14px)` }}>
           {Array.from({ length: geneCount }, (_, gene) => (
             <div
               key={gene}

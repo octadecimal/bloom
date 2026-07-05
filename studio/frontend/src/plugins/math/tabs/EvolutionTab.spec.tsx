@@ -96,4 +96,9 @@ describe('EvolutionTab', () => {
     const stub = screen.getByTestId('fitness-landscape').querySelector('[data-testid="uplot-chart-stub"]');
     expect(stub?.getAttribute('data-sparkline')).toBe('false');
   });
+
+  it('gives the chart row all flexible space; heatmap and scrubber size to content', () => {
+    render(<EvolutionTab frames={FRAMES} selectedGeneration="live" onScrub={vi.fn()} />);
+    expect(screen.getByTestId('evolution-tab').className).toContain('grid-rows-[minmax(0,1fr)_auto_auto]');
+  });
 });
