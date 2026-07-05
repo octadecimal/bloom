@@ -45,7 +45,7 @@ class RecordingCurationRunner:
         self._result = result
         self.models: list[dict] = []
 
-    async def run(self, model, target, on_progress):
+    async def run(self, model, target, on_progress, on_spawn=None):
         self.models.append(model)
         return self._result
 
@@ -55,14 +55,14 @@ class GatedTunerRunner:
         self._result = result
         self.gate = asyncio.Event()
 
-    async def run(self, seed_model, target, config, on_progress):
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
         await self.gate.wait()
         return self._result
 
 
 class RaisingTunerRunner:
     """Simulates a subprocess crash / transient error inside request_tune."""
-    async def run(self, seed_model, target, config, on_progress):
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
         raise RuntimeError("boom")
 
 
@@ -257,3 +257,105 @@ async def test_generate_snapshots_locks_onto_the_run(mongo_db):
     saved = (await runs.list_for_game("g1"))[0]
     assert saved.locks is not None
     assert saved.locks.bonus is True and saved.locks.reels is False and saved.locks.paytable is False
+
+
+class HangingTunerRunner:
+    """Runs until its kill callable fires (mirrors a subprocess that only ends
+    when killed); returns the error-shaped result a killed tune produces."""
+    def __init__(self):
+        self.spawned = asyncio.Event()
+        self._killed = asyncio.Event()
+
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
+        if on_spawn is not None:
+            on_spawn(self._killed.set)
+        self.spawned.set()
+        await self._killed.wait()
+        return TuneResult(status="error", verdict=None, tuned_model=None,
+                          metrics=None, missed=[], trace=[],
+                          failure="tuner produced no result (exit -9)", ran_at="t1")
+
+
+class SlowSpawnTunerRunner(HangingTunerRunner):
+    """Holds the 'subprocess' back until released — models cancel arriving
+    before the spawn registers its kill callable."""
+    def __init__(self):
+        super().__init__()
+        self.release_spawn = asyncio.Event()
+
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
+        await self.release_spawn.wait()
+        return await super().run(seed_model, target, config, on_progress,
+                                 on_spawn=on_spawn)
+
+
+class HangingCurationRunner:
+    def __init__(self):
+        self.spawned = asyncio.Event()
+        self._killed = asyncio.Event()
+
+    async def run(self, model, target, on_progress, on_spawn=None):
+        if on_spawn is not None:
+            on_spawn(self._killed.set)
+        self.spawned.set()
+        await self._killed.wait()
+        return CurationResult(status="error", metrics=_metrics(),
+                              failure="simulator produced no result (exit -9)",
+                              ran_at="t2")
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_tune_emits_cancelled_and_persists_nothing(mongo_db):
+    sio = FakeSio()
+    tuner = HangingTunerRunner()
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=tuner,
+                            curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    task = asyncio.create_task(hub.generate("g1"))
+    await asyncio.wait_for(tuner.spawned.wait(), timeout=2)
+    assert hub.cancel_generate("g1") is True
+    assert await task is True
+    assert sio.phases() == ["tuning", "cancelled"]
+    assert sio.count("tuning_failed") == 0
+    assert sio.count("run_complete") == 0
+    assert await runs.list_for_game("g1") == []
+    assert (await store.get("g1")).tune_result is None
+    assert hub.cancel_generate("g1") is False  # reservation freed
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_verify_emits_cancelled_and_records_no_run(mongo_db):
+    sio = FakeSio()
+    cur = HangingCurationRunner()
+    hub, _, runs = _hub(mongo_db, sio,
+                        tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
+                        curation_runner=cur)
+    task = asyncio.create_task(hub.generate("g1"))
+    await asyncio.wait_for(cur.spawned.wait(), timeout=2)
+    assert hub.cancel_generate("g1") is True
+    assert await task is True
+    assert sio.phases() == ["tuning", "verifying", "cancelled"]
+    assert sio.count("run_complete") == 0
+    assert await runs.list_for_game("g1") == []
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_spawn_kills_on_registration(mongo_db):
+    sio = FakeSio()
+    tuner = SlowSpawnTunerRunner()
+    hub, _, runs = _hub(mongo_db, sio, tuner_runner=tuner,
+                        curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    task = asyncio.create_task(hub.generate("g1"))
+    await asyncio.sleep(0)  # let the pipeline reserve + park before spawn
+    assert hub.cancel_generate("g1") is True   # no kill callable yet: flag-only
+    tuner.release_spawn.set()                  # spawn now registers → killed at once
+    assert await task is True
+    assert sio.phases() == ["tuning", "cancelled"]
+    assert await runs.list_for_game("g1") == []
+
+
+@pytest.mark.asyncio
+async def test_cancel_without_active_run_returns_false(mongo_db):
+    hub, _, _ = _hub(mongo_db, FakeSio(),
+                     tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
+                     curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    assert hub.cancel_generate("nope") is False

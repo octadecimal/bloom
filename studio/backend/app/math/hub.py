@@ -10,6 +10,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Callable
 
 from app.math.bounds import build_config, derive_bounds
 from app.math.models import (
@@ -44,6 +45,8 @@ class MathHub:
         self._tuner_runner = tuner_runner
         self._gdd = gdd_store
         self._active: set[str] = set()  # games with a generate pipeline in flight
+        self._cancelled: set[str] = set()   # cancel requested for an active pipeline
+        self._cancels: dict[str, Callable[[], None]] = {}  # live kill per game
 
     # ── subscriptions (one per legacy pane; event names preserved) ──────────
     async def attach_sim_subscriber(self, game_id: str, sid: str) -> None:
@@ -144,9 +147,13 @@ class MathHub:
             pending.append(loop.create_task(on_progress(p)))
 
         result = await self._tuner_runner.run(model, target, config,
-                                              on_progress=sync_progress)
+                                              on_progress=sync_progress,
+                                              on_spawn=self._register_kill(game_id))
         if pending:
             await asyncio.gather(*pending)
+        self._cancels.pop(game_id, None)
+        if game_id in self._cancelled:
+            return result  # cancelled: discard — no save, no tuning_failed
         await self._store.save_tune_result(game_id, result)
 
         if result.status not in ("pass", "near_miss"):
@@ -178,6 +185,25 @@ class MathHub:
         self._active.add(game_id)
         return True
 
+    def cancel_generate(self, game_id: str) -> bool:
+        """Request cancellation of an in-flight generate pipeline. Discards
+        everything: kills the live subprocess (if any) now, and the flag aborts
+        the pipeline at its next phase boundary. False if nothing is running."""
+        if game_id not in self._active:
+            return False
+        self._cancelled.add(game_id)
+        kill = self._cancels.get(game_id)
+        if kill is not None:
+            kill()
+        return True
+
+    def _register_kill(self, game_id: str) -> Callable[[Callable[[], None]], None]:
+        def register(kill: Callable[[], None]) -> None:
+            self._cancels[game_id] = kill
+            if game_id in self._cancelled:
+                kill()  # cancel arrived before the subprocess spawned
+        return register
+
     async def _status(self, game_id: str, phase: str) -> None:
         await self._sio.emit("generate_status",
                              {"gameId": game_id, "phase": phase}, room=game_id)
@@ -194,11 +220,17 @@ class MathHub:
             started = time.monotonic()
             result = await self.request_tune(game_id)
             duration_ms = int((time.monotonic() - started) * 1000)
+            if game_id in self._cancelled:
+                await self._status(game_id, "cancelled")
+                return True
             if result is None or result.status not in ("pass", "near_miss"):
                 await self._status(game_id, "failed")
                 return True
             await self._status(game_id, "verifying")
             verify = await self._verify_tuned(game_id, result.tuned_model)
+            if game_id in self._cancelled:
+                await self._status(game_id, "cancelled")
+                return True
             await self.record_run(game_id, params, result, duration_ms,
                                   verify=verify, locks=locks)
             await self._status(game_id, "done")
@@ -210,11 +242,16 @@ class MathHub:
             # the begin_generate fire-and-forget path), emit the same terminal
             # generate_status:failed as the known-failure branches above, then
             # re-raise so the awaited generate() path surfaces it to its caller.
+            if game_id in self._cancelled:
+                await self._status(game_id, "cancelled")
+                return True
             logger.exception("generate pipeline failed for game %s", game_id)
             await self._status(game_id, "failed")
             raise
         finally:
             self._active.discard(game_id)
+            self._cancelled.discard(game_id)
+            self._cancels.pop(game_id, None)
 
     async def _verify_tuned(self, game_id: str, tuned_model: dict) -> CurationResult:
         """Independent curate pass on the WINNER (not the stored model). Does not
@@ -229,8 +266,12 @@ class MathHub:
         def _noop(p):
             pass
 
-        return await self._curation_runner.run(tuned_model, target,
-                                               on_progress=_noop)
+        try:
+            return await self._curation_runner.run(
+                tuned_model, target, on_progress=_noop,
+                on_spawn=self._register_kill(game_id))
+        finally:
+            self._cancels.pop(game_id, None)
 
     # ── run recording (was AnalyticsHub.record_run, + verify) ───────────────
     async def record_run(self, game_id: str, params: TuningParams,
