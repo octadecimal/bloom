@@ -200,7 +200,7 @@ export interface IMathState {
   targetGap: string | null;
   targetSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   // generate pipeline
-  genStatus: 'idle' | 'tuning' | 'verifying' | 'done' | 'failed';
+  genStatus: 'idle' | 'tuning' | 'verifying' | 'done' | 'failed' | 'cancelling' | 'cancelled';
   genProgress: { generation: number; maxGenerations: number } | null;
   genFailure: string | null;
   // verify-only (curation of the stored model)
