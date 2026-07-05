@@ -70,6 +70,8 @@ function run(id: string, trace: IMathRun['trace'] = []): IMathRun {
   };
 }
 
+const tunerParamsFixture = run('seed-only').params;
+
 function snapshot(generation: number) {
   return {
     generation,
@@ -82,6 +84,7 @@ function snapshot(generation: number) {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   rootStore.plugins.nested(MATH_PLUGIN_ID).set(makeInitialState() as never);
   refreshRuns.mockReset();
   refreshTuneResult.mockReset();
@@ -116,7 +119,7 @@ describe('MathPane', () => {
     expect(refreshTuneResult).not.toHaveBeenCalled();
   });
 
-  it('renders GenerateBar, ResultStrip and AdvancedSection around the tab bar', () => {
+  it('renders GenerateBar, ResultStrip and the advanced toggle around the tab bar', () => {
     mathSlice().activeGameId.set('g1');
     mathSlice().loadStatus.set('idle');
     mathSlice().runs.set([run('r1')]);
@@ -243,5 +246,29 @@ describe('MathPane', () => {
     fireEvent.click(screen.getByTestId('analytics-tab-evolution'));
     fireEvent.change(screen.getByRole('slider'), { target: { value: '0' } });
     expect(scrub).toHaveBeenCalledWith(0);
+  });
+
+  it('opens the param sidebar from the header toggle and persists the choice', () => {
+    mathSlice().activeGameId.set('g1');
+    mathSlice().loadStatus.set('idle');
+    mathSlice().tunerParams.set(tunerParamsFixture);
+    render(<MathPane {...({} as never)} />);
+    expect(screen.queryByTestId('advanced-params')).toBeNull();
+    const toggle = screen.getByTestId('advanced-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('advanced-params')).toBeTruthy();
+    expect(screen.getByTestId('param-master-seed')).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(localStorage.getItem('bloom.math.sidebar')).toBe('1');
+  });
+
+  it('restores a persisted-open sidebar on mount', () => {
+    localStorage.setItem('bloom.math.sidebar', '1');
+    mathSlice().activeGameId.set('g1');
+    mathSlice().loadStatus.set('idle');
+    mathSlice().tunerParams.set(tunerParamsFixture);
+    render(<MathPane {...({} as never)} />);
+    expect(screen.getByTestId('advanced-params')).toBeTruthy();
   });
 });
