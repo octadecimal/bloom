@@ -266,6 +266,34 @@ async def test_generate_route_returns_409_when_already_running(mongo_db):
     gated.gate.set()
 
 
+@pytest.mark.asyncio
+async def test_cancel_route_409_when_idle(mongo_db):
+    hub = _generate_hub(mongo_db,
+                        tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune_result()))
+    req = _req(math_hub=hub)
+    with pytest.raises(HTTPException) as exc_info:
+        await rest.cancel_generate_math("g1", req)
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_cancel_route_202_aborts_running_generate(mongo_db):
+    gated = _GatedTunerRunner(_pass_tune_result())
+    hub = _generate_hub(mongo_db, tuner_runner=gated)
+    req = _req(math_hub=hub)
+
+    resp = await rest.generate_math("g1", req)
+    assert resp.status_code == 202
+    await asyncio.sleep(0)  # let the run reserve + park on the gate
+
+    resp = await rest.cancel_generate_math("g1", req)
+    assert resp.status_code == 202
+    gated.gate.set()  # runner returns; pipeline sees the flag and cancels
+    await asyncio.sleep(0.05)
+    with pytest.raises(HTTPException):  # nothing active anymore
+        await rest.cancel_generate_math("g1", req)
+
+
 # ── analytics (was test_analytics_rest.py) ───────────────────────────────────
 def _run(run_id: str, game_id: str, created_at: str) -> MathRunDoc:
     return MathRunDoc(

@@ -114,6 +114,13 @@ async def generate_math(game_id: str, request: Request) -> Response:
     return Response(status_code=202)
 
 
+@router.post("/games/{game_id}/math/generate/cancel", status_code=202)
+async def cancel_generate_math(game_id: str, request: Request) -> Response:
+    if not request.app.state.math_hub.cancel_generate(game_id):
+        raise HTTPException(status_code=409, detail="no active run")
+    return Response(status_code=202)
+
+
 @router.post("/games/{game_id}/tuner/apply")
 async def apply_tuner(game_id: str, request: Request) -> dict:
     doc = await request.app.state.math_store.get(game_id)
