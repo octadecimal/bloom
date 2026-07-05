@@ -317,3 +317,36 @@ test('cancel: Generate toggles to Cancel, aborts the run, persists nothing', asy
   const runs = await request.get(`${BACKEND}/analytics/runs?game_id=${gameId}`);
   expect(await runs.json()).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// Test 6 — param sidebar: toggle, rich tooltip, edited param persists (the
+// observable end-state, not the dispatch) through Verify.
+// ---------------------------------------------------------------------------
+
+test('param sidebar: tooltip on hover, edited pool size persists through Verify', async ({ page, request }) => {
+  test.setTimeout(120_000);
+
+  const gameId = await setupGame(page, request, 'erin', `sidebar ${Date.now()}`, {
+    model: MODEL_09,
+    simParams: FAST_SIM_PARAMS,
+    intent: { rtp: '90%', volatility: 'low' },
+  });
+  await openMath(page);
+
+  // Toggle the sidebar open from the header icon.
+  await page.getByTestId('advanced-toggle').click();
+  await expect(page.getByTestId('advanced-params')).toBeVisible();
+
+  // Rich tooltip on label hover.
+  await page.getByTestId('advanced-params').getByText('Pool size', { exact: true }).hover();
+  await expect(page.getByRole('tooltip')).toContainText('signed pool');
+
+  // Edit a curation param, run Verify, assert the persisted end-state.
+  await page.getByTestId('param-pool-size').fill('600');
+  await page.getByTestId('verify-button').click();
+  await expect(page.getByTestId('result-verdict')).toContainText('PASS', { timeout: 90_000 });
+
+  const after = await request.get(`${BACKEND}/games/${gameId}/slot-model`);
+  const doc = (await after.json()) as { params: { poolSize: number } };
+  expect(doc.params.poolSize).toBe(600);
+});

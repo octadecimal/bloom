@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
+import { SlidersHorizontal } from 'lucide-react';
 import { mathHooks, selectedRun, type IMathState, type IGenFrame, type IMathRun } from './state';
 import { MathProfileTab } from './tabs/MathProfileTab';
 import { EvolutionTab } from './tabs/EvolutionTab';
@@ -8,7 +9,7 @@ import { ReportTab } from './tabs/ReportTab';
 import { TargetStrip } from './components/TargetStrip';
 import { GenerateBar } from './components/GenerateBar';
 import { ResultStrip } from './components/ResultStrip';
-import { AdvancedSection } from './components/AdvancedSection';
+import { ParamSidebar, useParamSidebarOpen } from './components/ParamSidebar';
 import { refreshRuns, scrub, toggleRunSelected } from './actions';
 import { refreshTuneResult } from './sync';
 
@@ -36,6 +37,7 @@ const TABS: ITabDef[] = [
 export function MathPane(_props: IDockviewPanelProps) {
   const s = mathHooks.usePluginState();
   const [activeTab, setActiveTab] = useState<ITabId>('profile');
+  const [sidebarOpen, toggleSidebar] = useParamSidebarOpen();
   const activeGameId = s.activeGameId.get();
 
   // Pane (re-)open: refresh what a closed pane may have missed — the run history
@@ -72,54 +74,70 @@ export function MathPane(_props: IDockviewPanelProps) {
     <div className="flex h-full flex-col bg-surface">
       <div className="flex flex-none items-center justify-between border-b border-hairline p-2">
         <span className="text-sm text-text-1">Math</span>
-        {run && (
-          <span className="text-xs text-text-3">
-            {run.verdict === 'pass' ? 'PASS' : run.verdict === 'near_miss' ? 'NEAR-MISS' : ''} · {new Date(run.createdAt).toLocaleString()}
-          </span>
-        )}
-      </div>
-
-      <TargetStrip />
-      <GenerateBar />
-
-      <div role="tablist" className="flex flex-none gap-1 border-b border-hairline px-2">
-        {TABS.map((tab) => (
+        <div className="flex items-center gap-2">
+          {run && (
+            <span className="text-xs text-text-3">
+              {run.verdict === 'pass' ? 'PASS' : run.verdict === 'near_miss' ? 'NEAR-MISS' : ''} · {new Date(run.createdAt).toLocaleString()}
+            </span>
+          )}
           <button
-            key={tab.id}
-            role="tab"
-            data-testid={`analytics-tab-${tab.id}`}
-            aria-selected={activeTab === tab.id}
-            disabled={!tab.enabled}
-            onClick={() => tab.enabled && setActiveTab(tab.id)}
-            className={`border-b-2 px-2.5 py-1.5 text-xs ${
-              activeTab === tab.id ? 'border-accent text-text-1' : 'border-transparent text-text-3'
-            } disabled:cursor-not-allowed disabled:text-text-3/60`}
+            type="button"
+            data-testid="advanced-toggle"
+            aria-pressed={sidebarOpen}
+            title="Tuning parameters"
+            onClick={toggleSidebar}
+            className={`rounded p-1 hover:bg-raised-hover ${sidebarOpen ? 'text-accent-text' : 'text-text-2'}`}
           >
-            {tab.label}
-            {!tab.enabled && <span className="ml-1 text-[9px] uppercase text-text-3">soon</span>}
+            <SlidersHorizontal className="h-3.5 w-3.5" />
           </button>
-        ))}
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1">
-        {loadStatus === 'loading' && (
-          <div data-testid="analytics-loading" className="flex h-full items-center justify-center text-text-2">
-            Loading runs…
-          </div>
-        )}
-        {loadStatus !== 'loading' && !run && !hasEvolutionData && (
-          <div data-testid="analytics-no-runs" className="flex h-full items-center justify-center text-text-2">
-            No tune runs recorded for this game yet.
-          </div>
-        )}
-        {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
-        {loadStatus !== 'loading' && activeTab === 'evolution' && <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />}
-        {loadStatus !== 'loading' && activeTab === 'compare' && <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />}
-        {loadStatus !== 'loading' && run && activeTab === 'report' && <ReportTab run={run} />}
-      </div>
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TargetStrip />
+          <GenerateBar />
 
-      <ResultStrip />
-      <AdvancedSection />
+          <div role="tablist" className="flex flex-none gap-1 border-b border-hairline px-2">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                data-testid={`analytics-tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                disabled={!tab.enabled}
+                onClick={() => tab.enabled && setActiveTab(tab.id)}
+                className={`border-b-2 px-2.5 py-1.5 text-xs ${
+                  activeTab === tab.id ? 'border-accent text-text-1' : 'border-transparent text-text-3'
+                } disabled:cursor-not-allowed disabled:text-text-3/60`}
+              >
+                {tab.label}
+                {!tab.enabled && <span className="ml-1 text-[9px] uppercase text-text-3">soon</span>}
+              </button>
+            ))}
+          </div>
+
+          <div className="min-h-0 flex-1">
+            {loadStatus === 'loading' && (
+              <div data-testid="analytics-loading" className="flex h-full items-center justify-center text-text-2">
+                Loading runs…
+              </div>
+            )}
+            {loadStatus !== 'loading' && !run && !hasEvolutionData && (
+              <div data-testid="analytics-no-runs" className="flex h-full items-center justify-center text-text-2">
+                No tune runs recorded for this game yet.
+              </div>
+            )}
+            {loadStatus !== 'loading' && run && activeTab === 'profile' && <MathProfileTab run={run} />}
+            {loadStatus !== 'loading' && activeTab === 'evolution' && <EvolutionTab frames={frames} selectedGeneration={selectedGeneration} onScrub={scrub} />}
+            {loadStatus !== 'loading' && activeTab === 'compare' && <CompareTab runs={runs} selectedRunIds={selectedRunIds} onToggleRun={toggleRunSelected} />}
+            {loadStatus !== 'loading' && run && activeTab === 'report' && <ReportTab run={run} />}
+          </div>
+
+          <ResultStrip />
+        </div>
+        {sidebarOpen && <ParamSidebar />}
+      </div>
     </div>
   );
 }
