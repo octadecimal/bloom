@@ -33,7 +33,7 @@ class _GatedTunerRunner:
         self._result = result
         self.gate = asyncio.Event()
 
-    async def run(self, seed_model, target, config, on_progress):
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
         await self.gate.wait()
         return self._result
 
