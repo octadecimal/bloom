@@ -81,6 +81,9 @@ No new socket events.
 
 ## Edge cases
 
+- **Cancel before spawn**: if the flag is already set when a runner registers its
+  kill callable, the registration invokes it immediately — a cancel that lands in
+  the spawn window can't leave a subprocess running to the next boundary.
 - **Cancel between phases**: no live subprocess → flag-only; pipeline aborts at the
   next boundary check. The 202 response does not guarantee the kill happened, only
   that cancellation is underway; on 202 the button shows a disabled "Cancelling…"
