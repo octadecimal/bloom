@@ -1,6 +1,6 @@
 import { mathHooks, type ISectionLocks } from '../state';
 import { allLocked } from '../reducers';
-import { generateMath, verifyMath } from '../actions';
+import { generateMath, verifyMath, cancelMath } from '../actions';
 
 /** Generate = the sub-project-1 backend pipeline (tune → verify), one accent
  * button. Verify-only = curate the STORED model (the Simulator pane's old
@@ -16,7 +16,9 @@ export function GenerateBar() {
   const verifyProgress = s.verifyProgress.get();
   const verifyFailure = s.verifyFailure.get();
 
-  const running = genStatus === 'tuning' || genStatus === 'verifying' || verifyStatus === 'running';
+  const genRunning = genStatus === 'tuning' || genStatus === 'verifying';
+  const cancelling = genStatus === 'cancelling';
+  const running = genRunning || cancelling || verifyStatus === 'running';
   const locked = allLocked(locks);
   const statusText =
     genStatus === 'tuning'
@@ -29,19 +31,32 @@ export function GenerateBar() {
           ? 'done'
           : genStatus === 'failed'
             ? 'failed'
-            : '';
+            : genStatus === 'cancelled'
+              ? 'run cancelled'
+              : '';
 
   return (
     <div className="flex-none border-b border-hairline p-2">
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          data-testid="generate-button"
-          onClick={() => void generateMath()}
-          disabled={running || locked || !!gap}
-          className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
-        >
-          Generate
-        </button>
+        {genRunning || cancelling ? (
+          <button
+            data-testid="cancel-button"
+            onClick={() => void cancelMath()}
+            disabled={cancelling}
+            className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel'}
+          </button>
+        ) : (
+          <button
+            data-testid="generate-button"
+            onClick={() => void generateMath()}
+            disabled={running || locked || !!gap}
+            className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+          >
+            Generate
+          </button>
+        )}
         <button
           data-testid="verify-button"
           onClick={() => void verifyMath()}
