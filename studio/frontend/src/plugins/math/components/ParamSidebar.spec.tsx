@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ParamSidebar, useParamSidebarOpen } from './ParamSidebar';
+import { ParamSidebar } from './ParamSidebar';
 import { MATH_PLUGIN_ID, makeInitialState, mathSlice } from '../state';
 import { rootStore } from '../../../state/rootStore';
 
@@ -26,11 +26,6 @@ const curationParams = {
   bonusRateTolerance: 0.25,
 };
 
-function Harness() {
-  const [open, toggle] = useParamSidebarOpen();
-  return <button data-testid="harness-toggle" aria-pressed={open} onClick={toggle} />;
-}
-
 beforeEach(() => {
   localStorage.clear();
   rootStore.plugins.nested(MATH_PLUGIN_ID).set(makeInitialState() as never);
@@ -39,41 +34,38 @@ beforeEach(() => {
 });
 
 describe('ParamSidebar', () => {
-  it('renders all three groups with their fields', () => {
+  it('renders the six semantic groups with their fields', () => {
     render(<ParamSidebar />);
     expect(screen.getByTestId('advanced-params')).toBeTruthy();
-    expect(screen.getByText('Tuner')).toBeTruthy();
-    expect(screen.getByText('Fitness weights')).toBeTruthy();
-    expect(screen.getByText('Curation')).toBeTruthy();
+    for (const label of ['Search budget', 'Genetic operators', 'Fitness weights', 'Verification', 'Pool', 'Reproducibility']) {
+      expect(screen.getByText(label, { exact: true }), label).toBeTruthy();
+    }
     expect(screen.getByTestId('param-master-seed')).toBeTruthy();
     expect(screen.getByTestId('param-crossover')).toBeTruthy();
     expect(screen.getByTestId('param-weight-rtp')).toBeTruthy();
     expect(screen.getByTestId('param-pool-size')).toBeTruthy();
   });
 
-  it('group reset restores only its own group', () => {
+  it('group headers read a tier above field labels (text-1 + hairline divider)', () => {
+    render(<ParamSidebar />);
+    const header = screen.getByText('Search budget', { exact: true });
+    expect(header.className).toContain('text-text-1');
+    expect(header.parentElement!.className).toContain('border-b');
+    const fieldLabel = screen.getByText('Population', { exact: true });
+    expect(fieldLabel.closest('span[tabindex]')!.className).toContain('text-text-2');
+  });
+
+  it('group reset restores only its own group — including across slices', () => {
     render(<ParamSidebar />);
     fireEvent.change(screen.getByTestId('param-population'), { target: { value: '50' } });
     fireEvent.change(screen.getByTestId('param-pool-size'), { target: { value: '700' } });
-    fireEvent.click(screen.getByTestId('param-reset-tuner'));
+    fireEvent.click(screen.getByTestId('param-reset-search'));
     expect(mathSlice().tunerParams.get()?.population).toBe(24);
     expect(mathSlice().curationParams.get()?.poolSize).toBe(700);
-  });
-});
-
-describe('useParamSidebarOpen', () => {
-  it('defaults closed and persists a toggle to localStorage', () => {
-    render(<Harness />);
-    const btn = screen.getByTestId('harness-toggle');
-    expect(btn.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(btn);
-    expect(btn.getAttribute('aria-pressed')).toBe('true');
-    expect(localStorage.getItem('bloom.math.sidebar')).toBe('1');
-  });
-
-  it('restores a persisted open state', () => {
-    localStorage.setItem('bloom.math.sidebar', '1');
-    render(<Harness />);
-    expect(screen.getByTestId('harness-toggle').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.change(screen.getByTestId('param-master-seed'), { target: { value: '7' } });
+    fireEvent.change(screen.getByTestId('param-sim-seed'), { target: { value: '8' } });
+    fireEvent.click(screen.getByTestId('param-reset-repro'));
+    expect(mathSlice().tunerParams.get()?.masterSeed).toBe(2026);
+    expect(mathSlice().curationParams.get()?.masterSeed).toBe(2026);
   });
 });

@@ -9,7 +9,8 @@ import { ReportTab } from './tabs/ReportTab';
 import { TargetStrip } from './components/TargetStrip';
 import { GenerateBar } from './components/GenerateBar';
 import { ResultStrip } from './components/ResultStrip';
-import { ParamSidebar, useParamSidebarOpen } from './components/ParamSidebar';
+import { PaneSidebar, PaneSidebarToggle, usePaneSidebar } from '../../components/ui/PaneSidebar';
+import { ParamSidebar } from './components/ParamSidebar';
 import { refreshRuns, scrub, toggleRunSelected } from './actions';
 import { refreshTuneResult } from './sync';
 
@@ -37,7 +38,7 @@ const TABS: ITabDef[] = [
 export function MathPane(_props: IDockviewPanelProps) {
   const s = mathHooks.usePluginState();
   const [activeTab, setActiveTab] = useState<ITabId>('profile');
-  const [sidebarOpen, toggleSidebar] = useParamSidebarOpen();
+  const sidebar = usePaneSidebar('bloom.math.sidebar');
   const activeGameId = s.activeGameId.get();
 
   // Pane (re-)open: refresh what a closed pane may have missed — the run history
@@ -80,16 +81,7 @@ export function MathPane(_props: IDockviewPanelProps) {
               {run.verdict === 'pass' ? 'PASS' : run.verdict === 'near_miss' ? 'NEAR-MISS' : ''} · {new Date(run.createdAt).toLocaleString()}
             </span>
           )}
-          <button
-            type="button"
-            data-testid="advanced-toggle"
-            aria-pressed={sidebarOpen}
-            title="Tuning parameters"
-            onClick={toggleSidebar}
-            className={`rounded p-1 hover:bg-raised-hover ${sidebarOpen ? 'text-accent-text' : 'text-text-2'}`}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
+          <PaneSidebarToggle open={sidebar.open} onToggle={sidebar.toggle} icon={SlidersHorizontal} title="Tuning parameters" testId="advanced-toggle" />
         </div>
       </div>
 
@@ -136,7 +128,11 @@ export function MathPane(_props: IDockviewPanelProps) {
 
           <ResultStrip />
         </div>
-        {sidebarOpen && <ParamSidebar />}
+        {sidebar.open && (
+          <PaneSidebar width={sidebar.width} onWidthChange={sidebar.setWidth}>
+            <ParamSidebar />
+          </PaneSidebar>
+        )}
       </div>
     </div>
   );
