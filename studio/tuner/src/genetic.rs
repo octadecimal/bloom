@@ -34,6 +34,19 @@ fn generation_seeds(master_seed: u64, generation: usize, count: usize) -> Vec<u6
     generate_seeds(mixed, count)
 }
 
+/// Fresh, deterministic seed panel for the generation-`g` feasibility
+/// confirmation. Distinct per generation and distinct from the base final
+/// panel, so acceptance never measures a candidate on seeds it was selected
+/// or compared on — a fixed confirmation panel lets the search exploit that
+/// panel's lucky realization (winner's curse) and report the inflated draw.
+fn confirmation_seeds(master_seed: u64, generation: usize, count: usize) -> Vec<u64> {
+    let mixed = SplitMix64::new(
+        master_seed ^ FINAL_SALT ^ (generation as u64 + 1).wrapping_mul(0xA24B_AED4_963E_E407),
+    )
+    .next_u64();
+    generate_seeds(mixed, count)
+}
+
 /// Mutate a genome in place, then repair. Each gene mutates with probability
 /// `cfg.mutation_rate`; numeric genes step within their bounds.
 fn mutate(g: &mut Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut SplitMix64) {
@@ -157,12 +170,15 @@ pub fn tune_with_progress(
     // Search fitness is measured at low fidelity, so it is noisy two ways: a
     // candidate can look in-band by luck, and cross-generation comparisons use
     // different seed sets. Nothing below trusts it for the verdict — feasibility
-    // is confirmed at final fidelity before stopping, and the returned winner is
-    // chosen by re-measuring the end candidates on the final seeds.
+    // is confirmed at final fidelity on a FRESH panel per attempt (a fixed
+    // confirmation panel lets the run select whichever candidate reads lucky on
+    // those particular seeds, and reporting that same draw inflates the verdict),
+    // and the returned winner is chosen by re-measuring the end candidates on
+    // the base final seeds.
     let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
     let final_fitness =
         |m: &SlotModel| fitness(&measure(&simulate(m, &final_seeds)), target, &cfg.weights);
-    let mut feasible: Option<Genome> = None;
+    let mut feasible: Option<(SlotModel, Vec<bloom_simulator::measure::RoundSample>)> = None;
     let mut last_top: Option<Genome> = None;
 
     for g in 0..max_generations {
@@ -258,12 +274,21 @@ pub fn tune_with_progress(
         }
         last_top = Some(scored[0].0.clone());
 
-        if scored[0].1 >= 0.0 && final_fitness(&decode(&scored[0].0, seed_model)) >= 0.0 {
-            // In-band at search fidelity AND confirmed at final fidelity —
-            // a lucky low-fidelity measurement alone must not end the search.
-            feasible = Some(scored[0].0.clone());
-            stop_reason = StopReason::Feasible;
-            break;
+        if scored[0].1 >= 0.0 {
+            // In-band at search fidelity — confirm at final fidelity on a fresh
+            // panel before stopping. A lucky low-fidelity measurement alone must
+            // not end the search, and the confirmation must not reuse seeds any
+            // candidate was selected or previously confirmed on.
+            let candidate = decode(&scored[0].0, seed_model);
+            let conf_samples = simulate(
+                &candidate,
+                &confirmation_seeds(cfg.master_seed, g, cfg.final_candidate_count),
+            );
+            if fitness(&measure(&conf_samples), target, &cfg.weights) >= 0.0 {
+                feasible = Some((candidate, conf_samples));
+                stop_reason = StopReason::Feasible;
+                break;
+            }
         }
         if stagnation >= cfg.stagnation_window {
             stop_reason = StopReason::Stagnated;
@@ -289,39 +314,52 @@ pub fn tune_with_progress(
         pop = next;
     }
 
-    // Pick the winner by FINAL-fidelity fitness. On a confirmed feasible stop
-    // that's the confirmed genome; otherwise compare the (noisy) historical
-    // best, the last generation's top, and the untouched seed — so the tuner
+    // On a confirmed feasible stop the winner is the confirmed model, and the
+    // verdict is measured on its confirmation samples — the one final-fidelity
+    // measurement the search never selected on. Otherwise pick the winner by
+    // FINAL-fidelity fitness, comparing the (noisy) historical best, the last
+    // generation's top, and the untouched seed head-to-head on the base final
+    // panel (common random numbers are right for comparison) — so the tuner
     // can never return a model that measures worse than its input.
     // The raw seed model is a candidate itself (not its genome round-trip —
     // decode(encode(seed)) may re-arrange reel strips, which measures slightly
     // differently), so an untunable input comes back byte-identical.
-    let candidates: Vec<SlotModel> = match feasible {
-        Some(genome) => vec![decode(&genome, seed_model)],
+    let (model, final_samples) = match feasible {
+        Some((model, conf_samples)) => {
+            // Never return worse than the input: if the untouched seed outscores
+            // the confirmed candidate head-to-head on the base panel, keep the
+            // seed (measured on that panel — it was never selected on anything,
+            // so the panel is a fresh referee for it).
+            if *seed_model != model && final_fitness(seed_model) > final_fitness(&model) {
+                (seed_model.clone(), simulate(seed_model, &final_seeds))
+            } else {
+                (model, conf_samples)
+            }
+        }
         None => {
             let (best_genome, _) = best.expect("at least one generation always runs");
-            let mut v = vec![decode(&best_genome, seed_model)];
+            let mut candidates = vec![decode(&best_genome, seed_model)];
             if let Some(top) = last_top {
                 let m = decode(&top, seed_model);
-                if !v.contains(&m) {
-                    v.push(m);
+                if !candidates.contains(&m) {
+                    candidates.push(m);
                 }
             }
-            if !v.contains(seed_model) {
-                v.push(seed_model.clone());
+            if !candidates.contains(seed_model) {
+                candidates.push(seed_model.clone());
             }
-            v
+            let mut winner = (&candidates[0], final_fitness(&candidates[0]));
+            for m in &candidates[1..] {
+                let f = final_fitness(m);
+                if f > winner.1 {
+                    winner = (m, f);
+                }
+            }
+            let model = winner.0.clone();
+            let samples = simulate(&model, &final_seeds);
+            (model, samples)
         }
     };
-    let mut winner = (&candidates[0], final_fitness(&candidates[0]));
-    for m in &candidates[1..] {
-        let f = final_fitness(m);
-        if f > winner.1 {
-            winner = (m, f);
-        }
-    }
-    let model = winner.0.clone();
-    let final_samples = simulate(&model, &final_seeds);
     let metrics = measure(&final_samples);
     let verdict = match verify(&metrics, target) {
         Ok(()) => Verdict::Pass,
@@ -532,6 +570,46 @@ mod tests {
                 "seed {seed}: returned model final fitness {out_fit} < seed's {seed_fit}"
             );
         }
+    }
+
+    #[test]
+    fn confirmation_panels_differ_per_generation_and_from_the_selection_panel() {
+        let (master, n) = (2026u64, 64usize);
+        let base = generate_seeds(master ^ FINAL_SALT, n);
+        let g0 = confirmation_seeds(master, 0, n);
+        let g1 = confirmation_seeds(master, 1, n);
+        assert_ne!(g0, g1, "confirmation panels must be fresh per generation");
+        assert_ne!(
+            g0, base,
+            "confirmation must not reuse the winner-selection panel"
+        );
+        assert_ne!(
+            g1, base,
+            "confirmation must not reuse the winner-selection panel"
+        );
+        assert_eq!(
+            g0,
+            confirmation_seeds(master, 0, n),
+            "must stay deterministic"
+        );
+    }
+
+    #[test]
+    fn feasible_verdict_is_measured_on_the_confirmation_panel() {
+        // On a Feasible stop the reported metrics must come from the fresh
+        // panel that confirmed feasibility — not from the base final panel,
+        // which one candidate per generation was already tested against
+        // (reusing it reports the selected-on, optimism-biased draw).
+        let c = cfg(7);
+        let out = GeneticTuner.tune(&toy(1), &target_09(), &c);
+        assert_eq!(out.trace.stop_reason, StopReason::Feasible);
+        let stop_gen = out.trace.generations_run - 1;
+        let conf = confirmation_seeds(c.master_seed, stop_gen, c.final_candidate_count);
+        let expected = measure(&simulate(&out.model, &conf));
+        assert_eq!(
+            out.metrics.rtp, expected.rtp,
+            "feasible metrics must be the confirmation-panel measurement"
+        );
     }
 
     #[test]
