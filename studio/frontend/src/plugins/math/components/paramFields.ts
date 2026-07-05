@@ -1,7 +1,7 @@
 import type { State } from '@hookstate/core';
 import type { IMathState } from '../state';
 
-export type IParamGroup = 'tuner' | 'weights' | 'curation';
+export type IParamGroup = 'search' | 'genetics' | 'weights' | 'verification' | 'pool' | 'repro';
 
 export interface IParamTooltip {
   title: string;
@@ -32,33 +32,20 @@ export interface IParamFieldDef {
 }
 
 export const PARAM_GROUPS: { id: IParamGroup; label: string }[] = [
-  { id: 'tuner', label: 'Tuner' },
+  { id: 'search', label: 'Search budget' },
+  { id: 'genetics', label: 'Genetic operators' },
   { id: 'weights', label: 'Fitness weights' },
-  { id: 'curation', label: 'Curation' },
+  { id: 'verification', label: 'Verification' },
+  { id: 'pool', label: 'Pool' },
+  { id: 'repro', label: 'Reproducibility' },
 ];
 
 export const PARAM_FIELDS: IParamFieldDef[] = [
-  // ── tuner ──────────────────────────────────────────────────────────────
-  {
-    key: 'master-seed',
-    label: 'Seed',
-    group: 'tuner',
-    tooltip: {
-      title: 'Master seed',
-      body: "Seeds the genetic algorithm's random number generator.",
-      effect: 'Same seed + same params → an identical, reproducible run.',
-    },
-    min: 0,
-    step: 1,
-    integer: true,
-    defaultValue: 2026,
-    get: (s) => s.tunerParams.ornull?.masterSeed.get() ?? null,
-    set: (s, v) => s.tunerParams.ornull?.masterSeed.set(v),
-  },
+  // ── search budget ──────────────────────────────────────────────────────
   {
     key: 'population',
     label: 'Population',
-    group: 'tuner',
+    group: 'search',
     tooltip: {
       title: 'Population',
       body: 'Number of candidate models alive in each GA generation.',
@@ -74,7 +61,7 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
   {
     key: 'generations',
     label: 'Generations',
-    group: 'tuner',
+    group: 'search',
     tooltip: {
       title: 'Max generations',
       body: 'Upper budget on GA generations; the run stops earlier once the target is feasible or progress stagnates.',
@@ -90,7 +77,7 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
   {
     key: 'search-spins',
     label: 'Search spins',
-    group: 'tuner',
+    group: 'search',
     tooltip: {
       title: 'Search spins',
       body: 'Spins simulated to measure each candidate during the search phase (low fidelity).',
@@ -107,7 +94,7 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
   {
     key: 'final-spins',
     label: 'Final spins',
-    group: 'tuner',
+    group: 'search',
     tooltip: {
       title: 'Final spins',
       body: 'Spins for the trusted final-fidelity confirmation of the best candidate; only these measurements decide the verdict.',
@@ -122,25 +109,27 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     set: (s, v) => s.tunerParams.ornull?.finalCandidateCount.set(v),
   },
   {
-    key: 'elitism',
-    label: 'Elitism',
-    group: 'tuner',
+    key: 'stagnation',
+    label: 'Stagnation',
+    group: 'search',
     tooltip: {
-      title: 'Elitism',
-      body: 'Best candidates copied unchanged into the next generation.',
-      effect: 'Guards against losing the best solution to mutation.',
+      title: 'Stagnation window',
+      body: 'Generations without improvement before the GA stops early.',
+      effect: 'Lower = give up sooner on a stuck search.',
     },
-    min: 0,
+    unit: 'gens',
+    min: 1,
     step: 1,
     integer: true,
-    defaultValue: 2,
-    get: (s) => s.tunerParams.ornull?.elitism.get() ?? null,
-    set: (s, v) => s.tunerParams.ornull?.elitism.set(v),
+    defaultValue: 12,
+    get: (s) => s.tunerParams.ornull?.stagnationWindow.get() ?? null,
+    set: (s, v) => s.tunerParams.ornull?.stagnationWindow.set(v),
   },
+  // ── genetic operators ──────────────────────────────────────────────────
   {
     key: 'mutation',
     label: 'Mutation',
-    group: 'tuner',
+    group: 'genetics',
     tooltip: {
       title: 'Mutation rate',
       body: 'Chance each gene mutates while breeding the next generation (0–1).',
@@ -157,7 +146,7 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
   {
     key: 'crossover',
     label: 'Crossover',
-    group: 'tuner',
+    group: 'genetics',
     tooltip: {
       title: 'Crossover rate',
       body: 'Chance two parents mix genes instead of cloning (0–1).',
@@ -172,21 +161,20 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     set: (s, v) => s.tunerParams.ornull?.crossoverRate.set(v),
   },
   {
-    key: 'stagnation',
-    label: 'Stagnation',
-    group: 'tuner',
+    key: 'elitism',
+    label: 'Elitism',
+    group: 'genetics',
     tooltip: {
-      title: 'Stagnation window',
-      body: 'Generations without improvement before the GA stops early.',
-      effect: 'Lower = give up sooner on a stuck search.',
+      title: 'Elitism',
+      body: 'Best candidates copied unchanged into the next generation.',
+      effect: 'Guards against losing the best solution to mutation.',
     },
-    unit: 'gens',
-    min: 1,
+    min: 0,
     step: 1,
     integer: true,
-    defaultValue: 12,
-    get: (s) => s.tunerParams.ornull?.stagnationWindow.get() ?? null,
-    set: (s, v) => s.tunerParams.ornull?.stagnationWindow.set(v),
+    defaultValue: 2,
+    get: (s) => s.tunerParams.ornull?.elitism.get() ?? null,
+    set: (s, v) => s.tunerParams.ornull?.elitism.set(v),
   },
   // ── fitness weights ────────────────────────────────────────────────────
   {
@@ -237,28 +225,11 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     get: (s) => s.tunerParams.ornull?.weights.hitRate.get() ?? null,
     set: (s, v) => s.tunerParams.ornull?.weights.hitRate.set(v),
   },
-  // ── curation ───────────────────────────────────────────────────────────
-  {
-    key: 'pool-size',
-    label: 'Pool size',
-    group: 'curation',
-    tooltip: {
-      title: 'Pool size',
-      body: 'Outcomes frozen into the signed pool the game server draws from.',
-      effect: "Larger pools track the model's RTP more faithfully.",
-    },
-    unit: 'outcomes',
-    min: 100,
-    step: 100,
-    integer: true,
-    defaultValue: 1000,
-    get: (s) => s.curationParams.ornull?.poolSize.get() ?? null,
-    set: (s, v) => s.curationParams.ornull?.poolSize.set(v),
-  },
+  // ── verification ───────────────────────────────────────────────────────
   {
     key: 'candidates',
     label: 'Candidates',
-    group: 'curation',
+    group: 'verification',
     tooltip: {
       title: 'Candidates',
       body: 'Spins simulated to measure the model during verification.',
@@ -273,25 +244,9 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     set: (s, v) => s.curationParams.ornull?.candidateCount.set(v),
   },
   {
-    key: 'sim-seed',
-    label: 'Sim seed',
-    group: 'curation',
-    tooltip: {
-      title: 'Sim seed',
-      body: "Seeds the verification simulation's random number generator.",
-      effect: 'Same seed + same model → identical verification.',
-    },
-    min: 0,
-    step: 1,
-    integer: true,
-    defaultValue: 2026,
-    get: (s) => s.curationParams.ornull?.masterSeed.get() ?? null,
-    set: (s, v) => s.curationParams.ornull?.masterSeed.set(v),
-  },
-  {
     key: 'rtp-tolerance',
     label: 'RTP tolerance',
-    group: 'curation',
+    group: 'verification',
     tooltip: {
       title: 'RTP tolerance',
       body: 'Allowed absolute deviation of measured RTP from the target (0.01 = ±1%).',
@@ -305,9 +260,43 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     set: (s, v) => s.curationParams.ornull?.rtpTolerance.set(v),
   },
   {
+    key: 'bonus-tolerance',
+    label: 'Bonus tolerance',
+    group: 'verification',
+    tooltip: {
+      title: 'Bonus tolerance',
+      body: 'Relative ± band around the GDD bonus hit rate during verification.',
+      effect: 'Tighter = bonus rates must match the design more exactly.',
+    },
+    min: 0.01,
+    step: 0.05,
+    integer: false,
+    defaultValue: 0.25,
+    get: (s) => s.curationParams.ornull?.bonusRateTolerance.get() ?? null,
+    set: (s, v) => s.curationParams.ornull?.bonusRateTolerance.set(v),
+  },
+  // ── pool ───────────────────────────────────────────────────────────────
+  {
+    key: 'pool-size',
+    label: 'Pool size',
+    group: 'pool',
+    tooltip: {
+      title: 'Pool size',
+      body: 'Outcomes frozen into the signed pool the game server draws from.',
+      effect: "Larger pools track the model's RTP more faithfully.",
+    },
+    unit: 'outcomes',
+    min: 100,
+    step: 100,
+    integer: true,
+    defaultValue: 1000,
+    get: (s) => s.curationParams.ornull?.poolSize.get() ?? null,
+    set: (s, v) => s.curationParams.ornull?.poolSize.set(v),
+  },
+  {
     key: 'correction-band',
     label: 'Correction band',
-    group: 'curation',
+    group: 'pool',
     tooltip: {
       title: 'Correction band',
       body: "Honesty guardrail: curation may only correct the pool toward a target within this band of the model's measured RTP.",
@@ -320,21 +309,38 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     get: (s) => s.curationParams.ornull?.realizedCorrectionBand.get() ?? null,
     set: (s, v) => s.curationParams.ornull?.realizedCorrectionBand.set(v),
   },
+  // ── reproducibility ────────────────────────────────────────────────────
   {
-    key: 'bonus-tolerance',
-    label: 'Bonus tolerance',
-    group: 'curation',
+    key: 'master-seed',
+    label: 'Seed',
+    group: 'repro',
     tooltip: {
-      title: 'Bonus tolerance',
-      body: 'Relative ± band around the GDD bonus hit rate during verification.',
-      effect: 'Tighter = bonus rates must match the design more exactly.',
+      title: 'Master seed',
+      body: "Seeds the genetic algorithm's random number generator.",
+      effect: 'Same seed + same params → an identical, reproducible run.',
     },
-    min: 0.01,
-    step: 0.05,
-    integer: false,
-    defaultValue: 0.25,
-    get: (s) => s.curationParams.ornull?.bonusRateTolerance.get() ?? null,
-    set: (s, v) => s.curationParams.ornull?.bonusRateTolerance.set(v),
+    min: 0,
+    step: 1,
+    integer: true,
+    defaultValue: 2026,
+    get: (s) => s.tunerParams.ornull?.masterSeed.get() ?? null,
+    set: (s, v) => s.tunerParams.ornull?.masterSeed.set(v),
+  },
+  {
+    key: 'sim-seed',
+    label: 'Sim seed',
+    group: 'repro',
+    tooltip: {
+      title: 'Sim seed',
+      body: "Seeds the verification simulation's random number generator.",
+      effect: 'Same seed + same model → identical verification.',
+    },
+    min: 0,
+    step: 1,
+    integer: true,
+    defaultValue: 2026,
+    get: (s) => s.curationParams.ornull?.masterSeed.get() ?? null,
+    set: (s, v) => s.curationParams.ornull?.masterSeed.set(v),
   },
 ];
 

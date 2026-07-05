@@ -38,8 +38,8 @@ describe('paramFields registry', () => {
     expect(keys).toContain('pool-size'); // legacy testid param-pool-size
   });
 
-  it('has three groups, each non-empty', () => {
-    expect(PARAM_GROUPS.map((g) => g.id)).toEqual(['tuner', 'weights', 'curation']);
+  it('has six semantic groups, each non-empty', () => {
+    expect(PARAM_GROUPS.map((g) => g.id)).toEqual(['search', 'genetics', 'weights', 'verification', 'pool', 'repro']);
     for (const g of PARAM_GROUPS) {
       expect(PARAM_FIELDS.some((f) => f.group === g.id)).toBe(true);
     }
@@ -90,15 +90,29 @@ describe('paramFields registry', () => {
     }
   });
 
-  it('resetGroup restores only its own group', () => {
+  it('assigns every field to its spec group, in spec order', () => {
+    const byGroup = (id: string) => PARAM_FIELDS.filter((f) => f.group === id).map((f) => f.key);
+    expect(byGroup('search')).toEqual(['population', 'generations', 'search-spins', 'final-spins', 'stagnation']);
+    expect(byGroup('genetics')).toEqual(['mutation', 'crossover', 'elitism']);
+    expect(byGroup('weights')).toEqual(['weight-rtp', 'weight-volatility', 'weight-hit-rate']);
+    expect(byGroup('verification')).toEqual(['candidates', 'rtp-tolerance', 'bonus-tolerance']);
+    expect(byGroup('pool')).toEqual(['pool-size', 'correction-band']);
+    expect(byGroup('repro')).toEqual(['master-seed', 'sim-seed']);
+  });
+
+  it('resetGroup restores only its own group — repro spans both slices', () => {
     const s = mathSlice();
-    s.tunerParams.set({ ...tunerParams, population: 99, weights: { ...tunerParams.weights, rtp: 9 } });
-    s.curationParams.set({ ...curationParams, poolSize: 77 });
-    resetGroup(s, 'tuner');
+    s.tunerParams.set({ ...tunerParams, population: 99, masterSeed: 7, weights: { ...tunerParams.weights, rtp: 9 } });
+    s.curationParams.set({ ...curationParams, poolSize: 77, masterSeed: 8 });
+    resetGroup(s, 'search');
     expect(s.tunerParams.get()?.population).toBe(24);
+    expect(s.tunerParams.get()?.masterSeed).toBe(7); // repro is its own group
     expect(s.tunerParams.get()?.weights.rtp).toBe(9); // weights is its own group
-    expect(s.curationParams.get()?.poolSize).toBe(77); // curation untouched
-    resetGroup(s, 'curation');
+    expect(s.curationParams.get()?.poolSize).toBe(77); // pool untouched
+    resetGroup(s, 'pool');
     expect(s.curationParams.get()?.poolSize).toBe(1000);
+    resetGroup(s, 'repro');
+    expect(s.tunerParams.get()?.masterSeed).toBe(2026);
+    expect(s.curationParams.get()?.masterSeed).toBe(2026);
   });
 });
