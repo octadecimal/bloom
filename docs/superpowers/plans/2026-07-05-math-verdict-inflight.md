@@ -319,7 +319,7 @@ await expect(page.getByTestId('result-verdict')).toContainText('RUNNING');
 await expect(page.getByTestId('metric-rtp')).toBeHidden();
 ```
 
-Note: placed *after* the `tuning gen` poll on purpose — the run is then provably still in flight for several generations, so a plain assert (no poll) is race-free. Do NOT place it before the poll.
+Note: placed _after_ the `tuning gen` poll on purpose — the run is then provably still in flight for several generations, so a plain assert (no poll) is race-free. Do NOT place it before the poll.
 
 - [ ] **Step 2: Add the mid-run assertions to test 5 (cancel flow)**
 
