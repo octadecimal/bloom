@@ -182,6 +182,13 @@ test('full contract: edit target, generate to PASS, apply, Game Config reflects'
   // so there's a real multi-frame window here, not a sub-frame race.
   await expect.poll(() => page.getByTestId('generate-status').innerText(), { intervals: [50], timeout: 5_000 }).toContain('tuning gen');
 
+  // In-flight verdict: the strip must not present the previous result as
+  // current while the pipeline runs. Same deterministic multi-generation
+  // window as the poll above; RUNNING… spans tune AND verify phases, so this
+  // is wider than the 'tuning gen' text itself.
+  await expect(page.getByTestId('result-verdict')).toContainText('RUNNING');
+  await expect(page.getByTestId('metric-rtp')).toBeHidden();
+
   await expect(page.getByTestId('scrubber')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('generate-status')).toContainText('done', { timeout: 120_000 });
 
@@ -307,11 +314,20 @@ test('cancel: Generate toggles to Cancel, aborts the run, persists nothing', asy
 
   await page.getByTestId('generate-button').click();
   await expect(page.getByTestId('generate-status')).toContainText('tuning', { timeout: 15_000 });
+
+  // >60s deterministic window (SLOW_TUNER_PARAMS) — plain asserts are safe.
+  await expect(page.getByTestId('result-verdict')).toContainText('RUNNING');
+  await expect(page.getByTestId('apply-button')).toBeDisabled();
+
   await expect(page.getByTestId('cancel-button')).toBeEnabled();
 
   await page.getByTestId('cancel-button').click();
   await expect(page.getByTestId('generate-status')).toContainText('run cancelled', { timeout: 30_000 });
   await expect(page.getByTestId('generate-button')).toBeEnabled();
+
+  // Post-cancel the strip reverts to latestOutcome — nothing persisted here,
+  // so the badge is the no-outcome dash again, not a stuck RUNNING…
+  await expect(page.getByTestId('result-verdict')).toHaveText('—');
 
   // Discard semantics: no run was persisted.
   const runs = await request.get(`${BACKEND}/analytics/runs?game_id=${gameId}`);
