@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ResultStrip } from './ResultStrip';
-import { MATH_PLUGIN_ID, makeInitialState, mathSlice, type IMathRun } from '../state';
+import { MATH_PLUGIN_ID, makeInitialState, mathSlice, type IMathRun, type ITuneResult } from '../state';
 import { rootStore } from '../../../state/rootStore';
 
 const applyMath = vi.fn();
@@ -141,5 +141,73 @@ describe('ResultStrip', () => {
     render(<ResultStrip />);
     expect(screen.getByTestId('metric-rtp').textContent).toBe('0.9612');
     expect(screen.getByText(/band 0.955–0.965/)).toBeTruthy();
+  });
+
+  describe('in-flight state', () => {
+    // A previous result rich enough that every hideable element would render.
+    const staleRun = () =>
+      baseRun({
+        stopReason: 'feasible',
+        locks: { reels: false, paytable: false, bonus: true },
+      });
+    const tunedResult = (): ITuneResult => ({ status: 'pass', verdict: 'pass', tunedModel: { reels: [] }, metrics: null, missed: [], failure: null, ranAt: 't' });
+
+    it('shows RUNNING… and hides the previous result while genStatus is tuning', () => {
+      mathSlice().runs.set([staleRun()]);
+      mathSlice().applied.set(true);
+      mathSlice().genStatus.set('tuning');
+      render(<ResultStrip />);
+      expect(screen.getByTestId('result-verdict').textContent).toBe('RUNNING…');
+      expect(screen.queryByTestId('metric-rtp')).toBeNull();
+      expect(screen.queryByTestId('result-stop-reason')).toBeNull();
+      expect(screen.queryByTestId('result-lock-chips')).toBeNull();
+      expect(screen.queryByTestId('math-applied')).toBeNull();
+    });
+
+    it('shows RUNNING… while genStatus is verifying', () => {
+      mathSlice().runs.set([staleRun()]);
+      mathSlice().genStatus.set('verifying');
+      render(<ResultStrip />);
+      expect(screen.getByTestId('result-verdict').textContent).toBe('RUNNING…');
+    });
+
+    it('shows CANCELLING… while genStatus is cancelling', () => {
+      mathSlice().runs.set([staleRun()]);
+      mathSlice().genStatus.set('cancelling');
+      render(<ResultStrip />);
+      expect(screen.getByTestId('result-verdict').textContent).toBe('CANCELLING…');
+      expect(screen.queryByTestId('metric-rtp')).toBeNull();
+    });
+
+    it('shows RUNNING… while a verify-only curation is in flight', () => {
+      mathSlice().runs.set([staleRun()]);
+      mathSlice().verifyStatus.set('running');
+      render(<ResultStrip />);
+      expect(screen.getByTestId('result-verdict').textContent).toBe('RUNNING…');
+      expect(screen.queryByTestId('metric-rtp')).toBeNull();
+    });
+
+    it('disables Apply during a verify-only run, even with a tuned model', () => {
+      mathSlice().tuneResult.set(tunedResult());
+      mathSlice().verifyStatus.set('running');
+      render(<ResultStrip />);
+      expect((screen.getByTestId('apply-button') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('disables Apply while cancelling, even with a tuned model', () => {
+      mathSlice().tuneResult.set(tunedResult());
+      mathSlice().genStatus.set('cancelling');
+      render(<ResultStrip />);
+      expect((screen.getByTestId('apply-button') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('reverts to the latest outcome once the run is done', () => {
+      mathSlice().runs.set([staleRun()]);
+      mathSlice().genStatus.set('done');
+      render(<ResultStrip />);
+      expect(screen.getByTestId('result-verdict').textContent).toBe('PASS');
+      expect(screen.getByTestId('metric-rtp')).toBeTruthy();
+      expect(screen.getByTestId('result-stop-reason')).toBeTruthy();
+    });
   });
 });
