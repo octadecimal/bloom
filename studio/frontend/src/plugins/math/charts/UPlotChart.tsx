@@ -79,8 +79,9 @@ export function toOptions(data: IChartData, width: number, height: number, playh
               const x = u.valToPos(xVal, 'x', true);
               const { ctx, bbox } = u;
               ctx.save();
+              ctx.lineWidth = devicePixelRatio;
               ctx.strokeStyle = cssVar('--chart-playhead');
-              ctx.setLineDash([4, 4]);
+              ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
               ctx.beginPath();
               ctx.moveTo(x, bbox.top);
               ctx.lineTo(x, bbox.top + bbox.height);
@@ -115,8 +116,17 @@ export function createUPlotChart(): IChart {
   let ro: ResizeObserver | null = null;
   let current: IChartData | null = null;
 
+  // uPlot's `height` option sizes the plot region only — the `.u-legend`
+  // element it renders for multi-series charts sits *below* that region,
+  // inside the same mount element. Left unaccounted for, the legend overflows
+  // the mount's `overflow-hidden` card and is permanently clipped. The legend
+  // doesn't exist until uPlot constructs into the element, so `build` below
+  // corrects the initial size with one extra `setSize` call once it appears.
   function sizeOf(el: HTMLElement): { width: number; height: number } {
-    return { width: el.clientWidth || 600, height: el.clientHeight || 220 };
+    const legendHeight = el.querySelector<HTMLElement>('.u-legend')?.offsetHeight ?? 0;
+    const rawHeight = el.clientHeight || 220;
+    const height = legendHeight > 0 ? Math.max(rawHeight - legendHeight, 1) : rawHeight;
+    return { width: el.clientWidth || 600, height };
   }
 
   function build(el: HTMLElement, data: IChartData) {
@@ -128,6 +138,11 @@ export function createUPlotChart(): IChart {
       el,
     );
     shape = shapeOf(data);
+    // The legend only exists post-construction; if one rendered, re-measure
+    // and correct the size uPlot was just built with. The ResizeObserver
+    // keeps it right thereafter.
+    const legendHeight = el.querySelector<HTMLElement>('.u-legend')?.offsetHeight ?? 0;
+    if (legendHeight > 0) plot.setSize(sizeOf(el));
   }
 
   return {

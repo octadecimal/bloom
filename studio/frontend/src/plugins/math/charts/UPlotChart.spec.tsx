@@ -358,6 +358,31 @@ describe('createUPlotChart (container-driven sizing)', () => {
     chart.destroy();
     expect(FakeResizeObserver.instances[0].disconnected).toBe(true);
   });
+
+  // uPlot's `height` option sizes the plot region only — the `.u-legend`
+  // element renders *below* it, inside the same mount element. Since the plot
+  // consumes the mount's full clientHeight, the legend overflows the
+  // `overflow-hidden` card and is permanently clipped (Compare tab). The
+  // adapter must reserve legend height when sizing.
+  it('reserves space for the legend so it is not clipped by the mount element', () => {
+    const chart = createUPlotChart();
+    const el = sizedEl(800, 200);
+    const legend = document.createElement('div');
+    legend.className = 'u-legend';
+    Object.defineProperty(legend, 'offsetHeight', { value: 30, configurable: true });
+    el.appendChild(legend); // pre-appended: simulates uPlot's own legend already present
+
+    chart.mount(el, DATA);
+
+    const instance = (uPlot as unknown as FakeUPlotCtor).instances[0];
+    expect(instance.opts.height).toBe(170); // 200 - 30 legend height
+    expect(instance.setSize).toHaveBeenCalledWith({ width: 800, height: 170 });
+
+    Object.defineProperty(el, 'clientHeight', { value: 90, configurable: true });
+    const ro = FakeResizeObserver.instances[0];
+    ro.cb([], ro as unknown as ResizeObserver);
+    expect(instance.setSize).toHaveBeenLastCalledWith({ width: 800, height: 60 }); // 90 - 30
+  });
 });
 
 // Sparkline mode: the homing tiles show a big current value + a bare line —
