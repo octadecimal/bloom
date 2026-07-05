@@ -350,3 +350,43 @@ test('param sidebar: tooltip on hover, edited pool size persists through Verify'
   const doc = (await after.json()) as { params: { poolSize: number } };
   expect(doc.params.poolSize).toBe(600);
 });
+
+// ---------------------------------------------------------------------------
+// Test 7 — param sidebar shell (second pass): six semantic groups render;
+// drag-resize persists across reload (observable end-state: the rendered
+// width after reload, not the dispatch).
+// ---------------------------------------------------------------------------
+
+test('param sidebar: semantic groups render and drag-resize persists across reload', async ({ page, request }) => {
+  const roomName = `sidebar2 ${Date.now()}`;
+  await setupGame(page, request, 'erin', roomName, {
+    model: MODEL_09,
+    simParams: FAST_SIM_PARAMS,
+    intent: { rtp: '90%', volatility: 'low' },
+  });
+  await openMath(page);
+
+  await page.getByTestId('advanced-toggle').click();
+  await expect(page.getByTestId('advanced-params')).toBeVisible();
+  for (const label of ['Search budget', 'Genetic operators', 'Fitness weights', 'Verification', 'Pool', 'Reproducibility']) {
+    await expect(page.getByTestId('advanced-params').getByText(label, { exact: true })).toBeVisible();
+  }
+
+  // Drag the handle 80px left → sidebar widens from 240 to ~320.
+  const handle = page.getByTestId('sidebar-resize');
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 80, box.y + 200, { steps: 4 });
+  await page.mouse.up();
+  const widened = (await page.getByTestId('pane-sidebar').boundingBox())!.width;
+  expect(widened).toBeGreaterThan(300);
+
+  // Reload: open state AND width reconcile from the persisted preference.
+  await page.reload();
+  await expect(page.getByTestId('chat-room-pane')).toBeVisible();
+  await openMath(page);
+  await expect(page.getByTestId('advanced-params')).toBeVisible();
+  const after = (await page.getByTestId('pane-sidebar').boundingBox())!.width;
+  expect(Math.abs(after - widened)).toBeLessThan(2);
+});

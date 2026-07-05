@@ -260,7 +260,7 @@ describe('MathPane', () => {
     expect(screen.getByTestId('advanced-params')).toBeTruthy();
     expect(screen.getByTestId('param-master-seed')).toBeTruthy();
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    expect(localStorage.getItem('bloom.math.sidebar')).toBe('1');
+    expect(JSON.parse(localStorage.getItem('bloom.math.sidebar')!)).toMatchObject({ open: true });
   });
 
   it('restores a persisted-open sidebar on mount', () => {
