@@ -4,7 +4,10 @@ import { applyMath } from '../actions';
 
 /** Pinned to the LATEST outcome (newest generate run vs verify-only result) —
  * never the RunSelector's browsed run. Apply stays human-gated and is enabled
- * even on a failed verdict (warning styling), per spec. */
+ * even on a failed verdict (warning styling), per spec. While a tune / verify /
+ * cancel is in flight the strip shows a neutral RUNNING…/CANCELLING… badge and
+ * hides the previous outcome entirely (spec:
+ * docs/superpowers/specs/2026-07-05-math-verdict-inflight-design.md). */
 export function ResultStrip() {
   const s = mathHooks.usePluginState();
   const outcome = latestOutcome({
@@ -14,16 +17,38 @@ export function ResultStrip() {
   const target = s.derivedTarget.get() as ITargetSpec | null;
   const tuneResult = s.tuneResult.get();
   const genStatus = s.genStatus.get();
+  const verifyStatus = s.verifyStatus.get();
   const applied = s.applied.get();
 
+  const running = genStatus === 'tuning' || genStatus === 'verifying' || genStatus === 'cancelling' || verifyStatus === 'running';
+
   const verdict = outcomeVerdict(outcome);
-  const badge = verdict === 'pass' ? 'PASS' : verdict === 'near_miss' ? 'NEAR-MISS' : verdict === 'fail' ? 'FAIL' : verdict === 'error' ? 'ERROR' : '—';
-  const badgeClass =
-    verdict === 'pass' ? 'text-success' : verdict === 'near_miss' ? 'text-warning' : verdict === 'fail' || verdict === 'error' ? 'text-danger' : 'text-text-3';
+  const badge = running
+    ? genStatus === 'cancelling'
+      ? 'CANCELLING…'
+      : 'RUNNING…'
+    : verdict === 'pass'
+      ? 'PASS'
+      : verdict === 'near_miss'
+        ? 'NEAR-MISS'
+        : verdict === 'fail'
+          ? 'FAIL'
+          : verdict === 'error'
+            ? 'ERROR'
+            : '—';
+  const badgeClass = running
+    ? 'text-text-2'
+    : verdict === 'pass'
+      ? 'text-success'
+      : verdict === 'near_miss'
+        ? 'text-warning'
+        : verdict === 'fail' || verdict === 'error'
+          ? 'text-danger'
+          : 'text-text-3';
   const metrics = outcome?.kind === 'run' ? (outcome.run.verify?.metrics ?? outcome.run.metrics) : (outcome?.result.metrics ?? null);
   const runLocks = outcome?.kind === 'run' ? outcome.run.locks : null;
   const lockedSections = runLocks ? (['reels', 'paytable', 'bonus'] as const).filter((k) => runLocks[k]) : [];
-  const failedVerdict = verdict === 'fail' || verdict === 'error';
+  const failedVerdict = !running && (verdict === 'fail' || verdict === 'error');
 
   const stopReason = outcome?.kind === 'run' ? outcome.run.stopReason : null;
   const generations = outcome?.kind === 'run' ? outcome.run.trace.length : 0;
@@ -43,12 +68,12 @@ export function ResultStrip() {
         <span data-testid="result-verdict" className={`text-sm font-semibold ${badgeClass}`}>
           {badge}
         </span>
-        {stopLabel && (
+        {!running && stopLabel && (
           <span data-testid="result-stop-reason" className="text-text-3">
             {stopLabel}
           </span>
         )}
-        {lockedSections.length > 0 && (
+        {!running && lockedSections.length > 0 && (
           <span data-testid="result-lock-chips" className="text-text-3">
             locked: {lockedSections.join(', ')}
           </span>
@@ -56,7 +81,7 @@ export function ResultStrip() {
         <button
           data-testid="apply-button"
           onClick={() => void applyMath()}
-          disabled={!tuneResult?.tunedModel || genStatus === 'tuning' || genStatus === 'verifying'}
+          disabled={!tuneResult?.tunedModel || running}
           className={`ml-auto rounded px-3 py-1 text-sm ${
             failedVerdict ? 'border border-warning text-warning' : 'text-text-1 hover:bg-raised-hover'
           } disabled:text-text-3`}
@@ -64,7 +89,7 @@ export function ResultStrip() {
           Apply
         </button>
       </div>
-      {metrics && (
+      {!running && metrics && (
         <table className="mt-1 text-text-1">
           <tbody>
             <tr>
@@ -89,7 +114,7 @@ export function ResultStrip() {
           </tbody>
         </table>
       )}
-      {applied && (
+      {!running && applied && (
         <p data-testid="math-applied" className="mt-1 text-success">
           Applied — Game Config now reflects the tuned model.
         </p>
