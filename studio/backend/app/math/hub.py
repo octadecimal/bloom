@@ -151,6 +151,11 @@ class MathHub:
                                               on_spawn=self._register_kill(game_id))
         if pending:
             await asyncio.gather(*pending)
+        # ponytail: a cancel can land here, between the tuner-runner await
+        # returning and this check — the subprocess already finished, so this
+        # is cancel racing natural completion (spec-accepted), not a hazard;
+        # same race applies to record_run in _generate_reserved below. The
+        # window is one Mongo write (save_tune_result / record_run).
         self._cancels.pop(game_id, None)
         if game_id in self._cancelled:
             return result  # cancelled: discard — no save, no tuning_failed
