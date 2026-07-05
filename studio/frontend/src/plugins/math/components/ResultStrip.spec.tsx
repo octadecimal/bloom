@@ -150,7 +150,15 @@ describe('ResultStrip', () => {
         stopReason: 'feasible',
         locks: { reels: false, paytable: false, bonus: true },
       });
-    const tunedResult = (): ITuneResult => ({ status: 'pass', verdict: 'pass', tunedModel: { reels: [] }, metrics: null, missed: [], failure: null, ranAt: 't' });
+    const tunedResult = (): ITuneResult => ({
+      status: 'pass',
+      verdict: 'pass',
+      tunedModel: { reels: [] },
+      metrics: null,
+      missed: [],
+      failure: null,
+      ranAt: 't',
+    });
 
     it('shows RUNNING… and hides the previous result while genStatus is tuning', () => {
       mathSlice().runs.set([staleRun()]);
