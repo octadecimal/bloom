@@ -122,7 +122,11 @@ export function createUPlotChart(): IChart {
   function build(el: HTMLElement, data: IChartData) {
     current = data;
     const { width, height } = sizeOf(el);
-    plot = new uPlot(toOptions(data, width, height, () => current?.playheadX), toAlignedData(data), el);
+    plot = new uPlot(
+      toOptions(data, width, height, () => current?.playheadX),
+      toAlignedData(data),
+      el,
+    );
     shape = shapeOf(data);
   }
 

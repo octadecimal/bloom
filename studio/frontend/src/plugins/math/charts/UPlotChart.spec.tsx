@@ -28,7 +28,9 @@ vi.mock('uplot', () => {
   return { default: FakeUPlot };
 });
 
-type FakeUPlotCtor = { instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn>; setSize: ReturnType<typeof vi.fn>; opts: uPlot.Options }[] };
+type FakeUPlotCtor = {
+  instances: { destroy: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn>; setSize: ReturnType<typeof vi.fn>; opts: uPlot.Options }[];
+};
 
 // Tests target the `IChart` seam via an injected fake factory — never the real
 // uPlot instance (canvas isn't available in jsdom, and the point of the seam is
