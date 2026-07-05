@@ -6,15 +6,18 @@ import { rootStore } from '../../../state/rootStore';
 
 const generateMath = vi.fn();
 const verifyMath = vi.fn();
+const cancelMath = vi.fn();
 vi.mock('../actions', () => ({
   generateMath: () => generateMath(),
   verifyMath: () => verifyMath(),
+  cancelMath: () => cancelMath(),
 }));
 
 beforeEach(() => {
   rootStore.plugins.nested(MATH_PLUGIN_ID).set(makeInitialState() as never);
   generateMath.mockReset();
   verifyMath.mockReset();
+  cancelMath.mockReset();
 });
 
 describe('GenerateBar', () => {
@@ -29,11 +32,41 @@ describe('GenerateBar', () => {
     expect(generateMath).toHaveBeenCalled();
   });
 
-  it('disables generate + verify while genStatus is tuning', () => {
+  it('swaps Generate for an enabled Cancel while tuning; verify stays disabled', () => {
     mathSlice().genStatus.set('tuning');
     render(<GenerateBar />);
-    expect((screen.getByTestId('generate-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('generate-button')).toBeNull();
+    expect((screen.getByTestId('cancel-button') as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByTestId('verify-button') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows Cancel even when all sections are locked (cancel is never gated)', () => {
+    mathSlice().genStatus.set('verifying');
+    mathSlice().locks.set({ reels: true, paytable: true, bonus: true });
+    render(<GenerateBar />);
+    expect((screen.getByTestId('cancel-button') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('calls cancelMath when Cancel is clicked', () => {
+    mathSlice().genStatus.set('tuning');
+    render(<GenerateBar />);
+    fireEvent.click(screen.getByTestId('cancel-button'));
+    expect(cancelMath).toHaveBeenCalled();
+  });
+
+  it('shows a disabled Cancelling… button while cancelling', () => {
+    mathSlice().genStatus.set('cancelling');
+    render(<GenerateBar />);
+    const btn = screen.getByTestId('cancel-button') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toBe('Cancelling…');
+  });
+
+  it('shows run cancelled in the status line and restores Generate after cancel', () => {
+    mathSlice().genStatus.set('cancelled');
+    render(<GenerateBar />);
+    expect(screen.getByTestId('generate-status').textContent).toBe('run cancelled');
+    expect((screen.getByTestId('generate-button') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('disables generate and shows the locked chip when all three sections are locked', () => {

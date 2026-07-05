@@ -54,7 +54,7 @@ export function createMathSocket() {
       const next = runLoaded(mathSlice().get({ noproxy: true }) as IMathState, p.run);
       mathSlice().set(next as never);
     });
-    sock.on('generate_status', (p: { gameId: string; phase: 'tuning' | 'verifying' | 'done' | 'failed' }) => {
+    sock.on('generate_status', (p: { gameId: string; phase: 'tuning' | 'verifying' | 'done' | 'failed' | 'cancelled' }) => {
       if (!isActive(p.gameId)) return;
       const s = mathSlice();
       s.genStatus.set(p.phase);
@@ -66,6 +66,7 @@ export function createMathSocket() {
         s.frames.set([]);
         s.selectedGeneration.set('live');
       }
+      if (p.phase === 'cancelled') s.genProgress.set(null);
       if (p.phase === 'done') void refreshTuneResult(p.gameId);
     });
     sock.on('tuning_failed', (p: { gameId: string; failure?: string }) => {

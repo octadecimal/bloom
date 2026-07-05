@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from app.math.models import CurationResult, MetricsWire
-from app.subprocess_guard import LoopSafeRunner, watch_proc_tree
+from app.subprocess_guard import LoopSafeRunner, watch_proc_tree, kill_proc_tree
 
 
 @dataclass
@@ -40,7 +40,8 @@ def parse_result_line(line: str, *, ran_at: str) -> CurationResult:
 
 class CurationRunner(Protocol):
     async def run(self, model: dict, target: dict,
-                  on_progress: Callable[[CurationProgress], None]) -> CurationResult: ...
+                  on_progress: Callable[[CurationProgress], None],
+                  on_spawn: Callable[[Callable[[], None]], None] | None = None) -> CurationResult: ...
 
 
 # Repo root = .../app/math/runners/curate.py -> parents[5]. Verify on first run.
@@ -65,7 +66,7 @@ class SubprocessCurationRunner:
                 "--bin", "curate_json", "--", model_path, target_path,
                 "studio-curation", pkg_path]
 
-    async def run(self, model, target, on_progress) -> CurationResult:
+    async def run(self, model, target, on_progress, on_spawn=None) -> CurationResult:
         ran_at = _now_iso()
         tmp = Path(tempfile.mkdtemp(prefix="bloom-curation-"))
         try:
@@ -81,6 +82,8 @@ class SubprocessCurationRunner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            if on_spawn is not None:
+                on_spawn(lambda: kill_proc_tree(proc.pid))
             result: CurationResult | None = None
             guard_trip: str | None = None
             done = asyncio.Event()
@@ -142,7 +145,7 @@ class FakeCurationRunner:
         self._progress = progress
         self._result = result
 
-    async def run(self, model, target, on_progress) -> CurationResult:
+    async def run(self, model, target, on_progress, on_spawn=None) -> CurationResult:
         for p in self._progress:
             on_progress(p)
         return self._result

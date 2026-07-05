@@ -8,6 +8,7 @@ const getSlotModel = vi.fn();
 const putCurationParams = vi.fn();
 const curate = vi.fn();
 const generate = vi.fn();
+const cancelGenerateMock = vi.fn();
 const getTuner = vi.fn();
 const putTunerParams = vi.fn();
 const applyTuned = vi.fn();
@@ -22,6 +23,7 @@ vi.mock('./restClient', () => ({
   putCurationParams: (gameId: string, params: unknown) => putCurationParams(gameId, params),
   curate: (gameId: string) => curate(gameId),
   generate: (gameId: string) => generate(gameId),
+  cancelGenerate: (gameId: string) => cancelGenerateMock(gameId),
   getTuner: (gameId: string) => getTuner(gameId),
   putTunerParams: (gameId: string, params: unknown) => putTunerParams(gameId, params),
   applyTuned: (gameId: string) => applyTuned(gameId),
@@ -39,7 +41,7 @@ vi.mock('./socketClient', () => ({
   mathSock: () => ({ connect, joinMath, leaveMath }),
 }));
 
-import { openGameMath, closeGameMath, editTargetField, flushTargetSave, TARGET_DEBOUNCE_MS, generateMath, verifyMath, applyMath } from './actions';
+import { openGameMath, closeGameMath, editTargetField, flushTargetSave, TARGET_DEBOUNCE_MS, generateMath, verifyMath, applyMath, cancelMath } from './actions';
 
 function run(id: string): IMathRun {
   return {
@@ -118,6 +120,7 @@ beforeEach(() => {
   putCurationParams.mockReset();
   curate.mockReset();
   generate.mockReset();
+  cancelGenerateMock.mockReset();
   getTuner.mockReset();
   putTunerParams.mockReset();
   applyTuned.mockReset();
@@ -345,5 +348,32 @@ describe('applyMath', () => {
 
     expect(mathSlice().genFailure.get()).toBe('apply failed');
     expect(mathSlice().applied.get()).toBe(false);
+  });
+});
+
+describe('cancelMath', () => {
+  it('sets cancelling and leaves the rest to the socket event on accepted', async () => {
+    mathSlice().activeGameId.set('g1');
+    mathSlice().genStatus.set('tuning');
+    cancelGenerateMock.mockResolvedValue('accepted');
+    await cancelMath();
+    expect(mathSlice().genStatus.get()).toBe('cancelling');
+  });
+
+  it('self-heals to idle when the backend reports no active run (409)', async () => {
+    mathSlice().activeGameId.set('g1');
+    mathSlice().genStatus.set('tuning'); // stuck UI
+    cancelGenerateMock.mockResolvedValue('idle');
+    await cancelMath();
+    expect(mathSlice().genStatus.get()).toBe('idle');
+    expect(mathSlice().genProgress.get()).toBeNull();
+  });
+
+  it('restores the prior status when the cancel POST itself fails', async () => {
+    mathSlice().activeGameId.set('g1');
+    mathSlice().genStatus.set('tuning');
+    cancelGenerateMock.mockRejectedValue(new Error('network'));
+    await cancelMath();
+    expect(mathSlice().genStatus.get()).toBe('tuning');
   });
 });

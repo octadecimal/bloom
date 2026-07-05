@@ -29,13 +29,14 @@ class LoopSafeRunner:
     def __init__(self, inner):
         self._inner = inner
 
-    async def run(self, *args, on_progress=None):
+    async def run(self, *args, on_progress=None, on_spawn=None):
         if on_progress is None:
             *args, on_progress = args
         loop = asyncio.get_running_loop()
         if not (sys.platform == "win32"
                 and isinstance(loop, asyncio.SelectorEventLoop)):
-            return await self._inner.run(*args, on_progress=on_progress)
+            return await self._inner.run(*args, on_progress=on_progress,
+                                         on_spawn=on_spawn)
 
         def relay(p):  # called on the worker thread's loop
             loop.call_soon_threadsafe(on_progress, p)
@@ -49,7 +50,8 @@ class LoopSafeRunner:
             try:
                 result.append(
                     inner_loop.run_until_complete(
-                        self._inner.run(*args, on_progress=relay)))
+                        self._inner.run(*args, on_progress=relay,
+                                        on_spawn=on_spawn)))
             except BaseException as exc:  # surfaced on the caller's loop below
                 error.append(exc)
             finally:

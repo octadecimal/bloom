@@ -352,7 +352,7 @@ class _ConfigCapturingTunerRunner:
         self._result = result
         self.config: dict | None = None
 
-    async def run(self, seed_model, target, config, on_progress):
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
         self.config = config
         return self._result
 

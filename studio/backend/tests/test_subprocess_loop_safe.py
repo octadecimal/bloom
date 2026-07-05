@@ -14,7 +14,7 @@ class SubprocessInner:
     """Minimal stand-in for the real runners: spawns a subprocess via
     asyncio.create_subprocess_exec and reports progress via a sync callback."""
 
-    async def run(self, on_progress):
+    async def run(self, on_progress, on_spawn=None):
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-c", "print('hi')",
             stdout=asyncio.subprocess.PIPE,
@@ -64,12 +64,43 @@ def test_loop_safe_runner_accepts_on_progress_as_keyword():
     assert seen == ["hi"]
 
 
+def test_loop_safe_runner_forwards_on_spawn_on_selector_loop():
+    """The worker-thread branch (selector loop -> Proactor on a daemon thread)
+    is the path real `uvicorn --reload` cancels take, and it must forward
+    on_spawn just like on_progress: the inner's registered kill callable must
+    reach the caller, and invoking it must take effect."""
+
+    killed: list[str] = []
+
+    class SpawningInner:
+        async def run(self, on_progress, on_spawn=None):
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", "print('hi')",
+                stdout=asyncio.subprocess.PIPE,
+            )
+            if on_spawn is not None:
+                on_spawn(lambda: killed.append("killed"))
+            out, _ = await proc.communicate()
+            on_progress(out.decode().strip())
+            return "ok"
+
+    spawned: list = []
+    seen: list[str] = []
+    result = _run_on_selector_loop(
+        LoopSafeRunner(SpawningInner()).run(seen.append, on_spawn=spawned.append))
+    assert result == "ok"
+    assert seen == ["hi"]
+    assert len(spawned) == 1
+    spawned[0]()  # invoking the forwarded kill callable takes effect
+    assert killed == ["killed"]
+
+
 def test_loop_safe_runner_is_passthrough_on_subprocess_capable_loops():
     """On a loop that supports subprocesses the wrapper must not add a thread
     hop — the inner coroutine runs on the caller's own loop."""
 
     class LoopCapturingInner:
-        async def run(self, on_progress):
+        async def run(self, on_progress, on_spawn=None):
             return asyncio.get_running_loop()
 
     async def main():

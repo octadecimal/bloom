@@ -68,6 +68,13 @@ export async function generate(gameId: string): Promise<void> {
   if (!res.ok) throw new Error(res.status === 409 ? 'a run is already in progress' : `request failed: ${res.status}`);
 }
 
+export async function cancelGenerate(gameId: string): Promise<'accepted' | 'idle'> {
+  const res = await fetch(`${BACKEND_URL}/games/${gameId}/math/generate/cancel`, { method: 'POST' });
+  if (res.status === 409) return 'idle'; // no active run — caller self-heals
+  if (!res.ok) throw new Error(`request failed: ${res.status}`);
+  return 'accepted';
+}
+
 export async function getTuner(gameId: string): Promise<ITunerWire> {
   return okJson<ITunerWire>(await fetch(`${BACKEND_URL}/games/${gameId}/tuner`));
 }

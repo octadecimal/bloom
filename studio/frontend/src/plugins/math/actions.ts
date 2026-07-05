@@ -1,6 +1,7 @@
 import { mathSlice, makeInitialState, type ITargetFields, type ITuningParams, type ICurationParams } from './state';
 import {
   applyTuned,
+  cancelGenerate,
   curate,
   fetchRuns,
   generate,
@@ -155,6 +156,25 @@ export async function applyMath(): Promise<void> {
     s.applied.set(true);
   } catch {
     s.genFailure.set('apply failed');
+  }
+}
+
+export async function cancelMath(): Promise<void> {
+  const s = mathSlice();
+  const gameId = s.activeGameId.get();
+  if (!gameId) return;
+  const prev = s.genStatus.get();
+  s.genStatus.set('cancelling');
+  try {
+    const outcome = await cancelGenerate(gameId);
+    if (outcome === 'idle') {
+      // Backend has no active run — the UI was stuck; reset to reality.
+      s.genStatus.set('idle');
+      s.genProgress.set(null);
+    }
+    // 'accepted': stay in 'cancelling' until generate_status:cancelled lands.
+  } catch {
+    s.genStatus.set(prev); // POST failed; the run is still going
   }
 }
 

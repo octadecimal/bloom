@@ -1,4 +1,5 @@
 import sys
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -98,3 +99,19 @@ async def test_fake_runner_streams_then_returns():
     out = await runner.run({"reels": []}, {"rtp_target": 0.9}, {"population": 8}, on_progress=seen.append)
     assert [p.generation for p in seen] == [0, 1]
     assert out.status == "pass"
+
+
+@pytest.mark.asyncio
+async def test_on_spawn_delivers_a_kill_that_aborts_the_run():
+    runner = _runner(timeout_s=30.0)
+    runner._command = _cmd_for(_SLEEPER)
+    kills = []
+    task = asyncio.create_task(
+        runner.run({"m": 1}, {"t": 1}, {"c": 1},
+                   on_progress=lambda _p: None, on_spawn=kills.append))
+    while not kills:
+        await asyncio.sleep(0.01)
+    kills[0]()
+    res = await task
+    assert res.status == "error"
+    assert "no result" in res.failure.lower()

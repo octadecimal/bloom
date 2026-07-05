@@ -157,6 +157,15 @@ describe('generate_status', () => {
     expect(mathSlice().genStatus.get()).toBe('done');
   });
 
+  it('generate_status cancelled resets progress and sets genStatus', () => {
+    createMathSocket().connect();
+    mathSlice().genStatus.set('cancelling');
+    mathSlice().genProgress.set({ generation: 3, maxGenerations: 40 });
+    handlers['generate_status']({ gameId: 'g1', phase: 'cancelled' });
+    expect(mathSlice().genStatus.get()).toBe('cancelled');
+    expect(mathSlice().genProgress.get()).toBeNull();
+  });
+
   it('ignores events for a non-active game', () => {
     createMathSocket().connect();
     handlers['generate_status']({ gameId: 'other', phase: 'tuning' });

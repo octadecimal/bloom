@@ -14,7 +14,7 @@ from app.math.models import (
     PopulationStatsWire, RtpPointWire, RunProfileWire, TailWire, TuneResult,
     WinDistributionWire,
 )
-from app.subprocess_guard import LoopSafeRunner, watch_proc_tree
+from app.subprocess_guard import LoopSafeRunner, watch_proc_tree, kill_proc_tree
 
 
 def _empty_population() -> PopulationStatsWire:
@@ -113,7 +113,8 @@ def parse_tune_error_line(obj: dict, *, ran_at: str) -> TuneResult:
 
 class TunerRunner(Protocol):
     async def run(self, seed_model: dict, target: dict, config: dict,
-                  on_progress: Callable[[TuneProgress], None]) -> TuneResult: ...
+                  on_progress: Callable[[TuneProgress], None],
+                  on_spawn: Callable[[Callable[[], None]], None] | None = None) -> TuneResult: ...
 
 
 # Repo root = .../app/math/runners/tune.py -> parents[5].
@@ -136,7 +137,8 @@ class SubprocessTunerRunner:
         return ["cargo", "run", "--release", "-p", "bloom-tuner",
                 "--bin", "tune_json", "--", seed_path, target_path, config_path]
 
-    async def run(self, seed_model, target, config, on_progress) -> TuneResult:
+    async def run(self, seed_model, target, config, on_progress,
+                  on_spawn=None) -> TuneResult:
         ran_at = _now_iso()
         tmp = Path(tempfile.mkdtemp(prefix="bloom-tuner-"))
         try:
@@ -153,6 +155,8 @@ class SubprocessTunerRunner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            if on_spawn is not None:
+                on_spawn(lambda: kill_proc_tree(proc.pid))
             result: TuneResult | None = None
             guard_trip: str | None = None
             done = asyncio.Event()
@@ -220,7 +224,8 @@ class FakeTunerRunner:
         self._progress = progress
         self._result = result
 
-    async def run(self, seed_model, target, config, on_progress) -> TuneResult:
+    async def run(self, seed_model, target, config, on_progress,
+                  on_spawn=None) -> TuneResult:
         for p in self._progress:
             on_progress(p)
         return self._result

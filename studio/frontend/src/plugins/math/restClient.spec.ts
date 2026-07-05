@@ -6,6 +6,7 @@ import {
   putCurationParams,
   curate,
   generate,
+  cancelGenerate,
   getTuner,
   putTunerParams,
   applyTuned,
@@ -90,6 +91,23 @@ describe('math restClient', () => {
   it('generate throws with specific message on 409 conflict', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409 }));
     await expect(generate('g1')).rejects.toThrow('a run is already in progress');
+  });
+
+  it('cancelGenerate POSTs to the cancel route and returns accepted on 202', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 202 });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(cancelGenerate('g1')).resolves.toBe('accepted');
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/games/g1/math/generate/cancel'), { method: 'POST' });
+  });
+
+  it('cancelGenerate returns idle on 409 without throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409 }));
+    await expect(cancelGenerate('g1')).resolves.toBe('idle');
+  });
+
+  it('cancelGenerate throws on other failures', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await expect(cancelGenerate('g1')).rejects.toThrow('request failed: 500');
   });
 
   it('getTuner GETs /games/g1/tuner and returns ITunerWire', async () => {

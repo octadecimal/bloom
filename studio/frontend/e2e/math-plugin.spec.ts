@@ -280,3 +280,40 @@ test('all sections locked disables Generate', async ({ page, request }) => {
   await expect(page.getByTestId('generate-button')).toBeDisabled();
   await expect(page.getByTestId('generate-locked-chip')).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// Test 5 — cancel round-trip: toggle, abort, nothing persisted.
+// ---------------------------------------------------------------------------
+
+// Heavy search params: ~64×2M spins per generation keeps the GA busy for well
+// over a minute (watchdog cap is 120s) — a deterministic window to cancel into.
+const SLOW_TUNER_PARAMS = {
+  ...FAST_TUNER_PARAMS,
+  population: 64,
+  maxGenerations: 100000,
+  stagnationWindow: 100000,
+  searchCandidateCount: 2000000,
+};
+
+test('cancel: Generate toggles to Cancel, aborts the run, persists nothing', async ({ page, request }) => {
+  // Unique room name like every other test — the replay DB persists across runs,
+  // and a repeated fixed name breaks the room-picker's strict-mode getByText click.
+  const gameId = await setupGame(page, request, 'canceluser', `cancel ${Date.now()}`, {
+    model: DETUNED,
+    tunerParams: SLOW_TUNER_PARAMS,
+    intent: { rtp: '90%', volatility: 'medium' },
+  });
+  await openMath(page);
+
+  await page.getByTestId('generate-button').click();
+  await expect(page.getByTestId('generate-status')).toContainText('tuning', { timeout: 15_000 });
+  await expect(page.getByTestId('cancel-button')).toBeEnabled();
+
+  await page.getByTestId('cancel-button').click();
+  await expect(page.getByTestId('generate-status')).toContainText('run cancelled', { timeout: 30_000 });
+  await expect(page.getByTestId('generate-button')).toBeEnabled();
+
+  // Discard semantics: no run was persisted.
+  const runs = await request.get(`${BACKEND}/analytics/runs?game_id=${gameId}`);
+  expect(await runs.json()).toEqual([]);
+});
