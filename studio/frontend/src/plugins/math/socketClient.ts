@@ -54,21 +54,30 @@ export function createMathSocket() {
       const next = runLoaded(mathSlice().get({ noproxy: true }) as IMathState, p.run);
       mathSlice().set(next as never);
     });
-    sock.on('generate_status', (p: { gameId: string; phase: 'tuning' | 'verifying' | 'done' | 'failed' | 'cancelled' }) => {
-      if (!isActive(p.gameId)) return;
-      const s = mathSlice();
-      s.genStatus.set(p.phase);
-      if (p.phase === 'tuning') {
-        // A fresh pipeline: clear the previous run's artifacts so Evolution streams live.
-        s.genFailure.set(null);
-        s.genProgress.set(null);
-        s.applied.set(false);
-        s.frames.set([]);
-        s.selectedGeneration.set('live');
-      }
-      if (p.phase === 'cancelled') s.genProgress.set(null);
-      if (p.phase === 'done') void refreshTuneResult(p.gameId);
-    });
+    sock.on(
+      'generate_status',
+      (p: { gameId: string; phase: 'tuning' | 'verifying' | 'done' | 'failed' | 'cancelled'; attempt?: number; maxAttempts?: number }) => {
+        if (!isActive(p.gameId)) return;
+        const s = mathSlice();
+        s.genStatus.set(p.phase);
+        if (p.phase === 'tuning' || p.phase === 'verifying') {
+          s.genAttempt.set(p.attempt != null && p.maxAttempts != null ? { attempt: p.attempt, maxAttempts: p.maxAttempts } : null);
+        } else {
+          s.genAttempt.set(null);
+        }
+        if (p.phase === 'tuning') {
+          // A fresh attempt: clear the previous artifacts so Evolution streams live.
+          // (This also resets frames per RESTART — each attempt is its own evolution.)
+          s.genFailure.set(null);
+          s.genProgress.set(null);
+          s.applied.set(false);
+          s.frames.set([]);
+          s.selectedGeneration.set('live');
+        }
+        if (p.phase === 'cancelled') s.genProgress.set(null);
+        if (p.phase === 'done') void refreshTuneResult(p.gameId);
+      },
+    );
     sock.on('tuning_failed', (p: { gameId: string; failure?: string }) => {
       if (!isActive(p.gameId)) return;
       mathSlice().genFailure.set(p.failure ?? 'tune failed');

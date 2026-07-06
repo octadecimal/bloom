@@ -86,6 +86,7 @@ const tunerParamsObj: ITuningParams = {
   mutationRate: 0.25,
   crossoverRate: 0.9,
   stagnationWindow: 12,
+  maxAttempts: 4,
   weights: { rtp: 1, volatility: 1, hitRate: 1 },
 };
 const tuneResultObj: ITuneResult = {

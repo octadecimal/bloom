@@ -117,4 +117,27 @@ describe('GenerateBar', () => {
     fireEvent.click(screen.getByTestId('verify-button'));
     expect(verifyMath).toHaveBeenCalled();
   });
+
+  it('appends the attempt counter while tuning when the loop can restart', () => {
+    mathSlice().genStatus.set('tuning');
+    mathSlice().genProgress.set({ generation: 3, maxGenerations: 40 });
+    mathSlice().genAttempt.set({ attempt: 2, maxAttempts: 4 });
+    render(<GenerateBar />);
+    expect(screen.getByTestId('generate-status').textContent).toBe('tuning gen 3/40 (attempt 2/4)');
+  });
+
+  it('appends the attempt counter to verifying and to tuning without progress yet', () => {
+    mathSlice().genStatus.set('verifying');
+    mathSlice().genAttempt.set({ attempt: 2, maxAttempts: 4 });
+    render(<GenerateBar />);
+    expect(screen.getByTestId('generate-status').textContent).toBe('verifying… (attempt 2/4)');
+  });
+
+  it('omits the attempt counter for a single-shot run (maxAttempts 1)', () => {
+    mathSlice().genStatus.set('tuning');
+    mathSlice().genProgress.set({ generation: 3, maxGenerations: 40 });
+    mathSlice().genAttempt.set({ attempt: 1, maxAttempts: 1 });
+    render(<GenerateBar />);
+    expect(screen.getByTestId('generate-status').textContent).toBe('tuning gen 3/40');
+  });
 });

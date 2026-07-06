@@ -80,6 +80,7 @@ const FAST_TUNER_PARAMS = {
   mutationRate: 0.25,
   crossoverRate: 0.9,
   stagnationWindow: 12,
+  maxAttempts: 1,
   weights: { rtp: 1, volatility: 1, hitRate: 1 },
 };
 

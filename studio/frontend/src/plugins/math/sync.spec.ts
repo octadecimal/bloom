@@ -25,6 +25,7 @@ function makeTuningParams(): ITuningParams {
     mutationRate: 0.1,
     crossoverRate: 0.7,
     stagnationWindow: 10,
+    maxAttempts: 4,
     weights: { rtp: 1, volatility: 1, hitRate: 1 },
   };
 }
