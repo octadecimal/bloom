@@ -81,10 +81,8 @@ attempt keeps its own subprocess watchdog.
 - `MathRunDoc` gains:
   - `attempts: [{attempt, verdict, stopReason, missScore}]` — one entry per
     attempt, in order.
-  - `loop_stop: 'pass' | 'attempts_exhausted' | 'not_improving'` — facts only;
-    phrasing derived client-side.
-- Socket events `generate_status` (while `phase` is `tuning`/`verifying`) and
-  `analytics_progress` gain `attempt` / `maxAttempts`.
+  - `loop_stop: 'pass' | 'attempts_exhausted' | 'not_improving' | 'error'` — facts only; (`'error'` = a mid-loop verify errored: environmental, loop stopped early with the best so far).
+- Socket event `generate_status` (while `phase` is `tuning`/`verifying`) gains `attempt` / `maxAttempts`. `analytics_progress` is unchanged — the frontend already resets frames on every `tuning` status, so each attempt gets a fresh Evolution timeline for free.
 - No Rust/NDJSON protocol changes.
 
 ## UI (`studio/frontend/src/plugins/math/`)

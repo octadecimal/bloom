@@ -82,6 +82,10 @@ class TuningParams(_WireModel):
     crossover_rate: float
     stagnation_window: int
     weights: TuneWeights
+    # Python-only restart knob (spec 2026-07-06-auto-restart-tune-design.md):
+    # whole-tune attempts, re-seeded from best-so-far with escalated mutation.
+    # Never forwarded to the Rust binary (build_config enumerates its fields).
+    max_attempts: int = Field(default=4, ge=1, le=10)
 
 
 class BandMissWire(_WireModel):
@@ -191,6 +195,15 @@ class SectionLocks(_WireModel):
     bonus: bool = False
 
 
+# ── auto-restart loop (spec 2026-07-06-auto-restart-tune-design.md) ──────────
+class AttemptSummaryWire(_WireModel):
+    """One restart-loop attempt, folded onto the recorded run."""
+    attempt: int
+    verdict: str | None = None       # "pass" | "near_miss" (None never recorded)
+    stop_reason: str | None = None   # the GA's own stop: feasible/stagnated/budget
+    miss_score: float = 0.0          # ranking/diagnosis only, never a verdict
+
+
 # ── NEW: the unified per-game math document (collection `slot_models`) ───────
 class SlotModelDoc(_WireModel):
     id: str
@@ -218,6 +231,9 @@ class MathRunDoc(_WireModel):
     verify: CurationResult | None = None  # NEW: independent curate pass on the winner
     locks: SectionLocks | None = None  # SP3: lock set the run was tuned with
     stop_reason: str | None = None  # why the GA ended: feasible/stagnated/budget
+    # Auto-restart telemetry (None on runs that predate the restart loop).
+    attempts: list[AttemptSummaryWire] | None = None
+    loop_stop: str | None = None  # pass | attempts_exhausted | not_improving | error
     created_at: str
     duration_ms: int | None = None
 
