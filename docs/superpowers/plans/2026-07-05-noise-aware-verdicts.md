@@ -1189,7 +1189,7 @@ cd studio/frontend && npx nx run studio-frontend:typecheck && npx nx run studio-
 
 Expected: everything green before touching e2e.
 
-- [ ] **Step 2: Update the stale e2e comments.** In `math-plugin.spec.ts` the two comments claiming the DETUNED run "deterministically runs 5 generations" (:69 and :180) are now wrong — the run goes to stagnation before confirming. Update both to say the run now lasts at least a stagnation window of generations (12 with FAST_TUNER_PARAMS) before its fresh-panel confirm, which _widens_ the live `tuning gen` / RUNNING… window those polls rely on. Mirror the same comment fix in `tuner-chat.spec.ts` if it repeats the claim (its seed block mirrors tuner.spec.ts).
+- [ ] **Step 2: Update the stale e2e comments.** In `math-plugin.spec.ts` the two comments claiming the DETUNED run "deterministically runs 5 generations" (:69 and :180) are now wrong — the run goes to stagnation before confirming. Update both to say the run now lasts at least a stagnation window of generations (12 with FAST*TUNER_PARAMS) before its fresh-panel confirm, which \_widens* the live `tuning gen` / RUNNING… window those polls rely on. Mirror the same comment fix in `tuner-chat.spec.ts` if it repeats the claim (its seed block mirrors tuner.spec.ts).
 
 - [ ] **Step 3: Run the full Playwright suite against the worktree's replay stack.** From the worktree root, in one terminal (or background):
 
