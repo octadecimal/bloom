@@ -170,7 +170,8 @@ pub fn tune_with_progress(
     // Search fitness is measured at low fidelity, so it is noisy two ways: a
     // candidate can look in-band by luck, and cross-generation comparisons use
     // different seed sets. Nothing below trusts it for the verdict — feasibility
-    // is confirmed at final fidelity on a FRESH panel per attempt (a fixed
+    // is only confirmed AFTER the search stagnates (a full stagnation_window of
+    // flat generations), at final fidelity on a FRESH panel per attempt (a fixed
     // confirmation panel lets the run select whichever candidate reads lucky on
     // those particular seeds, and reporting that same draw inflates the verdict),
     // and the returned winner is chosen by re-measuring the end candidates on
@@ -274,25 +275,32 @@ pub fn tune_with_progress(
         }
         last_top = Some(scored[0].0.clone());
 
-        if scored[0].1 >= 0.0 {
-            // In-band at search fidelity — confirm at final fidelity on a fresh
-            // panel before stopping. A lucky low-fidelity measurement alone must
-            // not end the search, and the confirmation must not reuse seeds any
-            // candidate was selected or previously confirmed on.
-            let candidate = decode(&scored[0].0, seed_model);
-            let conf_samples = simulate(
-                &candidate,
-                &confirmation_seeds(cfg.master_seed, g, cfg.final_candidate_count),
-            );
-            if fitness(&measure(&conf_samples), target, &cfg.weights) >= 0.0 {
-                feasible = Some((candidate, conf_samples));
-                stop_reason = StopReason::Feasible;
+        if stagnation >= cfg.stagnation_window {
+            // The search has converged. If the best candidate's own search
+            // measurement is (noise-aware) in-band, confirm at final fidelity
+            // on a fresh panel before stopping — never on the strength of a
+            // low-fidelity read alone. The prefilter keeps hopeless targets
+            // (miss ≫ 2·SE even at search fidelity) ending early as Stagnated
+            // and skips pointless final-fidelity simulations.
+            if verify(&bm, target, cfg.search_candidate_count).is_ok() {
+                let candidate = decode(&scored[0].0, seed_model);
+                let conf_samples = simulate(
+                    &candidate,
+                    &confirmation_seeds(cfg.master_seed, g, cfg.final_candidate_count),
+                );
+                if verify(&measure(&conf_samples), target, cfg.final_candidate_count).is_ok() {
+                    feasible = Some((candidate, conf_samples));
+                    stop_reason = StopReason::Feasible;
+                    break;
+                }
+                // Confirm failed: give the search another full window rather
+                // than re-drawing fresh panels every generation — bounds the
+                // confirmation attempts to max_generations / stagnation_window.
+                stagnation = 0;
+            } else {
+                stop_reason = StopReason::Stagnated;
                 break;
             }
-        }
-        if stagnation >= cfg.stagnation_window {
-            stop_reason = StopReason::Stagnated;
-            break;
         }
         if g + 1 == max_generations {
             stop_reason = StopReason::Budget;
@@ -493,6 +501,34 @@ mod tests {
         let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
         assert!(matches!(out.verdict, Verdict::Pass));
         assert_eq!(out.trace.stop_reason, StopReason::Feasible);
+    }
+
+    #[test]
+    fn feasible_stop_waits_for_stagnation_not_first_in_band_read() {
+        // Old behavior stopped the moment one generation read in-band. Now a
+        // run must sit through a full stagnation window first, so a Feasible
+        // run always spans at least stagnation_window generations.
+        let mut c = cfg(7);
+        c.stagnation_window = 6;
+        let out = GeneticTuner.tune(&toy(1), &target_09(), &c);
+        assert_eq!(out.trace.stop_reason, StopReason::Feasible);
+        assert!(
+            out.trace.generations_run > c.stagnation_window,
+            "stopped after {} generations — before a stagnation window elapsed",
+            out.trace.generations_run
+        );
+    }
+
+    #[test]
+    fn in_band_seed_is_not_returned_untouched_at_gen_0() {
+        // The live failure: a seed already measuring in-band ended the run at
+        // generation 0 with the model byte-identical. The run must now last
+        // at least a stagnation window.
+        let seed_model = toy(5); // true RTP exactly 0.9 — in-band from gen 0
+        let mut c = cfg(7);
+        c.stagnation_window = 6;
+        let out = GeneticTuner.tune(&seed_model, &target_09(), &c);
+        assert!(out.trace.generations_run > 1, "stopped at generation 0/1");
     }
 
     #[test]
