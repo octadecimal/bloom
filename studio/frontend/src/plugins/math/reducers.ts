@@ -1,4 +1,13 @@
-import { MAX_COMPARE_SELECTION, type IMathState, type IGenFrame, type IMathRun, type ICurationResult, type ISectionLocks } from './state';
+import {
+  MAX_COMPARE_SELECTION,
+  type IMathState,
+  type IGenFrame,
+  type IMathRun,
+  type ICurationResult,
+  type ISectionLocks,
+  type IMetrics,
+  type ITargetSpec,
+} from './state';
 
 /** The result strip is PINNED TO LATEST (spec: tabs = analysis, strip = current
  * state): newest of the last recorded generate run vs the last verify-only
@@ -101,4 +110,25 @@ export function toggleRunSelected(state: IMathState, runId: string): IMathState 
  * `selectedRunIds` (Compare's multi-select, above). */
 export function selectRun(state: IMathState, runId: string): IMathState {
   return { ...state, selectedRunId: runId };
+}
+
+/** The single worst out-of-band gate (by band-width-relative distance) — the
+ * headline of the ResultStrip's restart diagnosis. Distance is RAW (display
+ * units); relative distance only picks the winner. Null = every gate in band. */
+export function worstMiss(metrics: IMetrics, target: ITargetSpec): { metric: string; distance: number; side: 'below' | 'above' } | null {
+  const OPEN = 1e8; // volatility 'high' → hi=1e9: normalize by the finite edge
+  const gates = [
+    { metric: 'rtp', measured: metrics.rtp, lo: target.rtp_target - target.rtp_tolerance, hi: target.rtp_target + target.rtp_tolerance },
+    { metric: 'volatility', measured: metrics.volatility, lo: target.volatility_min, hi: target.volatility_max },
+    ...target.bonus_hit_rate_bands.map((b, i) => ({ metric: `bonus[${i}]`, measured: metrics.bonusHitRates[i] ?? 0, lo: b.min, hi: b.max })),
+  ];
+  let worst: { metric: string; distance: number; side: 'below' | 'above'; rel: number } | null = null;
+  for (const g of gates) {
+    if (g.measured >= g.lo && g.measured <= g.hi) continue;
+    const width = Math.max(g.hi - g.lo > OPEN ? Math.abs(g.lo) : g.hi - g.lo, 1e-9);
+    const distance = g.measured < g.lo ? g.lo - g.measured : g.measured - g.hi;
+    const rel = distance / width;
+    if (!worst || rel > worst.rel) worst = { metric: g.metric, distance, side: g.measured < g.lo ? 'below' : 'above', rel };
+  }
+  return worst ? { metric: worst.metric, distance: worst.distance, side: worst.side } : null;
 }

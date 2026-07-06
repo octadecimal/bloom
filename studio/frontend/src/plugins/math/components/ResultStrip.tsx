@@ -1,5 +1,5 @@
 import { mathHooks, type ICurationResult, type IMathRun, type ITargetSpec } from '../state';
-import { latestOutcome, outcomeVerdict } from '../reducers';
+import { latestOutcome, outcomeVerdict, worstMiss } from '../reducers';
 import { applyMath } from '../actions';
 
 /** Pinned to the LATEST outcome (newest generate run vs verify-only result) —
@@ -65,6 +65,31 @@ export function ResultStrip() {
           ? `generation budget exhausted (${generations})`
           : null;
 
+  const attempts = outcome?.kind === 'run' ? outcome.run.attempts : null;
+  const loopStop = outcome?.kind === 'run' ? outcome.run.loopStop : null;
+  const runMaxAttempts = outcome?.kind === 'run' ? outcome.run.params.maxAttempts : 0;
+  const miss = !running && verdict !== 'pass' && metrics && target ? worstMiss(metrics, target) : null;
+  const restartDiagnosis =
+    running || !attempts || attempts.length === 0
+      ? null
+      : verdict === 'pass'
+        ? attempts.length > 1
+          ? `target reached on attempt ${attempts[attempts.length - 1].attempt}/${runMaxAttempts}`
+          : null
+        : [
+            `${attempts.length} attempt${attempts.length === 1 ? '' : 's'}`,
+            miss ? `best miss: ${miss.metric} ${Number(miss.distance.toPrecision(2))} ${miss.side} band` : null,
+            loopStop === 'not_improving'
+              ? 'misses not shrinking — target likely infeasible'
+              : loopStop === 'attempts_exhausted'
+                ? 'attempt budget exhausted'
+                : loopStop === 'error'
+                  ? 'verification errored'
+                  : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+
   return (
     <div className="flex-none border-t border-hairline p-2 text-xs">
       <div className="flex items-center gap-2">
@@ -75,6 +100,11 @@ export function ResultStrip() {
         {!running && stopLabel && (
           <span data-testid="result-stop-reason" className="text-text-3">
             {stopLabel}
+          </span>
+        )}
+        {restartDiagnosis && (
+          <span data-testid="restart-diagnosis" className="text-text-3">
+            {restartDiagnosis}
           </span>
         )}
         {withinNoise && (
