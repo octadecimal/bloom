@@ -372,7 +372,7 @@ pub fn tune_with_progress(
     let verdict = match verify(&metrics, target, final_samples.len()) {
         Ok(()) => Verdict::Pass,
         Err(_) => Verdict::NearMiss {
-            missed: band_misses(&metrics, target),
+            missed: band_misses(&metrics, target, final_samples.len()),
         },
     };
     let (distribution, tail) = profile(&final_samples, 1);
