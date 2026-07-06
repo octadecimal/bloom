@@ -5,29 +5,38 @@
 use crate::curate::{freeze_pool, CurateError, Pool};
 use crate::measure::{measure, simulate};
 use crate::seedgen::generate_seeds;
-use crate::target::{Metrics, TargetSpec};
+use crate::target::{outside, standard_errors, Metrics, TargetSpec, K_SIGMA};
 use bloom_math::mechanics::slots::{to_payload, SlotModel};
 use bloom_package::{build, Envelope, PackageContent};
 use ed25519_dalek::SigningKey;
 
 /// Check measured metrics against the target bands (RTP, volatility, and EACH
-/// feature's hit-rate). Err carries the metrics so the caller (human / future
-/// tuner) can see what missed. The band count must equal the feature count.
-pub fn verify(metrics: &Metrics, target: &TargetSpec) -> Result<(), Metrics> {
+/// feature's hit-rate), allowing a miss of up to K_SIGMA standard errors of
+/// the n-sample measurement — a sub-SE band miss is statistical noise, not a
+/// defect (spec 2026-07-05-noise-aware-verdicts-design.md). Err carries the
+/// metrics so the caller can see what missed. The band count must equal the
+/// feature count.
+pub fn verify(metrics: &Metrics, target: &TargetSpec, n: usize) -> Result<(), Metrics> {
     assert_eq!(
         target.bonus_hit_rate_bands.len(),
         metrics.bonus_hit_rates.len(),
         "target must provide one hit-rate band per model bonus"
     );
 
-    let rtp_ok = (metrics.rtp - target.rtp_target).abs() <= target.rtp_tolerance;
-    let vol_ok =
-        metrics.volatility >= target.volatility_min && metrics.volatility <= target.volatility_max;
+    let se = standard_errors(metrics, n);
+    let rtp_lo = target.rtp_target - target.rtp_tolerance;
+    let rtp_hi = target.rtp_target + target.rtp_tolerance;
+    let rtp_ok = outside(metrics.rtp, rtp_lo, rtp_hi) <= K_SIGMA * se.rtp;
+    let vol_ok = outside(
+        metrics.volatility,
+        target.volatility_min,
+        target.volatility_max,
+    ) <= K_SIGMA * se.volatility;
     let bonuses_ok = target
         .bonus_hit_rate_bands
         .iter()
-        .zip(&metrics.bonus_hit_rates)
-        .all(|(band, &rate)| rate >= band.min && rate <= band.max);
+        .zip(metrics.bonus_hit_rates.iter().zip(&se.bonus_hit_rates))
+        .all(|(band, (&rate, &se_hit))| outside(rate, band.min, band.max) <= K_SIGMA * se_hit);
 
     if rtp_ok && vol_ok && bonuses_ok {
         Ok(())
@@ -99,7 +108,7 @@ pub fn run_curation_streamed(
     let metrics = measure(&samples);
 
     on_progress(CurationProgress::Phase("verify"));
-    if let Err(m) = verify(&metrics, target) {
+    if let Err(m) = verify(&metrics, target, samples.len()) {
         return StreamedOutcome {
             metrics,
             outcome: Err(RunError::VerifyFailed(m)),
@@ -318,19 +327,19 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(verify(&metrics(0.955, 3.0, vec![0.02]), &t).is_ok());
+        assert!(verify(&metrics(0.955, 3.0, vec![0.02]), &t, 1_000_000).is_ok());
     }
 
     #[test]
     fn rtp_out_of_band_fails() {
         let t = target(vec![]);
-        assert!(verify(&metrics(0.80, 3.0, vec![]), &t).is_err());
+        assert!(verify(&metrics(0.80, 3.0, vec![]), &t, 1_000_000).is_err());
     }
 
     #[test]
     fn volatility_out_of_band_fails() {
         let t = target(vec![]);
-        assert!(verify(&metrics(0.955, 0.5, vec![]), &t).is_err());
+        assert!(verify(&metrics(0.955, 0.5, vec![]), &t, 1_000_000).is_err());
     }
 
     #[test]
@@ -339,7 +348,60 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(verify(&metrics(0.955, 3.0, vec![0.20]), &t).is_err());
+        assert!(verify(&metrics(0.955, 3.0, vec![0.20]), &t, 1_000_000).is_err());
+    }
+
+    // Noise-aware boundary: rtp measured 0.978 vs band 0.95–0.97 (miss 0.008),
+    // volatility 2.0. At n = 160_000, SE_rtp = 2/400 = 0.005 → allowance 0.01
+    // ≥ 0.008 → PASS. At n = 4_000_000, SE_rtp = 0.001 → allowance 0.002 → FAIL.
+    #[test]
+    fn rtp_miss_within_2_se_passes() {
+        let t = target(vec![]);
+        assert!(verify(&metrics(0.978, 2.0, vec![]), &t, 160_000).is_ok());
+    }
+
+    #[test]
+    fn rtp_miss_beyond_2_se_fails() {
+        let t = target(vec![]);
+        assert!(verify(&metrics(0.978, 2.0, vec![]), &t, 4_000_000).is_err());
+    }
+
+    #[test]
+    fn hit_rate_miss_within_2_se_passes() {
+        // rate 0.06 vs band 0–0.05 (miss 0.01); at n=100, SE=√(.06·.94/100)
+        // ≈ 0.0237 → allowance ≈ 0.0475 → PASS.
+        let t = target(vec![HitRateBand {
+            min: 0.0,
+            max: 0.05,
+        }]);
+        assert!(verify(&metrics(0.955, 3.0, vec![0.06]), &t, 100).is_ok());
+    }
+
+    #[test]
+    fn hit_rate_miss_beyond_2_se_fails() {
+        // same miss at n=10_000: SE ≈ 0.0024 → allowance ≈ 0.0047 → FAIL.
+        let t = target(vec![HitRateBand {
+            min: 0.0,
+            max: 0.05,
+        }]);
+        assert!(verify(&metrics(0.955, 3.0, vec![0.06]), &t, 10_000).is_err());
+    }
+
+    #[test]
+    fn the_live_contradiction_case_now_passes() {
+        // Spec §1: verify read 0.9819 vs band 0.960–0.970 at 200k spins,
+        // vol 2.8 → miss 0.0119 ≤ 2·SE (0.0125) → PASS (was FAIL).
+        let t = TargetSpec {
+            rtp_target: 0.965,
+            rtp_tolerance: 0.005,
+            volatility_min: 0.0,
+            volatility_max: 1e9,
+            bonus_hit_rate_bands: vec![],
+            pool_size: 100,
+            candidate_count: 200_000,
+            realized_correction_band: 0.05,
+        };
+        assert!(verify(&metrics(0.9819, 2.8, vec![]), &t, 200_000).is_ok());
     }
 
     #[test]

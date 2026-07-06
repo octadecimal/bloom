@@ -218,4 +218,51 @@ describe('ResultStrip', () => {
       expect(screen.getByTestId('result-stop-reason')).toBeTruthy();
     });
   });
+
+  describe('noise-aware SE display', () => {
+    const seMetrics = () => ({
+      rtp: 0.9819,
+      volatility: 2.8,
+      hitFrequency: 0.3,
+      baseRtp: 0.6,
+      featureRtp: 0.3819,
+      bonusHitRates: [],
+      se: { rtp: 0.0063, volatility: 0.0044, bonusHitRates: [] },
+    });
+
+    it('renders ±2·SE beside the measured RTP when se is present', () => {
+      mathSlice().runs.set([baseRun({ metrics: seMetrics() })]);
+      render(<ResultStrip />);
+      expect(screen.getByTestId('metric-rtp').textContent).toBe('0.9819'); // stays Number()-parseable
+      expect(screen.getByTestId('metric-rtp-se').textContent).toBe('±0.0126');
+    });
+
+    it('omits the ± cell for runs that predate se', () => {
+      mathSlice().runs.set([baseRun()]);
+      render(<ResultStrip />);
+      expect(screen.getByTestId('metric-rtp-se').textContent).toBe('');
+    });
+
+    it('shows the within-noise chip when a pass measured outside the band', () => {
+      mathSlice().runs.set([baseRun({ metrics: seMetrics(), verdict: 'pass' })]);
+      mathSlice().derivedTarget.set({ rtp_target: 0.965, rtp_tolerance: 0.005, volatility_min: 0, volatility_max: 1e9, bonus_hit_rate_bands: [] });
+      render(<ResultStrip />);
+      expect(screen.getByTestId('within-noise').textContent).toBe('within noise');
+      expect(screen.getByTestId('within-noise').title).toContain('2·SE');
+    });
+
+    it('omits the chip when the measurement is inside the band', () => {
+      mathSlice().runs.set([baseRun({ metrics: { ...seMetrics(), rtp: 0.9612 } })]);
+      mathSlice().derivedTarget.set({ rtp_target: 0.96, rtp_tolerance: 0.005, volatility_min: 0, volatility_max: 1e9, bonus_hit_rate_bands: [] });
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('within-noise')).toBeNull();
+    });
+
+    it('omits the chip without se data, even outside the band', () => {
+      mathSlice().runs.set([baseRun({ metrics: { ...seMetrics(), se: undefined } })]);
+      mathSlice().derivedTarget.set({ rtp_target: 0.965, rtp_tolerance: 0.005, volatility_min: 0, volatility_max: 1e9, bonus_hit_rate_bands: [] });
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('within-noise')).toBeNull();
+    });
+  });
 });

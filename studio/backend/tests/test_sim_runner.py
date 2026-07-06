@@ -1,3 +1,4 @@
+import json
 import sys
 from types import SimpleNamespace
 
@@ -118,3 +119,36 @@ async def test_fake_runner_streams_then_returns():
     out = await runner.run({"reels": []}, {"rtp_target": 0.96}, on_progress=seen.append)
     assert [p.phase for p in seen] == ["simulate", "freeze"]
     assert out.status == "pass"
+
+
+def test_parse_result_line_carries_se():
+    line = json.dumps({
+        "type": "result", "status": "pass", "rtp": 0.95, "volatility": 2.5,
+        "hitFrequency": 0.35, "baseRtp": 0.6, "featureRtp": 0.35,
+        "bonusHitRates": [0.1],
+        "se": {"rtp": 0.025, "volatility": 0.0177, "bonusHitRates": [0.003]},
+        "realizedRtp": 0.961, "poolSize": 1000, "failure": None,
+    })
+    r = parse_result_line(line, ran_at="t")
+    assert r.metrics.se is not None
+    assert r.metrics.se.rtp == 0.025
+    assert r.metrics.se.bonus_hit_rates == [0.003]
+
+
+def test_parse_result_line_without_se_is_none():
+    line = json.dumps({
+        "type": "result", "status": "pass", "rtp": 0.95, "volatility": 2.5,
+        "hitFrequency": 0.35, "baseRtp": 0.6, "featureRtp": 0.35,
+        "bonusHitRates": [], "realizedRtp": None, "poolSize": None,
+        "failure": None,
+    })
+    assert parse_result_line(line, ran_at="t").metrics.se is None
+
+
+def test_metrics_wire_dumps_se_camel_case():
+    from app.math.models import MetricSEWire, MetricsWire
+    m = MetricsWire(rtp=0.95, volatility=2.5, hit_frequency=0.35, base_rtp=0.6,
+                    feature_rtp=0.35, bonus_hit_rates=[0.1],
+                    se=MetricSEWire(rtp=0.025, volatility=0.0177, bonus_hit_rates=[0.003]))
+    d = m.model_dump(by_alias=True, mode="json")
+    assert d["se"] == {"rtp": 0.025, "volatility": 0.0177, "bonusHitRates": [0.003]}

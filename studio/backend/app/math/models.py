@@ -24,6 +24,14 @@ class CurationParams(_WireModel):
     bonus_rate_tolerance: float  # relative ± band around the GDD bonus rate
 
 
+class MetricSEWire(_WireModel):
+    """Standard errors of the measured metrics (additive; None on results
+    that predate noise-aware verdicts)."""
+    rtp: float
+    volatility: float
+    bonus_hit_rates: list[float] = Field(default_factory=list)
+
+
 class MetricsWire(_WireModel):
     rtp: float
     volatility: float
@@ -31,6 +39,7 @@ class MetricsWire(_WireModel):
     base_rtp: float
     feature_rtp: float
     bonus_hit_rates: list[float]
+    se: MetricSEWire | None = None
 
 
 class CurationResult(_WireModel):

@@ -66,10 +66,10 @@ const FAST_SIM_PARAMS = {
   bonusRateTolerance: 0.25,
 };
 
-// masterSeed 5 + 200k search spins: deterministically runs 5 generations
-// (~0.5s of GA time) before PASS under the final-fidelity-confirmed search —
-// wide enough for the live "tuning gen" transient to be observable below.
-// Verified offline via tune_json with exactly these inputs.
+// masterSeed 5 + 200k search spins: deterministically runs at least a
+// stagnation window of generations (12 with FAST_TUNER_PARAMS) before its
+// fresh-panel confirm, which widens the live "tuning gen" transient window
+// observable below. Verified offline via tune_json with exactly these inputs.
 const FAST_TUNER_PARAMS = {
   masterSeed: 5,
   population: 16,
@@ -178,8 +178,10 @@ test('full contract: edit target, generate to PASS, apply, Game Config reflects'
   // visible check alone passes even if nothing streamed live. Catch the
   // transient "tuning gen N/M" text (GenerateBar.tsx) with a tight poll —
   // this exact DETUNED model + FAST_TUNER_PARAMS (masterSeed 5, 200k search
-  // spins) deterministically runs 5 generations (~0.5s) before reaching PASS,
-  // so there's a real multi-frame window here, not a sub-frame race.
+  // spins) deterministically runs at least a stagnation window of generations
+  // (12 with FAST_TUNER_PARAMS) before its fresh-panel confirm, widening the
+  // live "tuning gen" window, so there's a real multi-frame window here, not
+  // a sub-frame race.
   await expect.poll(() => page.getByTestId('generate-status').innerText(), { intervals: [50], timeout: 5_000 }).toContain('tuning gen');
 
   // In-flight verdict: the strip must not present the previous result as

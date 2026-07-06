@@ -28,6 +28,12 @@ export interface ITuningParams {
   weights: ITuneWeights;
 }
 
+export interface IMetricSE {
+  rtp: number;
+  volatility: number;
+  bonusHitRates: number[];
+}
+
 export interface IMetrics {
   rtp: number;
   volatility: number;
@@ -35,6 +41,7 @@ export interface IMetrics {
   baseRtp: number;
   featureRtp: number;
   bonusHitRates: number[];
+  se?: IMetricSE | null;
 }
 
 export interface IPopulationStats {

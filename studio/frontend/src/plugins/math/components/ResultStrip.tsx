@@ -46,6 +46,10 @@ export function ResultStrip() {
           ? 'text-danger'
           : 'text-text-3';
   const metrics = outcome?.kind === 'run' ? (outcome.run.verify?.metrics ?? outcome.run.metrics) : (outcome?.result.metrics ?? null);
+  const se = metrics?.se ?? null;
+  const rtpOutsideBand = !!target && !!metrics && Math.abs(metrics.rtp - target.rtp_target) > target.rtp_tolerance;
+  const volOutsideBand = !!target && !!metrics && (metrics.volatility < target.volatility_min || metrics.volatility > target.volatility_max);
+  const withinNoise = !running && verdict === 'pass' && se != null && (rtpOutsideBand || volOutsideBand);
   const runLocks = outcome?.kind === 'run' ? outcome.run.locks : null;
   const lockedSections = runLocks ? (['reels', 'paytable', 'bonus'] as const).filter((k) => runLocks[k]) : [];
   const failedVerdict = !running && (verdict === 'fail' || verdict === 'error');
@@ -73,6 +77,15 @@ export function ResultStrip() {
             {stopLabel}
           </span>
         )}
+        {withinNoise && (
+          <span
+            data-testid="within-noise"
+            title={`Measured outside the target band but within the ±2·SE noise allowance (SE rtp ${se!.rtp.toFixed(4)}). Pass = band miss ≤ 2·SE.`}
+            className="text-text-3"
+          >
+            within noise
+          </span>
+        )}
         {!running && lockedSections.length > 0 && (
           <span data-testid="result-lock-chips" className="text-text-3">
             locked: {lockedSections.join(', ')}
@@ -95,6 +108,9 @@ export function ResultStrip() {
             <tr>
               <td className="pr-4 text-text-2">Measured RTP</td>
               <td data-testid="metric-rtp">{metrics.rtp.toFixed(4)}</td>
+              <td data-testid="metric-rtp-se" className="pl-1 text-text-3">
+                {se ? `±${(2 * se.rtp).toFixed(4)}` : ''}
+              </td>
               <td className="pl-3 text-text-3">
                 {target ? `band ${(target.rtp_target - target.rtp_tolerance).toFixed(3)}–${(target.rtp_target + target.rtp_tolerance).toFixed(3)}` : ''}
               </td>
@@ -102,6 +118,7 @@ export function ResultStrip() {
             <tr>
               <td className="pr-4 text-text-2">Volatility</td>
               <td>{metrics.volatility.toFixed(3)}</td>
+              <td className="pl-1 text-text-3">{se ? `±${(2 * se.volatility).toFixed(3)}` : ''}</td>
               <td className="pl-3 text-text-3">
                 {target ? `band ${target.volatility_min}–${target.volatility_max >= 1e9 ? '∞' : target.volatility_max}` : ''}
               </td>
@@ -109,6 +126,7 @@ export function ResultStrip() {
             <tr>
               <td className="pr-4 text-text-2">Hit frequency</td>
               <td>{metrics.hitFrequency.toFixed(4)}</td>
+              <td />
               <td />
             </tr>
           </tbody>

@@ -161,6 +161,8 @@ fn result_line(out: &TuneOutcome) -> String {
             })
         })
         .collect();
+    let se =
+        bloom_simulator::target::standard_errors(&out.metrics, out.trace.final_candidate_count);
     json!({
         "type": "result",
         "verdict": verdict,
@@ -172,6 +174,11 @@ fn result_line(out: &TuneOutcome) -> String {
             "baseRtp": out.metrics.base_rtp,
             "featureRtp": out.metrics.feature_rtp,
             "bonusHitRates": out.metrics.bonus_hit_rates,
+            "se": {
+                "rtp": se.rtp,
+                "volatility": se.volatility,
+                "bonusHitRates": se.bonus_hit_rates,
+            },
         },
         "missed": missed,
         "trace": trace,
@@ -485,5 +492,16 @@ mod tests {
         assert_eq!(v["profile"]["rtpConvergence"][0]["n"], 1000);
         assert_eq!(v["profile"]["rtpConvergence"][0]["realizedRtp"], 0.95);
         assert_eq!(v["trace"][0]["geneAgreement"][0], 0.8);
+    }
+
+    #[test]
+    fn result_line_metrics_carry_se() {
+        let v: serde_json::Value =
+            serde_json::from_str(&result_line(&outcome(Verdict::Pass))).unwrap();
+        // fixture: vol 3.2 over final_candidate_count 1000 → SE_rtp = 3.2/√1000
+        let expected = 3.2 / (1000f64).sqrt();
+        assert!((v["metrics"]["se"]["rtp"].as_f64().unwrap() - expected).abs() < 1e-12);
+        assert!(v["metrics"]["se"]["volatility"].is_number());
+        assert!(v["metrics"]["se"]["bonusHitRates"].is_array());
     }
 }

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
 
-from app.math.models import CurationResult, MetricsWire
+from app.math.models import CurationResult, MetricsWire, MetricSEWire
 from app.subprocess_guard import LoopSafeRunner, watch_proc_tree, kill_proc_tree
 
 
@@ -26,10 +26,13 @@ def _now_iso() -> str:
 
 def parse_result_line(line: str, *, ran_at: str) -> CurationResult:
     d = json.loads(line)
+    se_d = d.get("se")
     metrics = MetricsWire(
         rtp=d["rtp"], volatility=d["volatility"], hit_frequency=d["hitFrequency"],
         base_rtp=d["baseRtp"], feature_rtp=d["featureRtp"],
         bonus_hit_rates=d.get("bonusHitRates", []),
+        se=MetricSEWire(rtp=se_d["rtp"], volatility=se_d["volatility"],
+                        bonus_hit_rates=se_d.get("bonusHitRates", [])) if se_d else None,
     )
     return CurationResult(
         status=d["status"], metrics=metrics,
