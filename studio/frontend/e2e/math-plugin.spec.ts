@@ -80,6 +80,7 @@ const FAST_TUNER_PARAMS = {
   mutationRate: 0.25,
   crossoverRate: 0.9,
   stagnationWindow: 12,
+  maxAttempts: 1,
   weights: { rtp: 1, volatility: 1, hitRate: 1 },
 };
 
@@ -407,4 +408,51 @@ test('param sidebar: semantic groups render and drag-resize persists across relo
   await expect(page.getByTestId('advanced-params')).toBeVisible();
   const after = (await page.getByTestId('pane-sidebar').boundingBox())!.width;
   expect(Math.abs(after - widened)).toBeLessThan(2);
+});
+
+// ---------------------------------------------------------------------------
+// Test 8 — auto-restart: an infeasible target exhausts the attempt budget and
+// FAILs with a diagnosis (spec 2026-07-06-auto-restart-tune-design.md). The
+// 5000% RTP intent is unreachable by construction, so every attempt near-misses
+// deterministically; maxAttempts 2 keeps the run short.
+// ---------------------------------------------------------------------------
+
+const RESTART_TUNER_PARAMS = {
+  ...FAST_TUNER_PARAMS,
+  population: 8,
+  maxGenerations: 6,
+  stagnationWindow: 4,
+  searchCandidateCount: 20000,
+  finalCandidateCount: 20000,
+  maxAttempts: 2,
+};
+
+test('auto-restart: infeasible target exhausts attempts and fails with a diagnosis', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const gameId = await setupGame(page, request, 'frank', `restart ${Date.now()}`, {
+    model: DETUNED,
+    simParams: FAST_SIM_PARAMS,
+    tunerParams: RESTART_TUNER_PARAMS,
+    intent: { rtp: '5000%', volatility: 'low' }, // 50x RTP: unreachable by construction
+  });
+  await openMath(page);
+  await page.getByTestId('generate-button').click();
+
+  // The restart itself is observable live in the status line.
+  await expect.poll(() => page.getByTestId('generate-status').innerText(), { intervals: [50], timeout: 120_000 }).toContain('attempt 2/2');
+
+  await expect(page.getByTestId('generate-status')).toContainText('done', { timeout: 120_000 });
+
+  // Terminal non-pass with the machine's diagnosis, not "try again".
+  await expect(page.getByTestId('result-verdict')).toContainText(/FAIL|ERROR|NEAR-MISS/);
+  const diagnosis = await page.getByTestId('restart-diagnosis').innerText();
+  expect(diagnosis).toContain('2 attempts');
+  expect(diagnosis).toContain('best miss');
+
+  // One folded run with per-attempt telemetry.
+  const r = await request.get(`${BACKEND}/analytics/runs?game_id=${gameId}`);
+  const runs = (await r.json()) as { attempts: { attempt: number }[] | null; loopStop: string | null }[];
+  expect(runs).toHaveLength(1);
+  expect(runs[0].attempts).toHaveLength(2);
+  expect(runs[0].loopStop).toBe('attempts_exhausted');
 });

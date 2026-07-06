@@ -23,6 +23,7 @@ function baseRun(overrides: Partial<IMathRun> = {}): IMathRun {
       mutationRate: 0.25,
       crossoverRate: 0.9,
       stagnationWindow: 12,
+      maxAttempts: 4,
       weights: { rtp: 1, volatility: 1, hitRate: 1 },
     },
     verdict: 'pass',
@@ -34,6 +35,8 @@ function baseRun(overrides: Partial<IMathRun> = {}): IMathRun {
     verify: null,
     locks: null,
     stopReason: null,
+    attempts: null,
+    loopStop: null,
     ...overrides,
   };
 }
@@ -263,6 +266,58 @@ describe('ResultStrip', () => {
       mathSlice().derivedTarget.set({ rtp_target: 0.965, rtp_tolerance: 0.005, volatility_min: 0, volatility_max: 1e9, bonus_hit_rate_bands: [] });
       render(<ResultStrip />);
       expect(screen.queryByTestId('within-noise')).toBeNull();
+    });
+  });
+
+  describe('restart diagnosis', () => {
+    const failedVerify = () => ({
+      status: 'fail' as const,
+      metrics: { ...baseRun().metrics!, rtp: 0.9 },
+      realizedRtp: 0.9,
+      poolSize: 100,
+      failure: 'out of band',
+      ranAt: '2026-01-02T00:00:00Z',
+    });
+    const target = { rtp_target: 0.96, rtp_tolerance: 0.01, volatility_min: 3, volatility_max: 6, bonus_hit_rate_bands: [] };
+    const attempts = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ attempt: i + 1, verdict: 'near_miss' as const, stopReason: 'stagnated', missScore: 2.5 }));
+
+    it('shows the not-improving diagnosis with the worst gate miss', () => {
+      mathSlice().derivedTarget.set(target);
+      mathSlice().runs.set([baseRun({ verdict: 'near_miss', verify: failedVerify(), attempts: attempts(3), loopStop: 'not_improving' })]);
+      render(<ResultStrip />);
+      const text = screen.getByTestId('restart-diagnosis').textContent!;
+      expect(text).toContain('3 attempts');
+      expect(text).toContain('best miss: rtp 0.05 below band');
+      expect(text).toContain('misses not shrinking — target likely infeasible');
+    });
+
+    it('shows the attempts-exhausted diagnosis', () => {
+      mathSlice().derivedTarget.set(target);
+      mathSlice().runs.set([baseRun({ verdict: 'near_miss', verify: failedVerify(), attempts: attempts(4), loopStop: 'attempts_exhausted' })]);
+      render(<ResultStrip />);
+      expect(screen.getByTestId('restart-diagnosis').textContent).toContain('attempt budget exhausted');
+    });
+
+    it('a pass after restarts reads target reached on attempt n/max', () => {
+      mathSlice().runs.set([
+        baseRun({
+          params: { ...baseRun().params, maxAttempts: 4 },
+          attempts: [...attempts(1), { attempt: 2, verdict: 'pass', stopReason: 'feasible', missScore: 0 }],
+          loopStop: 'pass',
+        }),
+      ]);
+      render(<ResultStrip />);
+      expect(screen.getByTestId('restart-diagnosis').textContent).toBe('target reached on attempt 2/4');
+    });
+
+    it('renders no diagnosis for legacy runs or single-attempt passes', () => {
+      mathSlice().runs.set([baseRun()]); // attempts: null (legacy)
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('restart-diagnosis')).toBeNull();
+      mathSlice().runs.set([baseRun({ attempts: [{ attempt: 1, verdict: 'pass', stopReason: 'feasible', missScore: 0 }], loopStop: 'pass' })]);
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('restart-diagnosis')).toBeNull();
     });
   });
 });

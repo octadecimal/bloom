@@ -1,20 +1,23 @@
-"""Ported from test_sim_hub.py (2 cases), test_tuner_hub.py (3 cases),
-test_analytics_hub.py (4 cases), test_analytics_live.py (1 case) — one MathHub
-replaces CurationHub + TunerHub + AnalyticsHub. (Task 10: tuning_progress and
-the success-path tuning_complete were pruned along with the pane-only
-tune/seed routes — request_tune now emits tuning_failed on gap/error and
-nothing on success; run_complete is the generate pipeline's job.)"""
+"""Ported from test_sim_hub.py (2 cases), test_analytics_hub.py (4 cases),
+test_analytics_live.py (1 case) — one MathHub replaces CurationHub + TunerHub +
+AnalyticsHub. (Task 10 pruned tuning_progress/tuning_complete along with the
+pane-only tune/seed routes. Sub-project auto-restart-tune then removed
+request_tune entirely — the generate pipeline's restart loop is the only tune
+path now; its per-attempt/loop coverage — including analytics_progress relay,
+gap/error handling, and locks passed into the tuner config — lives in
+test_math_generate.py, so the standalone request_tune cases that used to live
+here (was test_tuner_hub.py) were retired rather than ported.)"""
 import pytest
 import pytest_asyncio
 from types import SimpleNamespace
 from app.math.models import (
-    GenSnapshotWire, HistogramBinWire, MetricsWire, PopulationStatsWire,
+    GenSnapshotWire, HistogramBinWire, MetricsWire,
     RunProfileWire, TailWire, TuneResult, WinDistributionWire,
     default_tuning_params,
 )
 from app.math.store import MathStore, MathRunStore
 from app.math.runners.curate import FakeCurationRunner, CurationProgress
-from app.math.runners.tune import FakeTunerRunner, TuneProgress
+from app.math.runners.tune import FakeTunerRunner
 from app.math.hub import MathHub
 
 
@@ -63,11 +66,6 @@ def _error_curation_result():
         realized_rtp=None, pool_size=None, failure="simulator crashed", ran_at="t")
 
 
-def _population(diversity: float) -> PopulationStatsWire:
-    return PopulationStatsWire(min=0.1, q1=0.2, median=0.3, q3=0.4, max=0.5,
-                               mean=0.3, diversity=diversity)
-
-
 def _pass_tune_result():
     return TuneResult(status="pass", verdict="pass", tuned_model={"reels": [[0]]},
                       metrics=MetricsWire(rtp=0.9, volatility=2.0, hit_frequency=0.4,
@@ -75,11 +73,6 @@ def _pass_tune_result():
                       missed=[], trace=[GenSnapshotWire(generation=0, best_fitness=0.0,
                                                         best_rtp=0.9, best_volatility=2.0)],
                       ran_at="t")
-
-
-def _error_tune_result():
-    return TuneResult(status="error", verdict=None, tuned_model=None, metrics=None,
-                      missed=[], trace=[], failure="boom", ran_at="t")
 
 
 def _profile() -> RunProfileWire:
@@ -170,66 +163,6 @@ async def test_request_curation_emits_failed_shape_and_persists_on_runner_error(
     assert saved.result.status == "error"
 
 
-# ── tuning (was test_tuner_hub.py) ───────────────────────────────────────────
-@pytest.mark.asyncio
-async def test_request_tune_saves_result_and_emits_nothing_on_success(mongo_db):
-    """request_tune no longer emits tuning_progress/tuning_complete or records
-    a run — that's the generate pipeline's job (record_run + run_complete,
-    covered in test_math_generate.py). request_tune only persists tune_result
-    and returns it; success is silent on the socket."""
-    store = MathStore(mongo_db)
-    await store.put("g1", model={"bonuses": []})
-    run_store = MathRunStore(mongo_db)
-    runner = FakeTunerRunner(progress=[TuneProgress(0, 40, -0.5, 0.5, 2.0)],
-                             result=_pass_tune_result())
-    sio = FakeSio()
-    hub = MathHub(sio, store, run_store, FakeCurationRunner(progress=[], result=_pass_curation_result()),
-                 runner, FakeGdd({"rtp": 0.9, "volatility": "low"}))
-
-    result = await hub.request_tune("g1")
-
-    names = [e[0] for e in sio.events]
-    assert "tuning_progress" not in names
-    assert "tuning_complete" not in names
-    saved = await store.get("g1")
-    assert saved.tune_result.status == "pass"
-    assert await run_store.list_for_game("g1") == []
-    assert result.status == "pass"
-
-
-@pytest.mark.asyncio
-async def test_request_tune_emits_failed_on_gdd_gap(mongo_db):
-    store = MathStore(mongo_db)
-    await store.put("g1", model={"bonuses": []})
-    run_store = MathRunStore(mongo_db)
-    runner = FakeTunerRunner(progress=[], result=_pass_tune_result())
-    sio = FakeSio()
-    hub = MathHub(sio, store, run_store, FakeCurationRunner(progress=[], result=_pass_curation_result()),
-                 runner, FakeGdd({"volatility": "low"}))  # no rtp
-
-    result = await hub.request_tune("g1")
-
-    assert "tuning_failed" in [e[0] for e in sio.events]
-    assert result is None
-    assert await run_store.list_for_game("g1") == []
-
-
-@pytest.mark.asyncio
-async def test_request_tune_does_not_record_analytics_on_error(mongo_db):
-    store = MathStore(mongo_db)
-    await store.put("g1", model={"bonuses": []})
-    run_store = MathRunStore(mongo_db)
-    runner = FakeTunerRunner(progress=[], result=_error_tune_result())
-    sio = FakeSio()
-    hub = MathHub(sio, store, run_store, FakeCurationRunner(progress=[], result=_pass_curation_result()),
-                 runner, FakeGdd({"rtp": 0.9, "volatility": "low"}))
-
-    await hub.request_tune("g1")
-
-    assert "tuning_failed" in [e[0] for e in sio.events]
-    assert await run_store.list_for_game("g1") == []
-
-
 # ── run recording + subscribers (was test_analytics_hub.py) ─────────────────
 @pytest.mark.asyncio
 async def test_record_run_appends_and_emits_camel_case(mongo_db):
@@ -308,68 +241,3 @@ async def test_attach_analytics_subscriber_no_emit_when_no_runs(mongo_db):
     assert sio.events == []
 
 
-# ── live analytics_progress relay (was test_analytics_live.py) ──────────────
-@pytest.mark.asyncio
-async def test_request_tune_emits_analytics_progress(mongo_db):
-    """run_complete is now the generate pipeline's responsibility (recorded via
-    record_run — see test_math_generate.py); request_tune alone only relays
-    the live analytics_progress frames and stays silent on success."""
-    store = MathStore(mongo_db)
-    await store.put("g1", model={"bonuses": []})
-    run_store = MathRunStore(mongo_db)
-    sio = FakeSio()
-    progress = [
-        TuneProgress(0, 40, -0.5, 0.5, 2.0, population=_population(0.42), gene_agreement=[0.1, 0.2]),
-        TuneProgress(1, 40, -0.3, 0.6, 1.9, population=_population(0.37), gene_agreement=[0.15, 0.25]),
-    ]
-    runner = FakeTunerRunner(progress=progress, result=_pass_tune_result())
-    hub = MathHub(sio, store, run_store, FakeCurationRunner(progress=[], result=_pass_curation_result()),
-                 runner, FakeGdd({"rtp": 0.9, "volatility": "low"}))
-
-    await hub.request_tune("g1")
-
-    analytics_events = [e for e in sio.events if e[0] == "analytics_progress"]
-    assert len(analytics_events) == 2
-    for (event, payload, room), p in zip(analytics_events, progress):
-        assert room == "g1"
-        assert payload["gameId"] == "g1"
-        assert payload["generation"] == p.generation
-        assert payload["maxGenerations"] == p.max_generations
-        assert payload["best"] == {
-            "fitness": p.best_fitness, "rtp": p.best_rtp, "volatility": p.best_volatility,
-        }
-        assert payload["population"]["diversity"] == p.population.diversity
-        assert payload["population"]["median"] == p.population.median
-        assert payload["geneAgreement"] == p.gene_agreement
-
-    names = [e[0] for e in sio.events]
-    assert names.count("analytics_progress") == 2
-    assert "run_complete" not in names
-
-
-class _ConfigCapturingTunerRunner:
-    def __init__(self, result):
-        self._result = result
-        self.config: dict | None = None
-
-    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
-        self.config = config
-        return self._result
-
-
-@pytest.mark.asyncio
-async def test_request_tune_passes_doc_locks_into_tuner_config(mongo_db):
-    from app.math.models import SectionLocks
-    store = MathStore(mongo_db)
-    await store.put("g1", model={"bonuses": []}, locks=SectionLocks(reels=True))
-    run_store = MathRunStore(mongo_db)
-    runner = _ConfigCapturingTunerRunner(_pass_tune_result())
-    sio = FakeSio()
-    hub = MathHub(sio, store, run_store,
-                  FakeCurationRunner(progress=[], result=_pass_curation_result()),
-                  runner, FakeGdd({"rtp": 0.9, "volatility": "low"}))
-
-    await hub.request_tune("g1")
-
-    assert runner.config is not None
-    assert runner.config["locks"] == {"reels": True, "paytable": False, "bonus": False}

@@ -10,6 +10,7 @@ export function GenerateBar() {
   const genStatus = s.genStatus.get();
   const verifyStatus = s.verifyStatus.get();
   const progress = s.genProgress.get();
+  const attempt = s.genAttempt.get();
   const locks = s.locks.get() as ISectionLocks | null;
   const gap = s.targetGap.get();
   const failure = s.genFailure.get();
@@ -20,13 +21,14 @@ export function GenerateBar() {
   const cancelling = genStatus === 'cancelling';
   const running = genRunning || cancelling || verifyStatus === 'running';
   const locked = allLocked(locks);
+  const attemptSuffix = attempt && attempt.maxAttempts > 1 ? ` (attempt ${attempt.attempt}/${attempt.maxAttempts})` : '';
   const statusText =
     genStatus === 'tuning'
       ? progress
-        ? `tuning gen ${progress.generation}/${progress.maxGenerations}`
-        : 'tuning…'
+        ? `tuning gen ${progress.generation}/${progress.maxGenerations}${attemptSuffix}`
+        : `tuning…${attemptSuffix}`
       : genStatus === 'verifying'
-        ? 'verifying…'
+        ? `verifying…${attemptSuffix}`
         : genStatus === 'done'
           ? 'done'
           : genStatus === 'failed'

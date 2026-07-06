@@ -10,9 +10,10 @@ import {
   latestOutcome,
   outcomeVerdict,
   allLocked,
+  worstMiss,
 } from './reducers';
 import { makeInitialState, currentFrame, MAX_COMPARE_SELECTION } from './state';
-import type { IMathRun, IGenFrame, IGenSnapshot, ICurationResult } from './state';
+import type { IMathRun, IGenFrame, IGenSnapshot, ICurationResult, IMetrics, ITargetSpec } from './state';
 
 function run(id: string, trace: IGenSnapshot[] = []): IMathRun {
   return {
@@ -277,5 +278,29 @@ describe('allLocked', () => {
     expect(allLocked({ reels: true, paytable: true, bonus: true })).toBe(true);
     expect(allLocked({ reels: true, paytable: true, bonus: false })).toBe(false);
     expect(allLocked(null)).toBe(false);
+  });
+});
+
+describe('worstMiss', () => {
+  const target: ITargetSpec = { rtp_target: 0.96, rtp_tolerance: 0.01, volatility_min: 3, volatility_max: 6, bonus_hit_rate_bands: [] };
+  const metrics = (rtp: number, vol: number): IMetrics => ({ rtp, volatility: vol, hitFrequency: 0.3, baseRtp: rtp, featureRtp: 0, bonusHitRates: [] });
+
+  it('returns null when every gate is in band', () => {
+    expect(worstMiss(metrics(0.96, 4), target)).toBeNull();
+  });
+
+  it('reports the below-band rtp distance', () => {
+    expect(worstMiss(metrics(0.9, 4), target)).toEqual({ metric: 'rtp', distance: expect.closeTo(0.05, 10), side: 'below' });
+  });
+
+  it('picks the RELATIVELY worse gate when several miss', () => {
+    // rtp miss 0.05/0.02 = 2.5 band-widths; vol miss 1/3 band-widths → rtp wins.
+    expect(worstMiss(metrics(0.9, 7), target)!.metric).toBe('rtp');
+  });
+
+  it('normalizes an open-ended volatility band by its finite edge', () => {
+    const high = { ...target, volatility_min: 10, volatility_max: 1e9 };
+    // vol 5 → miss 5, rel 5/10 = 0.5; rtp in band → vol is the (only) miss.
+    expect(worstMiss(metrics(0.96, 5), high)).toEqual({ metric: 'volatility', distance: 5, side: 'below' });
   });
 });

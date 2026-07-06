@@ -25,6 +25,7 @@ export interface ITuningParams {
   mutationRate: number;
   crossoverRate: number;
   stagnationWindow: number;
+  maxAttempts: number;
   weights: ITuneWeights;
 }
 
@@ -139,6 +140,14 @@ export interface IBandMiss {
   bandHi: number;
 }
 
+/** One restart-loop attempt folded onto a recorded run (wire: MathRunDoc.attempts). */
+export interface IAttemptSummary {
+  attempt: number;
+  verdict: 'pass' | 'near_miss' | null;
+  stopReason: string | null;
+  missScore: number;
+}
+
 export interface ITuneResult {
   status: 'pass' | 'near_miss' | 'error';
   verdict: 'pass' | 'near_miss' | null;
@@ -179,6 +188,9 @@ export interface IMathRun {
   locks: ISectionLocks | null;
   /** Why the GA ended: 'feasible' | 'stagnated' | 'budget' (null on runs that predate it). */
   stopReason: string | null;
+  /** Auto-restart telemetry (null on runs that predate the restart loop). */
+  attempts: IAttemptSummary[] | null;
+  loopStop: 'pass' | 'attempts_exhausted' | 'not_improving' | 'error' | null;
 }
 
 export interface IMathState {
@@ -209,6 +221,8 @@ export interface IMathState {
   // generate pipeline
   genStatus: 'idle' | 'tuning' | 'verifying' | 'done' | 'failed' | 'cancelling' | 'cancelled';
   genProgress: { generation: number; maxGenerations: number } | null;
+  /** Live restart-loop position from generate_status (null when single-shot info absent). */
+  genAttempt: { attempt: number; maxAttempts: number } | null;
   genFailure: string | null;
   // verify-only (curation of the stored model)
   verifyStatus: 'idle' | 'running' | 'pass' | 'fail' | 'error';
@@ -240,6 +254,7 @@ export function makeInitialState(): IMathState {
     targetSaveStatus: 'idle',
     genStatus: 'idle',
     genProgress: null,
+    genAttempt: null,
     genFailure: null,
     verifyStatus: 'idle',
     verifyProgress: null,
