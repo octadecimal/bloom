@@ -136,11 +136,11 @@ mod tests {
         let fail = metrics(0.80, 3.0, vec![0.02]);
         assert_eq!(
             fitness(&pass, &t, &weights()) == 0.0,
-            verify(&pass, &t).is_ok()
+            verify(&pass, &t, 1_000_000).is_ok()
         );
         assert_eq!(
             fitness(&fail, &t, &weights()) == 0.0,
-            verify(&fail, &t).is_ok()
+            verify(&fail, &t, 1_000_000).is_ok()
         );
     }
 

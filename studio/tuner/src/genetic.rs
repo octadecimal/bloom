@@ -361,7 +361,7 @@ pub fn tune_with_progress(
         }
     };
     let metrics = measure(&final_samples);
-    let verdict = match verify(&metrics, target) {
+    let verdict = match verify(&metrics, target, final_samples.len()) {
         Ok(()) => Verdict::Pass,
         Err(_) => Verdict::NearMiss {
             missed: band_misses(&metrics, target),
