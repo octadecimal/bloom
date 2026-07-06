@@ -125,6 +125,23 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     get: (s) => s.tunerParams.ornull?.stagnationWindow.get() ?? null,
     set: (s, v) => s.tunerParams.ornull?.stagnationWindow.set(v),
   },
+  {
+    key: 'attempts',
+    label: 'Attempts',
+    group: 'search',
+    tooltip: {
+      title: 'Max attempts',
+      body: 'Automatic whole-tune restarts when the search stagnates or fails verification; each restart re-seeds from the best model so far with a higher mutation rate and a fresh seed.',
+      effect: 'Higher = more chances to escape an unlucky search; 1 = single shot.',
+    },
+    min: 1,
+    max: 10,
+    step: 1,
+    integer: true,
+    defaultValue: 4,
+    get: (s) => s.tunerParams.ornull?.maxAttempts.get() ?? null,
+    set: (s, v) => s.tunerParams.ornull?.maxAttempts.set(v),
+  },
   // ── genetic operators ──────────────────────────────────────────────────
   {
     key: 'mutation',

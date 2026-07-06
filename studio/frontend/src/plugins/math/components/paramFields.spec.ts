@@ -31,10 +31,10 @@ beforeEach(() => {
 });
 
 describe('paramFields registry', () => {
-  it('covers all 18 wire fields with unique keys and preserves the legacy testid keys', () => {
+  it('covers all 19 wire fields with unique keys and preserves the legacy testid keys', () => {
     const keys = PARAM_FIELDS.map((f) => f.key);
-    expect(keys).toHaveLength(18);
-    expect(new Set(keys).size).toBe(18);
+    expect(keys).toHaveLength(19);
+    expect(new Set(keys).size).toBe(19);
     expect(keys).toContain('master-seed'); // legacy testid param-master-seed
     expect(keys).toContain('pool-size'); // legacy testid param-pool-size
   });
@@ -58,6 +58,7 @@ describe('paramFields registry', () => {
       mutation: 0.25,
       crossover: 0.9,
       stagnation: 12,
+      attempts: 4,
       'weight-rtp': 1.0,
       'weight-volatility': 1.0,
       'weight-hit-rate': 1.0,
@@ -93,7 +94,7 @@ describe('paramFields registry', () => {
 
   it('assigns every field to its spec group, in spec order', () => {
     const byGroup = (id: string) => PARAM_FIELDS.filter((f) => f.group === id).map((f) => f.key);
-    expect(byGroup('search')).toEqual(['population', 'generations', 'search-spins', 'final-spins', 'stagnation']);
+    expect(byGroup('search')).toEqual(['population', 'generations', 'search-spins', 'final-spins', 'stagnation', 'attempts']);
     expect(byGroup('genetics')).toEqual(['mutation', 'crossover', 'elitism']);
     expect(byGroup('weights')).toEqual(['weight-rtp', 'weight-volatility', 'weight-hit-rate']);
     expect(byGroup('verification')).toEqual(['candidates', 'rtp-tolerance', 'bonus-tolerance']);
