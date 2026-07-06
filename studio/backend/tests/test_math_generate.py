@@ -91,6 +91,78 @@ def _hub(mongo_db, sio, *, tuner_runner, curation_runner, gdd=None):
                    gdd or FakeGdd()), store, runs
 
 
+class SequencedTunerRunner:
+    """Queued per-call results; records the (seed_model, config) of each call."""
+    def __init__(self, results):
+        self._results = list(results)
+        self.calls: list[tuple[dict, dict]] = []
+
+    async def run(self, seed_model, target, config, on_progress, on_spawn=None):
+        self.calls.append((dict(seed_model), dict(config)))
+        return self._results.pop(0)
+
+
+class SequencedCurationRunner:
+    def __init__(self, results):
+        self._results = list(results)
+        self.models: list[dict] = []
+
+    async def run(self, model, target, on_progress, on_spawn=None):
+        self.models.append(dict(model))
+        return self._results.pop(0)
+
+
+def _near_miss_tune(rtp, model=None):
+    """A stagnated near-miss whose miss score falls as rtp approaches the
+    0.96±0.01 target band (FakeGdd intent + default curation params)."""
+    return TuneResult(
+        status="near_miss", verdict="near_miss",
+        tuned_model=model or {"rows": 5},
+        metrics=MetricsWire(rtp=rtp, volatility=4.0, hit_frequency=0.3,
+                            base_rtp=rtp, feature_rtp=0.0, bonus_hit_rates=[]),
+        ran_at="t1", stop_reason="stagnated")
+
+
+@pytest.mark.asyncio
+async def test_near_miss_restarts_seeded_from_best_with_escalation(mongo_db):
+    sio = FakeSio()
+    tuner = SequencedTunerRunner([_near_miss_tune(0.90, model={"a": 1}),
+                                  _pass_tune()])
+    recorder = RecordingCurationRunner(_pass_curation())
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=tuner,
+                            curation_runner=recorder)
+    assert await hub.generate("g1") is True
+
+    # Attempt 2 re-seeded from attempt 1's best model, escalated + reseeded.
+    assert len(tuner.calls) == 2
+    seed2, cfg2 = tuner.calls[1]
+    cfg1 = tuner.calls[0][1]
+    assert seed2 == {"a": 1}
+    assert cfg2["master_seed"] == cfg1["master_seed"] + 1
+    assert cfg2["mutation_rate"] == pytest.approx(min(0.5, cfg1["mutation_rate"] * 1.5))
+    assert cfg2["bounds"] == cfg1["bounds"]  # derived once, never from the tuned model
+
+    # Mid-loop verify only for passing tunes: the near-miss was never curated.
+    assert recorder.models == [{"rows": 7}]
+
+    # One folded run: best attempt's data + per-attempt telemetry.
+    docs = await runs.list_for_game("g1")
+    assert len(docs) == 1
+    assert docs[0].verdict == "pass"
+    assert docs[0].loop_stop == "pass"
+    assert [a.attempt for a in docs[0].attempts] == [1, 2]
+    assert docs[0].attempts[0].miss_score > 0
+    assert docs[0].attempts[1].miss_score == 0.0
+    assert docs[0].params.max_attempts == 4  # provenance
+
+    assert sio.phases() == ["tuning", "tuning", "verifying", "done"]
+    tuning_payloads = [p for e, p in sio.emits
+                       if e == "generate_status" and p["phase"] == "tuning"]
+    assert [(p["attempt"], p["maxAttempts"]) for p in tuning_payloads] == [(1, 4), (2, 4)]
+    assert sio.count("run_complete") == 1
+    assert (await store.get("g1")).tune_result.tuned_model == {"rows": 7}
+
+
 @pytest.mark.asyncio
 async def test_generate_runs_tune_then_verify_and_persists_one_run(mongo_db):
     sio = FakeSio()
@@ -118,6 +190,7 @@ async def test_generate_records_the_tuners_stop_reason(mongo_db):
     docs = await runs.list_for_game("g1")
     assert docs[0].stop_reason == "feasible"
     assert math_run_wire(docs[0])["stopReason"] == "feasible"
+    assert docs[0].attempts is not None and docs[0].loop_stop == "pass"
 
 
 @pytest.mark.asyncio
@@ -229,19 +302,23 @@ async def test_generate_records_params_from_pipeline_start_not_post_verify_rerea
 
 @pytest.mark.asyncio
 async def test_generate_failed_verify_still_persists_run_with_done_phase(mongo_db):
-    """Verify failing is not a pipeline failure: the pipeline finished (phase
-    ends 'done', not 'failed') and the run is persisted with the failing
-    verify verdict attached — record_run's contract only gates on the TUNE
-    result, not the verify result."""
+    """Verify failing is not a pipeline failure: with restarts pinned OFF
+    (max_attempts=1 — restart-on-verify-fail has its own test), the pipeline
+    finishes 'done' and the run persists with the failing verify attached."""
+    from app.math.models import default_tuning_params
     sio = FakeSio()
-    hub, _, runs = _hub(mongo_db, sio,
-                        tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
-                        curation_runner=FakeCurationRunner(progress=[], result=_failing_curation()))
+    hub, store, runs = _hub(mongo_db, sio,
+                            tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
+                            curation_runner=FakeCurationRunner(progress=[], result=_failing_curation()))
+    params = default_tuning_params()
+    params.max_attempts = 1
+    await store.put("g1", tuner_params=params)
     assert await hub.generate("g1") is True
     docs = await runs.list_for_game("g1")
     assert len(docs) == 1
     assert docs[0].verdict == "pass"
     assert docs[0].verify.status == "fail"
+    assert docs[0].loop_stop == "attempts_exhausted"
     assert sio.phases() == ["tuning", "verifying", "done"]
 
 
@@ -359,3 +436,120 @@ async def test_cancel_without_active_run_returns_false(mongo_db):
                      tuner_runner=FakeTunerRunner(progress=[], result=_pass_tune()),
                      curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
     assert hub.cancel_generate("nope") is False
+
+
+@pytest.mark.asyncio
+async def test_pass_with_failing_verify_restarts_and_records_the_passing_attempt(mongo_db):
+    sio = FakeSio()
+    tuner = SequencedTunerRunner([_pass_tune(), _pass_tune()])
+    curation = SequencedCurationRunner([_failing_curation(), _pass_curation()])
+    hub, _, runs = _hub(mongo_db, sio, tuner_runner=tuner, curation_runner=curation)
+    assert await hub.generate("g1") is True
+    assert len(tuner.calls) == 2
+    docs = await runs.list_for_game("g1")
+    assert len(docs) == 1
+    assert docs[0].loop_stop == "pass"
+    assert docs[0].verify.status == "pass"   # the joint-pass attempt won
+    assert len(docs[0].attempts) == 2
+    assert sio.phases() == ["tuning", "verifying", "tuning", "verifying", "done"]
+
+
+@pytest.mark.asyncio
+async def test_error_mid_loop_is_terminal_but_keeps_best_for_apply(mongo_db):
+    sio = FakeSio()
+    tuner = SequencedTunerRunner([
+        _near_miss_tune(0.90, model={"best": 1}),
+        TuneResult(status="error", failure="boom", ran_at="t1"),
+    ])
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=tuner,
+                            curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    assert await hub.generate("g1") is True
+    assert len(tuner.calls) == 2                       # no third attempt
+    assert sio.phases() == ["tuning", "tuning", "failed"]
+    assert sio.count("tuning_failed") == 1
+    assert await runs.list_for_game("g1") == []        # error → no run recorded
+    # ...but Apply still has the best-so-far model.
+    assert (await store.get("g1")).tune_result.tuned_model == {"best": 1}
+
+
+@pytest.mark.asyncio
+async def test_static_misses_exit_early_with_not_improving(mongo_db):
+    sio = FakeSio()
+    tuner = SequencedTunerRunner([_near_miss_tune(0.90, {"m": 1}),
+                                  _near_miss_tune(0.90, {"m": 2}),
+                                  _near_miss_tune(0.90, {"m": 3})])
+    recorder = RecordingCurationRunner(_pass_curation())
+    hub, _, runs = _hub(mongo_db, sio, tuner_runner=tuner, curation_runner=recorder)
+    assert await hub.generate("g1") is True
+    assert len(tuner.calls) == 3                       # stopped before the cap (4)
+    docs = await runs.list_for_game("g1")
+    assert docs[0].loop_stop == "not_improving"
+    assert len(docs[0].attempts) == 3
+    assert docs[0].verdict == "near_miss"
+    # Final catch-up verify ran once, on the BEST (first) attempt's model.
+    assert recorder.models == [{"m": 1}]
+    assert sio.phases() == ["tuning", "tuning", "tuning", "verifying", "done"]
+
+
+@pytest.mark.asyncio
+async def test_improving_misses_run_to_the_cap(mongo_db):
+    from app.math.models import default_tuning_params
+    sio = FakeSio()
+    tuner = SequencedTunerRunner([_near_miss_tune(0.90, {"m": 1}),
+                                  _near_miss_tune(0.92, {"m": 2}),
+                                  _near_miss_tune(0.94, {"m": 3})])
+    recorder = RecordingCurationRunner(_pass_curation())
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=tuner, curation_runner=recorder)
+    params = default_tuning_params()
+    params.max_attempts = 3
+    await store.put("g1", tuner_params=params)
+    assert await hub.generate("g1") is True
+    docs = await runs.list_for_game("g1")
+    assert docs[0].loop_stop == "attempts_exhausted"
+    scores = [a.miss_score for a in docs[0].attempts]
+    assert scores == sorted(scores, reverse=True)      # strictly shrinking misses
+    assert recorder.models == [{"m": 3}]               # best = last (closest) attempt
+    assert (await store.get("g1")).tune_result.tuned_model == {"m": 3}
+    assert docs[0].metrics.rtp == pytest.approx(0.94)  # run carries the best metrics
+
+
+@pytest.mark.asyncio
+async def test_max_attempts_one_is_todays_single_shot(mongo_db):
+    from app.math.models import default_tuning_params
+    sio = FakeSio()
+    tuner = SequencedTunerRunner([_near_miss_tune(0.90)])
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=tuner,
+                            curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    params = default_tuning_params()
+    params.max_attempts = 1
+    await store.put("g1", tuner_params=params)
+    assert await hub.generate("g1") is True
+    assert len(tuner.calls) == 1
+    assert sio.phases() == ["tuning", "verifying", "done"]
+    assert (await runs.list_for_game("g1"))[0].loop_stop == "attempts_exhausted"
+
+
+@pytest.mark.asyncio
+async def test_cancel_landing_after_an_attempt_stops_the_loop(mongo_db):
+    sio = FakeSio()
+    holder = {}
+
+    class CancelOnReturnRunner:
+        def __init__(self):
+            self.calls = 0
+
+        async def run(self, seed_model, target, config, on_progress, on_spawn=None):
+            self.calls += 1
+            holder["hub"].cancel_generate("g1")   # cancel lands as the attempt ends
+            return _near_miss_tune(0.90)
+
+    tuner = CancelOnReturnRunner()
+    hub, store, runs = _hub(mongo_db, sio, tuner_runner=tuner,
+                            curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    holder["hub"] = hub
+    assert await hub.generate("g1") is True
+    assert tuner.calls == 1                            # no restart after cancel
+    assert sio.phases() == ["tuning", "cancelled"]
+    assert await runs.list_for_game("g1") == []
+    # Cancel is checked BEFORE scoring/saving: nothing was persisted.
+    assert (await store.get("g1")).tune_result is None

@@ -3,8 +3,10 @@ Merges app/simulator/hub.py (CurationHub), app/tuner/hub.py (TunerHub) and
 app/analytics/hub.py (AnalyticsHub). Event names: curation_progress/complete/
 failed, tuning_failed, analytics_progress, run_complete. (Task 10 pruned the
 pane-only tuning_progress/tuning_complete emissions along with the tune/seed
-routes those panes used — request_tune is now silent on success; the
-generate pipeline's record_run emits run_complete instead.)"""
+routes those panes used. Sub-project auto-restart-tune then removed
+request_tune entirely — the generate pipeline's restart loop
+(_generate_reserved) is the only tune path; it owns save_tune_result and
+record_run/run_complete itself.)"""
 import asyncio
 import logging
 import time
@@ -14,9 +16,10 @@ from typing import Callable
 
 from app.math.bounds import build_config, derive_bounds
 from app.math.models import (
-    CurationResult, MathRunDoc, SectionLocks, TuneResult, TuningParams,
-    math_run_wire, sim_wire,
+    AttemptSummaryWire, CurationResult, MathRunDoc, SectionLocks, TuneResult,
+    TuningParams, math_run_wire, sim_wire,
 )
+from app.math.restart import escalate, miss_score
 from app.math.targets import derive_target, TargetGap
 
 logger = logging.getLogger(__name__)
@@ -110,24 +113,9 @@ class MathHub:
                                   "failure": result.failure or "curation failed"},
                                  room=game_id)
 
-    # ── tuning (was TunerHub.request_tune) ──────────────────────────────────
-    async def request_tune(self, game_id: str) -> TuneResult | None:
-        """Run one GA tune. Returns the TuneResult (None on target gap).
-        Emits tuning_failed on gap/error; success emits nothing terminal — the
-        generate pipeline (_generate_reserved) records the run itself
-        (record_run → run_complete) so it can attach the verify verdict."""
-        doc = await self._store.get_or_seed(game_id)
-        model = doc.model or {}
-        try:
-            target = await self._derive_target(game_id, doc)
-        except TargetGap as gap:
-            await self._sio.emit("tuning_failed",
-                                 {"gameId": game_id, "failure": gap.message},
-                                 room=game_id)
-            return None
-
-        config = build_config(doc.tuner_params, derive_bounds(model), doc.locks)
-
+    # ── one tune attempt (the loop-refactored body of the old request_tune) ──
+    async def _tune_attempt(self, game_id: str, seed_model: dict, target: dict,
+                            config: dict) -> TuneResult:
         async def on_progress(p):
             # Ephemeral enriched frame for the (live) analytics Evolution tab.
             await self._sio.emit(
@@ -146,26 +134,15 @@ class MathHub:
         def sync_progress(p):
             pending.append(loop.create_task(on_progress(p)))
 
-        result = await self._tuner_runner.run(model, target, config,
+        result = await self._tuner_runner.run(seed_model, target, config,
                                               on_progress=sync_progress,
                                               on_spawn=self._register_kill(game_id))
         if pending:
             await asyncio.gather(*pending)
         # ponytail: a cancel can land here, between the tuner-runner await
-        # returning and this check — the subprocess already finished, so this
-        # is cancel racing natural completion (spec-accepted), not a hazard;
-        # same race applies to record_run in _generate_reserved below. The
-        # window is one Mongo write (save_tune_result / record_run).
+        # returning and the caller's cancelled check — the subprocess already
+        # finished, so this is cancel racing natural completion (spec-accepted).
         self._cancels.pop(game_id, None)
-        if game_id in self._cancelled:
-            return result  # cancelled: discard — no save, no tuning_failed
-        await self._store.save_tune_result(game_id, result)
-
-        if result.status not in ("pass", "near_miss"):
-            await self._sio.emit("tuning_failed",
-                                 {"gameId": game_id,
-                                  "failure": result.failure or "tune failed"},
-                                 room=game_id)
         return result
 
     # ── generate pipeline: tune → verify → persist (spec sub-project 1) ──────
@@ -209,35 +186,119 @@ class MathHub:
                 kill()  # cancel arrived before the subprocess spawned
         return register
 
-    async def _status(self, game_id: str, phase: str) -> None:
-        await self._sio.emit("generate_status",
-                             {"gameId": game_id, "phase": phase}, room=game_id)
+    async def _status(self, game_id: str, phase: str, *,
+                      attempt: int | None = None,
+                      max_attempts: int | None = None) -> None:
+        payload: dict = {"gameId": game_id, "phase": phase}
+        if attempt is not None:
+            payload["attempt"] = attempt
+            payload["maxAttempts"] = max_attempts
+        await self._sio.emit("generate_status", payload, room=game_id)
 
     async def _generate_reserved(self, game_id: str) -> bool:
         try:
-            await self._status(game_id, "tuning")
             # Capture the params tuned WITH (from the doc at pipeline start), so
             # a user editing GA params mid-pipeline can't mislabel the run's
-            # provenance — matches what request_tune records on its own path.
+            # provenance.
             doc0 = await self._store.get_or_seed(game_id)
             params = doc0.tuner_params
             locks = doc0.locks
-            started = time.monotonic()
-            result = await self.request_tune(game_id)
-            duration_ms = int((time.monotonic() - started) * 1000)
-            if game_id in self._cancelled:
-                await self._status(game_id, "cancelled")
-                return True
-            if result is None or result.status not in ("pass", "near_miss"):
+            model = doc0.model or {}
+            max_attempts = params.max_attempts
+            await self._status(game_id, "tuning",
+                               attempt=1, max_attempts=max_attempts)
+            try:
+                target = await self._derive_target(game_id, doc0)
+            except TargetGap as gap:
+                await self._sio.emit("tuning_failed",
+                                     {"gameId": game_id, "failure": gap.message},
+                                     room=game_id)
                 await self._status(game_id, "failed")
                 return True
-            await self._status(game_id, "verifying")
-            verify = await self._verify_tuned(game_id, result.tuned_model)
-            if game_id in self._cancelled:
-                await self._status(game_id, "cancelled")
-                return True
-            await self.record_run(game_id, params, result, duration_ms,
-                                  verify=verify, locks=locks)
+            # Bounds derive from the STORED model once — the search space must
+            # not drift as restarts re-seed from tuned (payout-raised) models.
+            base_config = build_config(params, derive_bounds(model), locks)
+            started = time.monotonic()
+
+            best: TuneResult | None = None
+            best_verify: CurationResult | None = None
+            best_score = float("inf")
+            attempts: list[AttemptSummaryWire] = []
+            loop_stop = "attempts_exhausted"
+            no_improve = 0
+
+            for attempt in range(1, max_attempts + 1):
+                if attempt > 1:
+                    await self._status(game_id, "tuning",
+                                       attempt=attempt, max_attempts=max_attempts)
+                seed = (best.tuned_model
+                        if best is not None and best.tuned_model else model)
+                result = await self._tune_attempt(
+                    game_id, seed, target, escalate(base_config, attempt))
+                if game_id in self._cancelled:
+                    await self._status(game_id, "cancelled")
+                    return True
+                if result.status not in ("pass", "near_miss"):
+                    # Environmental (crash/watchdog/bad input): terminal, no
+                    # retry. An earlier best stays on the doc for Apply; with
+                    # no best yet, save the error so the pane can show it.
+                    if best is None:
+                        await self._store.save_tune_result(game_id, result)
+                    await self._sio.emit(
+                        "tuning_failed",
+                        {"gameId": game_id,
+                         "failure": result.failure or "tune failed"},
+                        room=game_id)
+                    await self._status(game_id, "failed")
+                    return True
+                verify: CurationResult | None = None
+                if result.verdict == "pass":
+                    await self._status(game_id, "verifying",
+                                       attempt=attempt, max_attempts=max_attempts)
+                    verify = await self._verify_tuned(game_id, result.tuned_model)
+                    if game_id in self._cancelled:
+                        await self._status(game_id, "cancelled")
+                        return True
+                joint_pass = (result.verdict == "pass"
+                              and verify is not None and verify.status == "pass")
+                measured = (verify.metrics
+                            if verify is not None and verify.status != "error"
+                            else result.metrics)
+                score = 0.0 if joint_pass else miss_score(measured, target)
+                attempts.append(AttemptSummaryWire(
+                    attempt=attempt, verdict=result.verdict,
+                    stop_reason=result.stop_reason, miss_score=score))
+                # A joint pass always wins outright (its raw miss can tie a
+                # failed attempt's — e.g. a fail that's in-band on raw distance
+                # but outside the verdict's noise-aware gates).
+                if joint_pass or best is None or score < best_score:
+                    best, best_verify, best_score = result, verify, score
+                    await self._store.save_tune_result(game_id, result)
+                    no_improve = 0
+                else:
+                    no_improve += 1
+                if joint_pass:
+                    loop_stop = "pass"
+                    break
+                if verify is not None and verify.status == "error":
+                    loop_stop = "error"  # environmental — stop with best so far
+                    break
+                if no_improve >= 2:
+                    loop_stop = "not_improving"
+                    break
+
+            # Recorded-run contract: verify is always attached. A best whose
+            # tune never passed was never verified mid-loop — curate it now.
+            if best_verify is None and best.tuned_model:
+                await self._status(game_id, "verifying")
+                best_verify = await self._verify_tuned(game_id, best.tuned_model)
+                if game_id in self._cancelled:
+                    await self._status(game_id, "cancelled")
+                    return True
+            duration_ms = int((time.monotonic() - started) * 1000)
+            await self.record_run(game_id, params, best, duration_ms,
+                                  verify=best_verify, locks=locks,
+                                  attempts=attempts, loop_stop=loop_stop)
             await self._status(game_id, "done")
             return True
         except Exception:
@@ -282,7 +343,9 @@ class MathHub:
     async def record_run(self, game_id: str, params: TuningParams,
                          result: TuneResult, duration_ms: int,
                          verify: CurationResult | None = None,
-                         locks: SectionLocks | None = None) -> MathRunDoc | None:
+                         locks: SectionLocks | None = None,
+                         attempts: list[AttemptSummaryWire] | None = None,
+                         loop_stop: str | None = None) -> MathRunDoc | None:
         if result.status not in ("pass", "near_miss"):
             return None
         doc = MathRunDoc(
@@ -290,6 +353,7 @@ class MathHub:
             verdict=result.verdict, metrics=result.metrics, trace=result.trace,
             profile=result.profile, verify=verify, locks=locks,
             stop_reason=result.stop_reason,
+            attempts=attempts, loop_stop=loop_stop,
             created_at=_now(), duration_ms=duration_ms,
         )
         saved = await self._runs.append(doc)
