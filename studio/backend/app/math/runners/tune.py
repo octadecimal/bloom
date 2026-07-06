@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from app.math.models import (
-    BandMissWire, GenSnapshotWire, HistogramBinWire, MetricsWire,
+    BandMissWire, GenSnapshotWire, HistogramBinWire, MetricsWire, MetricSEWire,
     PopulationStatsWire, RtpPointWire, RunProfileWire, TailWire, TuneResult,
     WinDistributionWire,
 )
@@ -86,10 +86,13 @@ def _parse_snapshot(s: dict) -> GenSnapshotWire:
 def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
     d = json.loads(line)
     m = d.get("metrics") or {}
+    se_d = m.get("se")
     metrics = MetricsWire(
         rtp=m["rtp"], volatility=m["volatility"], hit_frequency=m["hitFrequency"],
         base_rtp=m["baseRtp"], feature_rtp=m["featureRtp"],
         bonus_hit_rates=m.get("bonusHitRates", []),
+        se=MetricSEWire(rtp=se_d["rtp"], volatility=se_d["volatility"],
+                        bonus_hit_rates=se_d.get("bonusHitRates", [])) if se_d else None,
     )
     verdict = d["verdict"]  # "pass" | "near_miss"
     profile_d = d.get("profile")

@@ -198,3 +198,26 @@ def test_parse_tune_error_line_maps_message_to_failure():
     assert res.tuned_model is None
     assert "locked" in res.failure
     assert res.ran_at == "t"
+
+
+def test_parse_tune_result_line_carries_se():
+    line = json.dumps({
+        "type": "result", "verdict": "pass", "model": {},
+        "metrics": {"rtp": 0.9, "volatility": 3.2, "hitFrequency": 0.4,
+                    "baseRtp": 0.9, "featureRtp": 0.0, "bonusHitRates": [],
+                    "se": {"rtp": 0.101, "volatility": 0.0716, "bonusHitRates": []}},
+        "missed": [], "trace": [], "stopReason": "feasible",
+    })
+    r = parse_tune_result_line(line, ran_at="t")
+    assert r.metrics.se is not None
+    assert r.metrics.se.rtp == 0.101
+
+
+def test_parse_tune_result_line_without_se_is_none():
+    line = json.dumps({
+        "type": "result", "verdict": "pass", "model": {},
+        "metrics": {"rtp": 0.9, "volatility": 3.2, "hitFrequency": 0.4,
+                    "baseRtp": 0.9, "featureRtp": 0.0, "bonusHitRates": []},
+        "missed": [], "trace": [], "stopReason": "feasible",
+    })
+    assert parse_tune_result_line(line, ran_at="t").metrics.se is None
