@@ -4,9 +4,11 @@ from types import SimpleNamespace
 import pytest
 
 from app.math.hub import MathHub
-from app.math.models import CurationResult, MetricsWire, SectionLocks, TuneResult
+from app.math.models import (
+    CurationResult, MetricsWire, PopulationStatsWire, SectionLocks, TuneResult,
+)
 from app.math.runners.curate import FakeCurationRunner
-from app.math.runners.tune import FakeTunerRunner
+from app.math.runners.tune import FakeTunerRunner, TuneProgress
 from app.math.store import MathRunStore, MathStore
 
 
@@ -61,9 +63,15 @@ class GatedTunerRunner:
 
 
 class RaisingTunerRunner:
-    """Simulates a subprocess crash / transient error inside request_tune."""
+    """Simulates a subprocess crash / transient error inside the generate loop's
+    tune attempt."""
     async def run(self, seed_model, target, config, on_progress, on_spawn=None):
         raise RuntimeError("boom")
+
+
+def _population(diversity: float) -> PopulationStatsWire:
+    return PopulationStatsWire(min=0.1, q1=0.2, median=0.3, q3=0.4, max=0.5,
+                               mean=0.3, diversity=diversity)
 
 
 def _metrics():
@@ -177,6 +185,35 @@ async def test_generate_runs_tune_then_verify_and_persists_one_run(mongo_db):
     assert (await store.get("g1")).tune_result.tuned_model == {"rows": 7}
     assert sio.phases() == ["tuning", "verifying", "done"]
     assert sio.count("run_complete") == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_emits_analytics_progress_payload_shape(mongo_db):
+    """The (live) analytics Evolution tab is fed by _tune_attempt's on_progress
+    relay. This is the only test asserting the emitted analytics_progress
+    payload shape survives the generate-loop refactor."""
+    sio = FakeSio()
+    progress = [
+        TuneProgress(0, 40, -0.5, 0.5, 2.0, population=_population(0.42), gene_agreement=[0.1, 0.2]),
+        TuneProgress(1, 40, -0.3, 0.6, 1.9, population=_population(0.37), gene_agreement=[0.15, 0.25]),
+    ]
+    hub, _, _ = _hub(mongo_db, sio,
+                     tuner_runner=FakeTunerRunner(progress=progress, result=_pass_tune()),
+                     curation_runner=FakeCurationRunner(progress=[], result=_pass_curation()))
+    assert await hub.generate("g1") is True
+
+    analytics_events = [p for e, p in sio.emits if e == "analytics_progress"]
+    assert len(analytics_events) == 2
+    for payload, p in zip(analytics_events, progress):
+        assert payload["gameId"] == "g1"
+        assert payload["generation"] == p.generation
+        assert payload["maxGenerations"] == p.max_generations
+        assert payload["best"] == {
+            "fitness": p.best_fitness, "rtp": p.best_rtp, "volatility": p.best_volatility,
+        }
+        assert payload["population"]["diversity"] == p.population.diversity
+        assert payload["population"]["median"] == p.population.median
+        assert payload["geneAgreement"] == p.gene_agreement
 
 
 @pytest.mark.asyncio
