@@ -63,6 +63,7 @@ const FAST_SIM_PARAMS = {
 
 const FAST_TUNER_PARAMS = {
   masterSeed: 7,
+  maxAttempts: 1,
   population: 16,
   maxGenerations: 40,
   searchCandidateCount: 5000,
