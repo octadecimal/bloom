@@ -43,6 +43,7 @@ fn progress_line(p: &CurationProgress) -> String {
 fn result_line(
     status: &str,
     metrics: &bloom_simulator::target::Metrics,
+    se: &bloom_simulator::target::MetricSE,
     realized_rtp: Option<f64>,
     pool_size: Option<usize>,
     failure: Option<&str>,
@@ -56,6 +57,11 @@ fn result_line(
         "baseRtp": metrics.base_rtp,
         "featureRtp": metrics.feature_rtp,
         "bonusHitRates": metrics.bonus_hit_rates,
+        "se": {
+            "rtp": se.rtp,
+            "volatility": se.volatility,
+            "bonusHitRates": se.bonus_hit_rates,
+        },
         "realizedRtp": realized_rtp,
         "poolSize": pool_size,
         "failure": failure,
@@ -160,9 +166,11 @@ fn main() {
         ),
     };
 
+    let se = bloom_simulator::target::standard_errors(m, target.candidate_count);
     emit(result_line(
         status,
         m,
+        &se,
         realized,
         pool_size,
         failure.as_deref(),
@@ -192,6 +200,24 @@ mod tests {
     }
 
     #[test]
+    fn result_line_carries_se() {
+        let metrics = Metrics {
+            rtp: 0.95,
+            volatility: 2.5,
+            hit_frequency: 0.35,
+            bonus_hit_rates: vec![0.1],
+            base_rtp: 0.60,
+            feature_rtp: 0.35,
+        };
+        let se = bloom_simulator::target::standard_errors(&metrics, 10_000);
+        let s = result_line("pass", &metrics, &se, Some(0.961), Some(1000), None);
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        assert!((v["se"]["rtp"].as_f64().unwrap() - 2.5 / 100.0).abs() < 1e-12);
+        assert!(v["se"]["volatility"].as_f64().unwrap() > 0.0);
+        assert_eq!(v["se"]["bonusHitRates"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
     fn result_line_pass_shape() {
         let metrics = Metrics {
             rtp: 0.95,
@@ -201,7 +227,8 @@ mod tests {
             base_rtp: 0.60,
             feature_rtp: 0.35,
         };
-        let s = result_line("pass", &metrics, Some(0.961), Some(1000), None);
+        let se = bloom_simulator::target::standard_errors(&metrics, 10_000);
+        let s = result_line("pass", &metrics, &se, Some(0.961), Some(1000), None);
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
 
         assert_eq!(v["type"], "result");
@@ -214,6 +241,7 @@ mod tests {
         assert_eq!(v["realizedRtp"], 0.961);
         assert_eq!(v["poolSize"], 1000);
         assert!(v["failure"].is_null());
+        assert!(v["se"]["rtp"].is_number());
     }
 
     #[test]
@@ -226,7 +254,8 @@ mod tests {
             base_rtp: 0.59,
             feature_rtp: 0.35,
         };
-        let s = result_line("fail", &metrics, None, None, Some("missed bands"));
+        let se = bloom_simulator::target::standard_errors(&metrics, 10_000);
+        let s = result_line("fail", &metrics, &se, None, None, Some("missed bands"));
         let v: serde_json::Value = serde_json::from_str(&s).unwrap();
 
         assert_eq!(v["status"], "fail");
