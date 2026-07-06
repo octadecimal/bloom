@@ -562,7 +562,8 @@ mod tests {
         let mut c = cfg(master_seed);
         c.search_candidate_count = 60;
         c.final_candidate_count = 50_000;
-        c.max_generations = 8;
+        c.max_generations = 12;
+        c.stagnation_window = 2;
         c
     }
 
