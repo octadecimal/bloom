@@ -18,14 +18,25 @@ describe('Orchestrator', () => {
     expect(reels.stopSpinning).toHaveBeenCalledWith(outcome);
   });
 
-  it('re-emits round:complete when the module reports reels:settled', () => {
+  it('re-emits round:complete when the module reports reels:settled after a spin it initiated', () => {
+    const bus = createBus();
+    const reels = fakeReels();
+    const orch = new Orchestrator({ bus, reels: () => reels });
+    const done = vi.fn();
+    bus.on('round:complete', done);
+    orch.spin({ grid: [['X']] });
+    bus.emit('reels:settled', { grid: [['A'], ['B']] });
+    expect(done).toHaveBeenCalledWith({ grid: [['A'], ['B']] });
+  });
+
+  it('does not re-emit round:complete for reels:settled without a prior spin() (e.g. composed@1 trace walks)', () => {
     const bus = createBus();
     const reels = fakeReels();
     new Orchestrator({ bus, reels: () => reels });
     const done = vi.fn();
     bus.on('round:complete', done);
-    bus.emit('reels:settled', { grid: [['A'], ['B']] });
-    expect(done).toHaveBeenCalledWith({ grid: [['A'], ['B']] });
+    bus.emit('reels:settled', { grid: [['A']] });
+    expect(done).not.toHaveBeenCalled();
   });
 
   it('dispose() stops it from reacting to further reels:settled events', () => {
