@@ -38,8 +38,8 @@ const MODEL: ISlotModel = {
   bonuses: [],
 };
 
-function doc(model: unknown, updatedAt: string, presentation: unknown = { symbols: {} }, locks?: unknown) {
-  return { id: 'd1', gameId: 'g1', model, presentation, updatedAt, ...(locks ? { locks } : {}) };
+function doc(model: unknown, updatedAt: string, presentation: unknown = { symbols: {} }, locks?: unknown, shapeStale?: boolean) {
+  return { id: 'd1', gameId: 'g1', model, presentation, updatedAt, ...(locks ? { locks } : {}), ...(shapeStale != null ? { shapeStale } : {}) };
 }
 
 describe('game-config actions', () => {
@@ -66,6 +66,14 @@ describe('game-config actions', () => {
     expect(s.model.get({ noproxy: true })).toEqual(MODEL);
     expect(s.watermark.get()).toBe('t1');
     expect(JSON.parse(s.jsonDraft.get())).toEqual(MODEL);
+  });
+
+  it('openGameConfig hydrates shapeStale from the doc, defaulting to false when absent', async () => {
+    await open(); // doc without shapeStale
+    expect(gameConfigSlice().shapeStale.get()).toBe(false);
+    getSlotModel.mockResolvedValue(doc(MODEL, 't2', { symbols: {} }, undefined, true));
+    await openGameConfig('g1');
+    expect(gameConfigSlice().shapeStale.get()).toBe(true);
   });
 
   it('applyModel debounces a single PUT with source editor and marks saved', async () => {

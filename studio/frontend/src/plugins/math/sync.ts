@@ -34,6 +34,7 @@ export async function refreshDoc(gameId: string): Promise<void> {
     s.locks.set(doc.locks);
     s.curationParams.set(doc.params);
     s.verifyResult.set(doc.result);
+    s.verdictStale.set(!!doc.verdictStale);
   } catch {
     // keep current state
   }

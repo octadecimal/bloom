@@ -85,10 +85,11 @@ describe('refreshDoc', () => {
     mathSlice().activeGameId.set('g1');
     const locks = { reels: true, paytable: false, bonus: false };
     const params = { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 };
-    getSlotModel.mockResolvedValue({ id: 'sm1', gameId: 'g1', model: {}, params, locks, result: null, updatedAt: 't' });
+    getSlotModel.mockResolvedValue({ id: 'sm1', gameId: 'g1', model: {}, params, locks, result: null, updatedAt: 't', verdictStale: true });
     await refreshDoc('g1');
     expect(mathSlice().locks.get({ noproxy: true })).toEqual(locks);
     expect(mathSlice().curationParams.get({ noproxy: true })).toEqual(params);
+    expect(mathSlice().verdictStale.get()).toBe(true);
   });
 
   it('drops responses for a game that is no longer active', async () => {

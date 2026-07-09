@@ -24,6 +24,7 @@ function hydrateDoc(doc: ISlotModelWireDoc): void {
   s.locks.set({ ...defaultLocks(), ...(doc.locks ?? {}) });
   s.jsonDraft.set(JSON.stringify(model, null, 2));
   s.jsonError.set(null);
+  s.shapeStale.set(!!doc.shapeStale);
   if (doc.updatedAt > s.watermark.get()) s.watermark.set(doc.updatedAt);
 }
 
@@ -59,6 +60,7 @@ export function closeGameConfig(): void {
   s.externalSource.set(null);
   s.watermark.set('');
   s.loadStatus.set('idle');
+  s.shapeStale.set(false);
 }
 
 function scheduleSave(kind: 'model' | 'presentation' | 'locks'): void {

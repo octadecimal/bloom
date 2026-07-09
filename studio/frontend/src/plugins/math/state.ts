@@ -236,6 +236,9 @@ export interface IMathState {
   locks: ISectionLocks | null;
   tunerParams: ITuningParams | null;
   curationParams: ICurationParams | null;
+  /** True when the stored verdict/result no longer describes the current model or
+   * targets (spec 2026-07-09 §4/§5) — backend-owned, UI just renders the chip. */
+  verdictStale: boolean;
 }
 
 export function makeInitialState(): IMathState {
@@ -265,6 +268,7 @@ export function makeInitialState(): IMathState {
     locks: null,
     tunerParams: null,
     curationParams: null,
+    verdictStale: false,
   };
 }
 

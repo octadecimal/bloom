@@ -35,6 +35,10 @@ export interface IGameConfigState {
   externalSource: string | null;
   watermark: string; // updatedAt of the last state we hydrated; older socket events are ignored
   loadStatus: 'idle' | 'loading' | 'error';
+  /** True when the GDD's declared shape no longer matches the realized model
+   * (spec 2026-07-09 §5) — display-only here; the re-realize affordance lives
+   * in the GDD viewer (Task 8). */
+  shapeStale: boolean;
 }
 
 export function makeInitialState(): IGameConfigState {
@@ -52,6 +56,7 @@ export function makeInitialState(): IGameConfigState {
     externalSource: null,
     watermark: '',
     loadStatus: 'idle',
+    shapeStale: false,
   };
 }
 

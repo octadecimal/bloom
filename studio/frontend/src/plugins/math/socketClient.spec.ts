@@ -210,13 +210,14 @@ describe('curation_progress/complete/failed', () => {
     const params = { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 };
     handlers['curation_complete']({
       gameId: 'g1',
-      doc: { id: 'sm1', gameId: 'g1', model: {}, params, locks, result, updatedAt: 't' },
+      doc: { id: 'sm1', gameId: 'g1', model: {}, params, locks, result, updatedAt: 't', verdictStale: false },
     });
     expect(mathSlice().verifyResult.get({ noproxy: true })).toEqual(result);
     expect(mathSlice().verifyStatus.get()).toBe('pass');
     expect(mathSlice().verifyProgress.get()).toBeNull();
     expect(mathSlice().locks.get({ noproxy: true })).toEqual(locks);
     expect(mathSlice().curationParams.get({ noproxy: true })).toEqual(params);
+    expect(mathSlice().verdictStale.get()).toBe(false);
   });
 
   it('curation_complete falls back to idle verifyStatus when result is null', () => {

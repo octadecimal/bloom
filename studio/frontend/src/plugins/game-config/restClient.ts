@@ -10,6 +10,7 @@ export interface ISlotModelWireDoc {
   presentation?: unknown; // absent until the backend task lands; normalized on hydrate
   locks?: ISectionLocks;
   updatedAt: string;
+  shapeStale?: boolean;
 }
 
 export interface IPutSlotModelPatch {

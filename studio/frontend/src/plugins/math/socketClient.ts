@@ -97,6 +97,7 @@ export function createMathSocket() {
       s.verifyProgress.set(null);
       s.locks.set(p.doc.locks);
       s.curationParams.set(p.doc.params);
+      s.verdictStale.set(!!p.doc.verdictStale);
     });
     sock.on('curation_failed', (p: { gameId: string; failure?: string }) => {
       if (!isActive(p.gameId)) return;
