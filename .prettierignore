@@ -9,3 +9,6 @@ studio/backend/tests/fixtures/replay/
 
 # pytest auto-generated cache — not hand-maintained
 **/.pytest_cache/
+
+# Golden trace vectors (bit-exact serde output, regenerated via BLOOM_REGEN_GOLDEN; not hand-maintained)
+trusted/math/fixtures/composed/trace_seed_*.json

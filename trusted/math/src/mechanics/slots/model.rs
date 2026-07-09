@@ -4,48 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A symbol id. Its art/name/value live in the package presentation, not here.
-pub type Symbol = u8;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SymbolRole {
-    Normal,
-    Wild,
-    Scatter,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SymbolDef {
-    pub id: Symbol,
-    pub role: SymbolRole,
-}
-
-/// One paytable row: paying `symbol` appearing exactly `count` times yields
-/// `payout` bet-multiples. (Lines use left-aligned run length; scatters use
-/// total grid count.)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PaytableEntry {
-    pub symbol: Symbol,
-    pub count: u8,
-    pub payout: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Paytable {
-    pub entries: Vec<PaytableEntry>,
-}
-
-impl Paytable {
-    /// Payout (bet-multiples) for `symbol` at exactly `count`. 0 if no entry.
-    pub fn lookup(&self, symbol: Symbol, count: u8) -> u64 {
-        self.entries
-            .iter()
-            .find(|e| e.symbol == symbol && e.count == count)
-            .map(|e| e.payout)
-            .unwrap_or(0)
-    }
-}
+pub use crate::components::{Paytable, PaytableEntry, Symbol, SymbolDef, SymbolRole};
 
 /// What triggers (or retriggers) a bonus feature: `min_count` of `symbol`
 /// anywhere on the relevant grid.

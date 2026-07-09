@@ -1,0 +1,221 @@
+{
+  "entries": [
+    {
+      "t": "round_start",
+      "seed": "3395"
+    },
+    {
+      "t": "state_enter",
+      "state": "base"
+    },
+    {
+      "t": "step",
+      "n": 1
+    },
+    {
+      "t": "trigger",
+      "mechanic": "main_reels",
+      "name": "spin",
+      "events": [
+        "scatters:3"
+      ],
+      "data": {
+        "kind": "reels",
+        "grid": [
+          [
+            9
+          ],
+          [
+            9
+          ],
+          [
+            9
+          ]
+        ],
+        "payout": 8
+      }
+    },
+    {
+      "t": "trigger",
+      "mechanic": "bonus_meter",
+      "name": "accumulate",
+      "events": [],
+      "data": {
+        "kind": "meter",
+        "fill": 3,
+        "target": 4
+      }
+    },
+    {
+      "t": "transition",
+      "on": "scatters:3",
+      "to": "fs1"
+    },
+    {
+      "t": "state_exit",
+      "state": "base",
+      "payout": 8
+    },
+    {
+      "t": "state_enter",
+      "state": "fs1"
+    },
+    {
+      "t": "step",
+      "n": 2
+    },
+    {
+      "t": "trigger",
+      "mechanic": "main_reels",
+      "name": "spin",
+      "events": [
+        "scatters:3"
+      ],
+      "data": {
+        "kind": "reels",
+        "grid": [
+          [
+            9
+          ],
+          [
+            9
+          ],
+          [
+            9
+          ]
+        ],
+        "payout": 16
+      }
+    },
+    {
+      "t": "trigger",
+      "mechanic": "bonus_meter",
+      "name": "accumulate",
+      "events": [
+        "meter:full"
+      ],
+      "data": {
+        "kind": "meter",
+        "fill": 6,
+        "target": 4
+      }
+    },
+    {
+      "t": "transition",
+      "on": "scatters:3",
+      "effect": "steps:add:2"
+    },
+    {
+      "t": "step",
+      "n": 3
+    },
+    {
+      "t": "trigger",
+      "mechanic": "main_reels",
+      "name": "spin",
+      "events": [],
+      "data": {
+        "kind": "reels",
+        "grid": [
+          [
+            0
+          ],
+          [
+            0
+          ],
+          [
+            1
+          ]
+        ],
+        "payout": 10
+      }
+    },
+    {
+      "t": "trigger",
+      "mechanic": "bonus_meter",
+      "name": "accumulate",
+      "events": [
+        "meter:full"
+      ],
+      "data": {
+        "kind": "meter",
+        "fill": 6,
+        "target": 4
+      }
+    },
+    {
+      "t": "transition",
+      "on": "meter:full",
+      "to": "fs2"
+    },
+    {
+      "t": "state_exit",
+      "state": "fs1",
+      "payout": 26
+    },
+    {
+      "t": "state_enter",
+      "state": "fs2"
+    },
+    {
+      "t": "step",
+      "n": 4
+    },
+    {
+      "t": "trigger",
+      "mechanic": "main_reels",
+      "name": "spin",
+      "events": [],
+      "data": {
+        "kind": "reels",
+        "grid": [
+          [
+            9
+          ],
+          [
+            0
+          ],
+          [
+            0
+          ]
+        ],
+        "payout": 0
+      }
+    },
+    {
+      "t": "step",
+      "n": 5
+    },
+    {
+      "t": "trigger",
+      "mechanic": "main_reels",
+      "name": "spin",
+      "events": [],
+      "data": {
+        "kind": "reels",
+        "grid": [
+          [
+            0
+          ],
+          [
+            9
+          ],
+          [
+            0
+          ]
+        ],
+        "payout": 0
+      }
+    },
+    {
+      "t": "state_exit",
+      "state": "fs2",
+      "payout": 0
+    },
+    {
+      "t": "round_end",
+      "total_payout": 34
+    }
+  ],
+  "total_payout": 34
+}
