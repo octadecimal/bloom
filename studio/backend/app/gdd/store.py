@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.gdd.models import GDD_TAXONOMY, GddDoc, Status, derive_status
-from app.gdd.schemas import schema_for
+from app.gdd.schemas import ASPECT_SCHEMAS, schema_for
 from app.gdd.normalize import normalize_value
 from app.gdd.render import render
 
@@ -25,6 +25,10 @@ def _to_doc(doc: GddDoc) -> dict:
 def _from_doc(raw: dict) -> GddDoc:
     data = dict(raw)
     data["id"] = data.pop("_id")
+    aspect = data.get("aspect")
+    if aspect in ASPECT_SCHEMAS and isinstance(data.get("data"), dict):
+        allowed = {f.key for f in ASPECT_SCHEMAS[aspect]}
+        data["data"] = {k: v for k, v in data["data"].items() if k in allowed}
     return GddDoc.model_validate(data)
 
 

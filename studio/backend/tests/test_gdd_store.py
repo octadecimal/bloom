@@ -101,3 +101,17 @@ async def test_upsert_doc_raises_when_aspect_unseeded(mongo_db):
     # Must be a real, clear error -- not a bare AssertionError.
     assert not isinstance(excinfo.value, AssertionError)
     assert "seed" in str(excinfo.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_evicted_keys_stripped_on_read(mongo_db):
+    store = GddStore(mongo_db)
+    await store.seed_taxonomy("g9")
+    # simulate a pre-rework doc with evicted keys persisted
+    await store._docs.update_one(
+        {"game_id": "g9", "aspect": "paytable"},
+        {"$set": {"data": {"payouts": [{"symbol": "a"}], "notes": "keep"}}},
+    )
+    doc = await store.get_doc("g9", "paytable")
+    assert "payouts" not in doc.data
+    assert doc.data["notes"] == "keep"
