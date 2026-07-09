@@ -16,6 +16,9 @@ from app.assets.rest import router as assets_router
 from app.assets.sockets import register_asset_handlers
 from app.assets.store import AssetStore
 from app.chat_service import ChatService
+from app.compose.rest import router as compose_router
+from app.compose.runner import build_compose_runner
+from app.compose.store import ComposeStore
 from app.config import Settings, get_settings
 from app.gdd.hub import GddHub
 from app.gdd.sockets import register_gdd_handlers
@@ -110,6 +113,20 @@ def build(settings: Settings) -> AppContext:
         )
 
     math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
+
+    async def _on_game_definition_change(doc, source: str) -> None:
+        # Single choke point: every definition/presentation write reaches any
+        # open Game Structure pane. Room join reuses the existing join_sim
+        # handler (the room is the bare gameId). ponytail: no compose hub —
+        # add one only when compose grows push flows beyond this one event.
+        await sio.emit(
+            "game_definition_changed",
+            {"gameId": doc.game_id, "updatedAt": doc.updated_at, "source": source},
+            room=doc.game_id,
+        )
+
+    compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
+    compose_runner = build_compose_runner(settings)
     math_run_store = MathRunStore(mongo[settings.mongo_db])
     math_hub = MathHub(sio, math_store, math_run_store,
                        build_curation_runner(settings), build_tuner_runner(settings),
@@ -148,6 +165,8 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.asset_store = asset_store
     fastapi_app.state.gdd_store = gdd_store
     fastapi_app.state.skill_registry = skill_registry
+    fastapi_app.state.compose_store = compose_store
+    fastapi_app.state.compose_runner = compose_runner
     fastapi_app.state.math_store = math_store
     fastapi_app.state.math_hub = math_hub
     fastapi_app.state.math_run_store = math_run_store
@@ -161,6 +180,7 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.scene_art_critic = scene_art_critic
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(math_router)
+    fastapi_app.include_router(compose_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
