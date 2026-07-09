@@ -16,4 +16,5 @@ pub mod trace;
 pub use compile::{compile, CompiledGame, DefinitionError};
 pub use definition::{from_payload, to_payload, GameDefinition, FAMILY};
 pub use eval::evaluate;
+pub use mechanic::TriggerData;
 pub use trace::{RoundTrace, TraceEntry};

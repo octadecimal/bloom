@@ -140,6 +140,18 @@ runtime-demo-pkg:
 runtime-serve: runtime-demo-pkg
     cargo run --release -p bloom-runtime-server
 
+# Mint the composed@1 demo package (dev-signed, uncurated pool) from its fixture.
+composed-demo-pkg:
+    cargo run --release -p bloom-simulator --bin compose -- \
+      runtime/server/demo/composed.definition.json \
+      bloom-demo-composed 10000 20260709 \
+      runtime/server/demo/composed.pkg \
+      runtime/server/demo/composed.presentation.json
+
+# Run the authoritative runtime game server on the composed demo package.
+runtime-serve-composed: composed-demo-pkg
+    BLOOM_RUNTIME_PACKAGE=runtime/server/demo/composed.pkg cargo run --release -p bloom-runtime-server
+
 # Print the direct play-mode URL. Start the two servers first (separate shells):
 #   just runtime-serve            # authoritative server on 9000+offset
 #   just serve-runtime-client     # Pixi client on 4300+offset

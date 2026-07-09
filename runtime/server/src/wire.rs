@@ -2,6 +2,7 @@
 //! by mechanic, one arm today (`slots@1`). `trusted/math`'s `RoundOutcome` stays a
 //! pure (non-serde) certified type; we map it here.
 
+use bloom_math::mechanics::composed::TraceEntry;
 use bloom_math::mechanics::slots::{FeatureOutcome, RoundOutcome, Symbol};
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,10 @@ pub struct SlotsOutcomeWire {
 pub enum OutcomeWire {
     #[serde(rename = "slots@1")]
     Slots(SlotsOutcomeWire),
+    /// Summary arm: generic consumers read `total_payout`; per-state payouts
+    /// live in the trace's `state_exit` entries (SP2 spec §5.2).
+    #[serde(rename = "composed@1")]
+    Composed { total_payout: u64 },
 }
 
 impl OutcomeWire {
@@ -56,6 +61,10 @@ pub struct SpinResponse {
     pub seed: u64,
     pub bet: u64,
     pub outcome: OutcomeWire,
+    /// The full lifecycle trace — composed packages only. Slots responses
+    /// are byte-identical to pre-SP2 (key omitted).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace: Option<Vec<TraceEntry>>,
 }
 
 /// The seed is a `u64` that can exceed 2^53; a JS client parsing it as a JSON
@@ -74,6 +83,10 @@ pub struct HandshakeResponse {
     pub package_version: u32,
     pub mechanic: String,
     pub presentation: serde_json::Value,
+    /// The parsed Game Definition — composed packages only (SP3's client
+    /// builds its module set from this; SP2 spec §5.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub definition: Option<serde_json::Value>,
 }
 
 #[cfg(test)]
@@ -137,7 +150,9 @@ mod tests {
         let m = model_with_feature();
         let o = evaluate(&m, 53); // a seed known to trigger in bloom-math goldens
         let wire = OutcomeWire::from_round(&o);
-        let OutcomeWire::Slots(s) = &wire;
+        let OutcomeWire::Slots(s) = &wire else {
+            panic!("expected the slots arm")
+        };
         assert_eq!(s.base_grid, o.base_grid);
         assert_eq!(s.total_payout, o.total_payout);
         assert_eq!(s.features.len(), o.features.len());
@@ -161,6 +176,7 @@ mod tests {
             seed: 9_007_199_254_740_993,
             bet: 1,
             outcome,
+            trace: None,
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert!(json["seed"].is_string(), "seed must serialize as a string");
@@ -169,5 +185,65 @@ mod tests {
             serde_json::Value::String("9007199254740993".into())
         );
         assert_eq!(json["bet"], 1);
+    }
+
+    #[test]
+    fn composed_outcome_serializes_with_family_tag_and_summary() {
+        let wire = OutcomeWire::Composed { total_payout: 640 };
+        let json = serde_json::to_value(&wire).unwrap();
+        assert_eq!(json["mechanic"], "composed@1");
+        assert_eq!(json["total_payout"], 640);
+        let back: OutcomeWire = serde_json::from_value(json).unwrap();
+        assert_eq!(back, wire);
+    }
+
+    #[test]
+    fn spin_response_omits_trace_for_slots_and_carries_it_for_composed() {
+        let outcome = OutcomeWire::from_round(&evaluate(&model_with_feature(), 53));
+        let slots = SpinResponse {
+            seed: 1,
+            bet: 1,
+            outcome: outcome.clone(),
+            trace: None,
+        };
+        let v = serde_json::to_value(&slots).unwrap();
+        assert!(
+            v.get("trace").is_none(),
+            "slots response must not have a trace key"
+        );
+
+        let composed = SpinResponse {
+            seed: 1,
+            bet: 1,
+            outcome: OutcomeWire::Composed { total_payout: 0 },
+            trace: Some(vec![
+                bloom_math::mechanics::composed::TraceEntry::RoundEnd { total_payout: 0 },
+            ]),
+        };
+        let v = serde_json::to_value(&composed).unwrap();
+        assert_eq!(v["trace"][0]["t"], "round_end");
+    }
+
+    #[test]
+    fn handshake_response_omits_definition_when_none() {
+        let none = HandshakeResponse {
+            package_id: "p".into(),
+            package_version: 1,
+            mechanic: "slots@1".into(),
+            presentation: serde_json::Value::Null,
+            definition: None,
+        };
+        let v = serde_json::to_value(&none).unwrap();
+        assert!(v.get("definition").is_none());
+
+        let some = HandshakeResponse {
+            package_id: "p".into(),
+            package_version: 1,
+            mechanic: "composed@1".into(),
+            presentation: serde_json::Value::Null,
+            definition: Some(serde_json::json!({"family": "composed@1"})),
+        };
+        let v = serde_json::to_value(&some).unwrap();
+        assert_eq!(v["definition"]["family"], "composed@1");
     }
 }

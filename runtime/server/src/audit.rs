@@ -18,6 +18,10 @@ pub struct AuditRecord {
     pub timestamp_ms: u128,
     /// The served outcome (mechanic-tagged).
     pub outcome: crate::wire::OutcomeWire,
+    /// SHA-256 (lowercase hex) of the signed math payload. `default` keeps
+    /// pre-SP2 JSONL lines deserializable.
+    #[serde(default)]
+    pub definition_hash: String,
 }
 
 pub trait AuditSink: Send + Sync {
@@ -115,6 +119,7 @@ mod tests {
             bet: 1,
             timestamp_ms: 123,
             outcome: crate::wire::OutcomeWire::from_round(&evaluate(&model, seed)),
+            definition_hash: "deadbeef".into(),
         }
     }
 

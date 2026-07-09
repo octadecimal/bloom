@@ -3,9 +3,11 @@
 
 use crate::audit::AuditSink;
 use crate::draw::Draw;
+use bloom_math::mechanics::composed;
 use bloom_math::mechanics::slots::{from_payload, SlotModel};
 use bloom_package::{verify_and_load, PackageContent, PackageError};
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use sha2::{Digest, Sha256};
 
 /// The development verifying key (matches the dev signing key `[7u8; 32]`).
 /// Real signing-key management is a deferred sign-off-gate concern.
@@ -17,13 +19,33 @@ pub fn dev_verifying_key() -> VerifyingKey {
 pub enum StartupError {
     BadPackage(PackageError),
     BadPayload(postcard::Error),
+    /// Composed payload failed to parse or compile (umbrella §3: hard errors
+    /// before any evaluation).
+    BadDefinition(String),
+    UnknownMechanic(String),
     Io(std::io::Error),
     EmptyPool,
 }
 
+/// The decoded, family-dispatched math artifact.
+pub enum LoadedGame {
+    Slots(SlotModel),
+    Composed(Box<composed::CompiledGame>),
+}
+
+/// Lowercase-hex SHA-256 of the math payload — the audit's `definition_hash`
+/// (SP2 spec §5.4). Family-agnostic: it hashes whatever bytes are signed.
+pub fn payload_hash(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 pub struct AppState {
     pub package: PackageContent,
-    pub model: SlotModel,
+    pub game: LoadedGame,
+    pub definition_hash: String,
     pub draw: Box<dyn Draw>,
     pub audit: Box<dyn AuditSink>,
 }
@@ -37,13 +59,27 @@ impl AppState {
     ) -> Result<AppState, StartupError> {
         let package =
             verify_and_load(bytes, &dev_verifying_key()).map_err(StartupError::BadPackage)?;
-        let model = from_payload(&package.math_payload).map_err(StartupError::BadPayload)?;
         if package.seeds.is_empty() {
             return Err(StartupError::EmptyPool);
         }
+        let game = match package.envelope.mechanic.as_str() {
+            "slots@1" => LoadedGame::Slots(
+                from_payload(&package.math_payload).map_err(StartupError::BadPayload)?,
+            ),
+            "composed@1" => {
+                let def = composed::from_payload(&package.math_payload)
+                    .map_err(|e| StartupError::BadDefinition(e.to_string()))?;
+                let compiled = composed::compile(&def)
+                    .map_err(|errs| StartupError::BadDefinition(format!("{errs:?}")))?;
+                LoadedGame::Composed(Box::new(compiled))
+            }
+            other => return Err(StartupError::UnknownMechanic(other.to_string())),
+        };
+        let definition_hash = payload_hash(&package.math_payload);
         Ok(AppState {
             package,
-            model,
+            game,
+            definition_hash,
             draw,
             audit,
         })
@@ -115,7 +151,7 @@ mod tests {
         )
         .expect("loads");
         assert_eq!(state.package.envelope.package_id, "pkg-test");
-        assert_eq!(state.model.reels.len(), 3);
+        assert!(matches!(&state.game, LoadedGame::Slots(m) if m.reels.len() == 3));
     }
 
     #[test]
@@ -180,5 +216,92 @@ mod tests {
             ),
             Err(StartupError::BadPackage(_))
         ));
+    }
+
+    use serde_json::json;
+
+    fn tiny_composed_def_json() -> serde_json::Value {
+        json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "reels", "type": "reels@1",
+                  "config": { "strips": [[0],[0],[0]], "rows": 1,
+                              "symbols": [{"id":0,"role":"normal"}],
+                              "paylines": [[0,0,0]],
+                              "paytable": { "entries": [{"symbol":0,"count":3,"payout":5}] } } }
+            ],
+            "states": [
+                { "id": "base", "bindings": [ { "mechanic": "reels" } ],
+                  "steps": { "budget": 1 }, "script": [ { "invoke": "reels.spin" } ] }
+            ],
+            "start": "base",
+            "transitions": [],
+            "caps": { "max_steps": 50 }
+        })
+    }
+
+    fn composed_package_bytes(def_json: &serde_json::Value, mechanic: &str) -> Vec<u8> {
+        let content = PackageContent {
+            envelope: Envelope {
+                package_id: "pkg-composed-test".into(),
+                package_version: 1,
+                mechanic: mechanic.into(),
+            },
+            math_payload: serde_json::to_vec(def_json).unwrap(),
+            seeds: vec![1, 2, 3],
+            presentation: Vec::new(),
+        };
+        build(&content, &dev_signing_key())
+    }
+
+    #[test]
+    fn loads_and_compiles_a_composed_package() {
+        let bytes = composed_package_bytes(&tiny_composed_def_json(), "composed@1");
+        let state = AppState::from_package_bytes(
+            &bytes,
+            Box::new(crate::draw::OsRngDraw),
+            Box::new(crate::audit::MemoryAuditSink::new()),
+        )
+        .expect("composed package loads");
+        assert!(matches!(state.game, LoadedGame::Composed(_)));
+        assert_eq!(state.definition_hash.len(), 64);
+        assert!(state.definition_hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn rejects_an_unknown_mechanic_family() {
+        let bytes = composed_package_bytes(&tiny_composed_def_json(), "mystery@9");
+        assert!(matches!(
+            AppState::from_package_bytes(
+                &bytes,
+                Box::new(crate::draw::OsRngDraw),
+                Box::new(crate::audit::MemoryAuditSink::new()),
+            ),
+            Err(StartupError::UnknownMechanic(m)) if m == "mystery@9"
+        ));
+    }
+
+    #[test]
+    fn rejects_a_composed_package_with_an_invalid_definition() {
+        let mut def = tiny_composed_def_json();
+        def["start"] = json!("nope");
+        let bytes = composed_package_bytes(&def, "composed@1");
+        assert!(matches!(
+            AppState::from_package_bytes(
+                &bytes,
+                Box::new(crate::draw::OsRngDraw),
+                Box::new(crate::audit::MemoryAuditSink::new()),
+            ),
+            Err(StartupError::BadDefinition(_))
+        ));
+    }
+
+    #[test]
+    fn payload_hash_matches_the_sha256_test_vector() {
+        // SHA-256("abc") — FIPS 180-2 appendix B.1.
+        assert_eq!(
+            payload_hash(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 }
