@@ -2,6 +2,8 @@ import type { IDockviewPanelProps } from 'dockview-react';
 import type { ReactElement } from 'react';
 import { gameStructureHooks, type GsTab } from './state';
 import type { IGameDefinition } from './model';
+import { buildPackage } from './actions';
+import { engineOrigin } from '../game/config';
 import { MechanicsSection } from './sections/MechanicsSection';
 import { StatesSection } from './sections/StatesSection';
 import { TransitionsSection } from './sections/TransitionsSection';
@@ -52,6 +54,9 @@ export function GameStructurePane(_props: IDockviewPanelProps) {
           : '—';
   const vTone: StatusTone = validation.status === 'errors' ? 'danger' : validation.status === 'ok' ? 'success' : 'neutral';
 
+  const build = s.build.get({ noproxy: true });
+  const gameId = activeGameId; // non-null past the guard
+
   const Section = SECTIONS[activeTab];
 
   return (
@@ -61,7 +66,42 @@ export function GameStructurePane(_props: IDockviewPanelProps) {
           <StatusPill data-testid="gs-validation-pill" tone={vTone}>
             {vLabel}
           </StatusPill>
-          {/* Build/Play cluster: Task 14 */}
+          <button
+            data-testid="gs-build"
+            onClick={() => void buildPackage()}
+            disabled={build.status === 'building'}
+            className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+          >
+            {build.status === 'building' ? 'Building…' : 'Build'}
+          </button>
+          {build.status === 'done' && build.metrics && (
+            <span data-testid="gs-metrics" className="flex items-center gap-2 text-[11px] text-text-2">
+              <span data-testid="gs-metric-rtp">rtp {build.metrics.rtp.toFixed(3)}</span>
+              <span data-testid="gs-metric-hit-rate">hit {(build.metrics.hitRate * 100).toFixed(1)}%</span>
+              <span data-testid="gs-metric-max-win">max {build.metrics.maxWinX}x</span>
+              <span data-testid="gs-metric-visits">
+                {Object.entries(build.metrics.stateVisits)
+                  .map(([k, v]) => `${k}:${v}`)
+                  .join(' ')}
+              </span>
+            </span>
+          )}
+          {build.status === 'error' && (
+            <span data-testid="gs-build-error" className="text-[11px] text-danger">
+              {build.errors[0]}
+            </span>
+          )}
+          {build.status === 'done' && (
+            <a
+              data-testid="gs-play"
+              href={`${engineOrigin()}/?package=${encodeURIComponent(gameId)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded border border-border px-3 py-1 text-xs text-text-1 hover:bg-raised-hover"
+            >
+              Play ↗
+            </a>
+          )}
           <StatusPill data-testid="gs-sync-pill" tone={syncTone}>
             {syncLabel}
           </StatusPill>
