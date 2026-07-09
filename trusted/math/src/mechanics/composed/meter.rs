@@ -28,7 +28,13 @@ pub struct MeterMechanic {
 }
 
 impl Mechanic for MeterMechanic {
-    fn invoke(&mut self, _: &str, _: &MechanicConfig, _: &mut StepCtx, _: &mut SplitMix64) -> InvokeOutcome {
+    fn invoke(
+        &mut self,
+        _: &str,
+        _: &MechanicConfig,
+        _: &mut StepCtx,
+        _: &mut SplitMix64,
+    ) -> InvokeOutcome {
         unimplemented!("Task 5")
     }
 }

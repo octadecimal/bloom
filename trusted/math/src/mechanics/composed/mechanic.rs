@@ -140,7 +140,9 @@ mod tests {
 
     #[test]
     fn parse_config_rejects_bad_shape() {
-        assert!(MechanicKind::Reels.parse_config(&json!({ "rows": 1 })).is_err());
+        assert!(MechanicKind::Reels
+            .parse_config(&json!({ "rows": 1 }))
+            .is_err());
     }
 
     #[test]
