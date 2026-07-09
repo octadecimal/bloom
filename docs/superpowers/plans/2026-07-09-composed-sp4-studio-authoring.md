@@ -91,7 +91,7 @@ Task order: Rust simulator (1-2) → runtime server (3-4) → Python backend (5-
 - Consumes: `bloom_math::mechanics::composed::{evaluate, CompiledGame, TraceEntry}` (existing), `crate::seedgen::generate_seeds` (existing).
 - Produces: `pub struct PoolMetrics { pub rtp: f64, pub hit_rate: f64, pub max_win_x: u64, pub state_visits: BTreeMap<String, u64> }` and `pub fn measure_pool(game: &CompiledGame, seeds: &[u64]) -> PoolMetrics` — Task 2 calls both.
 
-- [ ] **Step 1: Write the failing tests** — append to the existing `#[cfg(test)] mod tests` in `studio/simulator/src/compose.rs` (it already has `valid_def()` and `key()` helpers):
+- [x] **Step 1: Write the failing tests** — append to the existing `#[cfg(test)] mod tests` in `studio/simulator/src/compose.rs` (it already has `valid_def()` and `key()` helpers):
 
 ```rust
     #[test]
@@ -120,12 +120,12 @@ Task order: Rust simulator (1-2) → runtime server (3-4) → Python backend (5-
 
 NOTE: `valid_def()`'s start state id may not be `"base"` — read the helper first and use its actual start-state id in the assertion.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo test -p bloom-simulator measure_pool`
 Expected: FAIL — `measure_pool` not found.
 
-- [ ] **Step 3: Implement** — add to `studio/simulator/src/compose.rs` (below `build_composed_package`):
+- [x] **Step 3: Implement** — add to `studio/simulator/src/compose.rs` (below `build_composed_package`):
 
 ```rust
 use std::collections::BTreeMap;
@@ -182,12 +182,12 @@ pub fn measure_pool(
 
 Adjust the imports to match the file's existing `use` style (it already imports from `bloom_math::mechanics::composed`; extend that line instead of a nested `use` if cleaner).
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cargo test -p bloom-simulator compose`
 Expected: all compose tests PASS (existing + 2 new).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/simulator/src/compose.rs
@@ -211,7 +211,7 @@ git commit -m "feat(simulator): informational pool metrics for composed packages
   `{"type":"result","ok":true}` (validate ok) · `{"type":"result","ok":false,"errors":["..."]}` (any failure) · `{"type":"result","ok":true,"metrics":{"rtp":f,"hitRate":f,"maxWinX":n,"stateVisits":{"<state>":n}}}` (build ok).
   Exit codes: 0 for any well-formed result (including ok:false); 2 for unreadable/unparseable stdin job or missing out_path on build; 1 for package write IO failure.
 
-- [ ] **Step 1: Write the file with failing tests first.** Create `studio/simulator/src/bin/compose_json.rs` containing ONLY the test module and stubs that don't compile yet is awkward for a bin — instead write tests + implementation in one file and let the tests drive the helper shapes. The full file:
+- [x] **Step 1: Write the file with failing tests first.** Create `studio/simulator/src/bin/compose_json.rs` containing ONLY the test module and stubs that don't compile yet is awkward for a bin — instead write tests + implementation in one file and let the tests drive the helper shapes. The full file:
 
 ```rust
 //! Studio compose bin: read one JSON job from stdin, validate (kernel compile)
@@ -442,12 +442,12 @@ mod tests {
 
 NOTE: check `studio/simulator/src/lib.rs` — `seedgen` must be `pub mod seedgen;` for the bin to call `bloom_simulator::seedgen::generate_seeds`. If it's private, make it `pub` (the `compose` module already consumes it internally).
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `cargo test -p bloom-simulator --bin compose_json`
 Expected: 5 tests PASS. If `seedgen` visibility fails compilation, fix per the note and rerun.
 
-- [ ] **Step 3: Smoke the real contract once**
+- [x] **Step 3: Smoke the real contract once**
 
 Run (Git Bash, from repo root):
 
@@ -457,7 +457,7 @@ echo '{"definition":'"$(cat runtime/server/demo/composed.definition.json)"',"pac
 
 Expected: `{"type":"result","ok":true}` on stdout, exit 0.
 
-- [ ] **Step 4: fmt + clippy + commit**
+- [x] **Step 4: fmt + clippy + commit**
 
 ```bash
 cargo fmt
@@ -489,7 +489,7 @@ Pure refactor: all existing tests stay green; behavior identical. This isolates 
   - `impl AppState { pub fn resolve(&self, package: Option<&str>, refresh: bool) -> Result<Arc<LoadedPackage>, ResolveError> }`
   - `ServerConfig.packages_dir: Option<PathBuf>` from env `BLOOM_RUNTIME_PACKAGES`.
 
-- [ ] **Step 1: config.rs** — add to `ServerConfig`:
+- [x] **Step 1: config.rs** — add to `ServerConfig`:
 
 ```rust
 pub struct ServerConfig {
@@ -508,7 +508,7 @@ and in `from_env()` (before constructing the struct):
 
 Include `packages_dir` in the returned struct.
 
-- [ ] **Step 2: state.rs refactor.** Extract the family-dispatch body of `AppState::from_package_bytes` into the new type:
+- [x] **Step 2: state.rs refactor.** Extract the family-dispatch body of `AppState::from_package_bytes` into the new type:
 
 ```rust
 use std::collections::HashMap;
@@ -652,7 +652,7 @@ impl AppState {
 
 Delete the old `AppState { package, game, definition_hash, … }` fields and the old `from_package_bytes`/`load` bodies — the above replaces them wholesale. Keep `dev_verifying_key`, `StartupError`, `LoadedGame`, `payload_hash` unchanged.
 
-- [ ] **Step 3: routes.rs plumbing.** Every handler that read `state.package`/`state.game`/`state.definition_hash` now resolves first. In this task pass `None` (single mode); Task 4 threads the real params.
+- [x] **Step 3: routes.rs plumbing.** Every handler that read `state.package`/`state.game`/`state.definition_hash` now resolves first. In this task pass `None` (single mode); Task 4 threads the real params.
 
 ```rust
 use crate::state::{AppState, LoadedGame, LoadedPackage, ResolveError};
@@ -696,14 +696,14 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Result<Json<HealthRes
 
 (in `spin`: `state.resolve(None, false)`). `state.draw` and `state.audit` usage is unchanged. Update return types to `Result<Json<…>, StatusCode>` where they weren't already.
 
-- [ ] **Step 4: Fix compilation across the crate** — `cargo build -p bloom-runtime-server` and follow the errors; tests in `runtime/server/tests/*.rs` construct `AppState::from_package_bytes`, which still exists with the same signature, so they should only need changes if they poked `state.package` directly (adjust those to `match &state.source`).
+- [x] **Step 4: Fix compilation across the crate** — `cargo build -p bloom-runtime-server` and follow the errors; tests in `runtime/server/tests/*.rs` construct `AppState::from_package_bytes`, which still exists with the same signature, so they should only need changes if they poked `state.package` directly (adjust those to `match &state.source`).
 
-- [ ] **Step 5: Run the full server test suite**
+- [x] **Step 5: Run the full server test suite**
 
 Run: `cargo test -p bloom-runtime-server`
 Expected: ALL existing tests PASS (pure refactor).
 
-- [ ] **Step 6: fmt + clippy + commit**
+- [x] **Step 6: fmt + clippy + commit**
 
 ```bash
 cargo fmt
@@ -727,7 +727,7 @@ git commit -m "refactor(runtime): extract LoadedPackage + PackageSource resolve 
 - Consumes: Task 3's `resolve`, `PackageSource::Dir`.
 - Produces (Tasks 15/16 depend on this wire): `GET /handshake?package=<id>`; `SpinRequest` gains `"package": <string, optional>`; dir mode without the param → 400; unknown/bad id → 404. `just runtime-serve-packages` serves `var/packages`.
 
-- [ ] **Step 1: Write failing integration tests** — `runtime/server/tests/packages_dir.rs`:
+- [x] **Step 1: Write failing integration tests** — `runtime/server/tests/packages_dir.rs`:
 
 ```rust
 //! Dir-mode integration: lazy load by id, param required, sanitization,
@@ -891,12 +891,12 @@ async fn spin_serves_from_cache_even_if_the_file_churns() {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo test -p bloom-runtime-server --test packages_dir`
 Expected: FAIL — handshake takes no query, `SpinRequest` has no `package` field.
 
-- [ ] **Step 3: Implement in routes.rs**
+- [x] **Step 3: Implement in routes.rs**
 
 ```rust
 use axum::extract::Query;
@@ -942,12 +942,12 @@ pub async fn spin(
     // ...existing body against lp.* ...
 ```
 
-- [ ] **Step 4: Run all server tests**
+- [x] **Step 4: Run all server tests**
 
 Run: `cargo test -p bloom-runtime-server`
 Expected: ALL PASS (new dir tests + old single-mode tests).
 
-- [ ] **Step 5: justfile recipe** — add next to `runtime-serve-composed`:
+- [x] **Step 5: justfile recipe** — add next to `runtime-serve-composed`:
 
 ```makefile
 # Serve every studio-built package from var/packages (dir mode, lazy load).
@@ -955,7 +955,7 @@ runtime-serve-packages:
     BLOOM_RUNTIME_PACKAGES=var/packages cargo run --release -p bloom-runtime-server
 ```
 
-- [ ] **Step 6: fmt + clippy + commit**
+- [x] **Step 6: fmt + clippy + commit**
 
 ```bash
 cargo fmt
@@ -985,7 +985,7 @@ git commit -m "feat(runtime): package-directory mode with ?package= selection an
   - `templates.default_definition() -> dict`, `templates.default_presentation() -> dict`.
   - `ComposeStore(db, on_change=None)` with `async get(game_id) -> GameDefinitionDoc | None`, `async get_or_seed(game_id) -> GameDefinitionDoc`, `async put(game_id, *, definition=None, presentation=None, source="api") -> GameDefinitionDoc`. `put` fires `await on_change(doc, source)` when definition or presentation was written.
 
-- [ ] **Step 1: Write failing tests** — `studio/backend/tests/test_compose_store.py` (mirror `test_math_store.py` style; tests run against real Mongo db `bloom_studio_test` via the `mongo_db` fixture in conftest):
+- [x] **Step 1: Write failing tests** — `studio/backend/tests/test_compose_store.py` (mirror `test_math_store.py` style; tests run against real Mongo db `bloom_studio_test` via the `mongo_db` fixture in conftest):
 
 ```python
 import pytest
@@ -1042,12 +1042,12 @@ async def test_put_with_no_fields_does_not_fire_on_change(mongo_db):
 
 Also edit `studio/backend/tests/conftest.py`: add `"game_definitions",` to the `_COLLECTIONS` list.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd studio/backend && uv run pytest tests/test_compose_store.py -q`
 Expected: FAIL — `app.compose` does not exist.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `studio/backend/app/compose/models.py`:
 
@@ -1190,12 +1190,12 @@ class ComposeStore:
         return doc
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd studio/backend && uv run pytest tests/test_compose_store.py -q`
 Expected: 3 PASS. Then the full backend suite: `uv run pytest -m "not e2e" -q` — no regressions.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/backend/app/compose studio/backend/tests/test_compose_store.py studio/backend/tests/conftest.py
@@ -1217,7 +1217,7 @@ git commit -m "feat(compose): game_definitions store seeded from the composed de
 - Consumes: Task 2's `compose_json` stdin/stdout contract; `app.subprocess_guard` (read `studio/backend/app/subprocess_guard.py` first and match how `build_curation_runner` wraps its runner with `LoopSafeRunner`).
 - Produces (Task 7 relies on): `ComposeRunner` protocol — `async run(job: dict) -> dict` returning the parsed result object (`{"ok": bool, "errors"?: [str], "metrics"?: {...}}`); `SubprocessComposeRunner(settings)`; `FakeComposeRunner(result)` recording `.jobs`; `build_compose_runner(settings) -> ComposeRunner`. Settings fields `compose_bin: str = ""`, `compose_timeout_s: float = 180.0`, `packages_dir: str = "var/packages"` (repo-root-relative).
 
-- [ ] **Step 1: Write failing tests** — `studio/backend/tests/test_compose_runner.py` (mirror `test_sim_runner.py`'s monkeypatched-`_command` style):
+- [x] **Step 1: Write failing tests** — `studio/backend/tests/test_compose_runner.py` (mirror `test_sim_runner.py`'s monkeypatched-`_command` style):
 
 ```python
 import sys
@@ -1283,12 +1283,12 @@ async def test_fake_runner_records_jobs():
     assert fake.jobs == [{"package_id": "g"}]
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd studio/backend && uv run pytest tests/test_compose_runner.py -q`
 Expected: FAIL — module missing.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `studio/backend/app/config.py` — add fields beside `simulator_bin`/`tuner_bin`:
 
@@ -1379,12 +1379,12 @@ def build_compose_runner(settings) -> ComposeRunner:
 
 NOTE: read `app/subprocess_guard.py` first — if `LoopSafeRunner` is not a generic passthrough wrapper (e.g. it assumes the curate `run(model, target, on_progress)` signature), don't force it: keep `build_compose_runner(settings)` as the factory and mirror whatever loop-safety mechanism it uses (it exists because Windows `uvicorn --reload` runs a SelectorEventLoop that cannot spawn subprocesses).
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd studio/backend && uv run pytest tests/test_compose_runner.py -q`
 Expected: 4 PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/backend/app/compose/runner.py studio/backend/app/config.py studio/backend/tests/test_compose_runner.py
@@ -1411,7 +1411,7 @@ git commit -m "feat(compose): compose_json subprocess runner behind a mockable s
   - `POST /games/{id}/game-definition/build` → `{ok, errors: [str]|null, metrics: {rtp, hitRate, maxWinX, stateVisits}|null, packageId: <game_id>}`; writes `<repo>/var/packages/<game_id>.pkg`
   - Socket room join: the frontend reuses the existing `join_sim`/`leave_sim` handlers (room is the bare gameId) — no new socket handlers.
 
-- [ ] **Step 1: Write failing tests** — `studio/backend/tests/test_compose_rest.py` (direct-handler style with `SimpleNamespace` fake request, as `test_math_rest.py`):
+- [x] **Step 1: Write failing tests** — `studio/backend/tests/test_compose_rest.py` (direct-handler style with `SimpleNamespace` fake request, as `test_math_rest.py`):
 
 ```python
 from types import SimpleNamespace
@@ -1507,12 +1507,12 @@ async def test_build_shapes_job_and_response(mongo_db):
     assert fake.jobs[1]["master_seed"] == job["master_seed"]
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd studio/backend && uv run pytest tests/test_compose_rest.py -q`
 Expected: FAIL — `app.compose.rest` missing.
 
-- [ ] **Step 3: Implement** — `studio/backend/app/compose/rest.py`:
+- [x] **Step 3: Implement** — `studio/backend/app/compose/rest.py`:
 
 ```python
 import hashlib
@@ -1634,12 +1634,12 @@ from app.compose.runner import build_compose_runner
 from app.compose.store import ComposeStore
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd studio/backend && uv run pytest tests/test_compose_rest.py -q` → 6 PASS.
 Then the whole backend: `uv run pytest -m "not e2e" -q` → no regressions (main.py `build()` is exercised by the `ctx` fixture).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/backend/app/compose studio/backend/app/main.py studio/backend/tests/test_compose_rest.py
@@ -1664,7 +1664,7 @@ git commit -m "feat(compose): game-definition REST (get/put/validate/build) + so
   - `normalizeDefinition(raw: unknown): IGameDefinition` — pure; malformed/missing top-level fields get defaults, well-formed input passes through untouched; mechanic `config` and binding `override` are opaque (never normalized deep).
   - `vocab.ts`: `MECHANIC_CATALOG: IMechanicCatalogEntry[]` (`{type, label, defaultConfig}` for `reels@1` and `meter@1`), `ACTIONS: Record<string, string[]>` (`{'reels@1': ['spin'], 'meter@1': ['accumulate']}`), `STEPS_EXHAUSTED = 'steps:exhausted'`, `emittableEvents(def: IGameDefinition): string[]`, `invokeOptions(def: IGameDefinition, state: IStateDef): string[]`.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
 
 `model.spec.ts`:
 
@@ -1775,12 +1775,12 @@ describe('vocab', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd studio/frontend && npx vitest run src/plugins/game-structure`
 Expected: FAIL — modules missing.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `model.ts`:
 
@@ -1948,12 +1948,12 @@ export function invokeOptions(def: IGameDefinition, state: IStateDef): string[] 
 }
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd studio/frontend && npx vitest run src/plugins/game-structure`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src/plugins/game-structure
@@ -1991,7 +1991,7 @@ Reference semantics (test them explicitly):
 - `toggleBinding` adds `{mechanic}` if absent, else removes it (and its script steps).
 - `setTransition` stores exactly one of `to`/`effect` (delete the other key).
 
-- [ ] **Step 1: Write failing tests** — `reducers.spec.ts`. Use a `base()` factory built from `emptyDefinition()` + two mechanics + two states + one transition (same shape as model.spec's `full()`). Cover, at minimum:
+- [x] **Step 1: Write failing tests** — `reducers.spec.ts`. Use a `base()` factory built from `emptyDefinition()` + two mechanics + two states + one transition (same shape as model.spec's `full()`). Cover, at minimum:
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -2149,12 +2149,12 @@ describe('transitions + caps', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd studio/frontend && npx vitest run src/plugins/game-structure/reducers.spec.ts`
 Expected: FAIL — module missing.
 
-- [ ] **Step 3: Implement `reducers.ts`.** All reducers rebuild via structured spread/`map`/`filter`; deep-clone only where an object crosses from shared constants (catalog `defaultConfig` via `structuredClone`). Representative implementations (write all of them in this style):
+- [x] **Step 3: Implement `reducers.ts`.** All reducers rebuild via structured spread/`map`/`filter`; deep-clone only where an object crosses from shared constants (catalog `defaultConfig` via `structuredClone`). Representative implementations (write all of them in this style):
 
 ```ts
 import type { IGameDefinition, IStateDef, ITransitionRow } from './model';
@@ -2218,12 +2218,12 @@ export function setTransition(def: IGameDefinition, index: number, row: ITransit
 
 `addTransition` appends `{from: def.start || (def.states[0]?.id ?? ''), on: '', to: def.states[0]?.id ?? ''}`. `addState` uses `uniqueId('state_1'…)` — number from 1 counting existing `state_*` ids via the same `uniqueId('state', taken)` scheme is fine as long as the test's expectations hold (`state_1`, `state_2`): implement as `uniqueId` over base `state_${states.length + 1}` then fall back — simplest correct: try `state_${n}` for n = 1.. until free.
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd studio/frontend && npx vitest run src/plugins/game-structure`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src/plugins/game-structure/reducers.ts studio/frontend/src/plugins/game-structure/reducers.spec.ts
@@ -2252,7 +2252,7 @@ git commit -m "feat(game-structure): pure definition reducers with reference rew
   - `restClient.ts`: `IGameDefinitionWireDoc {id, gameId, definition, presentation, updatedAt}`, `IPutGameDefinitionPatch {definition?, presentation?, source}`, `IComposeMetrics {rtp, hitRate, maxWinX, stateVisits: Record<string, number>}`, `IBuildResponse {ok, errors, metrics, packageId}`, `getGameDefinition(gameId)`, `putGameDefinition(gameId, patch)`, `validateGameDefinition(gameId, definition)` → `{ok, errors}`, `buildGameDefinition(gameId)` → `IBuildResponse`.
   - `socketClient.ts`: `IDefinitionChangedEvent {gameId, updatedAt, source}`, `setDefinitionChangedHandler(h)`, `gameStructureSock()` with `connect/disconnect/join/leave` — join/leave emit the EXISTING `join_sim`/`leave_sim` events (room = gameId; no new backend handlers).
 
-- [ ] **Step 1: Write failing test** — `restClient.spec.ts` (mirror game-config's `restClient.spec.ts` style: stub global `fetch`, assert URL/method/body and parsed result). Cover `getGameDefinition` URL, `putGameDefinition` PUT body passthrough, `validateGameDefinition` POST body `{definition}`, `buildGameDefinition` POST with empty body, and non-ok → throw.
+- [x] **Step 1: Write failing test** — `restClient.spec.ts` (mirror game-config's `restClient.spec.ts` style: stub global `fetch`, assert URL/method/body and parsed result). Cover `getGameDefinition` URL, `putGameDefinition` PUT body passthrough, `validateGameDefinition` POST body `{definition}`, `buildGameDefinition` POST with empty body, and non-ok → throw.
 
 ```ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -2300,9 +2300,9 @@ describe('restClient', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `npx vitest run src/plugins/game-structure/restClient.spec.ts` → FAIL.
+- [x] **Step 2: Run to verify failure** — `npx vitest run src/plugins/game-structure/restClient.spec.ts` → FAIL.
 
-- [ ] **Step 3: Implement.** `config.ts` is one line: `export { BACKEND_URL } from '../assets/config';`
+- [x] **Step 3: Implement.** `config.ts` is one line: `export { BACKEND_URL } from '../assets/config';`
 
 `state.ts` — clone game-config's `state.ts` with the state shape from the Interfaces block (drop locks/lens/reelset; add `validation` + `build`). `makeInitialState()` returns `{ activeGameId: null, definition: null, presentation: {}, jsonDraft: '', jsonError: null, activeTab: 'mechanics', sync: 'idle', externalSource: null, watermark: '', loadStatus: 'idle', validation: { status: 'idle', errors: [] }, build: { status: 'idle', metrics: null, errors: [] } }`.
 
@@ -2332,9 +2332,9 @@ export async function buildGameDefinition(gameId: string): Promise<IBuildRespons
 
 `socketClient.ts` — clone game-config's `socketClient.ts` verbatim with renames: event `game_definition_changed`, handler setter `setDefinitionChangedHandler`, auth displayName `game-structure`, socket accessor `gameStructureSock()`; `join`/`leave` still emit `join_sim`/`leave_sim` with a comment: `// Reuses the existing join_sim room (room == gameId); compose has no handlers of its own.`
 
-- [ ] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS.
+- [x] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src/plugins/game-structure
@@ -2361,7 +2361,7 @@ git commit -m "feat(game-structure): plugin state slice, REST client, socket sea
   - `handleDefinitionChanged(p: IDefinitionChangedEvent)` — watermark gate identical to game-config
   - `requestValidate()` (immediate), `buildPackage(): Promise<void>` — flushes pending save first, sets `build.status`, stores metrics/errors.
 
-- [ ] **Step 1: Write failing tests** — `actions.spec.ts`, mirroring game-config's `actions.spec.ts` mocking style (`vi.mock('./restClient')`, `vi.mock('./socketClient')`, fake timers). Cover:
+- [x] **Step 1: Write failing tests** — `actions.spec.ts`, mirroring game-config's `actions.spec.ts` mocking style (`vi.mock('./restClient')`, `vi.mock('./socketClient')`, fake timers). Cover:
 
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -2503,9 +2503,9 @@ describe('buildPackage', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `npx vitest run src/plugins/game-structure/actions.spec.ts` → FAIL.
+- [x] **Step 2: Run to verify failure** — `npx vitest run src/plugins/game-structure/actions.spec.ts` → FAIL.
 
-- [ ] **Step 3: Implement `actions.ts`.** Clone game-config's `actions.ts` structure wholesale (module-level timers + dirty flags, `hydrateDoc`, `openGameStructure`, `scheduleSave`, `flushPendingSave` with `{definition?, presentation?, source: 'editor'}` patch, `handleDefinitionChanged` + `rehydrateExternal` with the same watermark rules and `EXTERNAL_FLASH_MS` flash). New pieces:
+- [x] **Step 3: Implement `actions.ts`.** Clone game-config's `actions.ts` structure wholesale (module-level timers + dirty flags, `hydrateDoc`, `openGameStructure`, `scheduleSave`, `flushPendingSave` with `{definition?, presentation?, source: 'editor'}` patch, `handleDefinitionChanged` + `rehydrateExternal` with the same watermark rules and `EXTERNAL_FLASH_MS` flash). New pieces:
 
 ```ts
 export const VALIDATE_DEBOUNCE_MS = 800;
@@ -2585,9 +2585,9 @@ export async function buildPackage(): Promise<void> {
 
 `hydrateDoc` sets `definition` via `normalizeDefinition(doc.definition)`, `presentation`, `jsonDraft` via `draftFor`, watermark — clone the game-config version. `closeGameStructure()` leaves the socket room and resets the slice to `makeInitialState()`.
 
-- [ ] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS.
+- [x] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src/plugins/game-structure/actions.ts studio/frontend/src/plugins/game-structure/actions.spec.ts
@@ -2618,7 +2618,7 @@ Test-id contract (e2e-load-bearing, keep exact):
 `gs-reels-rows-<id>` (Stepper), `gs-reels-event-emit-<id>-<i>` (CommittedInput), `gs-reels-add-event-<id>`, `gs-reels-remove-event-<id>-<i>`,
 `gs-mech-config-json-<id>` (textarea), `gs-mech-config-apply-<id>`, `gs-mech-config-error-<id>`.
 
-- [ ] **Step 1: Write failing pane test** — `GameStructurePane.spec.tsx` (mirror `GameConfigPane.spec.tsx`: render with the slice pre-set, assert empty state, tab switching, sync pill text):
+- [x] **Step 1: Write failing pane test** — `GameStructurePane.spec.tsx` (mirror `GameConfigPane.spec.tsx`: render with the slice pre-set, assert empty state, tab switching, sync pill text):
 
 ```tsx
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -2719,9 +2719,9 @@ describe('MechanicsSection', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `npx vitest run src/plugins/game-structure` → FAIL (components missing).
+- [x] **Step 2: Run to verify failure** — `npx vitest run src/plugins/game-structure` → FAIL (components missing).
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `GameStructurePane.tsx` — clone `GameConfigPane.tsx`'s skeleton (empty-state guard, header row, tab strip, section mount) minus stats/locks/template. Header right side: validation pill + Build/Play cluster placeholder (Task 14 fills it) + sync pill:
 
@@ -2979,9 +2979,9 @@ export const gameStructure: IPlugin<IGameStructureState> = {
 
 Register in `plugins/index.ts` (import + array entry after `gameConfig`). In `RoomRoute.tsx`, add `void openGameStructure(found.gameId);` beside `openGameConfig` (and mirror the mock in `RoomRoute.spec.tsx` exactly as the other plugin opens are mocked — read that spec first).
 
-- [ ] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure src/app/routes` → all PASS. Also run the design-language guard: `npx vitest run src/design-language.guard.spec.ts` (any hex literal would fail it).
+- [x] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure src/app/routes` → all PASS. Also run the design-language guard: `npx vitest run src/design-language.guard.spec.ts` (any hex literal would fail it).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src
@@ -3003,7 +3003,7 @@ git commit -m "feat(game-structure): pane shell, plugin registration, mechanics 
 - Produces test-ids (Task 16 e2e): `gs-section-states`, `gs-state-card-<id>`, `gs-state-id-<id>`, `gs-state-remove-<id>`, `gs-add-state`, `gs-budget-mode-<id>` (select fixed/awarded), `gs-budget-fixed-<id>` (Stepper), `gs-budget-initial-<id>` (Stepper), `gs-binding-<stateId>-<mechId>` (checkbox), `gs-override-<stateId>-<i>` (textarea in details), `gs-override-apply-<stateId>-<i>`, `gs-script-add-<id>` (select), `gs-script-step-<id>-<i>`, `gs-script-remove-<id>-<i>`, `gs-script-up-<id>-<i>`, `gs-script-down-<id>-<i>`;
   `gs-section-transitions`, `gs-tr-row-<i>`, `gs-tr-from-<i>`, `gs-tr-on-<i>`, `gs-tr-kind-<i>` (select to/effect), `gs-tr-to-<i>`, `gs-tr-steps-<i>` (Stepper for the steps:add amount), `gs-tr-remove-<i>`, `gs-add-transition`, `gs-start-select`, `gs-max-steps` (Stepper).
 
-- [ ] **Step 1: Write failing tests.** `StatesSection.spec.tsx` — seed the slice with the two-mechanic/two-state `base()`-like definition (copy the factory from `reducers.spec.ts`), then assert:
+- [x] **Step 1: Write failing tests.** `StatesSection.spec.tsx` — seed the slice with the two-mechanic/two-state `base()`-like definition (copy the factory from `reducers.spec.ts`), then assert:
   - a card per state with its id input and budget controls (`gs-budget-mode-base` shows `fixed`, `gs-budget-mode-fs1` shows `awarded` and `gs-budget-initial-fs1` present);
   - toggling `gs-binding-base-bonus_meter` unbinds (definition loses the binding);
   - selecting a value in `gs-script-add-fs1` appends that invoke;
@@ -3011,9 +3011,9 @@ git commit -m "feat(game-structure): pane shell, plugin registration, mechanics 
 
   `TransitionsSection.spec.tsx` — assert a row per transition; changing `gs-tr-on-0` writes the definition; switching `gs-tr-kind-0` to `effect` swaps `to` for `effect: 'steps:add:1'` (then `gs-tr-steps-0` edits the amount); `gs-start-select` change writes `start`; `gs-max-steps` writes caps. Write these in the exact style of the Task 12 section specs (render → fireEvent → assert `gameStructureSlice().definition`).
 
-- [ ] **Step 2: Run to verify failure** — placeholders render nothing useful → FAIL.
+- [x] **Step 2: Run to verify failure** — placeholders render nothing useful → FAIL.
 
-- [ ] **Step 3: Implement.** `StatesSection.tsx` structure (uses only reducers + vocab — no new logic):
+- [x] **Step 3: Implement.** `StatesSection.tsx` structure (uses only reducers + vocab — no new logic):
 
 ```tsx
 export function StatesSection() {
@@ -3203,9 +3203,9 @@ export function TransitionsSection() {
 
 Fill the StatesSection comment blocks with real JSX in the same idiom (all mutations via `applyDefinition` + a reducer; no local state except override JSON drafts, which follow Task 12's `ConfigJson` useState pattern).
 
-- [ ] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS.
+- [x] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src/plugins/game-structure/sections
@@ -3226,7 +3226,7 @@ git commit -m "feat(game-structure): states and transitions sections"
 - Consumes: `applyDocFromJson`, `buildPackage` (Task 11); `engineOrigin` from `../game/config` (existing — the runtime client dev server IS the play surface, port 4300+offset).
 - Produces: test-ids `gs-json-textarea`, `gs-json-apply`, `gs-json-error`, `gs-build`, `gs-play`, `gs-metrics`, `gs-metric-rtp`, `gs-metric-hit-rate`, `gs-metric-max-win`, `gs-metric-visits`.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
       `JsonSection.spec.tsx` — clone game-config's `JsonSection.spec.tsx` shape: textarea bound to `jsonDraft`, Apply calls through (assert definition changed via the slice), parse error shows `gs-json-error`.
       Pane spec additions:
 
@@ -3250,9 +3250,9 @@ it('build button stores metrics and enables play', async () => {
 
 (This requires the pane spec to `vi.mock('./restClient')` the same way `actions.spec.ts` does — add the mock block at the top.)
 
-- [ ] **Step 2: Run to verify failure.**
+- [x] **Step 2: Run to verify failure.**
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `JsonSection.tsx` — clone game-config's `JsonSection.tsx` verbatim with renames: state hooks → `gameStructureHooks`, apply → `applyDocFromJson`, test-ids `gs-json-*`, label `Definition + presentation JSON`.
 
@@ -3310,9 +3310,9 @@ const gameId = activeGameId; // non-null past the guard
 
 (`engineOrigin()` is called inside render here, which is safe — it reads `window.location`, not `getHost()`. The Play URL's server defaults to hostname:9000+offset inside the client; a dir-mode server must be running via `just runtime-serve-packages` — that is the documented dev flow, and the link is only enabled after a successful build.)
 
-- [ ] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS. Then the full frontend gate trio: `npx nx typecheck frontend && npx nx test frontend && npx nx build frontend`.
+- [x] **Step 4: Run to verify pass** — `npx vitest run src/plugins/game-structure` → all PASS. Then the full frontend gate trio: `npx nx typecheck frontend && npx nx test frontend && npx nx build frontend`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/src/plugins/game-structure
@@ -3335,7 +3335,7 @@ git commit -m "feat(game-structure): json escape hatch + build-and-play toolbar"
 - Consumes: Task 4's server wire (`/handshake?package=`, spin body `package`).
 - Produces: `createRuntimeClient(baseUrl, fetchImpl = fetch, packageId?: string)` — when `packageId` is set, handshake appends `?package=` and spin includes `package` in the body. `main.ts`: `?package=<id>` in the page URL enters play mode and threads the id.
 
-- [ ] **Step 1: Write failing unit tests** — extend `runtime/client/src/play/runtimeClient.spec.ts` (read the existing tests and copy their fetch-stub idiom):
+- [x] **Step 1: Write failing unit tests** — extend `runtime/client/src/play/runtimeClient.spec.ts` (read the existing tests and copy their fetch-stub idiom):
 
 ```ts
 it('handshake and spin carry the package id when configured', async () => {
@@ -3365,9 +3365,9 @@ it('omits the package field entirely when not configured', async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `cd runtime/client && npx vitest run src/play/runtimeClient.spec.ts` → FAIL.
+- [x] **Step 2: Run to verify failure** — `cd runtime/client && npx vitest run src/play/runtimeClient.spec.ts` → FAIL.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `runtimeClient.ts`:
 
@@ -3405,9 +3405,9 @@ const isPlayMode = params.has('server') || params.has('play') || packageId !== u
 const client = createRuntimeClient(serverUrl, fetch, packageId);
 ```
 
-- [ ] **Step 4: Unit tests green** — `npx vitest run` (in runtime/client) → PASS.
+- [x] **Step 4: Unit tests green** — `npx vitest run` (in runtime/client) → PASS.
 
-- [ ] **Step 5: Dir-mode e2e.** Add a 4th webServer to `runtime/client/playwright.config.ts`, mirroring the existing composed entry EXACTLY (same command wrapper — read how the 9100 entry launches the server via `e2e/start-server.cjs` or direct cargo — and keep that mechanism), with only these differences: port base **9200**, env `BLOOM_RUNTIME_PACKAGES=runtime/server/demo` (repo-relative; the working dir mechanism must match the existing entry so the path resolves) and NO `BLOOM_RUNTIME_PACKAGE`. Health URL `http://localhost:${9200 + offset}/health`.
+- [x] **Step 5: Dir-mode e2e.** Add a 4th webServer to `runtime/client/playwright.config.ts`, mirroring the existing composed entry EXACTLY (same command wrapper — read how the 9100 entry launches the server via `e2e/start-server.cjs` or direct cargo — and keep that mechanism), with only these differences: port base **9200**, env `BLOOM_RUNTIME_PACKAGES=runtime/server/demo` (repo-relative; the working dir mechanism must match the existing entry so the path resolves) and NO `BLOOM_RUNTIME_PACKAGE`. Health URL `http://localhost:${9200 + offset}/health`.
 
 Create `runtime/client/e2e/playmode-dir.e2e.spec.ts` — the demo dir already contains the checked-in `composed.pkg`, whose id in dir mode is its filename stem `composed`:
 
@@ -3434,12 +3434,12 @@ test('play surface loads a dir-mode package via ?package= and completes a spin',
 });
 ```
 
-- [ ] **Step 6: Run the runtime-client e2e**
+- [x] **Step 6: Run the runtime-client e2e**
 
 Run (from `runtime/client`, with the worktree offset exported): `npx playwright test e2e/playmode-dir.e2e.spec.ts`
 Expected: PASS (server compiles on first run — allow the webServer timeout).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add runtime/client
@@ -3459,7 +3459,7 @@ git commit -m "feat(runtime-client): package selection via ?package= + dir-mode 
 
 - Consumes: everything. The suite runs against the replay backend (`just backend-serve-replay` on :8002 in this worktree) exactly like the other studio specs; the build endpoint shells REAL Rust (as curate already does under e2e).
 
-- [ ] **Step 1: playwright.config.ts** — add a second entry to `webServer` (turn the single object into an array; keep the existing frontend entry first):
+- [x] **Step 1: playwright.config.ts** — add a second entry to `webServer` (turn the single object into an array; keep the existing frontend entry first):
 
 ```ts
   webServer: [
@@ -3485,7 +3485,7 @@ git commit -m "feat(runtime-client): package selection via ?package= + dir-mode 
 
 (Playwright merges `process.env` with `env`, so `BLOOM_PORT_OFFSET` still applies. The server boots fine with an empty/missing `var/packages` — dir mode reads lazily.)
 
-- [ ] **Step 2: Write the spec** — `studio/frontend/e2e/game-structure.spec.ts`. Copy `setupGame` and the open-pane helper idiom from `game-config.spec.ts` (read it first; reuse its room/game creation exactly). The tests — every one asserts persisted end-state via REST, not just UI echo:
+- [x] **Step 2: Write the spec** — `studio/frontend/e2e/game-structure.spec.ts`. Copy `setupGame` and the open-pane helper idiom from `game-config.spec.ts` (read it first; reuse its room/game creation exactly). The tests — every one asserts persisted end-state via REST, not just UI echo:
 
 ```ts
 import { expect, test, type Page } from '@playwright/test';
@@ -3577,16 +3577,16 @@ test('external write flags the pane and rehydrates', async ({ page }) => {
 
 NOTE on `gs-meter-target-bonus_meter-inc`: the Stepper renders `-inc`/`-dec` suffixed buttons (see its props doc). NOTE on validation timeouts: the very first `cargo run --bin compose_json` inside the backend compiles the workspace — pre-warm before the suite with `cargo build --release -p bloom-simulator --bin compose_json` (add this to the e2e run notes in the PR description; the generous per-assert timeouts cover CI-less local runs regardless).
 
-- [ ] **Step 3: Run the suite**
+- [x] **Step 3: Run the suite**
 
 Preconditions (worktree, offset 2): replay backend up — `just backend-serve-replay` (serves :8002, db `bloom_studio_wt2`); pre-warm `cargo build --release -p bloom-simulator --bin compose_json -p bloom-runtime-server`.
 
 Run: `cd studio/frontend && npx playwright test e2e/game-structure.spec.ts`
 Expected: 4 PASS.
 
-- [ ] **Step 4: Full studio e2e sweep** — `just e2e` (from the worktree root). Expected: entire suite green (the new webServer entry must not break the other specs — it only adds a lazily-used server).
+- [x] **Step 4: Full studio e2e sweep** — `just e2e` (from the worktree root). Expected: entire suite green (the new webServer entry must not break the other specs — it only adds a lazily-used server).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add studio/frontend/e2e studio/frontend/playwright.config.ts
@@ -3601,7 +3601,7 @@ git commit -m "test(game-structure): authoring e2e - edit/validate/build/play ro
 
 - Modify: `docs/superpowers/plans/2026-07-09-composed-sp4-studio-authoring.md` (tick boxes as you went — no other doc changes; AGENTS.md/worktrees docs are untouched by this feature)
 
-- [ ] **Step 1: Rust gates**
+- [x] **Step 1: Rust gates**
 
 ```bash
 cargo fmt --check
@@ -3611,7 +3611,7 @@ cargo test -p bloom-simulator -p bloom-runtime-server -p bloom-math
 
 Expected: all green.
 
-- [ ] **Step 2: Backend gate**
+- [x] **Step 2: Backend gate**
 
 ```bash
 cd studio/backend && uv run pytest -m "not e2e" -q
@@ -3619,7 +3619,7 @@ cd studio/backend && uv run pytest -m "not e2e" -q
 
 Expected: green.
 
-- [ ] **Step 3: Frontend gates**
+- [x] **Step 3: Frontend gates**
 
 ```bash
 cd studio/frontend
@@ -3630,9 +3630,9 @@ npx nx typecheck client && npx nx test client && npx nx build client
 
 Expected: green (modulo the 3 known pre-existing offset-worktree failures if running `run-many -t test`).
 
-- [ ] **Step 4: e2e (both suites, replay stack)** — with the worktree's offset exported and `just backend-serve-replay` running: `just e2e`, then `cd runtime/client && npx playwright test`. Expected: green.
+- [x] **Step 4: e2e (both suites, replay stack)** — with the worktree's offset exported and `just backend-serve-replay` running: `just e2e`, then `cd runtime/client && npx playwright test`. Expected: green.
 
-- [ ] **Step 5: Push + PR**
+- [x] **Step 5: Push + PR**
 
 ```bash
 git push -u origin feat/composed-sp4
@@ -3656,7 +3656,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 6: After merge** (via `/bloom:complete-work` or manually): `gh pr merge --squash --delete-branch`, then from `C:\code\bloom`: `git worktree remove C:/code/bloom.wt/composed-sp4`, `git worktree prune`, `git branch -D feat/composed-sp4`. File follow-up issues: visual reels editing on composed (game-config convergence), #172 stays open for verify/freeze gating.
+- [x] **Step 6: After merge** (via `/bloom:complete-work` or manually): `gh pr merge --squash --delete-branch`, then from `C:\code\bloom`: `git worktree remove C:/code/bloom.wt/composed-sp4`, `git worktree prune`, `git branch -D feat/composed-sp4`. File follow-up issues: visual reels editing on composed (game-config convergence), #172 stays open for verify/freeze gating.
 
 ---
 
