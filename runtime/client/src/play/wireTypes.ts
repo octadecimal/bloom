@@ -1,3 +1,5 @@
+import type { ITraceEntry } from './composedTypes';
+
 /** The reels presentation manifest the package carries (server /handshake). */
 export interface IPresentation {
   cols: number;
@@ -6,17 +8,19 @@ export interface IPresentation {
   parentId?: string;
 }
 
-/** GET /handshake response. `presentation` is opaque JSON until validated. */
+/** GET /handshake response. `presentation`/`definition` are opaque JSON until
+ *  validated; `definition` is present for composed@1 packages, absent for slots. */
 export interface IHandshakeResponse {
   package_id: string;
   package_version: number;
   mechanic: string;
   presentation: unknown;
+  definition?: unknown;
 }
 
 /** The `slots@1` arm of the server's mechanic-tagged outcome union. */
 export interface ISlotsOutcomeWire {
-  mechanic: string;
+  mechanic: 'slots@1';
   base_grid: number[][];
   base_payout: number;
   feature_payout: number;
@@ -24,11 +28,19 @@ export interface ISlotsOutcomeWire {
   features: unknown[];
 }
 
-/** POST /spin response. `seed` is a string (a u64 that can exceed 2^53). */
+/** The `composed@1` summary arm — per-state payouts live in the trace. */
+export interface IComposedOutcomeWire {
+  mechanic: 'composed@1';
+  total_payout: number;
+}
+
+/** POST /spin response. `seed` is a string (a u64 that can exceed 2^53);
+ *  `trace` is present for composed@1, absent for slots. */
 export interface ISpinResponse {
   seed: string;
   bet: number;
-  outcome: ISlotsOutcomeWire;
+  outcome: ISlotsOutcomeWire | IComposedOutcomeWire;
+  trace?: ITraceEntry[];
 }
 
 /** The thin transport the play subsystem depends on (impl in runtimeClient.ts). */

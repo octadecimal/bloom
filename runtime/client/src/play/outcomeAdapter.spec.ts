@@ -45,7 +45,7 @@ describe('toClientOutcome', () => {
 
   it('throws on an unsupported mechanic', () => {
     const bad = res([[0]]);
-    bad.outcome.mechanic = 'poker@1';
+    (bad.outcome as { mechanic: string }).mechanic = 'poker@1';
     expect(() => toClientOutcome(bad)).toThrow();
   });
 });

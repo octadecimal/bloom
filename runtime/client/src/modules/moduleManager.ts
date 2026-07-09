@@ -27,4 +27,10 @@ export class ModuleManager {
     for (const m of this.modules.values()) if (m.type === type) return m;
     return undefined;
   }
+
+  /** Instance lookup by declaration id — the TraceWalker resolves mechanic
+   *  instance ids (e.g. 'main_reels') through this. */
+  byId(id: string): IGameModule | undefined {
+    return this.modules.get(id);
+  }
 }

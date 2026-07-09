@@ -9,6 +9,7 @@ import { ModuleRegistry } from './modules/registry';
 import { ModuleManager } from './modules/moduleManager';
 import { Orchestrator, type IReelsControl } from './orchestration/orchestrator';
 import { ReelsModule } from './modules/reels/reelsModule';
+import { MeterModule } from './modules/meter/meterModule';
 import { ViewportController, type IHostSurface } from './render/viewportController';
 
 export interface IEngineModules {
@@ -32,6 +33,7 @@ export function createEngine(deps: { renderer: IRenderer; post: (m: OutboundMess
 
   const registry = new ModuleRegistry();
   registry.register('reels', (args) => new ReelsModule(args));
+  registry.register('meter', (args) => new MeterModule(args));
   const manager = new ModuleManager({ registry, host: moduleHost });
 
   const orchestrator = new Orchestrator({

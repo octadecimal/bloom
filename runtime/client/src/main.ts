@@ -9,6 +9,7 @@ import { ReelsModule } from './modules/reels/reelsModule';
 import { resolveRuntimeServerUrl } from './play/runtimeServerUrl';
 import { createRuntimeClient } from './play/runtimeClient';
 import { startPlayMode } from './play/playMode';
+import type { ITriggerTarget } from './orchestration/traceWalker';
 
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
@@ -88,6 +89,10 @@ if (isPlayMode) {
     host,
     bus: modules.bus,
     orchestrator: modules.orchestrator,
+    resolveTarget: (id) => {
+      const m = modules.manager.byId(id) as unknown as Partial<ITriggerTarget> | undefined;
+      return m && typeof m.invoke === 'function' ? (m as ITriggerTarget) : null;
+    },
     spinButton,
     errorEl,
   });

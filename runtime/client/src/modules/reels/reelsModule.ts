@@ -7,6 +7,8 @@ import type { IDisplayHandle } from '../../render/renderer';
 import { advance, blurFor, easeOutCubic, reelDelay, settleT, symbolAt, wrap } from './reelsMath';
 import type { Op } from '../../model/ops';
 import { colorForSymbol } from './symbolColor';
+import type { ITriggerData } from '../../play/composedTypes';
+import { landscapeSafeArea } from '../safeArea';
 
 export const REELS_SCHEMA: IConfigSchema = {
   rows: { type: 'integer', default: 3, min: 1, max: 8 },
@@ -136,16 +138,8 @@ export class ReelsModule implements IGameModule {
   private withCenteredOrigin(raw: Record<string, JsonValue>, doc: IGameDocument): Record<string, JsonValue> {
     if (raw.originX !== undefined && raw.originY !== undefined) return raw;
     const cfg = resolveConfig(raw);
-    const { originX, originY } = centeredOrigin(cfg, this.landscapeSafeArea(doc));
+    const { originX, originY } = centeredOrigin(cfg, landscapeSafeArea(doc));
     return { ...raw, originX: raw.originX ?? originX, originY: raw.originY ?? originY };
-  }
-
-  private landscapeSafeArea(doc: IGameDocument): { width: number; height: number } {
-    const root = Object.values(doc.nodes).find((n) => n.type === 'Root');
-    const land = (root?.props?.safeArea as { landscape?: { width?: number; height?: number } } | undefined)?.landscape;
-    const w = typeof land?.width === 'number' && land.width > 0 ? land.width : 1280;
-    const h = typeof land?.height === 'number' && land.height > 0 ? land.height : 720;
-    return { width: w, height: h };
   }
 
   mount(): void {
@@ -169,6 +163,24 @@ export class ReelsModule implements IGameModule {
     this.outcome = outcome;
     this.elapsed = 0;
     this.phase = 'settling';
+  }
+
+  /** Composed trigger seam (TraceWalker): run one served spin end to end and
+   *  resolve when the reels settle. The Orchestrator/slots path never calls this. */
+  invoke(trigger: string, data: ITriggerData): Promise<void> {
+    if (trigger !== 'spin' || data.kind !== 'reels') {
+      return Promise.reject(new Error(`reels: unsupported trigger ${trigger} (${data.kind})`));
+    }
+    const grid = data.grid.map((reel) => reel.map((sym) => String(sym)));
+    return new Promise((resolve) => {
+      const off = this.host.bus.on('reels:settled', () => {
+        off();
+        resolve();
+      });
+      this.project(); // idempotent — ensures structure exists (as Orchestrator.spin does)
+      this.startSpinning();
+      this.stopSpinning({ grid });
+    });
   }
 
   update(dtMs: number): void {
