@@ -1,4 +1,4 @@
-import type { IGameDefinition, IBinding, IScriptEntry, IStateDef, ITransitionRow } from './model';
+import type { IGameDefinition, IBinding, IStateDef, ITransitionRow } from './model';
 import { MECHANIC_CATALOG } from './vocab';
 
 function uniqueId(base: string, taken: Set<string>): string {
@@ -68,11 +68,12 @@ export function addState(def: IGameDefinition): IGameDefinition {
     steps: { budget: 1 },
     script: [],
   };
-  const start = def.start || (def.states[0]?.id ?? '');
+  // Only set start to newStateId if this is the genuinely first state
+  const start = def.states.length === 0 ? newStateId : def.start;
   return {
     ...def,
     states: [...def.states, newState],
-    start: start === '' ? newStateId : start,
+    start,
   };
 }
 

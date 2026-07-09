@@ -87,6 +87,15 @@ describe('states', () => {
     expect(d.start).toBe('state_1');
   });
 
+  it('addState with dangling start preserves the dangling start', () => {
+    let d = base();
+    d = removeState(d, 0); // Remove 'base', leaving 'fs1' with start = ''
+    expect(d.start).toBe('');
+    d = addState(d);
+    expect(d.start).toBe(''); // Should remain '', not become 'fs1'
+    expect(d.states.map((s) => s.id)).toEqual(['fs1', 'state_1']);
+  });
+
   it('renameState rewrites start and transitions', () => {
     const d = renameState(base(), 0, 'main');
     expect(d.start).toBe('main');
