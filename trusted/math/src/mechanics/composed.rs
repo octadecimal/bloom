@@ -7,6 +7,7 @@
 
 pub mod compile;
 pub mod definition;
+pub mod eval;
 pub mod mechanic;
 pub mod meter;
 pub mod reels;
@@ -14,3 +15,5 @@ pub mod trace;
 
 pub use compile::{compile, CompiledGame, DefinitionError};
 pub use definition::{from_payload, to_payload, GameDefinition, FAMILY};
+pub use eval::evaluate;
+pub use trace::{RoundTrace, TraceEntry};
