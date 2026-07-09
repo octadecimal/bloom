@@ -145,6 +145,7 @@ mod tests {
     use super::*;
     use crate::mechanics::composed::compile::compile;
     use crate::mechanics::composed::definition::GameDefinition;
+    use crate::mechanics::composed::mechanic::TriggerData;
     use crate::mechanics::composed::trace::TraceEntry;
     use serde_json::json;
 
@@ -434,5 +435,142 @@ mod tests {
             .filter(|e| matches!(e, TraceEntry::Step { .. }))
             .count();
         assert_eq!(steps, 7);
+    }
+
+    /// Deterministic full-chain game (single-cell strips force every grid):
+    /// only the FIRST reel carries a 9, so every spin adds exactly 1 to the
+    /// meter (target 3). base fills 1 → fs1 fills 2 then 3 = full →
+    /// meter:full inside fs1 chains to fs2. Exercises multi-state carry.
+    fn meter_chain() -> serde_json::Value {
+        json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "reels", "type": "reels@1",
+                  "config": { "strips": [[9],[0],[0]], "rows": 1,
+                              "symbols": [{"id":0,"role":"normal"},{"id":9,"role":"scatter"}],
+                              "paylines": [],
+                              "paytable": { "entries": [] },
+                              "events": [{"symbol":9,"min_count":1,"emit":"seen:9"}] } },
+                { "id": "meter", "type": "meter@1",
+                  "config": { "target": 3, "count_symbol": 9 } }
+            ],
+            "states": [
+                { "id": "base",
+                  "bindings": [ { "mechanic": "reels" }, { "mechanic": "meter" } ],
+                  "steps": { "budget": 1 },
+                  "script": [ { "invoke": "reels.spin" }, { "invoke": "meter.accumulate" } ] },
+                { "id": "fs1",
+                  "bindings": [ { "mechanic": "reels" }, { "mechanic": "meter" } ],
+                  "steps": { "budget": "awarded", "initial": 5 },
+                  "script": [ { "invoke": "reels.spin" }, { "invoke": "meter.accumulate" } ] },
+                { "id": "fs2",
+                  "bindings": [ { "mechanic": "reels" } ],
+                  "steps": { "budget": 1 },
+                  "script": [ { "invoke": "reels.spin" } ] }
+            ],
+            "start": "base",
+            "transitions": [
+                { "from": "base", "on": "seen:9", "to": "fs1" },
+                { "from": "fs1", "on": "meter:full", "to": "fs2" }
+            ],
+            "caps": { "max_steps": 50 }
+        })
+    }
+
+    #[test]
+    fn meter_fill_flows_across_states_and_chains_to_fs2() {
+        let trace = evaluate(&compile_json(meter_chain()), 42);
+        // base step: meter 0→1. fs1 step1: 1→2. fs1 step2: 2→3 = full → fs2.
+        let fills: Vec<u32> = trace
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                TraceEntry::Trigger {
+                    data: TriggerData::Meter { fill, .. },
+                    ..
+                } => Some(*fill),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fills, vec![1, 2, 3]); // carried across base → fs1, no reset
+        let visited: Vec<&str> = trace
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                TraceEntry::StateEnter { state } => Some(state.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(visited, vec!["base", "fs1", "fs2"]);
+    }
+
+    #[test]
+    fn evaluate_is_bit_reproducible() {
+        let game = compile_json(proofish());
+        let first = evaluate(&game, 0xABCDEF);
+        for _ in 0..1000 {
+            assert_eq!(evaluate(&game, 0xABCDEF), first);
+        }
+    }
+
+    /// A stochastic mixed-strips game for sweeps (not forced outcomes).
+    pub(crate) fn proofish() -> serde_json::Value {
+        let mut v = two_states();
+        v["mechanics"][0]["config"]["strips"] =
+            json!([[0, 9, 0, 0, 1], [9, 0, 0, 1, 0], [0, 0, 9, 0, 1]]);
+        v["mechanics"][0]["config"]["symbols"] = json!([
+            {"id":0,"role":"normal"},{"id":1,"role":"wild"},{"id":9,"role":"scatter"}]);
+        v["mechanics"][0]["config"]["events"] = json!([{"symbol":9,"min_count":3,"emit":"go:fs"}]);
+        v["states"][1]["bindings"][0]["override"] = json!({ "multiplier": 2 });
+        v["transitions"].as_array_mut().unwrap().push(json!(
+            { "from": "fs", "on": "go:fs", "effect": "steps:add:2" }
+        ));
+        v
+    }
+
+    #[test]
+    fn sweep_traces_are_internally_consistent() {
+        let game = compile_json(proofish());
+        let mut any_pay = false;
+        let mut any_transition = false;
+        for seed in 0..3000u64 {
+            let t = evaluate(&game, seed);
+            assert!(matches!(
+                t.entries.first(),
+                Some(TraceEntry::RoundStart { .. })
+            ));
+            assert!(matches!(
+                t.entries.last(),
+                Some(TraceEntry::RoundEnd { .. })
+            ));
+            let exit_sum: u64 = t
+                .entries
+                .iter()
+                .filter_map(|e| match e {
+                    TraceEntry::StateExit { payout, .. } => Some(*payout),
+                    _ => None,
+                })
+                .sum();
+            assert_eq!(t.total_payout, exit_sum);
+            let steps: Vec<u32> = t
+                .entries
+                .iter()
+                .filter_map(|e| match e {
+                    TraceEntry::Step { n } => Some(*n),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(steps, (1..=steps.len() as u32).collect::<Vec<_>>());
+            any_pay |= t.total_payout > 0;
+            any_transition |= t
+                .entries
+                .iter()
+                .any(|e| matches!(e, TraceEntry::Transition { .. }));
+        }
+        assert!(
+            any_pay,
+            "no seed paid in 3000 trials — an always-zero evaluate would pass"
+        );
+        assert!(any_transition, "no seed transitioned in 3000 trials");
     }
 }
