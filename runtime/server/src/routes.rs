@@ -37,6 +37,7 @@ pub async fn handshake(State(state): State<Arc<AppState>>) -> Json<HandshakeResp
         package_version: state.package.envelope.package_version,
         mechanic: state.package.envelope.mechanic.clone(),
         presentation,
+        definition: None,
     })
 }
 
@@ -85,7 +86,12 @@ pub async fn spin(
         .append(&record)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(SpinResponse { seed, bet, outcome }))
+    Ok(Json(SpinResponse {
+        seed,
+        bet,
+        outcome,
+        trace: None,
+    }))
 }
 
 #[cfg(test)]
