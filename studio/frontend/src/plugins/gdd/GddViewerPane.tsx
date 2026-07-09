@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { IDockviewPanelProps } from 'dockview-react';
 import { gddHooks } from './state';
 import { saveIntentFields } from './actions';
+import { getSlotModel, realizeSlotModel } from './restClient';
+import { setModelChangedHandler } from './socketClient';
 import { INTENT_FIELDS } from './intentFields';
 import { Markdown } from '@/components/ui/Markdown';
+import { MirrorSection, type IMirrorModel } from './MirrorSection';
 
 const STATUS_LABEL: Record<string, string> = {
   empty: 'empty',
@@ -11,6 +14,11 @@ const STATUS_LABEL: Record<string, string> = {
   needs_input: 'needs input',
   complete: 'complete',
 };
+
+// Aspects whose realized shape can drift out of sync with the GDD (spec
+// 2026-07-09 §5); these are the only ones offered the re-realize affordance.
+const SHAPE_ASPECTS = new Set(['math-model', 'symbols-reels', 'bonus-features']);
+const MIRROR_ASPECTS = new Set(['paytable', 'bonus-features']);
 
 function IntentEditor({ gameId, aspect, data }: { gameId: string; aspect: string; data: Record<string, unknown> }) {
   const fields = INTENT_FIELDS[aspect];
@@ -90,6 +98,35 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
   const docs = s.docs.get();
   const selected = s.selectedAspect.get();
 
+  const [slotModel, setSlotModel] = useState<IMirrorModel | null>(null);
+  const [shapeStale, setShapeStale] = useState(false);
+
+  useEffect(() => {
+    setSlotModel(null);
+    setShapeStale(false);
+    if (!activeGameId) return;
+    const gameId = activeGameId;
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const doc = await getSlotModel(gameId);
+        if (cancelled) return;
+        setSlotModel(doc.model);
+        setShapeStale(doc.shapeStale);
+      } catch {
+        // transient fetch failure: keep the last-known mirror rather than blanking it
+      }
+    }
+    void refresh();
+    setModelChangedHandler((p) => {
+      if (p.gameId === gameId) void refresh();
+    });
+    return () => {
+      cancelled = true;
+      setModelChangedHandler(null);
+    };
+  }, [activeGameId]);
+
   if (!activeGameId) {
     return (
       <div data-testid="gdd-no-game" className="flex h-full items-center justify-center bg-surface text-text-2">
@@ -99,6 +136,23 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
   }
 
   const current = docs.find((d) => d.aspect === selected) ?? docs[0];
+  const symbolRows = (docs.find((d) => d.aspect === 'symbols-reels')?.data?.symbols ?? []) as Array<{
+    model_id?: number;
+    name?: string;
+    slot?: string;
+  }>;
+  const names = new Map<number, string>();
+  for (const row of symbolRows) {
+    if (row.model_id != null) names.set(Number(row.model_id), row.name || row.slot || '');
+  }
+
+  const gameId = activeGameId; // narrowed non-null by the early return above; the closure below doesn't inherit that narrowing from `activeGameId` directly
+  async function onRealize() {
+    await realizeSlotModel(gameId);
+    const doc = await getSlotModel(gameId);
+    setSlotModel(doc.model);
+    setShapeStale(doc.shapeStale);
+  }
 
   return (
     <div className="flex h-full bg-surface">
@@ -123,6 +177,17 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
           <IntentEditor key={current.aspect} gameId={activeGameId} aspect={current.aspect} data={current.data || {}} />
         )}
         <Markdown source={current?.body || ''} />
+        {current && SHAPE_ASPECTS.has(current.aspect) && shapeStale && (
+          <div data-testid="gdd-shape-stale" className="mt-3 flex items-center gap-3 border-t border-hairline pt-3 text-sm text-accent-text">
+            <span>The game model&rsquo;s shape no longer matches this GDD.</span>
+            <button onClick={() => void onRealize()} className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover">
+              Re-realize model
+            </button>
+          </div>
+        )}
+        {current && MIRROR_ASPECTS.has(current.aspect) && (
+          <MirrorSection aspect={current.aspect as 'paytable' | 'bonus-features'} model={slotModel} names={names} />
+        )}
       </div>
     </div>
   );
