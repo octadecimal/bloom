@@ -117,8 +117,11 @@ One serialized document — persisted per game by the studio, carried as the
     { "from": "base", "on": "scatters:3",  "to": "fs1" },
     { "from": "base", "on": "meter:full",  "to": "fs2" },
     { "from": "fs1",  "on": "scatters:3",  "effect": "steps:add:8" },  // retrigger: effect only, no state change
-    { "from": "fs1",  "on": "steps:exhausted", "to": "base" },
-    { "from": "fs2",  "on": "steps:exhausted", "to": "base" }
+    { "from": "fs1",  "on": "meter:full",  "to": "fs2" }
+    // no `steps:exhausted` rows: a state that exhausts its budget with no
+    // matching row ENDS THE ROUND. `to` on exhaustion is only for chaining
+    // features (e.g. fs1 exhausted → fs2) — never for "returning" to base,
+    // which would wrongly replay a fresh base spin.
   ],
   "caps": { "max_steps": 1000 }
 }
@@ -132,12 +135,18 @@ Shape notes (normative):
   schema.
 - `steps.budget` is either a literal count or `"awarded"` (event-adjustable).
   `steps:exhausted` is a built-in event emitted by the state loop itself.
-- A transition may carry an `effect` instead of (or before) a `to` — v1
-  effects: `steps:add:<n>`. This is how retriggers work without a state change.
-- The round ends when a transition returns to a state with no remaining budget
-  and no pending transitions — concretely: when `base` completes its budget
-  and no transition fires, or `caps.max_steps` is hit (round is still valid;
-  the cap just stops the loop, as `MAX_FREE_SPINS` does today).
+- A transition row carries **exactly one** of `to` or `effect` (v1). V1
+  effects: `steps:add:<n>` — how retriggers work without a state change.
+- A state's step budget **resets each time the state is entered**.
+- **Round end (normative):** the round ends when the current state's budget is
+  exhausted and no `(state, steps:exhausted)` row matches, or when
+  `caps.max_steps` is hit (the round is still valid; the cap just stops the
+  loop, as `MAX_FREE_SPINS` does today). There is no "return to base": base's
+  single budgeted step was already played, so re-entering it would wrongly
+  replay a base spin.
+- Transition matching is per step, against that step's events only, in
+  definition row order; the **first matching row wins** and only one row
+  applies per step.
 - Validation (studio-side and kernel-side at load): unknown mechanic types,
   bindings referencing undeclared instances, transitions referencing unknown
   states, unreachable states, missing `start`, script invoking unbound
@@ -210,7 +219,7 @@ The round outcome is an ordered list of entries:
 
 ```jsonc
 [
-  { "t": "round_start", "seed": "1234...", "bet": 100 },
+  { "t": "round_start", "seed": "1234..." },  // bet lives at the server wire layer (SP2); the kernel is bet-multiples
   { "t": "state_enter", "state": "base" },
   { "t": "step", "n": 1 },
   { "t": "trigger", "mechanic": "main_reels", "name": "spin",
