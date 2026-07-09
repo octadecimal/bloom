@@ -55,6 +55,7 @@ Fixtures consumed (read-only, never edited — changing one is a re-certificatio
 ### Task 1: Mirror types + wire additions
 
 **Files:**
+
 - Create: `runtime/client/src/play/composedTypes.ts`
 - Test: `runtime/client/src/play/composedTypes.spec.ts`
 - Modify: `runtime/client/src/play/wireTypes.ts`
@@ -62,6 +63,7 @@ Fixtures consumed (read-only, never edited — changing one is a re-certificatio
 - Modify: `runtime/client/src/play/outcomeAdapter.spec.ts` (one cast, behavior unchanged)
 
 **Interfaces:**
+
 - Consumes: `PlayModeError` from `./presentationConfig`.
 - Produces: `ITriggerData`, `ITraceEntry`, `IGameDefinition`, `IMechanicDecl`, `validateDefinition(raw: unknown): IGameDefinition` (all from `play/composedTypes.ts`); `IComposedOutcomeWire`, `ISpinResponse.trace?: ITraceEntry[]`, `IHandshakeResponse.definition?: unknown` (from `play/wireTypes.ts`). Later tasks import these exact names.
 
@@ -127,9 +129,7 @@ import { PlayModeError } from './presentationConfig';
  *  Numeric policy (SP2 §5): seed is a string (u64 can exceed 2^53); payouts
  *  are bet-multiple u64s far below 2^53 and stay JSON numbers. */
 
-export type ITriggerData =
-  | { kind: 'reels'; grid: number[][]; payout: number }
-  | { kind: 'meter'; fill: number; target: number };
+export type ITriggerData = { kind: 'reels'; grid: number[][]; payout: number } | { kind: 'meter'; fill: number; target: number };
 
 export type ITraceEntry =
   | { t: 'round_start'; seed: string }
@@ -293,10 +293,12 @@ git commit -m "feat(runtime-client): composed@1 mirror types + wire trace/defini
 ### Task 2: TraceWalker
 
 **Files:**
+
 - Create: `runtime/client/src/orchestration/traceWalker.ts`
 - Test: `runtime/client/src/orchestration/traceWalker.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `ITraceEntry`, `ITriggerData` from `../play/composedTypes` (Task 1).
 - Produces: `ITriggerTarget { invoke(trigger: string, data: ITriggerData): Promise<void> }`; `TraceWalker` with constructor deps `{ bus: { emit(event: string, payload: unknown): void }; resolve: (mechanicId: string) => ITriggerTarget | null }` and `walk(entries: ITraceEntry[]): Promise<void>`. Bus events emitted: `round:start {seed}`, `state:enter {state}`, `step {n}`, `transition {on, to, effect}`, `state:exit {state, payout}`, `round:complete {total_payout}`.
 
@@ -463,10 +465,12 @@ git commit -m "feat(runtime-client): TraceWalker steps composed traces through m
 ### Task 3: ReelsModule.invoke
 
 **Files:**
+
 - Modify: `runtime/client/src/modules/reels/reelsModule.ts`
 - Test: `runtime/client/src/modules/reels/reelsModule.invoke.spec.ts` (new file)
 
 **Interfaces:**
+
 - Consumes: `ITriggerData` (Task 1). Existing `ReelsModule` internals (`project/startSpinning/stopSpinning`, `reels:settled`).
 - Produces: `ReelsModule.invoke(trigger: string, data: ITriggerData): Promise<void>` satisfying `ITriggerTarget` structurally (Task 2). Existing methods and the Orchestrator/slots path unchanged.
 
@@ -572,6 +576,7 @@ git commit -m "feat(runtime-client): reels invoke('spin') trigger seam for the T
 ### Task 4: MeterModule + shared safe area + engine registration
 
 **Files:**
+
 - Create: `runtime/client/src/modules/safeArea.ts`
 - Create: `runtime/client/src/modules/meter/meterModule.ts`
 - Test: `runtime/client/src/modules/meter/meterModule.spec.ts`
@@ -579,8 +584,9 @@ git commit -m "feat(runtime-client): reels invoke('spin') trigger seam for the T
 - Modify: `runtime/client/src/engine.ts` (register `'meter'`)
 
 **Interfaces:**
+
 - Consumes: `ITriggerData` (Task 1); `IGameModule`, `IModuleHost` (`modules/module.ts`); `validateConfig`/`IConfigSchema` (`modules/schema.ts`); `reconcileOps`, `IDesiredScene`, `IDesiredNode` (`modules/reconcile.ts`).
-- Produces: `landscapeSafeArea(doc: IGameDocument): { width: number; height: number }` (from `modules/safeArea.ts`); `MeterModule` (type `'meter'`, config `{ target: integer, parentId: string }`) with `invoke(trigger, data): Promise<void>`, `debugState(): { fill: number; target: number }`, node ids `barId(id) = \`${id}:bar\``, `segId(id, i) = \`${id}:seg:${i}\``; bus event `meter:changed { fill, target }`; `METER_SCHEMA`, `buildMeterDesired` exported for tests. Engine registry key `'meter'`.
+- Produces: `landscapeSafeArea(doc: IGameDocument): { width: number; height: number }` (from `modules/safeArea.ts`); `MeterModule` (type `'meter'`, config `{ target: integer, parentId: string }`) with `invoke(trigger, data): Promise<void>`, `debugState(): { fill: number; target: number }`, node ids `barId(id) = \`${id}:bar\``, `segId(id, i) = \`${id}:seg:${i}\``; bus event `meter:changed { fill, target }`; `METER_SCHEMA`, `buildMeterDesired`exported for tests. Engine registry key`'meter'`.
 
 - [ ] **Step 1: Extract the shared safe-area helper (pure refactor, existing tests are the net)**
 
@@ -854,8 +860,8 @@ import { MeterModule } from './modules/meter/meterModule';
 ```
 
 ```ts
-  registry.register('reels', (args) => new ReelsModule(args));
-  registry.register('meter', (args) => new MeterModule(args));
+registry.register('reels', (args) => new ReelsModule(args));
+registry.register('meter', (args) => new MeterModule(args));
 ```
 
 - [ ] **Step 5: Run the tests and make sure they pass**
@@ -874,12 +880,14 @@ git commit -m "feat(runtime-client): MeterModule segment bar + shared safe-area 
 ### Task 5: Play mode composed branch + wiring
 
 **Files:**
+
 - Modify: `runtime/client/src/modules/moduleManager.ts` (+ its spec)
 - Modify: `runtime/client/src/play/presentationConfig.ts`
 - Modify: `runtime/client/src/play/playMode.ts` (+ its spec)
 - Modify: `runtime/client/src/main.ts`
 
 **Interfaces:**
+
 - Consumes: `validateDefinition`, `IGameDefinition` (Task 1); `TraceWalker`, `ITriggerTarget` (Task 2); modules with `invoke` (Tasks 3–4); `IModuleDecl` from `model/document.ts` (`{ id; type; config? }`).
 - Produces: `ModuleManager.byId(id: string): IGameModule | undefined`; `validatePresentationShape(p: unknown): IPresentation`; `buildComposedPlayDocument(def: IGameDefinition, pres: IPresentation, rootSize?): IGameDocument`; `IPlayModeDeps` gains `resolveTarget: (mechanicId: string) => ITriggerTarget | null` and `IPlayBus` gains `emit(event: string, payload: unknown): void`.
 
@@ -888,13 +896,13 @@ git commit -m "feat(runtime-client): MeterModule segment bar + shared safe-area 
 Add to `runtime/client/src/modules/moduleManager.spec.ts`, inside the existing `describe('ModuleManager', …)` block (its `setup()` helper provides `registry`/`host`):
 
 ```ts
-  it('byId returns the instance declared under that id', () => {
-    const { registry, host } = setup();
-    const manager = new ModuleManager({ registry, host });
-    manager.sync([{ id: 'main_reels', type: 'reels', config: { parentId: 'root' } }]);
-    expect(manager.byId('main_reels')?.id).toBe('main_reels');
-    expect(manager.byId('nope')).toBeUndefined();
-  });
+it('byId returns the instance declared under that id', () => {
+  const { registry, host } = setup();
+  const manager = new ModuleManager({ registry, host });
+  manager.sync([{ id: 'main_reels', type: 'reels', config: { parentId: 'root' } }]);
+  expect(manager.byId('main_reels')?.id).toBe('main_reels');
+  expect(manager.byId('nope')).toBeUndefined();
+});
 ```
 
 In `runtime/client/src/play/playMode.spec.ts`:
@@ -1175,18 +1183,18 @@ export async function startPlayMode(deps: IPlayModeDeps): Promise<void> {
 `runtime/client/src/main.ts` — add `resolveTarget` to the `startPlayMode` call (import `type { ITriggerTarget }` from `'./orchestration/traceWalker'`):
 
 ```ts
-  void startPlayMode({
-    client,
-    host,
-    bus: modules.bus,
-    orchestrator: modules.orchestrator,
-    resolveTarget: (id) => {
-      const m = modules.manager.byId(id) as unknown as Partial<ITriggerTarget> | undefined;
-      return m && typeof m.invoke === 'function' ? (m as ITriggerTarget) : null;
-    },
-    spinButton,
-    errorEl,
-  });
+void startPlayMode({
+  client,
+  host,
+  bus: modules.bus,
+  orchestrator: modules.orchestrator,
+  resolveTarget: (id) => {
+    const m = modules.manager.byId(id) as unknown as Partial<ITriggerTarget> | undefined;
+    return m && typeof m.invoke === 'function' ? (m as ITriggerTarget) : null;
+  },
+  spinButton,
+  errorEl,
+});
 ```
 
 - [ ] **Step 4: Run the tests and make sure they pass**
@@ -1206,9 +1214,11 @@ git commit -m "feat(runtime-client): composed@1 play mode — definition-driven 
 ### Task 6: Golden-vector walk suite (kernel parity)
 
 **Files:**
+
 - Test: `runtime/client/src/play/goldenWalk.spec.ts` (new; no production code — Tasks 1–2 are the code under test)
 
 **Interfaces:**
+
 - Consumes: `TraceWalker`, `ITriggerTarget` (Task 2); `validateDefinition`, `ITraceEntry`, `ITriggerData` (Task 1); fixtures `trusted/math/fixtures/composed/*` (read-only).
 
 - [ ] **Step 1: Write the suite (it should pass immediately — it's the parity gate, not TDD of new code)**
@@ -1294,11 +1304,13 @@ git commit -m "test(runtime-client): golden-vector walk parity against kernel co
 ### Task 7: Composed e2e + full gates
 
 **Files:**
+
 - Modify: `runtime/client/playwright.config.ts`
 - Modify: `runtime/client/e2e/start-server.cjs` (guard the mint step)
 - Create: `runtime/client/e2e/playmode-composed.e2e.spec.ts`
 
 **Interfaces:**
+
 - Consumes: checked-in `runtime/server/demo/composed.pkg` (3×3 reels, meter target 6, ids `main_reels`/`bonus_meter`, symbols `0,1,2,9`); `BLOOM_RUNTIME_PORT` env (server `config.rs` reads it; final port = base + `BLOOM_PORT_OFFSET`); existing `e2e/start-server.cjs` (spawns `cargo run -p bloom-runtime-server` with the env Playwright passes; its demo-mint step is slots-only and harmless here).
 
 - [ ] **Step 1: Add the composed server to `runtime/client/playwright.config.ts`**

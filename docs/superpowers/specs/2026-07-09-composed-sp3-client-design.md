@@ -82,11 +82,11 @@ interface ITriggerTarget {
 `walk(entries: ITraceEntry[]): Promise<void>` — strictly sequential over the
 flat entry list:
 
-| entry | action |
-| --- | --- |
-| `trigger` | resolve the module by `entry.mechanic` (the mechanic **instance id**); **await** `invoke(entry.name, entry.data)` before advancing. Unresolved mechanic → throw — the client is math-authoritative and fails loud; play mode surfaces the error. |
-| `round_end` | emit `round:complete { total_payout }` — the event name the slots path already emits. |
-| all others | emit a bus event (`round:start`, `state:enter`, `state:exit`, `transition`, `step`) with the entry's payload and advance immediately. Bus events are v1's presentation hook (umbrella §7); per-state scene variants stay out of scope. |
+| entry       | action                                                                                                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `trigger`   | resolve the module by `entry.mechanic` (the mechanic **instance id**); **await** `invoke(entry.name, entry.data)` before advancing. Unresolved mechanic → throw — the client is math-authoritative and fails loud; play mode surfaces the error. |
+| `round_end` | emit `round:complete { total_payout }` — the event name the slots path already emits.                                                                                                                                                            |
+| all others  | emit a bus event (`round:start`, `state:enter`, `state:exit`, `transition`, `step`) with the entry's payload and advance immediately. Bus events are v1's presentation hook (umbrella §7); per-state scene variants stay out of scope.           |
 
 Re-entrance is prevented one level up (the Spin button stays disabled until
 the walk promise settles), not inside the walker.
@@ -94,7 +94,7 @@ the walk promise settles), not inside the walker.
 ## 5. Modules
 
 - **`ReelsModule` gains `invoke('spin', data)`** — asserts `data.kind ===
-  'reels'`, maps `grid: number[][]` to the module's `string[][]`, runs the
+'reels'`, maps `grid: number[][]` to the module's `string[][]`, runs the
   existing project → startSpinning → stopSpinning sequence, and resolves on
   the next `reels:settled`. Unknown trigger name → reject. The
   Orchestrator/slots path through the module does not change.
@@ -107,7 +107,7 @@ the walk promise settles), not inside the walker.
   Fill is server-authoritative: the module renders to `data.fill`, never
   counts symbols itself (the client never re-runs math).
 - **Definition-driven instances.** `buildComposedPlayDocument(definition,
-  presentation, rootSize)` maps `definition.mechanics` to module declarations
+presentation, rootSize)` maps `definition.mechanics` to module declarations
   keyed by mechanic instance id (`main_reels`, `bonus_meter`):
   - `reels@1` → type `reels`, config from the presentation manifest
     (`toReelsConfig`, unchanged — presentation stays the visual source of
@@ -163,7 +163,7 @@ TDD throughout (vitest); e2e is Playwright, local-only per repo CI policy.
   composed wires walker, unknown mechanic errors).
 - **E2e:** a third `webServer` entry in `runtime/client/playwright.config.ts`
   boots the checked-in `runtime/server/demo/composed.pkg` on `9100 +
-  BLOOM_PORT_OFFSET` (the slots demo server keeps `9000 + offset`). New spec:
+BLOOM_PORT_OFFSET` (the slots demo server keeps `9000 + offset`). New spec:
   load `?server=` the composed instance → reels grid **and** meter segments
   render from the handshake → click Spin → walk completes: reels phase idle
   with a served-shape grid, Spin button re-enabled. The existing slots
