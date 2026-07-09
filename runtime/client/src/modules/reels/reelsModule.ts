@@ -8,6 +8,7 @@ import { advance, blurFor, easeOutCubic, reelDelay, settleT, symbolAt, wrap } fr
 import type { Op } from '../../model/ops';
 import { colorForSymbol } from './symbolColor';
 import type { ITriggerData } from '../../play/composedTypes';
+import { landscapeSafeArea } from '../safeArea';
 
 export const REELS_SCHEMA: IConfigSchema = {
   rows: { type: 'integer', default: 3, min: 1, max: 8 },
@@ -137,16 +138,8 @@ export class ReelsModule implements IGameModule {
   private withCenteredOrigin(raw: Record<string, JsonValue>, doc: IGameDocument): Record<string, JsonValue> {
     if (raw.originX !== undefined && raw.originY !== undefined) return raw;
     const cfg = resolveConfig(raw);
-    const { originX, originY } = centeredOrigin(cfg, this.landscapeSafeArea(doc));
+    const { originX, originY } = centeredOrigin(cfg, landscapeSafeArea(doc));
     return { ...raw, originX: raw.originX ?? originX, originY: raw.originY ?? originY };
-  }
-
-  private landscapeSafeArea(doc: IGameDocument): { width: number; height: number } {
-    const root = Object.values(doc.nodes).find((n) => n.type === 'Root');
-    const land = (root?.props?.safeArea as { landscape?: { width?: number; height?: number } } | undefined)?.landscape;
-    const w = typeof land?.width === 'number' && land.width > 0 ? land.width : 1280;
-    const h = typeof land?.height === 'number' && land.height > 0 ? land.height : 720;
-    return { width: w, height: h };
   }
 
   mount(): void {
