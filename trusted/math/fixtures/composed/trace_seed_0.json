@@ -1,0 +1,58 @@
+{
+  "entries": [
+    {
+      "t": "round_start",
+      "seed": "0"
+    },
+    {
+      "t": "state_enter",
+      "state": "base"
+    },
+    {
+      "t": "step",
+      "n": 1
+    },
+    {
+      "t": "trigger",
+      "mechanic": "main_reels",
+      "name": "spin",
+      "events": [],
+      "data": {
+        "kind": "reels",
+        "grid": [
+          [
+            0
+          ],
+          [
+            0
+          ],
+          [
+            0
+          ]
+        ],
+        "payout": 5
+      }
+    },
+    {
+      "t": "trigger",
+      "mechanic": "bonus_meter",
+      "name": "accumulate",
+      "events": [],
+      "data": {
+        "kind": "meter",
+        "fill": 0,
+        "target": 4
+      }
+    },
+    {
+      "t": "state_exit",
+      "state": "base",
+      "payout": 5
+    },
+    {
+      "t": "round_end",
+      "total_payout": 5
+    }
+  ],
+  "total_payout": 5
+}
