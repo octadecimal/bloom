@@ -12,11 +12,24 @@ export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   use: { baseURL, trace: 'on-first-retry' },
-  webServer: {
-    command: 'npx nx serve frontend',
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: 'npx nx serve frontend',
+      url: baseURL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      // Dir-mode runtime server over studio-built packages (SP4 build->play).
+      // 9300 base (NOT 9000/9100/9200) so reuseExistingServer can never attach
+      // to another suite's differently-configured server.
+      command: 'cargo run --release -p bloom-runtime-server',
+      cwd: '../..',
+      env: { BLOOM_RUNTIME_PACKAGES: 'var/packages', BLOOM_RUNTIME_PORT: '9300' },
+      url: `http://localhost:${9300 + offset}/health`,
+      reuseExistingServer: true,
+      timeout: 300_000, // first run compiles the server
+    },
+  ],
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });
