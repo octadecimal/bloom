@@ -360,4 +360,79 @@ mod tests {
         assert!(!trace.entries.iter().any(|e| matches!(e,
             TraceEntry::StateEnter { state } if state == "other")));
     }
+
+    #[test]
+    fn supercritical_retrigger_stops_at_max_steps() {
+        // Every fs spin retriggers +2 while budget only spends 1 → unbounded
+        // without the cap. Mirrors slots@1's supercritical free-spins test.
+        let mut v = two_states();
+        v["states"][1]["bindings"][0]["override"] = json!({ "multiplier": 1 }); // keep 9-strips
+        v["transitions"].as_array_mut().unwrap().push(json!(
+            { "from": "fs", "on": "go:fs", "effect": "steps:add:2" }
+        ));
+        v["caps"] = json!({ "max_steps": 40 });
+        let trace = evaluate(&compile_json(v), 99);
+        let steps = trace
+            .entries
+            .iter()
+            .filter(|e| matches!(e, TraceEntry::Step { .. }))
+            .count();
+        assert_eq!(steps, 40);
+        assert!(matches!(
+            trace.entries.last(),
+            Some(TraceEntry::RoundEnd { .. })
+        ));
+    }
+
+    #[test]
+    fn zero_budget_to_cycle_terminates() {
+        // Two zero-budget states that chain to each other on steps:exhausted:
+        // no step is ever consumed, so the transition guard must end the round.
+        let v = json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "reels", "type": "reels@1",
+                  "config": { "strips": [[0],[0],[0]], "rows": 1,
+                              "symbols": [{"id":0,"role":"normal"}],
+                              "paylines": [[0,0,0]],
+                              "paytable": { "entries": [] } } }
+            ],
+            "states": [
+                { "id": "a", "bindings": [ { "mechanic": "reels" } ],
+                  "steps": { "budget": 0 }, "script": [ { "invoke": "reels.spin" } ] },
+                { "id": "b", "bindings": [ { "mechanic": "reels" } ],
+                  "steps": { "budget": 0 }, "script": [ { "invoke": "reels.spin" } ] }
+            ],
+            "start": "a",
+            "transitions": [
+                { "from": "a", "on": "steps:exhausted", "to": "b" },
+                { "from": "b", "on": "steps:exhausted", "to": "a" }
+            ],
+            "caps": { "max_steps": 10 }
+        });
+        let trace = evaluate(&compile_json(v), 1);
+        assert!(matches!(
+            trace.entries.last(),
+            Some(TraceEntry::RoundEnd { total_payout: 0 })
+        ));
+        // Bounded: at most max_steps transitions were taken before the guard fired.
+        assert!(trace.entries.len() < 100);
+    }
+
+    #[test]
+    fn exhausted_effect_row_refunds_budget_and_is_capped() {
+        // A state that re-funds itself on exhaustion loops until the step cap.
+        let mut v = single_state();
+        v["transitions"].as_array_mut().unwrap().push(json!(
+            { "from": "base", "on": "steps:exhausted", "effect": "steps:add:1" }
+        ));
+        v["caps"] = json!({ "max_steps": 7 });
+        let trace = evaluate(&compile_json(v), 3);
+        let steps = trace
+            .entries
+            .iter()
+            .filter(|e| matches!(e, TraceEntry::Step { .. }))
+            .count();
+        assert_eq!(steps, 7);
+    }
 }
