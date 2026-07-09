@@ -20,7 +20,7 @@ from app.math.models import (
     TuningParams, math_run_wire, sim_wire,
 )
 from app.math.restart import escalate, miss_score
-from app.math.targets import derive_target, TargetGap
+from app.math.targets import derive_target, derive_num_bonuses, TargetGap
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,11 @@ class MathHub:
     # ── target derivation (shared) ───────────────────────────────────────────
     async def _derive_target(self, game_id: str, doc) -> dict:
         model = doc.model or {}
-        num_bonuses = len(model.get("bonuses", []) or [])
         gdd = await self._gdd.get_doc(game_id, "math-model")
         math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        features_doc = await self._gdd.get_doc(game_id, "bonus-features")
+        num_bonuses = derive_num_bonuses(
+            features_doc.data if features_doc else {}, model)
         return derive_target(math_model, doc.params, num_bonuses)
 
     # ── curation (was CurationHub.request_curation) ─────────────────────────

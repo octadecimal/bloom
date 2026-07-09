@@ -46,7 +46,10 @@ Decide what the latest user message is:
    LAYOUT-INTENT field (theme.art_direction, ui-ux.layout, ui-ux.orientation,
    ui-ux.focal_emphasis, ui-ux.framing_density) AND the scene already has placed
    elements, follow the `set_gdd_fields` call with a single `rebuild_scene` call
-   so the live scene reflows to the new plan. Then confirm in one sentence.
+   so the live scene reflows to the new plan. Then confirm in one sentence. Shape
+   fields (reels, rows, paylines, the symbols table, features) re-realize the
+   game's math model; if the model has been hand-tuned the studio will ask the
+   human to approve first.
 2. A change to a SYMBOL's identity or art (e.g. "make the high symbol a dragon",
    "the wild should be a rune stone"): first call `set_gdd_fields` on
    "symbols-reels" to update that symbol row's name/art_desc (keep its `slot`
