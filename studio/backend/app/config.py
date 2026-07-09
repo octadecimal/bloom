@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # (honest cargo-run tunes can approach ~1.2 GiB; 4 GiB gives headroom while
     #  still catching unbounded runaways that grow to many GB)
     tuner_timeout_s: float = 120.0  # wall-clock cap (backstop)
+    compose_bin: str = ""  # optional path to a prebuilt compose_json; "" => cargo run
+    compose_timeout_s: float = 180.0
+    packages_dir: str = "var/packages"  # repo-root-relative; runtime server dir mode reads it
     asset_regen_retries: int = 2        # max regenerate->re-judge cycles (matches ComposeBounds)
     asset_floor_regen_budget: int = 2   # bounded regen budget for an ad-hoc direct generate
     skills_dir: str = str(
