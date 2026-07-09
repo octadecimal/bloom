@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
 const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
 const runtime = 4300 + offset;
 const serverPort = 9000 + offset;
+const composedServerPort = 9100 + offset;
 const baseURL = `http://localhost:${runtime}`;
 
 export default defineConfig({
@@ -37,6 +38,20 @@ export default defineConfig({
         BLOOM_PORT_OFFSET: String(offset),
         BLOOM_RUNTIME_PACKAGE: 'runtime/server/demo/demo.pkg',
         BLOOM_RUNTIME_AUDIT: 'runtime/server/var/audit.e2e.jsonl',
+      },
+    },
+    {
+      // Second server instance serving the checked-in composed@1 demo package.
+      command: 'node runtime/client/e2e/start-server.cjs',
+      url: `http://localhost:${composedServerPort}/health`,
+      cwd: '../../',
+      reuseExistingServer: true,
+      timeout: 240_000,
+      env: {
+        BLOOM_PORT_OFFSET: String(offset),
+        BLOOM_RUNTIME_PORT: '9100',
+        BLOOM_RUNTIME_PACKAGE: 'runtime/server/demo/composed.pkg',
+        BLOOM_RUNTIME_AUDIT: 'runtime/server/var/audit.e2e-composed.jsonl',
       },
     },
   ],
