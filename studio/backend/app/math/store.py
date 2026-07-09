@@ -74,6 +74,13 @@ class MathStore:
             model = templates.default_model()
             await self._docs.update_one({"_id": raw["_id"]}, {"$set": {"model": model}})
             raw = {**raw, "model": model}
+        if "touched" not in raw:
+            # Pre-rework doc: conservatively treat as human-shaped so the
+            # re-realize gate applies (spec §9 migration).
+            legacy = {"touched": True, "origin": "template",
+                      "verdict_stale": False, "shape_stale": False}
+            await self._docs.update_one({"_id": raw["_id"]}, {"$set": legacy})
+            raw = {**raw, **legacy}
         return _from_doc(raw)
 
     async def _migrate_legacy_tuner(self, raw: dict) -> dict:
@@ -130,6 +137,8 @@ class MathStore:
             fields["locks"] = locks.model_dump(mode="json")
         if presentation is not None:
             fields["presentation"] = presentation
+        if source != "realize":
+            fields["touched"] = True
         await self._docs.update_one({"game_id": game_id}, {"$set": fields})
         doc = await self.get(game_id)
         changed = model is not None or presentation is not None or locks is not None
@@ -137,11 +146,40 @@ class MathStore:
             await self._on_change(doc, source)
         return doc
 
+    async def save_realized(self, game_id: str, model: dict) -> SlotModelDoc:
+        existing = await self.get_or_seed(game_id)
+        fields = {
+            "model": model, "origin": "realized", "shape_stale": False,
+            "updated_at": _now(),
+        }
+        if existing.result is not None or existing.tune_result is not None:
+            fields["verdict_stale"] = True
+        await self._docs.update_one({"game_id": game_id}, {"$set": fields})
+        doc = await self.get(game_id)
+        if self._on_change is not None:
+            await self._on_change(doc, "realize")
+        return doc
+
+    async def set_stale_flags(self, game_id: str, *,
+                              verdict_stale: bool | None = None,
+                              shape_stale: bool | None = None) -> SlotModelDoc:
+        await self.get_or_seed(game_id)
+        fields: dict = {"updated_at": _now()}
+        if verdict_stale is not None:
+            fields["verdict_stale"] = verdict_stale
+        if shape_stale is not None:
+            fields["shape_stale"] = shape_stale
+        await self._docs.update_one({"game_id": game_id}, {"$set": fields})
+        doc = await self.get(game_id)
+        if self._on_change is not None:
+            await self._on_change(doc, "flags")
+        return doc
+
     async def save_result(self, game_id: str, result: CurationResult) -> SlotModelDoc:
         await self.get_or_seed(game_id)
         await self._docs.update_one(
             {"game_id": game_id},
-            {"$set": {"result": result.model_dump(mode="json"), "updated_at": _now()}},
+            {"$set": {"result": result.model_dump(mode="json"), "verdict_stale": False, "updated_at": _now()}},
         )
         return await self.get(game_id)
 
@@ -150,6 +188,7 @@ class MathStore:
         await self._docs.update_one(
             {"game_id": game_id},
             {"$set": {"tune_result": result.model_dump(mode="json"),
+                      "verdict_stale": False,
                       "updated_at": _now()}},
         )
         return await self.get(game_id)

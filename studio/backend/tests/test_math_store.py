@@ -189,3 +189,60 @@ async def test_math_run_store_appends_and_lists_newest_first(mongo_db):
     assert [r.id for r in runs] == ["r2", "r1", "r0"]
     assert (await store.get("r1")).id == "r1"
     assert await store.get("missing") is None
+
+
+@pytest.fixture
+def sample_tune_result():
+    """Minimal TuneResult for testing."""
+    return TuneResult(status="pass", ran_at="2026-07-09T00:00:00Z")
+
+
+@pytest.mark.asyncio
+async def test_put_stamps_touched(mongo_db):
+    store = MathStore(mongo_db)
+    await store.get_or_seed("g1")
+    doc = await store.put("g1", model={"rows": 3}, source="api")
+    assert doc.touched is True
+    assert doc.origin == "template"
+
+
+@pytest.mark.asyncio
+async def test_save_realized_sets_origin_and_clears_shape_stale(mongo_db):
+    store = MathStore(mongo_db)
+    await store.get_or_seed("g2")
+    await store.set_stale_flags("g2", shape_stale=True)
+    doc = await store.save_realized("g2", {"rows": 4})
+    assert doc.origin == "realized"
+    assert doc.model["rows"] == 4
+    assert doc.shape_stale is False
+
+
+@pytest.mark.asyncio
+async def test_save_realized_marks_verdict_stale_when_result_exists(mongo_db, sample_tune_result):
+    store = MathStore(mongo_db)
+    await store.get_or_seed("g3")
+    await store.save_tune_result("g3", sample_tune_result)
+    doc = await store.save_realized("g3", {"rows": 4})
+    assert doc.verdict_stale is True
+
+
+@pytest.mark.asyncio
+async def test_new_results_clear_verdict_stale(mongo_db, sample_tune_result):
+    store = MathStore(mongo_db)
+    await store.get_or_seed("g4")
+    await store.set_stale_flags("g4", verdict_stale=True)
+    doc = await store.save_tune_result("g4", sample_tune_result)
+    assert doc.verdict_stale is False
+
+
+@pytest.mark.asyncio
+async def test_legacy_doc_backfills_touched_true(mongo_db):
+    # simulate a pre-rework doc: strip the new keys at the raw level
+    store = MathStore(mongo_db)
+    await store.get_or_seed("g5")
+    await store._docs.update_one(
+        {"game_id": "g5"},
+        {"$unset": {"touched": "", "origin": "", "verdict_stale": "", "shape_stale": ""}},
+    )
+    doc = await store.get("g5")
+    assert doc.touched is True and doc.origin == "template"
