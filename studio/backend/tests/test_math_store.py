@@ -236,6 +236,23 @@ async def test_new_results_clear_verdict_stale(mongo_db, sample_tune_result):
 
 
 @pytest.mark.asyncio
+async def test_put_does_not_stamp_touched_without_a_model(mongo_db):
+    # Verify clicks / cosmetic edits persist params, tuner_params, presentation,
+    # and locks through put() — none of those should permanently kill the
+    # silent-realize path by stamping touched.
+    store = MathStore(mongo_db)
+    await store.get_or_seed("g6")
+    doc = await store.put("g6", params=default_params(), source="api")
+    assert doc.touched is False
+    doc = await store.put("g6", presentation={"symbols": {}}, source="api")
+    assert doc.touched is False
+    doc = await store.put("g6", locks=SectionLocks(reels=True), source="api")
+    assert doc.touched is False
+    doc = await store.put("g6", model={"rows": 3}, source="api")
+    assert doc.touched is True
+
+
+@pytest.mark.asyncio
 async def test_legacy_doc_backfills_touched_true(mongo_db):
     # simulate a pre-rework doc: strip the new keys at the raw level
     store = MathStore(mongo_db)

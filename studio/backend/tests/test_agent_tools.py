@@ -325,3 +325,27 @@ async def test_set_gdd_fields_shape_touched_gates_and_deny_marks_stale(ctx, monk
     doc = await ctx.math_store.get(ctx.game_id)
     assert doc.shape_stale is True
     assert "stale" in out.lower() or "declined" in out.lower()
+
+
+async def test_set_gdd_fields_escalates_full_realize_when_shape_stale(ctx, monkeypatch):
+    monkeypatch.setattr("app.agent_tools.interrupt",
+                        lambda payload: "approve")
+    await _seed_symbols(ctx)
+    # Untouched baseline realize, then simulate an earlier denied bonuses edit
+    # that left drift behind (shape_stale flagged, model never re-realized).
+    from app.math.realize_flow import realize_game
+    await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id)
+    await ctx.gdd_store.set_fields(ctx.game_id, "bonus-features", {"features": [
+        {"name": "FS", "trigger": "3 scat"},
+        {"name": "Pick", "trigger": "bonus symbol"},
+    ]})
+    await ctx.math_store.set_stale_flags(ctx.game_id, shape_stale=True)
+
+    tool = build_set_gdd_fields_tool(ctx)
+    out = await tool.coroutine(aspect="math-model", fields={"reels": 4})
+
+    doc = await ctx.math_store.get(ctx.game_id)
+    assert len(doc.model["bonuses"]) == 2   # the previously-drifted section too
+    assert len(doc.model["reels"]) == 4
+    assert doc.shape_stale is False
+    assert "realized" in out.lower()

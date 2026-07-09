@@ -31,7 +31,8 @@ def _existing_ids(symbols_data: dict) -> dict[str, int]:
 
 async def realize_game(math_store, gdd_store, game_id: str, *,
                        aspect: str | None = None,
-                       fields: dict | None = None) -> RealizeFlowResult:
+                       fields: dict | None = None,
+                       gdd_hub=None) -> RealizeFlowResult:
     data = {}
     for a in _ASPECTS:
         doc = await gdd_store.get_doc(game_id, a)
@@ -45,14 +46,14 @@ async def realize_game(math_store, gdd_store, game_id: str, *,
         return RealizeFlowResult(False, result.errors, result.warnings)
 
     existing = await math_store.get_or_seed(game_id)
-    if existing.origin == "realized":
-        # aspect=None (explicit realize endpoint) means all sections, minus locks
-        sections = (affected_sections(aspect, fields or {}) if aspect
-                    else {"symbols", "reels", "paylines", "paytable", "bonuses"})
-        model = merge_sections(existing.model, result.model, sections,
-                               existing.locks)
-    else:
-        model = result.model  # birth: whole realized model
+    # Always merge, honoring locks — a touched-but-never-realized doc (or any
+    # legacy backfilled doc) must not have its locked sections wiped just
+    # because it never went through save_realized before.
+    # aspect=None (explicit realize endpoint) means all sections, minus locks
+    sections = (affected_sections(aspect, fields or {}) if aspect
+                else {"symbols", "reels", "paylines", "paytable", "bonuses"})
+    model = merge_sections(existing.model, result.model, sections,
+                           existing.locks)
     await math_store.save_realized(game_id, model)
 
     # join-key write-back (spec §5) — direct store call, no entry-point hook
@@ -65,7 +66,13 @@ async def realize_game(math_store, gdd_store, game_id: str, *,
             row["model_id"] = new_id
             changed = True
     if changed:
-        await gdd_store.set_fields(game_id, "symbols-reels", {"symbols": rows})
+        # Route through the hub when available so open GDD viewers see the
+        # write-back (gdd_doc_updated) — falls back to the store for callers
+        # that don't have a hub wired (e.g. bare unit tests).
+        if gdd_hub is not None:
+            await gdd_hub.set_fields(game_id, "symbols-reels", {"symbols": rows})
+        else:
+            await gdd_store.set_fields(game_id, "symbols-reels", {"symbols": rows})
 
     return RealizeFlowResult(True, result.errors, result.warnings)
 
@@ -89,8 +96,15 @@ async def apply_math_hooks(app_state, game_id: str, aspect: str,
         if doc.touched:
             await math_store.set_stale_flags(game_id, shape_stale=True)
             return "pending"
-        res = await realize_game(math_store, gdd_store, game_id,
-                                 aspect=aspect, fields=fields)
+        gdd_hub = getattr(app_state, "gdd_hub", None)
+        if doc.shape_stale:
+            # A previously-denied edit already left drift somewhere unresolved;
+            # a sectional realize here would clear the flag without actually
+            # fixing that drift, so escalate to a full re-realize.
+            res = await realize_game(math_store, gdd_store, game_id, gdd_hub=gdd_hub)
+        else:
+            res = await realize_game(math_store, gdd_store, game_id,
+                                     aspect=aspect, fields=fields, gdd_hub=gdd_hub)
         return "applied" if res.realized else None
     except Exception:  # noqa: BLE001 — the GDD save stays authoritative
         log.warning("math hook after GDD edit failed for game %s", game_id,

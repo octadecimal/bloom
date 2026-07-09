@@ -955,8 +955,16 @@ def build_set_gdd_fields_tool(ctx: ToolContext) -> BaseTool:
                     return msg + (" Re-realize declined — the model is now marked "
                                   "shape-stale until it is re-realized or the "
                                   "design is reverted.")
-            res = await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id,
-                                     aspect=aspect, fields=fields)
+            if mdoc.shape_stale:
+                # Earlier drift was never resolved (a prior denial, or a
+                # sectional realize elsewhere) — a sectional realize here would
+                # clear the flag without fixing it, so escalate to full.
+                res = await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id,
+                                         gdd_hub=ctx.gdd_hub)
+            else:
+                res = await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id,
+                                         aspect=aspect, fields=fields,
+                                         gdd_hub=ctx.gdd_hub)
             if res.realized:
                 msg += " Model re-realized to the new shape."
             elif res.errors:

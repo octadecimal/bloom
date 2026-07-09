@@ -137,7 +137,7 @@ class MathStore:
             fields["locks"] = locks.model_dump(mode="json")
         if presentation is not None:
             fields["presentation"] = presentation
-        if source != "realize":
+        if source != "realize" and model is not None:
             fields["touched"] = True
         await self._docs.update_one({"game_id": game_id}, {"$set": fields})
         doc = await self.get(game_id)

@@ -50,7 +50,8 @@ async def put_slot_model(game_id: str, body: PutSlotModelBody, request: Request)
 async def realize_slot_model_rest(game_id: str, request: Request) -> dict:
     from app.math.realize_flow import realize_game
     res = await realize_game(request.app.state.math_store,
-                             request.app.state.gdd_store, game_id)
+                             request.app.state.gdd_store, game_id,
+                             gdd_hub=request.app.state.gdd_hub)
     return {"realized": res.realized, "errors": res.errors,
             "warnings": res.warnings}
 
