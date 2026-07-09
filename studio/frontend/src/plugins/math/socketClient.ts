@@ -75,7 +75,13 @@ export function createMathSocket() {
           s.selectedGeneration.set('live');
         }
         if (p.phase === 'cancelled') s.genProgress.set(null);
-        if (p.phase === 'done') void refreshTuneResult(p.gameId);
+        if (p.phase === 'done') {
+          void refreshTuneResult(p.gameId);
+          // save_tune_result clears verdict_stale in Mongo without emitting
+          // slot_model_changed (it's called repeatedly inside the tune loop),
+          // so re-pull the doc here or the STALE chip outlives a fresh PASS.
+          void refreshDoc(p.gameId);
+        }
       },
     );
     sock.on('tuning_failed', (p: { gameId: string; failure?: string }) => {
