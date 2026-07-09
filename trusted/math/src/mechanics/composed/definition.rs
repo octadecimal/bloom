@@ -87,7 +87,7 @@ pub fn from_payload(bytes: &[u8]) -> Result<GameDefinition, serde_json::Error> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use serde_json::json;
 
@@ -130,7 +130,10 @@ mod tests {
         assert_eq!(def.family, FAMILY);
         assert_eq!(def.mechanics.len(), 2);
         assert_eq!(def.mechanics[0].kind, "reels@1");
-        assert_eq!(def.states[1].steps.budget, BudgetSpec::Keyword("awarded".into()));
+        assert_eq!(
+            def.states[1].steps.budget,
+            BudgetSpec::Keyword("awarded".into())
+        );
         assert_eq!(def.states[1].steps.initial, Some(3));
         assert_eq!(def.transitions[1].effect.as_deref(), Some("steps:add:2"));
         assert_eq!(def.transitions[1].to, None);
