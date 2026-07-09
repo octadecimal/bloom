@@ -21,9 +21,9 @@ _SYMBOLS = {"symbols": [
     {"slot": "wild", "name": "Rune", "kind": "wild"},
     {"slot": "scatter", "name": "Coin", "kind": "scatter"},
 ], "strip_length": {"min": 30, "max": 40}}
-_PAYTABLE = {"pay_constraints": [
-    {"symbol": "Dragon", "relation": "top-paying", "count": "5", "value": "100"},
-    {"symbol": "Ten", "relation": "floor", "count": "3", "value": "10"},
+_PAYTABLE = {"payouts": [
+    {"symbol": "Dragon", "3oak": "5", "4oak": "20", "5oak": "100"},
+    {"symbol": "Ten", "3oak": "2", "4oak": "8", "5oak": "40"},
 ]}
 # retrigger is ON deliberately: this is the parity oracle's teeth. A retriggering
 # free-spins feature on dense reels used to be a supercritical loop that drove the
@@ -34,8 +34,8 @@ _PAYTABLE = {"pay_constraints": [
 # must now curate to completion without OOM. Keeping retrigger ON makes this test
 # an end-to-end regression guard for that fix. Full write-up:
 # docs/superpowers/followups/2026-06-25-unbounded-free-spins-retrigger.md.
-_BONUS = {"features": [
-    {"name": "Free Spins", "trigger": "3 scatters", "description": "Spin 10 times with 2x multiplier"}]}
+_BONUS = {"free_spins": [
+    {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
 
 # A permissive target: we only need curation to RUN to completion, not to pass.
 _TARGET = {

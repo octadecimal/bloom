@@ -5,12 +5,12 @@
     { "name": "set_gdd_fields", "args": {
         "aspect": "paytable",
         "fields": {
-          "payouts": [
-            { "symbol": "Wild", "3oak": 10, "4oak": 50, "5oak": 500 },
-            { "symbol": "Cyber Seven", "3oak": 5, "4oak": 25, "5oak": 200 },
-            { "symbol": "Neon Bell", "3oak": 4, "4oak": 15, "5oak": 120 },
-            { "symbol": "Bar", "3oak": 3, "4oak": 10, "5oak": 80 },
-            { "symbol": "Ace", "3oak": 2, "4oak": 5, "5oak": 40 }
+          "pay_constraints": [
+            { "symbol": "Wild", "relation": "top-paying", "count": 5, "value": 500 },
+            { "symbol": "Cyber Seven", "relation": "top-paying", "count": 5, "value": 200 },
+            { "symbol": "Neon Bell", "relation": "floor", "count": 3, "value": 4 },
+            { "symbol": "Bar", "relation": "floor", "count": 3, "value": 3 },
+            { "symbol": "Ace", "relation": "floor", "count": 3, "value": 2 }
           ]
         } } },
     { "name": "ask_user_question", "args": {
