@@ -6,5 +6,8 @@
 //! change is a new type version. `slots@1` is untouched.
 
 pub mod definition;
+pub mod mechanic;
+pub mod meter;
+pub mod reels;
 
 pub use definition::{from_payload, to_payload, GameDefinition, FAMILY};
