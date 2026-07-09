@@ -4,7 +4,7 @@
 //! committed definition (like boot.rs), and separately asserts the
 //! CLI-minted, checked-in composed.pkg loads.
 
-use bloom_math::mechanics::composed::{compile, evaluate, GameDefinition};
+use bloom_math::mechanics::composed::{compile, evaluate, from_payload, GameDefinition};
 use bloom_package::{build, Envelope, PackageContent};
 use bloom_runtime_server::build_app;
 use bloom_runtime_server::state::{AppState, LoadedGame};
@@ -139,4 +139,8 @@ async fn checked_in_composed_pkg_loads_and_is_composed() {
     assert_eq!(state.package.envelope.package_id, "bloom-demo-composed");
     assert_eq!(state.package.seeds.len(), 10000);
     assert!(matches!(state.game, LoadedGame::Composed(_)));
+    assert_eq!(
+        from_payload(&state.package.math_payload).unwrap(),
+        demo_definition()
+    );
 }
