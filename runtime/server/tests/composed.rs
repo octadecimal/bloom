@@ -7,7 +7,7 @@
 use bloom_math::mechanics::composed::{compile, evaluate, from_payload, GameDefinition};
 use bloom_package::{build, Envelope, PackageContent};
 use bloom_runtime_server::build_app;
-use bloom_runtime_server::state::{AppState, LoadedGame};
+use bloom_runtime_server::state::{AppState, LoadedGame, PackageSource};
 use ed25519_dalek::SigningKey;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -136,11 +136,14 @@ async fn checked_in_composed_pkg_loads_and_is_composed() {
         Box::new(bloom_runtime_server::audit::MemoryAuditSink::new()),
     )
     .expect("checked-in composed.pkg verifies and compiles");
-    assert_eq!(state.package.envelope.package_id, "bloom-demo-composed");
-    assert_eq!(state.package.seeds.len(), 10000);
-    assert!(matches!(state.game, LoadedGame::Composed(_)));
+    let PackageSource::Single(lp) = &state.source else {
+        panic!("single mode");
+    };
+    assert_eq!(lp.package.envelope.package_id, "bloom-demo-composed");
+    assert_eq!(lp.package.seeds.len(), 10000);
+    assert!(matches!(lp.game, LoadedGame::Composed(_)));
     assert_eq!(
-        from_payload(&state.package.math_payload).unwrap(),
+        from_payload(&lp.package.math_payload).unwrap(),
         demo_definition()
     );
 }

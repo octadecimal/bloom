@@ -1,7 +1,8 @@
 //! Build + sign a `composed@1` package: definition → validate (kernel
-//! `compile`) → uncurated seed pool → signed bytes. No curation/metrics —
-//! composed curation is a filed follow-up (SP2 spec §2 decision 1). Pure
-//! (no I/O); the `compose` bin does file handling.
+//! `compile`) → uncurated seed pool → signed bytes; plus `measure_pool`,
+//! informational metrics over that (uncurated) pool. No curation/verify
+//! gating — that stays a filed follow-up (SP2 spec §2 decision 1, #172).
+//! Pure (no I/O); the `compose` bin does file handling.
 
 use crate::seedgen::generate_seeds;
 use bloom_math::mechanics::composed::{
@@ -9,6 +10,7 @@ use bloom_math::mechanics::composed::{
 };
 use bloom_package::{build, Envelope, PackageContent};
 use ed25519_dalek::SigningKey;
+use std::collections::BTreeMap;
 
 /// Validate the definition (any error means nothing is signed), then build
 /// the signed package with a deterministic uncurated pool.
@@ -32,6 +34,60 @@ pub fn build_composed_package(
         presentation: presentation.to_vec(),
     };
     Ok(build(&content, signing_key))
+}
+
+/// Informational metrics over an (uncurated) seed pool: every seed through the
+/// kernel evaluator, bet unit 1 (golden-vector convention). No gating — verify/
+/// freeze for composed stays #172.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PoolMetrics {
+    /// mean total_payout per round (bet unit 1)
+    pub rtp: f64,
+    /// share of rounds with any payout
+    pub hit_rate: f64,
+    /// largest single-round payout, in bet multiples
+    pub max_win_x: u64,
+    /// state id -> total StateEnter count across the pool
+    pub state_visits: BTreeMap<String, u64>,
+}
+
+pub fn measure_pool(
+    game: &bloom_math::mechanics::composed::CompiledGame,
+    seeds: &[u64],
+) -> PoolMetrics {
+    use bloom_math::mechanics::composed::{evaluate, TraceEntry};
+    let mut total: u128 = 0;
+    let mut hits: u64 = 0;
+    let mut max_win: u64 = 0;
+    let mut visits: BTreeMap<String, u64> = BTreeMap::new();
+    for &seed in seeds {
+        let trace = evaluate(game, seed);
+        total += u128::from(trace.total_payout);
+        if trace.total_payout > 0 {
+            hits += 1;
+        }
+        max_win = max_win.max(trace.total_payout);
+        for e in &trace.entries {
+            if let TraceEntry::StateEnter { state } = e {
+                *visits.entry(state.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    if seeds.is_empty() {
+        return PoolMetrics {
+            rtp: 0.0,
+            hit_rate: 0.0,
+            max_win_x: 0,
+            state_visits: visits,
+        };
+    }
+    let n = seeds.len() as f64;
+    PoolMetrics {
+        rtp: total as f64 / n,
+        hit_rate: hits as f64 / n,
+        max_win_x: max_win,
+        state_visits: visits,
+    }
 }
 
 #[cfg(test)]
@@ -104,5 +160,28 @@ mod tests {
         let a = build_composed_package(&def, "p", 50, 7, &[], &key()).unwrap();
         let b = build_composed_package(&def, "p", 50, 7, &[], &key()).unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn measure_pool_is_deterministic_and_counts_state_visits() {
+        let compiled = bloom_math::mechanics::composed::compile(&valid_def()).unwrap();
+        let seeds = crate::seedgen::generate_seeds(42, 200);
+        let a = measure_pool(&compiled, &seeds);
+        let b = measure_pool(&compiled, &seeds);
+        assert_eq!(a, b);
+        // Every round enters the start state exactly once.
+        assert_eq!(a.state_visits.get("base").copied(), Some(200));
+        assert!(a.rtp >= 0.0);
+        assert!((0.0..=1.0).contains(&a.hit_rate));
+    }
+
+    #[test]
+    fn measure_pool_empty_seeds_is_all_zero() {
+        let compiled = bloom_math::mechanics::composed::compile(&valid_def()).unwrap();
+        let m = measure_pool(&compiled, &[]);
+        assert_eq!(m.rtp, 0.0);
+        assert_eq!(m.hit_rate, 0.0);
+        assert_eq!(m.max_win_x, 0);
+        assert!(m.state_visits.is_empty());
     }
 }

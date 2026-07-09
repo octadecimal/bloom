@@ -1,8 +1,8 @@
 //! axum handlers. Thin orchestration over the AppState seams.
 
-use crate::state::{AppState, LoadedGame};
+use crate::state::{AppState, LoadedGame, ResolveError};
 use crate::wire::{HandshakeResponse, OutcomeWire, SpinResponse};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use bloom_math::mechanics::slots::evaluate;
@@ -17,31 +17,60 @@ pub struct HealthResponse {
     pub mechanic: String,
 }
 
-pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok",
-        package_id: state.package.envelope.package_id.clone(),
-        package_version: state.package.envelope.package_version,
-        mechanic: state.package.envelope.mechanic.clone(),
-    })
+fn resolve_status(e: ResolveError) -> StatusCode {
+    match e {
+        ResolveError::PackageParamRequired => StatusCode::BAD_REQUEST,
+        ResolveError::NotFound(_) => StatusCode::NOT_FOUND,
+        ResolveError::Load(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn health(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<HealthResponse>, StatusCode> {
+    match &state.source {
+        crate::state::PackageSource::Single(lp) => Ok(Json(HealthResponse {
+            status: "ok",
+            package_id: lp.package.envelope.package_id.clone(),
+            package_version: lp.package.envelope.package_version,
+            mechanic: lp.package.envelope.mechanic.clone(),
+        })),
+        crate::state::PackageSource::Dir { .. } => Ok(Json(HealthResponse {
+            status: "ok",
+            package_id: String::new(),
+            package_version: 0,
+            mechanic: "packages-dir".to_string(),
+        })),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct HandshakeQuery {
+    pub package: Option<String>,
 }
 
 /// Hand the untrusted client the package presentation (parsed as JSON; null if
 /// empty or non-JSON) plus the envelope. SP1 demo packages carry a small JSON
 /// manifest. Consuming this is SP2.
-pub async fn handshake(State(state): State<Arc<AppState>>) -> Json<HandshakeResponse> {
+pub async fn handshake(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<HandshakeQuery>,
+) -> Result<Json<HandshakeResponse>, StatusCode> {
+    let lp = state
+        .resolve(q.package.as_deref(), true)
+        .map_err(resolve_status)?;
     let presentation =
-        serde_json::from_slice(&state.package.presentation).unwrap_or(serde_json::Value::Null);
-    Json(HandshakeResponse {
-        package_id: state.package.envelope.package_id.clone(),
-        package_version: state.package.envelope.package_version,
-        mechanic: state.package.envelope.mechanic.clone(),
+        serde_json::from_slice(&lp.package.presentation).unwrap_or(serde_json::Value::Null);
+    Ok(Json(HandshakeResponse {
+        package_id: lp.package.envelope.package_id.clone(),
+        package_version: lp.package.envelope.package_version,
+        mechanic: lp.package.envelope.mechanic.clone(),
         presentation,
-        definition: match &state.game {
-            LoadedGame::Composed(_) => serde_json::from_slice(&state.package.math_payload).ok(),
+        definition: match &lp.game {
+            LoadedGame::Composed(_) => serde_json::from_slice(&lp.package.math_payload).ok(),
             LoadedGame::Slots(_) => None,
         },
-    })
+    }))
 }
 
 fn default_bet() -> u64 {
@@ -52,6 +81,8 @@ fn default_bet() -> u64 {
 pub struct SpinRequest {
     #[serde(default = "default_bet")]
     pub bet: u64,
+    #[serde(default)]
+    pub package: Option<String>,
 }
 
 fn now_ms() -> u128 {
@@ -68,11 +99,17 @@ pub async fn spin(
     State(state): State<Arc<AppState>>,
     body: Option<Json<SpinRequest>>,
 ) -> Result<Json<SpinResponse>, StatusCode> {
-    let bet = body.map(|Json(b)| b.bet).unwrap_or(1);
+    let (bet, package) = match body {
+        Some(Json(b)) => (b.bet, b.package),
+        None => (1, None),
+    };
 
-    let idx = state.draw.index(state.package.seeds.len());
-    let seed = state.package.seeds[idx];
-    let (outcome, trace) = match &state.game {
+    let lp = state
+        .resolve(package.as_deref(), false)
+        .map_err(resolve_status)?;
+    let idx = state.draw.index(lp.package.seeds.len());
+    let seed = lp.package.seeds[idx];
+    let (outcome, trace) = match &lp.game {
         LoadedGame::Slots(model) => (OutcomeWire::from_round(&evaluate(model, seed)), None),
         LoadedGame::Composed(game) => {
             let t = bloom_math::mechanics::composed::evaluate(game, seed);
@@ -86,15 +123,15 @@ pub async fn spin(
     };
 
     let record = crate::audit::AuditRecord {
-        package_id: state.package.envelope.package_id.clone(),
-        package_version: state.package.envelope.package_version,
-        mechanic: state.package.envelope.mechanic.clone(),
+        package_id: lp.package.envelope.package_id.clone(),
+        package_version: lp.package.envelope.package_version,
+        mechanic: lp.package.envelope.mechanic.clone(),
         math_engine_version: bloom_math::ENGINE_VERSION.to_string(),
         seed,
         bet,
         timestamp_ms: now_ms(),
         outcome: outcome.clone(),
-        definition_hash: state.definition_hash.clone(),
+        definition_hash: lp.definition_hash.clone(),
     };
     state
         .audit
@@ -296,7 +333,10 @@ mod tests {
     }
 
     fn slots_model(state: &AppState) -> SlotModel {
-        match &state.game {
+        let crate::state::PackageSource::Single(lp) = &state.source else {
+            panic!("test state is single-package");
+        };
+        match &lp.game {
             LoadedGame::Slots(m) => m.clone(),
             _ => panic!("test state is slots"),
         }

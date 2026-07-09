@@ -13,6 +13,8 @@ const openGameDocs = vi.fn();
 const closeGameDocs = vi.fn();
 const openGameConfig = vi.fn();
 const closeGameConfig = vi.fn();
+const openGameStructure = vi.fn();
+const closeGameStructure = vi.fn();
 const openGameMath = vi.fn();
 const closeGameMath = vi.fn();
 const error = vi.fn();
@@ -34,6 +36,11 @@ vi.mock('../../plugins/game-config/actions', () => ({
   openGameConfig: (id: string) => openGameConfig(id),
   closeGameConfig: () => closeGameConfig(),
   initGameConfig: vi.fn(),
+}));
+vi.mock('../../plugins/game-structure/actions', () => ({
+  openGameStructure: (id: string) => openGameStructure(id),
+  closeGameStructure: () => closeGameStructure(),
+  initGameStructure: vi.fn(),
 }));
 vi.mock('../../plugins/math/actions', () => ({
   openGameMath: (id: string) => openGameMath(id),
@@ -59,6 +66,8 @@ beforeEach(() => {
   closeGameDocs.mockReset();
   openGameConfig.mockReset();
   closeGameConfig.mockReset();
+  openGameStructure.mockReset();
+  closeGameStructure.mockReset();
   openGameMath.mockReset();
   closeGameMath.mockReset();
   error.mockReset();
