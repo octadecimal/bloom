@@ -151,10 +151,10 @@ export function applyDocFromJson(text: string): boolean {
 export async function buildPackage(): Promise<void> {
   const s = gameStructureSlice();
   const gameId = s.activeGameId.get();
-  if (!gameId) return;
-  await flushPendingSave(); // build reads the STORED doc — persist edits first
+  if (!gameId || s.build.status.get() === 'building') return;
   s.build.set({ status: 'building', metrics: null, errors: [] });
   try {
+    await flushPendingSave(); // build reads the STORED doc — persist edits first
     const res = await buildGameDefinition(gameId);
     if (res.ok) s.build.set({ status: 'done', metrics: res.metrics, errors: [] });
     else s.build.set({ status: 'error', metrics: null, errors: res.errors ?? ['build failed'] });

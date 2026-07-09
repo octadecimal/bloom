@@ -140,4 +140,18 @@ describe('buildPackage', () => {
     expect(b.status).toBe('error');
     expect(b.errors).toEqual(['BadCaps']);
   });
+
+  it('guards against a second concurrent call while the first is still flushing/building', async () => {
+    await openGameStructure('g1');
+    applyDefinition((d) => ({ ...d, start: 'base' })); // dirty -> flushPendingSave awaits putGameDefinition
+    let resolvePut!: (doc: unknown) => void;
+    restMock.putGameDefinition.mockImplementation(() => new Promise((resolve) => (resolvePut = resolve)));
+
+    const p1 = buildPackage();
+    const p2 = buildPackage(); // double-click before the first flush resolves
+    resolvePut(wireDoc({ updatedAt: '2026-07-09T00:00:02Z' }));
+    await Promise.all([p1, p2]);
+
+    expect(restMock.buildGameDefinition).toHaveBeenCalledTimes(1);
+  });
 });
