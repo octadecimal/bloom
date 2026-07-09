@@ -46,6 +46,15 @@ async def put_slot_model(game_id: str, body: PutSlotModelBody, request: Request)
     return sim_wire(doc)
 
 
+@router.post("/games/{game_id}/slot-model/realize")
+async def realize_slot_model_rest(game_id: str, request: Request) -> dict:
+    from app.math.realize_flow import realize_game
+    res = await realize_game(request.app.state.math_store,
+                             request.app.state.gdd_store, game_id)
+    return {"realized": res.realized, "errors": res.errors,
+            "warnings": res.warnings}
+
+
 @router.post("/games/{game_id}/slot-model/curate", status_code=202)
 async def curate_slot_model(game_id: str, request: Request) -> Response:
     asyncio.create_task(request.app.state.math_hub.request_curation(game_id))

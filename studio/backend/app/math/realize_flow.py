@@ -68,3 +68,31 @@ async def realize_game(math_store, gdd_store, game_id: str, *,
         await gdd_store.set_fields(game_id, "symbols-reels", {"symbols": rows})
 
     return RealizeFlowResult(True, result.errors, result.warnings)
+
+
+async def apply_math_hooks(app_state, game_id: str, aspect: str,
+                           fields: dict) -> str | None:
+    """Shape/target side-effects of a persisted GDD edit (spec §4). Best-effort:
+    like the scene reflow, a failure must not fail the save's PUT."""
+    from app.math.shape import is_shape_change, is_target_change
+
+    try:
+        math_store = app_state.math_store
+        gdd_store = app_state.gdd_store
+        if is_target_change(aspect, fields):
+            doc = await math_store.get_or_seed(game_id)
+            if doc.result is not None or doc.tune_result is not None:
+                await math_store.set_stale_flags(game_id, verdict_stale=True)
+        if not is_shape_change(aspect, fields):
+            return None
+        doc = await math_store.get_or_seed(game_id)
+        if doc.touched:
+            await math_store.set_stale_flags(game_id, shape_stale=True)
+            return "pending"
+        res = await realize_game(math_store, gdd_store, game_id,
+                                 aspect=aspect, fields=fields)
+        return "applied" if res.realized else None
+    except Exception:  # noqa: BLE001 — the GDD save stays authoritative
+        log.warning("math hook after GDD edit failed for game %s", game_id,
+                    exc_info=True)
+        return None

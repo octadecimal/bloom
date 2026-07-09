@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from uuid import uuid4
 
+from app.gdd.hub import GddHub
+from app.gdd.store import GddStore
+from app.math import rest as math_rest
+from app.math.models import MetricsWire, TuneResult
+from app.math.store import MathStore
+from app.rest import SetGddFieldsBody, set_gdd_fields_rest
+
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
@@ -230,3 +237,106 @@ async def test_put_intent_field_is_reproducible(blueprint_rest_harness):
     second = (await h.scene_doc())["nodes"]["spr.reels"]["props"]
     assert first["position"] == second["position"]
     assert first["scale"] == second["scale"]
+
+
+# ---------------------------------------------------------------------------
+# Task 6: PUT /gdd/{aspect} shape/target hooks + explicit realize endpoint.
+# Lightweight harness (no scene/asset infra needed): real GddStore/GddHub/
+# MathStore over mongo_db, calling the REST handlers directly (mirrors the
+# _req(**state) pattern in tests/test_math_rest.py).
+# ---------------------------------------------------------------------------
+
+
+def _new_math_game() -> str:
+    return f"game-math-hook-{uuid4().hex[:8]}"
+
+
+def _math_req(state) -> SimpleNamespace:
+    return SimpleNamespace(app=SimpleNamespace(state=state))
+
+
+@pytest_asyncio.fixture
+async def math_gdd_state(mongo_db):
+    gdd_store = GddStore(mongo_db)
+    gdd_hub = GddHub(_FakeSio(), gdd_store)
+    math_store = MathStore(mongo_db)
+    return SimpleNamespace(gdd_store=gdd_store, gdd_hub=gdd_hub, math_store=math_store)
+
+
+async def _put_gdd(state, game_id: str, aspect: str, fields: dict) -> dict:
+    return await set_gdd_fields_rest(
+        game_id, aspect, SetGddFieldsBody(fields=fields), _math_req(state))
+
+
+@pytest_asyncio.fixture
+async def seeded_result(math_gdd_state):
+    """A game whose slot-model already has a stored tune_result (verdict)."""
+    state = math_gdd_state
+    gid = _new_math_game()
+    await state.gdd_store.seed_taxonomy(gid)
+    await state.math_store.get_or_seed(gid)
+    await state.math_store.save_tune_result(gid, TuneResult(
+        status="pass", verdict="pass", tuned_model={"reels": [[0]]},
+        metrics=MetricsWire(rtp=0.96, volatility=4.0, hit_frequency=0.3,
+                            base_rtp=0.8, feature_rtp=0.16, bonus_hit_rates=[]),
+        ran_at="t1"))
+    return state, gid
+
+
+@pytest.mark.asyncio
+async def test_shape_edit_on_untouched_model_realizes(math_gdd_state):
+    state = math_gdd_state
+    gid = _new_math_game()
+    await _put_gdd(state, gid, "symbols-reels",
+                   {"symbols": [{"slot": "a", "kind": "high"}]})
+    r = await _put_gdd(state, gid, "math-model", {"reels": 4, "rows": 3})
+    assert r["realize"] == "applied"
+    model = await math_rest.get_slot_model(gid, _math_req(state))
+    assert len(model["model"]["reels"]) == 4
+    assert model["origin"] == "realized"
+
+
+@pytest.mark.asyncio
+async def test_shape_edit_on_touched_model_goes_pending(math_gdd_state):
+    state = math_gdd_state
+    gid = _new_math_game()
+    req = _math_req(state)
+    await _put_gdd(state, gid, "symbols-reels",
+                   {"symbols": [{"slot": "a", "kind": "high"}]})
+    await _put_gdd(state, gid, "math-model", {"reels": 4})
+    doc = await math_rest.get_slot_model(gid, req)
+    # human edit -> touched
+    await math_rest.put_slot_model(
+        gid, math_rest.PutSlotModelBody(model=doc["model"]), req)
+    r = await _put_gdd(state, gid, "math-model", {"reels": 3})
+    assert r["realize"] == "pending"
+    doc = await math_rest.get_slot_model(gid, req)
+    assert doc["shapeStale"] is True
+    assert len(doc["model"]["reels"]) == 4          # model untouched
+
+
+@pytest.mark.asyncio
+async def test_explicit_realize_applies_and_clears_shape_stale(math_gdd_state):
+    state = math_gdd_state
+    gid = _new_math_game()
+    req = _math_req(state)
+    await _put_gdd(state, gid, "symbols-reels",
+                   {"symbols": [{"slot": "a", "kind": "high"}]})
+    await _put_gdd(state, gid, "math-model", {"reels": 4})
+    doc = await math_rest.get_slot_model(gid, req)
+    await math_rest.put_slot_model(
+        gid, math_rest.PutSlotModelBody(model=doc["model"]), req)
+    await _put_gdd(state, gid, "math-model", {"reels": 3})
+    r = await math_rest.realize_slot_model_rest(gid, req)
+    assert r["realized"] is True
+    doc = await math_rest.get_slot_model(gid, req)
+    assert doc["shapeStale"] is False
+    assert len(doc["model"]["reels"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_target_edit_after_result_sets_verdict_stale(seeded_result):
+    state, gid = seeded_result
+    await _put_gdd(state, gid, "math-model", {"rtp": "94%"})
+    doc = await math_rest.get_slot_model(gid, _math_req(state))
+    assert doc["verdictStale"] is True
