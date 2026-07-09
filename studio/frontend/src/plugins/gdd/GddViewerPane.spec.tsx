@@ -15,7 +15,7 @@ vi.mock('./actions', () => ({
 
 vi.mock('./restClient', () => ({
   getSlotModel: vi.fn(async () => ({ model: { symbols: [], paytable: { entries: [] }, bonuses: [] }, shapeStale: false })),
-  realizeSlotModel: vi.fn(async () => undefined),
+  realizeSlotModel: vi.fn(async () => ({ realized: true, errors: [], warnings: [] })),
 }));
 
 const fakeProps = {} as Parameters<typeof GddViewerPane>[0];
@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.mocked(getSlotModel)
     .mockReset()
     .mockResolvedValue({ model: { symbols: [], paytable: { entries: [] }, bonuses: [] }, shapeStale: false });
-  vi.mocked(realizeSlotModel).mockReset().mockResolvedValue(undefined);
+  vi.mocked(realizeSlotModel).mockReset().mockResolvedValue({ realized: true, errors: [], warnings: [] });
 });
 
 const uiDoc = (data: Record<string, unknown>): IGddDoc => ({
@@ -172,6 +172,28 @@ describe('GddViewerPane realized mirror', () => {
     });
     expect(realizeSlotModel).toHaveBeenCalledWith('g1');
     expect(getSlotModel).toHaveBeenCalledTimes(2); // initial mount fetch + post-realize refetch
+  });
+
+  it('surfaces realize errors and keeps the banner when realized is false', async () => {
+    vi.mocked(getSlotModel).mockResolvedValue({
+      model: { symbols: [], paytable: { entries: [] }, bonuses: [] },
+      shapeStale: true,
+    });
+    vi.mocked(realizeSlotModel).mockResolvedValue({ realized: false, errors: ['no symbols defined'], warnings: [] });
+    act(() => {
+      gddSlice().activeGameId.set('g1');
+      gddSlice().docs.set([symbolsDoc()]);
+      gddSlice().selectedAspect.set('symbols-reels');
+    });
+    render(<GddViewerPane {...fakeProps} />);
+    await waitFor(() => expect(screen.getByTestId('gdd-shape-stale')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /re-realize model/i }));
+    });
+    expect(screen.getByTestId('gdd-realize-error')).toHaveTextContent('no symbols defined');
+    expect(screen.getByTestId('gdd-shape-stale')).toBeTruthy(); // banner stays
+    expect(getSlotModel).toHaveBeenCalledTimes(1); // no refetch on a failed realize
   });
 
   it('does not render the mirror or the shape-stale warning outside their scoped aspects', async () => {

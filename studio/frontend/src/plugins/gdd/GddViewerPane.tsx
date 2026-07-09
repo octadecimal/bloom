@@ -100,10 +100,13 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
 
   const [slotModel, setSlotModel] = useState<IMirrorModel | null>(null);
   const [shapeStale, setShapeStale] = useState(false);
+  const [realizing, setRealizing] = useState(false);
+  const [realizeError, setRealizeError] = useState<string | null>(null);
 
   useEffect(() => {
     setSlotModel(null);
     setShapeStale(false);
+    setRealizeError(null);
     if (!activeGameId) return;
     const gameId = activeGameId;
     let cancelled = false;
@@ -148,10 +151,22 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
 
   const gameId = activeGameId; // narrowed non-null by the early return above; the closure below doesn't inherit that narrowing from `activeGameId` directly
   async function onRealize() {
-    await realizeSlotModel(gameId);
-    const doc = await getSlotModel(gameId);
-    setSlotModel(doc.model);
-    setShapeStale(doc.shapeStale);
+    setRealizing(true);
+    try {
+      const res = await realizeSlotModel(gameId);
+      if (!res.realized) {
+        setRealizeError(res.errors.join('; ') || 'realize failed');
+        return; // model unchanged on the backend; keep the stale banner as-is
+      }
+      const doc = await getSlotModel(gameId);
+      setSlotModel(doc.model);
+      setShapeStale(doc.shapeStale);
+      setRealizeError(null);
+    } catch {
+      setRealizeError('realize request failed');
+    } finally {
+      setRealizing(false);
+    }
   }
 
   return (
@@ -178,11 +193,22 @@ export function GddViewerPane(_props: IDockviewPanelProps) {
         )}
         <Markdown source={current?.body || ''} />
         {current && SHAPE_ASPECTS.has(current.aspect) && shapeStale && (
-          <div data-testid="gdd-shape-stale" className="mt-3 flex items-center gap-3 border-t border-hairline pt-3 text-sm text-accent-text">
-            <span>The game model&rsquo;s shape no longer matches this GDD.</span>
-            <button onClick={() => void onRealize()} className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover">
-              Re-realize model
-            </button>
+          <div data-testid="gdd-shape-stale" className="mt-3 flex flex-col gap-2 border-t border-hairline pt-3 text-sm">
+            <div className="flex items-center gap-3 text-accent-text">
+              <span>The game model&rsquo;s shape no longer matches this GDD.</span>
+              <button
+                onClick={() => void onRealize()}
+                disabled={realizing}
+                className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+              >
+                {realizing ? 'Re-realizing…' : 'Re-realize model'}
+              </button>
+            </div>
+            {realizeError && (
+              <span data-testid="gdd-realize-error" className="text-text-3">
+                Re-realize failed: {realizeError}
+              </span>
+            )}
           </div>
         )}
         {current && MIRROR_ASPECTS.has(current.aspect) && (

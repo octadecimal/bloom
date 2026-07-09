@@ -39,7 +39,13 @@ export async function getSlotModel(gameId: string): Promise<ISlotModelMirrorDoc>
   return okJson<ISlotModelMirrorDoc>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model`));
 }
 
-export async function realizeSlotModel(gameId: string): Promise<void> {
-  const res = await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/realize`, { method: 'POST' });
-  if (!res.ok) throw new Error(`request failed: ${res.status}`);
+// Realize always answers 200; failure is realized:false + populated errors.
+export interface IRealizeResult {
+  realized: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export async function realizeSlotModel(gameId: string): Promise<IRealizeResult> {
+  return okJson<IRealizeResult>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model/realize`, { method: 'POST' }));
 }
