@@ -74,6 +74,28 @@ async def test_sectional_rerealize_preserves_unaffected_and_ids(math_store, gdd_
     assert ids == {0, 1, 2}                                  # join keys stable
 
 
+async def test_first_sectional_realize_from_template_realizes_all_sections(
+    math_store, gdd_store
+):
+    # A fresh game's first realize arrives via a sectional shape edit (aspect +
+    # fields). The base model is still the seeded template — merging only the
+    # edit's sections would leave template residue (e.g. the video-5x3 bonuses
+    # whose trigger symbol doesn't exist in the fresh strips). First realize
+    # from template must cover all sections.
+    gdd_no_features = {**GDD, "bonus-features": {}}
+    await _seed_gdd(gdd_store, "g11", gdd_no_features)
+    await math_store.get_or_seed("g11")   # seeds the template model
+
+    res = await realize_game(
+        math_store, gdd_store, "g11", aspect="symbols-reels",
+        fields={"symbols": gdd_no_features["symbols-reels"]["symbols"]})
+
+    assert res.realized
+    doc = await math_store.get("g11")
+    assert doc.origin == "realized"
+    assert doc.model["bonuses"] == []   # realized (no GDD features), not template leftover
+
+
 async def test_approve_realize_honors_locks_on_touched_template_origin(math_store, gdd_store):
     # A hand-authored/tuner-applied model that was never GDD-born: origin stays
     # "template", touched=True (every legacy backfilled doc looks like this

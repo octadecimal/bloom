@@ -49,8 +49,12 @@ async def realize_game(math_store, gdd_store, game_id: str, *,
     # Always merge, honoring locks — a touched-but-never-realized doc (or any
     # legacy backfilled doc) must not have its locked sections wiped just
     # because it never went through save_realized before.
-    # aspect=None (explicit realize endpoint) means all sections, minus locks
-    sections = (affected_sections(aspect, fields or {}) if aspect
+    # aspect=None (explicit realize endpoint) means all sections, minus locks.
+    # First realize from a template base is also all-sections: a sectional
+    # merge would leave template residue (e.g. bonuses whose trigger symbol
+    # doesn't exist in the freshly realized strips).
+    sections = (affected_sections(aspect, fields or {})
+                if aspect and existing.origin != "template"
                 else {"symbols", "reels", "paylines", "paytable", "bonuses"})
     model = merge_sections(existing.model, result.model, sections,
                            existing.locks)
