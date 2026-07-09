@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 pub struct ServerConfig {
     pub package_path: PathBuf,
+    pub packages_dir: Option<PathBuf>,
     pub audit_path: PathBuf,
     pub bind_addr: SocketAddr,
 }
@@ -27,9 +28,13 @@ impl ServerConfig {
         let audit_path = std::env::var("BLOOM_RUNTIME_AUDIT")
             .unwrap_or_else(|_| "runtime/server/var/audit.jsonl".to_string())
             .into();
+        let packages_dir = std::env::var("BLOOM_RUNTIME_PACKAGES")
+            .ok()
+            .map(PathBuf::from);
 
         ServerConfig {
             package_path,
+            packages_dir,
             audit_path,
             bind_addr: SocketAddr::from(([0, 0, 0, 0], port)),
         }
