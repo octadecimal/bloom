@@ -150,9 +150,7 @@ export function setBindingOverride(
   const newBinding: IBinding = override ? { ...state.bindings[bindingIndex], override } : { mechanic: state.bindings[bindingIndex].mechanic };
   return {
     ...def,
-    states: def.states.map((s, i) =>
-      i === stateIndex ? { ...s, bindings: s.bindings.map((b, j) => (j === bindingIndex ? newBinding : b)) } : s,
-    ),
+    states: def.states.map((s, i) => (i === stateIndex ? { ...s, bindings: s.bindings.map((b, j) => (j === bindingIndex ? newBinding : b)) } : s)),
   };
 }
 
@@ -160,9 +158,7 @@ export function addScriptStep(def: IGameDefinition, stateIndex: number, invoke: 
   if (!def.states[stateIndex]) return def;
   return {
     ...def,
-    states: def.states.map((s, i) =>
-      i === stateIndex ? { ...s, script: [...s.script, { invoke }] } : s,
-    ),
+    states: def.states.map((s, i) => (i === stateIndex ? { ...s, script: [...s.script, { invoke }] } : s)),
   };
 }
 
@@ -171,9 +167,7 @@ export function removeScriptStep(def: IGameDefinition, stateIndex: number, stepI
   if (!state || !state.script[stepIndex]) return def;
   return {
     ...def,
-    states: def.states.map((s, i) =>
-      i === stateIndex ? { ...s, script: s.script.filter((_, j) => j !== stepIndex) } : s,
-    ),
+    states: def.states.map((s, i) => (i === stateIndex ? { ...s, script: s.script.filter((_, j) => j !== stepIndex) } : s)),
   };
 }
 
