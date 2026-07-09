@@ -50,7 +50,7 @@ pub struct RoundTrace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mechanics::composed::mechanic::TriggerData;
+    use crate::mechanics::composed::TriggerData;
     use serde_json::json;
 
     #[test]
