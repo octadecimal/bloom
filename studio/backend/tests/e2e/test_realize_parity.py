@@ -34,8 +34,13 @@ _PAYTABLE = {"payouts": [
 # must now curate to completion without OOM. Keeping retrigger ON makes this test
 # an end-to-end regression guard for that fix. Full write-up:
 # docs/superpowers/followups/2026-06-25-unbounded-free-spins-retrigger.md.
-_BONUS = {"free_spins": [
-    {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
+# NOTE: the realizer now seeds bonuses from the GDD `features` table with a fixed
+# config (retrigger=False always — the GDD no longer carries a retrigger flag,
+# that's GA territory per Plan 2 spec §6). To keep this regression guard's teeth
+# we realize normally, then flip retrigger back ON directly on the realized model
+# dict before curating.
+_BONUS = {"features": [
+    {"name": "Free Spins", "trigger": "3 scatters", "description": "wheel"}]}
 
 # A permissive target: we only need curation to RUN to completion, not to pass.
 _TARGET = {
@@ -51,6 +56,7 @@ _TARGET = {
 async def test_realized_model_is_structurally_valid_for_the_kernel():
     res = realize_slot_model(_MATH, _SYMBOLS, _PAYTABLE, _BONUS)
     assert res.model is not None, f"realize failed: {res.errors}"
+    res.model["bonuses"][0]["FreeSpins"]["config"]["retrigger"] = True
 
     seen: list[CurationProgress] = []
     runner = SubprocessCurationRunner(get_settings())
