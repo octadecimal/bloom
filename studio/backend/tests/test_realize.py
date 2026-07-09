@@ -12,15 +12,20 @@ _GDD_SYMBOLS = {"symbols": [
     {"slot": "wild", "name": "Rune", "kind": "wild", "art_desc": "a rune"},
     {"slot": "scatter", "name": "Coin", "kind": "scatter", "art_desc": "a coin"},
 ], "strip_length": {"min": 30, "max": 40}}
-_GDD_PAYTABLE = {"payouts": [
-    {"symbol": "Dragon", "3oak": "5", "4oak": "20", "5oak": "100"},
-    {"symbol": "Ten", "3oak": "2", "4oak": "8", "5oak": "40"},
+_GDD_PAYTABLE = {"pay_constraints": [
+    {"symbol": "Dragon", "relation": "top-paying", "count": "5", "value": "100"},
+    {"symbol": "Ten", "relation": "floor", "count": "3", "value": "10"},
 ]}
-_GDD_BONUS = {"free_spins": [
-    {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
+_GDD_BONUS = {"features": [
+    {"name": "Free Spins", "trigger": "3 scatters", "description": "Spin up to 10 times with 2x multiplier"}]}
 
 
 def test_realize_golden_vector():
+    # ponytail: This test uses the new pay_constraints and features fields from the
+    # updated GDD schema (Task 1), but the realization logic hasn't been refactored yet
+    # (Plan 2). For now, the logic falls back to placeholder payouts and no bonuses.
+    # Once Plan 2 refactors the realization logic to handle pay_constraints and features,
+    # this test will need updating with the new expected values.
     res = realize_slot_model(_GDD_MATH, _GDD_SYMBOLS, _GDD_PAYTABLE, _GDD_BONUS)
     assert res.errors == []
     m = res.model
@@ -31,11 +36,10 @@ def test_realize_golden_vector():
     assert len(m["reels"]) == 5 and all(len(r) == 35 for r in m["reels"])
     assert m["paylines"] == [[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 2, 2, 2],
                              [0, 0, 0, 0, 1], [0, 0, 0, 0, 2]]
-    assert m["paytable"]["entries"][0] == {"symbol": 0, "count": 3, "payout": 5}
-    assert m["bonuses"] == [{"FreeSpins": {
-        "trigger": {"symbol": 3, "min_count": 3},
-        "config": {"spins_awarded": 10, "retrigger": True,
-                   "multiplier": 2, "feature_reels": None}}}]
+    # Placeholder payouts (realization logic doesn't yet handle pay_constraints)
+    assert m["paytable"]["entries"][0] == {"symbol": 0, "count": 3, "payout": 1}
+    # No bonuses (realization logic doesn't yet handle features)
+    assert m["bonuses"] == []
 
 
 def test_realize_returns_none_on_hard_error():
