@@ -163,4 +163,58 @@ mod tests {
         assert_eq!(a.payout, b.payout);
         assert_eq!(a.events, b.events);
     }
+
+    #[test]
+    fn spin_accumulates_into_prepopulated_ctx() {
+        // Inline config with scatter paytable entry (pays 8 for 3 scatters).
+        let config = MechanicConfig::Reels(ReelsConfig {
+            strips: vec![vec![9], vec![9], vec![9]],
+            rows: 1,
+            symbols: vec![
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 9,
+                    role: SymbolRole::Scatter,
+                },
+            ],
+            paylines: vec![vec![0, 0, 0]],
+            paytable: Paytable {
+                entries: vec![
+                    PaytableEntry {
+                        symbol: 0,
+                        count: 3,
+                        payout: 5,
+                    },
+                    PaytableEntry {
+                        symbol: 9,
+                        count: 3,
+                        payout: 8,
+                    },
+                ],
+            },
+            multiplier: 1,
+            events: vec![GridEvent {
+                symbol: 9,
+                min_count: 3,
+                emit: "scatters:3".into(),
+            }],
+        });
+
+        // Pre-populate ctx to verify accumulation (+=, extend) not replacement.
+        let mut ctx = StepCtx::new();
+        ctx.payout = 100;
+        ctx.events = vec!["prior:event".to_string()];
+        let mut rng = SplitMix64::new(7);
+        let _ = ReelsMechanic.invoke("spin", &config, &mut ctx, &mut rng);
+
+        // Assert accumulation: payout += 8, events extended with "scatters:3".
+        assert_eq!(ctx.payout, 108);
+        assert_eq!(
+            ctx.events,
+            vec!["prior:event".to_string(), "scatters:3".to_string()]
+        );
+    }
 }
