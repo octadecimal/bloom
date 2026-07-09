@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from app.compose import rest
 from app.compose.runner import FakeComposeRunner
@@ -89,3 +90,14 @@ async def test_build_shapes_job_and_response(mongo_db):
     # deterministic per game: rebuilds reproduce the same pool
     await rest.build_game_definition("g1", req)
     assert fake.jobs[1]["master_seed"] == job["master_seed"]
+
+
+@pytest.mark.asyncio
+async def test_build_rejects_a_game_id_that_escapes_the_packages_dir(mongo_db):
+    store = ComposeStore(mongo_db)
+    fake = FakeComposeRunner({"ok": True})
+    req = _req(compose_store=store, compose_runner=fake, settings=_settings())
+    with pytest.raises(HTTPException) as exc:
+        await rest.build_game_definition("..\\foo", req)
+    assert exc.value.status_code == 400
+    assert fake.jobs == []

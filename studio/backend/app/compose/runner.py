@@ -40,6 +40,7 @@ class SubprocessComposeRunner:
             )
         except asyncio.TimeoutError:
             kill_proc_tree(proc.pid)
+            await proc.wait()
             return {"ok": False, "errors": [f"compose timed out after {self._timeout_s}s"]}
         for line in out.decode().splitlines():
             line = line.strip()

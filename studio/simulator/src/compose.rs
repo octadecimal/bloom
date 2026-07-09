@@ -1,7 +1,8 @@
 //! Build + sign a `composed@1` package: definition → validate (kernel
-//! `compile`) → uncurated seed pool → signed bytes. No curation/metrics —
-//! composed curation is a filed follow-up (SP2 spec §2 decision 1). Pure
-//! (no I/O); the `compose` bin does file handling.
+//! `compile`) → uncurated seed pool → signed bytes; plus `measure_pool`,
+//! informational metrics over that (uncurated) pool. No curation/verify
+//! gating — that stays a filed follow-up (SP2 spec §2 decision 1, #172).
+//! Pure (no I/O); the `compose` bin does file handling.
 
 use crate::seedgen::generate_seeds;
 use bloom_math::mechanics::composed::{
