@@ -172,7 +172,15 @@ pub fn compile(def: &GameDefinition) -> Result<CompiledGame, Vec<DefinitionError
     let state_idx = |id: &str| state_ids.iter().position(|x| x == id);
 
     let mut states: Vec<CompiledState> = Vec::new();
+    let mut seen_state_ids: Vec<String> = Vec::new();
     for s in &def.states {
+        if seen_state_ids.contains(&s.id) {
+            // Duplicate id already reported above; skip so `states` stays
+            // index-aligned with the deduped `state_ids` (and thus `state_idx`).
+            continue;
+        }
+        seen_state_ids.push(s.id.clone());
+
         let mut instances: Vec<usize> = Vec::new();
         let mut configs: Vec<MechanicConfig> = Vec::new();
         let mut bound_ids: Vec<&str> = Vec::new();
@@ -184,7 +192,15 @@ pub fn compile(def: &GameDefinition) -> Result<CompiledGame, Vec<DefinitionError
                 });
                 continue;
             };
-            let decl = &def.mechanics[idx];
+            // `idx` is a position in the filtered instance_ids/kinds lists (skipped
+            // mechanics don't occupy a slot there), so it must NOT be used to index
+            // the raw, unfiltered `def.mechanics`. Resolve the declaration by id
+            // instead; instance_idx already proved it exists.
+            let decl = def
+                .mechanics
+                .iter()
+                .find(|m| m.id == b.mechanic)
+                .expect("instance_idx found it, so it exists in def.mechanics");
             let effective = match &b.config_override {
                 Some(over) => merge_json(&decl.config, over),
                 None => decl.config.clone(),
@@ -472,6 +488,28 @@ mod tests {
         assert!(errs.iter().any(|e| matches!(e,
             DefinitionError::BadConfig { instance, state: Some(s), .. }
                 if instance == "main_reels" && s == "fs1")));
+    }
+
+    #[test]
+    fn bad_mechanic_before_valid_one_keeps_diagnostics_aligned() {
+        // A skipped mechanic (unknown kind) ahead of valid ones must not shift
+        // which declaration later bindings resolve against.
+        let mut v = sample_def_json();
+        v["mechanics"]
+            .as_array_mut()
+            .unwrap()
+            .insert(0, json!({ "id": "ghost", "type": "tower@1", "config": {} }));
+        let errs = compile_json(v).expect_err("must not compile");
+        assert!(errs.contains(&DefinitionError::UnknownMechanicType {
+            instance: "ghost".into(),
+            kind: "tower@1".into(),
+        }));
+        assert!(
+            !errs.iter().any(|e| matches!(e,
+                DefinitionError::BadConfig { instance, .. }
+                    if instance == "main_reels" || instance == "bonus_meter")),
+            "valid mechanics' own configs must not be misattributed as bad: {errs:?}"
+        );
     }
 
     #[test]
