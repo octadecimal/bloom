@@ -2,7 +2,7 @@
 
 use crate::state::{AppState, LoadedGame, ResolveError};
 use crate::wire::{HandshakeResponse, OutcomeWire, SpinResponse};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use bloom_math::mechanics::slots::evaluate;
@@ -44,13 +44,21 @@ pub async fn health(
     }
 }
 
+#[derive(Deserialize)]
+pub struct HandshakeQuery {
+    pub package: Option<String>,
+}
+
 /// Hand the untrusted client the package presentation (parsed as JSON; null if
 /// empty or non-JSON) plus the envelope. SP1 demo packages carry a small JSON
 /// manifest. Consuming this is SP2.
 pub async fn handshake(
     State(state): State<Arc<AppState>>,
+    Query(q): Query<HandshakeQuery>,
 ) -> Result<Json<HandshakeResponse>, StatusCode> {
-    let lp = state.resolve(None, true).map_err(resolve_status)?;
+    let lp = state
+        .resolve(q.package.as_deref(), true)
+        .map_err(resolve_status)?;
     let presentation =
         serde_json::from_slice(&lp.package.presentation).unwrap_or(serde_json::Value::Null);
     Ok(Json(HandshakeResponse {
@@ -73,6 +81,8 @@ fn default_bet() -> u64 {
 pub struct SpinRequest {
     #[serde(default = "default_bet")]
     pub bet: u64,
+    #[serde(default)]
+    pub package: Option<String>,
 }
 
 fn now_ms() -> u128 {
@@ -89,9 +99,14 @@ pub async fn spin(
     State(state): State<Arc<AppState>>,
     body: Option<Json<SpinRequest>>,
 ) -> Result<Json<SpinResponse>, StatusCode> {
-    let bet = body.map(|Json(b)| b.bet).unwrap_or(1);
+    let (bet, package) = match body {
+        Some(Json(b)) => (b.bet, b.package),
+        None => (1, None),
+    };
 
-    let lp = state.resolve(None, false).map_err(resolve_status)?;
+    let lp = state
+        .resolve(package.as_deref(), false)
+        .map_err(resolve_status)?;
     let idx = state.draw.index(lp.package.seeds.len());
     let seed = lp.package.seeds[idx];
     let (outcome, trace) = match &lp.game {

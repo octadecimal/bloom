@@ -152,6 +152,10 @@ composed-demo-pkg:
 runtime-serve-composed: composed-demo-pkg
     BLOOM_RUNTIME_PACKAGE=runtime/server/demo/composed.pkg cargo run --release -p bloom-runtime-server
 
+# Serve every studio-built package from var/packages (dir mode, lazy load).
+runtime-serve-packages:
+    BLOOM_RUNTIME_PACKAGES=var/packages cargo run --release -p bloom-runtime-server
+
 # Print the direct play-mode URL. Start the two servers first (separate shells):
 #   just runtime-serve            # authoritative server on 9000+offset
 #   just serve-runtime-client     # Pixi client on 4300+offset
