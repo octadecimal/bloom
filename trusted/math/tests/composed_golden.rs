@@ -119,6 +119,15 @@ fn golden_scenarios_have_the_claimed_shapes() {
     };
     assert_eq!(states(SEED_LOSE), vec!["base"]);
     assert_eq!(states(SEED_FS1), vec!["base", "fs1"]);
+    // "no retrigger" (see the SEED_FS1 comment) — pin it as an assertion, not
+    // just a fixture side-effect.
+    assert!(!evaluate(&game, SEED_FS1).entries.iter().any(|e| matches!(
+        e,
+        TraceEntry::Transition {
+            effect: Some(_),
+            ..
+        }
+    )));
     assert!(states(SEED_RETRIGGER).contains(&"fs1".to_string()));
     assert!(evaluate(&game, SEED_RETRIGGER)
         .entries

@@ -73,7 +73,11 @@ pub fn evaluate(game: &CompiledGame, seed: u64) -> RoundTrace {
                         match (row.to, row.effect) {
                             (Some(to), None) => break Some(to),
                             (None, Some(Effect::AddSteps(n))) => {
-                                budget += n;
+                                // saturating: a repeated steps:add near u32::MAX must
+                                // not wrap the budget counter (panics in debug, silently
+                                // wraps in release) — the max_steps cap still bounds
+                                // the loop regardless of the budget value.
+                                budget = budget.saturating_add(n);
                                 continue;
                             }
                             _ => unreachable!("compile enforces exactly one of to/effect"),
@@ -116,7 +120,8 @@ pub fn evaluate(game: &CompiledGame, seed: u64) -> RoundTrace {
                 entries.push(transition_entry(game, row));
                 match (row.to, row.effect) {
                     (Some(to), None) => break Some(to),
-                    (None, Some(Effect::AddSteps(n))) => budget += n,
+                    // saturating: see the exhaustion-branch comment above.
+                    (None, Some(Effect::AddSteps(n))) => budget = budget.saturating_add(n),
                     _ => unreachable!("compile enforces exactly one of to/effect"),
                 }
             }

@@ -6,6 +6,60 @@ use serde_json::Value;
 
 use super::definition::{BudgetSpec, GameDefinition, FAMILY};
 use super::mechanic::{MechanicConfig, MechanicKind};
+use super::reels::ReelsConfig;
+
+/// Hard kernel bound on `caps.max_steps`. Steps generalize `slots@1` free
+/// spins here and this plays the same role as `MAX_FREE_SPINS`
+/// (`mechanics::slots::eval`) — NOT a game-design knob, but the ceiling that
+/// keeps a pathological definition (e.g. `max_steps: u32::MAX` plus a
+/// self-refunding `steps:exhausted` effect row) from growing the trace
+/// without bound. No honest composed@1 game plays anywhere near 10k steps in
+/// one round, so this is invisible to legitimate models while making the
+/// kernel incapable of unbounded memory/time for ANY input.
+pub const MAX_STEPS_CEILING: u32 = 10_000;
+
+/// Kernel bound on `rows`: it drives a per-reel `Vec` allocation sized `rows`
+/// on every `spin` (component `components::spin`), so an unbounded value is
+/// a multi-GB-allocation vector. 100 rows is far beyond any real slot layout
+/// (typically 1-5) and costs nothing for honest games.
+const MAX_REELS_ROWS: usize = 100;
+
+/// Semantic validation of a resolved `ReelsConfig` — beyond what serde's
+/// shape check catches. Compile calls this at every site that produces a
+/// `ReelsConfig` (base declaration and per-binding merged override) so
+/// `evaluate` can assume: strips are non-empty (no mod-by-zero in `spin`),
+/// `rows` is in bounds (no OOM, no empty grid), and every payline indexes
+/// cells that actually exist on the grid (no OOB panic in `line_payout`).
+fn validate_reels(cfg: &ReelsConfig) -> Result<(), String> {
+    if cfg.strips.is_empty() {
+        return Err("reels: strips must not be empty".into());
+    }
+    if cfg.strips.iter().any(|strip| strip.is_empty()) {
+        return Err("reels: every strip must be non-empty".into());
+    }
+    if cfg.rows == 0 {
+        return Err("reels: rows must be >= 1".into());
+    }
+    if cfg.rows > MAX_REELS_ROWS {
+        return Err(format!("reels: rows must be <= {MAX_REELS_ROWS}"));
+    }
+    for (i, line) in cfg.paylines.iter().enumerate() {
+        if line.len() != cfg.strips.len() {
+            return Err(format!(
+                "reels: payline {i} has {} entries, expected {} (one per strip)",
+                line.len(),
+                cfg.strips.len()
+            ));
+        }
+        if line.iter().any(|&row| row >= cfg.rows) {
+            return Err(format!(
+                "reels: payline {i} references a row out of bounds (rows={})",
+                cfg.rows
+            ));
+        }
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CompiledBudget {
@@ -94,6 +148,9 @@ pub enum DefinitionError {
         index: usize,
         message: String,
     },
+    BadCaps {
+        message: String,
+    },
 }
 
 /// Recursive object merge; non-objects replace (spec §3 shape notes).
@@ -132,6 +189,15 @@ pub fn compile(def: &GameDefinition) -> Result<CompiledGame, Vec<DefinitionError
         });
     }
 
+    if def.caps.max_steps > MAX_STEPS_CEILING {
+        errs.push(DefinitionError::BadCaps {
+            message: format!(
+                "max_steps {} exceeds kernel ceiling {MAX_STEPS_CEILING}",
+                def.caps.max_steps
+            ),
+        });
+    }
+
     // --- instances: ids unique, kinds known, base configs parse ---
     let mut instance_ids: Vec<String> = Vec::new();
     let mut kinds: Vec<MechanicKind> = Vec::new();
@@ -142,12 +208,22 @@ pub fn compile(def: &GameDefinition) -> Result<CompiledGame, Vec<DefinitionError
         }
         match MechanicKind::parse(&m.kind) {
             Some(kind) => {
-                if let Err(message) = kind.parse_config(&m.config) {
-                    errs.push(DefinitionError::BadConfig {
+                match kind.parse_config(&m.config) {
+                    Ok(MechanicConfig::Reels(rc)) => {
+                        if let Err(message) = validate_reels(&rc) {
+                            errs.push(DefinitionError::BadConfig {
+                                instance: m.id.clone(),
+                                state: None,
+                                message,
+                            });
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(message) => errs.push(DefinitionError::BadConfig {
                         instance: m.id.clone(),
                         state: None,
                         message,
-                    });
+                    }),
                 }
                 instance_ids.push(m.id.clone());
                 kinds.push(kind);
@@ -207,9 +283,22 @@ pub fn compile(def: &GameDefinition) -> Result<CompiledGame, Vec<DefinitionError
             };
             match kinds[idx].parse_config(&effective) {
                 Ok(cfg) => {
-                    instances.push(idx);
-                    configs.push(cfg);
-                    bound_ids.push(&decl.id);
+                    let geometry_ok = match &cfg {
+                        MechanicConfig::Reels(rc) => validate_reels(rc),
+                        _ => Ok(()),
+                    };
+                    match geometry_ok {
+                        Ok(()) => {
+                            instances.push(idx);
+                            configs.push(cfg);
+                            bound_ids.push(&decl.id);
+                        }
+                        Err(message) => errs.push(DefinitionError::BadConfig {
+                            instance: decl.id.clone(),
+                            state: Some(s.id.clone()),
+                            message,
+                        }),
+                    }
                 }
                 Err(message) => errs.push(DefinitionError::BadConfig {
                     instance: decl.id.clone(),
@@ -340,7 +429,7 @@ pub fn compile(def: &GameDefinition) -> Result<CompiledGame, Vec<DefinitionError
         });
     }
 
-    // --- reachability (BFS from start over `to` edges) ---
+    // --- reachability (DFS from start over `to` edges) ---
     if state_idx(&def.start).is_some() {
         let mut reached = vec![false; state_ids.len()];
         let mut queue = vec![start];
@@ -649,5 +738,51 @@ mod tests {
         v["start"] = json!("lobby");
         let errs = compile_json(v).expect_err("must not compile");
         assert!(errs.len() >= 2);
+    }
+
+    #[test]
+    fn rejects_max_steps_over_kernel_ceiling() {
+        expect_error(
+            sample_def_json(),
+            |v| v["caps"]["max_steps"] = json!(MAX_STEPS_CEILING + 1),
+            DefinitionError::BadCaps {
+                message: format!(
+                    "max_steps {} exceeds kernel ceiling {MAX_STEPS_CEILING}",
+                    MAX_STEPS_CEILING + 1
+                ),
+            },
+        );
+    }
+
+    #[test]
+    fn rejects_empty_reels_strip() {
+        let mut v = sample_def_json();
+        v["mechanics"][0]["config"]["strips"][0] = json!([]);
+        let errs = compile_json(v).expect_err("must not compile");
+        assert!(errs.iter().any(|e| matches!(e,
+            DefinitionError::BadConfig { instance, state: None, .. }
+                if instance == "main_reels")));
+    }
+
+    #[test]
+    fn rejects_payline_row_out_of_bounds() {
+        // rows: 1, so row index 1 is out of bounds.
+        let mut v = sample_def_json();
+        v["mechanics"][0]["config"]["paylines"] = json!([[0, 0, 1]]);
+        let errs = compile_json(v).expect_err("must not compile");
+        assert!(errs.iter().any(|e| matches!(e,
+            DefinitionError::BadConfig { instance, state: None, .. }
+                if instance == "main_reels")));
+    }
+
+    #[test]
+    fn rejects_payline_length_mismatch() {
+        // 3 strips, but this payline only names 2 entries.
+        let mut v = sample_def_json();
+        v["mechanics"][0]["config"]["paylines"] = json!([[0, 0]]);
+        let errs = compile_json(v).expect_err("must not compile");
+        assert!(errs.iter().any(|e| matches!(e,
+            DefinitionError::BadConfig { instance, state: None, .. }
+                if instance == "main_reels")));
     }
 }

@@ -50,7 +50,9 @@ impl Mechanic for MeterMechanic {
             .as_ref()
             .map(|g| components::count_symbol(g, cfg.count_symbol) as u32)
             .unwrap_or(0);
-        self.fill += added;
+        // saturating: a crafted count_symbol/grid pairing near u32::MAX must
+        // not wrap the fill counter (panics in debug, silently wraps in release).
+        self.fill = self.fill.saturating_add(added);
         let reached = self.fill;
 
         let mut events = Vec::new();
