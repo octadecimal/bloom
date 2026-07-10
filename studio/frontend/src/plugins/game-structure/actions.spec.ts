@@ -10,6 +10,7 @@ vi.mock('./restClient', () => ({
 }));
 vi.mock('./socketClient', () => ({
   setDefinitionChangedHandler: vi.fn(),
+  setBuildStatusHandler: vi.fn(),
   gameStructureSock: () => ({ connect: vi.fn(), disconnect: vi.fn(), join: vi.fn(), leave: vi.fn() }),
 }));
 
@@ -17,6 +18,7 @@ import * as rest from './restClient';
 import {
   SAVE_DEBOUNCE_MS,
   VALIDATE_DEBOUNCE_MS,
+  applyBuildStatus,
   applyDefinition,
   applyDocFromJson,
   buildPackage,
@@ -153,5 +155,19 @@ describe('buildPackage', () => {
     await Promise.all([p1, p2]);
 
     expect(restMock.buildGameDefinition).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('applyBuildStatus', () => {
+  it('mirrors auto-build progress into the build slice', () => {
+    gameStructureSlice().activeGameId.set('g1');
+    applyBuildStatus({ gameId: 'g1', status: 'building' });
+    expect(gameStructureSlice().build.status.get()).toBe('building');
+    applyBuildStatus({ gameId: 'g1', status: 'done', metrics: { rtp: 0.96 } as never, packageId: 'g1' });
+    expect(gameStructureSlice().build.status.get()).toBe('done');
+    applyBuildStatus({ gameId: 'other', status: 'error', errors: ['x'] });
+    expect(gameStructureSlice().build.status.get()).toBe('done'); // inactive game ignored
+    applyBuildStatus({ gameId: 'g1', status: 'error', errors: ['UnknownState'] });
+    expect(gameStructureSlice().build.errors.get({ noproxy: true })).toEqual(['UnknownState']);
   });
 });

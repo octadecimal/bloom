@@ -16,6 +16,21 @@ export function setDefinitionChangedHandler(h: (p: IDefinitionChangedEvent) => v
   handler = h;
 }
 
+// Emitted by the backend's debounced auto-build (Task 3) on every definition save.
+export interface IBuildStatusEvent {
+  gameId: string;
+  status: 'building' | 'done' | 'error';
+  errors?: string[];
+  metrics?: unknown;
+  packageId?: string;
+}
+
+let buildHandler: ((p: IBuildStatusEvent) => void) | null = null;
+
+export function setBuildStatusHandler(h: (p: IBuildStatusEvent) => void): void {
+  buildHandler = h;
+}
+
 let sock: Socket | null = null;
 
 export function createGameStructureSocket() {
@@ -23,6 +38,7 @@ export function createGameStructureSocket() {
     if (sock) return;
     sock = io(BACKEND_URL, { auth: { displayName: 'game-structure' } });
     sock.on('game_definition_changed', (p: IDefinitionChangedEvent) => handler?.(p));
+    sock.on('game_build_status', (p: IBuildStatusEvent) => buildHandler?.(p));
   }
   function disconnect(): void {
     sock?.disconnect();

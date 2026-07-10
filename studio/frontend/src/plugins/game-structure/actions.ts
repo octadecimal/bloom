@@ -4,11 +4,12 @@ import {
   putGameDefinition,
   validateGameDefinition,
   buildGameDefinition,
+  type IComposeMetrics,
   type IGameDefinitionWireDoc,
   type IPutGameDefinitionPatch,
 } from './restClient';
 import { normalizeDefinition, type IGameDefinition } from './model';
-import { gameStructureSock, setDefinitionChangedHandler, type IDefinitionChangedEvent } from './socketClient';
+import { gameStructureSock, setBuildStatusHandler, setDefinitionChangedHandler, type IBuildStatusEvent, type IDefinitionChangedEvent } from './socketClient';
 
 export const SAVE_DEBOUNCE_MS = 600;
 export const VALIDATE_DEBOUNCE_MS = 800;
@@ -23,6 +24,7 @@ let dirty = { definition: false, presentation: false };
 export function initGameStructure(): void {
   gameStructureSock().connect();
   setDefinitionChangedHandler(handleDefinitionChanged);
+  setBuildStatusHandler(applyBuildStatus);
 }
 
 function draftFor(definition: IGameDefinition, presentation: Record<string, unknown>): string {
@@ -161,6 +163,15 @@ export async function buildPackage(): Promise<void> {
   } catch (e) {
     s.build.set({ status: 'error', metrics: null, errors: [e instanceof Error ? e.message : 'build failed'] });
   }
+}
+
+/** Mirrors the backend's debounced auto-build (Task 3) into the same build slice the manual Build button uses. */
+export function applyBuildStatus(p: IBuildStatusEvent): void {
+  const s = gameStructureSlice();
+  if (s.activeGameId.get() !== p.gameId) return;
+  if (p.status === 'building') s.build.set({ status: 'building', metrics: null, errors: [] });
+  else if (p.status === 'done') s.build.set({ status: 'done', metrics: (p.metrics as IComposeMetrics) ?? null, errors: [] });
+  else s.build.set({ status: 'error', metrics: null, errors: p.errors ?? ['build failed'] });
 }
 
 export function handleDefinitionChanged(p: IDefinitionChangedEvent): void {
