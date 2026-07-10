@@ -111,6 +111,47 @@ describe('watermark', () => {
   });
 });
 
+describe('straggler hydration vs dirty local edits', () => {
+  it('a straggler GET from openGameStructure does not clobber a dirty edit made after a second (external seed) hydrate already won the race', async () => {
+    // GET #1: openGameStructure's own fetch — held open to arrive LAST (the straggler).
+    let resolveFirst!: (doc: unknown) => void;
+    const firstGet = new Promise((resolve) => (resolveFirst = resolve));
+    restMock.getGameDefinition.mockReturnValueOnce(firstGet);
+
+    const openPromise = openGameStructure('g1'); // GET #1 in flight; watermark still ''
+
+    // Socket 'seed' event arrives before GET #1 resolves -> rehydrateExternal fires GET #2.
+    restMock.getGameDefinition.mockResolvedValueOnce(wireDoc({ updatedAt: '2026-07-09T00:00:02Z' }));
+    handleDefinitionChanged({ gameId: 'g1', updatedAt: '2026-07-09T00:00:02Z', source: 'seed' });
+    await vi.advanceTimersByTimeAsync(0); // let GET #2 resolve and hydrate
+
+    expect(gameStructureSlice().watermark.get()).toBe('2026-07-09T00:00:02Z');
+
+    // User edits before the straggler GET #1 resolves.
+    applyDefinition((d) => ({ ...d, start: 'edited' }));
+    expect(gameStructureSlice().definition.start.get()).toBe('edited');
+
+    // The straggler GET #1 (stale seeded doc) finally resolves.
+    resolveFirst(wireDoc({ updatedAt: '2026-07-09T00:00:00Z' }));
+    await openPromise;
+
+    expect(gameStructureSlice().definition.start.get()).toBe('edited'); // not clobbered
+    expect(gameStructureSlice().watermark.get()).toBe('2026-07-09T00:00:02Z'); // not regressed either
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 1); // flush the pending save so dirty doesn't leak into the next test
+  });
+
+  it('a genuine (non-stale) external hydrate is suppressed while dirty, so it never clobbers unsaved local edits', async () => {
+    await openGameStructure('g1');
+    applyDefinition((d) => ({ ...d, start: 'edited' })); // dirty.definition = true, save pending
+
+    restMock.getGameDefinition.mockResolvedValue(wireDoc({ updatedAt: '2026-07-09T00:00:05Z', definition: { ...emptyDefinition(), start: 'server-value' } }));
+    handleDefinitionChanged({ gameId: 'g1', updatedAt: '2026-07-09T00:00:05Z', source: 'api' });
+    await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS + 1); // flush the pending save too (also resolves rehydrateExternal's GET)
+
+    expect(gameStructureSlice().definition.start.get()).toBe('edited'); // local edit preserved
+  });
+});
+
 describe('applyDocFromJson', () => {
   it('applies {definition, presentation} and rejects bad JSON', async () => {
     await openGameStructure('g1');

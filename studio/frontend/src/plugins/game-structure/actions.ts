@@ -19,6 +19,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 let validateEpoch = 0; // drop out-of-order responses
+let hydrateEpoch = 0; // drop out-of-order hydrate responses (mirrors validateEpoch)
 let dirty = { definition: false, presentation: false };
 
 export function initGameStructure(): void {
@@ -42,13 +43,26 @@ function hydrateDoc(doc: IGameDefinitionWireDoc): void {
   if (doc.updatedAt > s.watermark.get()) s.watermark.set(doc.updatedAt);
 }
 
+/**
+ * Fetches the definition doc and hydrates state — unless a newer hydrate has since started/landed
+ * (stale-response guard, same idea as validateEpoch) or the user has unsaved local edits (dirty),
+ * either of which means this response must not clobber what's already there. Returns whether it applied.
+ */
+async function fetchAndHydrate(gameId: string): Promise<boolean> {
+  const epoch = ++hydrateEpoch;
+  const doc = await getGameDefinition(gameId);
+  if (epoch !== hydrateEpoch || dirty.definition || dirty.presentation) return false;
+  hydrateDoc(doc);
+  return true;
+}
+
 export async function openGameStructure(gameId: string): Promise<void> {
   const s = gameStructureSlice();
   s.activeGameId.set(gameId);
   s.loadStatus.set('loading');
   gameStructureSock().join(gameId);
   try {
-    hydrateDoc(await getGameDefinition(gameId));
+    await fetchAndHydrate(gameId);
     s.loadStatus.set('idle');
   } catch {
     s.loadStatus.set('error');
@@ -67,6 +81,7 @@ export function closeGameStructure(): void {
   validateTimer = null;
   dirty = { definition: false, presentation: false };
   validateEpoch++;
+  hydrateEpoch++;
   s.set(makeInitialState());
 }
 
@@ -189,11 +204,13 @@ async function rehydrateExternal(source: string): Promise<void> {
   const s = gameStructureSlice();
   const gameId = s.activeGameId.get();
   if (!gameId) return;
+  let applied: boolean;
   try {
-    hydrateDoc(await getGameDefinition(gameId));
+    applied = await fetchAndHydrate(gameId);
   } catch {
     return; // transient fetch failure: keep current state
   }
+  if (!applied) return; // stale response, or user has unsaved local edits — don't clobber
   s.sync.set('external');
   s.externalSource.set(source);
   if (flashTimer) clearTimeout(flashTimer);
