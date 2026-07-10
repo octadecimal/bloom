@@ -16,6 +16,7 @@ from app.assets.rest import router as assets_router
 from app.assets.sockets import register_asset_handlers
 from app.assets.store import AssetStore
 from app.chat_service import ChatService
+from app.compose.autobuild import AutoBuilder
 from app.compose.rest import router as compose_router
 from app.compose.runner import build_compose_runner
 from app.compose.scene_sync import sync_scene_modules
@@ -127,9 +128,11 @@ def build(settings: Settings) -> AppContext:
             room=doc.game_id,
         )
         await sync_scene_modules(scene_hub, doc.game_id, doc.definition, doc.presentation)
+        auto_builder.schedule(doc.game_id, doc.definition, doc.presentation)
 
-    compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
     compose_runner = build_compose_runner(settings)
+    auto_builder = AutoBuilder(compose_runner, settings, sio)
+    compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
     math_run_store = MathRunStore(mongo[settings.mongo_db])
     math_hub = MathHub(sio, math_store, math_run_store,
                        build_curation_runner(settings), build_tuner_runner(settings),
