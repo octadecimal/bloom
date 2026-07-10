@@ -1,6 +1,6 @@
 import pytest
 from app.math import templates
-from app.scene.reels_spin import derive_reels_config, map_grid, FakeSpinRunner
+from app.scene.reels_spin import map_grid, FakeSpinRunner
 
 
 def test_classic_template_shape():
@@ -8,17 +8,6 @@ def test_classic_template_shape():
     assert len(m["reels"]) == 3
     assert m["rows"] == 3
     assert {s["id"] for s in m["symbols"]} == {0, 1, 2, 9}
-
-
-def test_derive_config_from_model():
-    cfg = derive_reels_config(templates.get_model("classic-3x3"))
-    assert cfg == {"cols": 3, "rows": 3, "symbols": ["0", "1", "2", "9"], "parentId": "root"}
-
-
-def test_derive_config_falls_back_on_empty_model():
-    cfg = derive_reels_config({})
-    assert cfg["cols"] == 5 and cfg["rows"] == 3 and cfg["parentId"] == "root"
-    assert cfg["symbols"] == ["0", "1", "2", "3", "4"]
 
 
 def test_map_grid_ids_to_strings_without_transpose():

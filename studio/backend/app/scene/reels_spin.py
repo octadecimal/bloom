@@ -17,16 +17,6 @@ from app.subprocess_guard import watch_proc_tree
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
-def derive_reels_config(model: dict) -> dict:
-    reels = model.get("reels") or []
-    cols = len(reels) if reels else 5
-    rows = int(model.get("rows") or 3)
-    symbols = [str(s["id"]) for s in (model.get("symbols") or [])]
-    if not symbols:
-        symbols = [str(i) for i in range(5)]
-    return {"cols": cols, "rows": rows, "symbols": symbols, "parentId": "root"}
-
-
 def map_grid(numeric_grid: list[list[int]]) -> list[list[str]]:
     return [[str(s) for s in reel] for reel in numeric_grid]
 

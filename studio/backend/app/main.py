@@ -33,6 +33,7 @@ from app.scene.art_critic import build_scene_art_critic
 from app.scene.layout.overrides import RegionOverrideStore
 from app.scene.sockets import register_scene_handlers
 from app.scene.reels_spin import build_spin_runner
+from app.scene.composed_spin import build_composed_spin_client
 from app.scene.store import GameSceneStore
 from app.math.hub import MathHub
 from app.math.rest import router as math_router
@@ -193,7 +194,8 @@ def build(settings: Settings) -> AppContext:
     register_gdd_handlers(sio, gdd_hub)
     fastapi_app.state.capture_broker = capture_broker
     spin_runner = build_spin_runner(settings)
-    register_scene_handlers(sio, scene_hub, capture_broker, math_store, spin_runner)
+    register_scene_handlers(sio, scene_hub, capture_broker, math_store, spin_runner,
+                            compose_store, build_composed_spin_client(settings))
     register_math_handlers(sio, math_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
