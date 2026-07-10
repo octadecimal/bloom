@@ -1,84 +1,85 @@
 import { test, expect, type Page } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { BACKEND_URL, seedLocalStorage } from './helpers';
 
-// Local-only (browser e2e is never in CI). Requires the full stack on the
-// worktree's offset ports: engine, backend (replay), studio. Drives the real
-// socket path: Add Reels -> declaration -> projected grid; Spin -> server round
-// -> rendered settle. The engine iframe is cross-origin, so engine globals are
-// read via Playwright's contentFrame(), not the top window.
+// Local-only (browser e2e is never in CI). Requires the worktree-offset stack:
+// engine, replay backend (which points RUNTIME_SERVER_URL at the e2e runtime
+// server below), studio frontend; Playwright's webServer boots the dir-mode
+// runtime server on 9300+offset. Contract: mechanics declared in Game Structure
+// ARE the scene (no manual Add Reels), and Spin plays the authoritative
+// composed round via a served trace.
 
-async function openGamePane(page: Page): Promise<string> {
-  await page.addInitScript(() => {
-    (window as any).__engineMsgs = [];
-    window.addEventListener('message', (e) => {
-      const d = e.data;
-      if (d && (d.kind === 'ready' || d.kind === 'error')) {
-        (window as any).__engineMsgs.push({ origin: e.origin, kind: d.kind });
-      }
-    });
+const offset = Number(process.env.BLOOM_PORT_OFFSET ?? 0) || 0;
+const RUNTIME = `http://localhost:${9300 + offset}`;
+
+async function setupRoom(page: Page): Promise<string> {
+  const roomName = `reels ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const resp = await fetch(`${BACKEND_URL}/rooms`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: roomName }),
   });
+  expect(resp.ok).toBeTruthy();
+  const room = (await resp.json()) as { id: string; gameId: string };
   await seedLocalStorage(page, 'bloom.studio.session', JSON.stringify({ version: 1, data: { username: 'ada' } }));
   await page.goto('/');
-  await page.getByPlaceholder(/new room/i).fill(`Reels E2E ${Date.now()}`);
-  await page.getByRole('button', { name: /create/i }).click();
-  await expect(page).toHaveURL(/\/room\//);
-  await expect(page.getByTestId('workbench')).toBeVisible();
+  await expect(page.getByTestId('room-picker')).toBeVisible();
+  await page.getByTestId('room-picker').getByText(roomName, { exact: true }).click();
+  await expect(page.getByTestId('chat-room-pane')).toBeVisible();
+  return room.gameId;
+}
 
+async function openGameScene(page: Page) {
   await page.getByTestId('menu-view').click();
   await page.getByTestId('view-open-game/preview').click();
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
-  await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs.some((m: any) => m.kind === 'ready')), { timeout: 20000 }).toBe(true);
-
-  const gameId = await page.evaluate(() => (window as any).__gameActiveId ?? null);
-  expect(gameId).toBeTruthy();
-  return gameId as string;
 }
 
-async function engineFrame(page: Page) {
+// Re-resolve the engine frame on every evaluation: opening another pane makes
+// dockview re-parent the iframe, which reloads it and detaches old Frame handles.
+async function engineEval<T>(page: Page, fn: () => T): Promise<T> {
   const handle = await page.getByTestId('game-engine-frame').elementHandle();
   const frame = await handle!.contentFrame();
   expect(frame).toBeTruthy();
-  return frame!;
+  return frame!.evaluate(fn);
 }
 
-test('Add Reels projects a color-coded grid; Spin lands on the server outcome', async ({ page }) => {
-  await openGamePane(page);
-  const frame = await engineFrame(page);
+test('Game Structure mechanics render in the scene and Spin plays a served trace', async ({ page }) => {
+  test.setTimeout(420_000); // first auto-build may compile compose_json + mint a 10k-seed pool
+  const gameId = await setupRoom(page);
+  await openGameScene(page);
 
-  // 1. Add Reels -> the declaration projects cells into the engine model.
-  await page.getByTestId('game-add-reels').click();
-  await expect.poll(() => frame.evaluate(() => (window as any).__engineModel?.toDocument().nodes['reels:cell:0:0'] != null), { timeout: 20000 }).toBe(true);
+  // No Add Reels button — mechanics are declared in Game Structure.
+  await expect(page.getByTestId('game-add-reels')).toHaveCount(0);
 
-  // The grid is color-coded + labeled: cell carries a hex fill and a label.
-  const cell = await frame.evaluate(() => (window as any).__engineModel.toDocument().nodes['reels:cell:0:0'].props);
-  expect(String(cell.fill)).toMatch(/^#[0-9a-f]{6}$/i);
-  expect(cell.label).toBeDefined();
+  // Opening Game Structure seeds the definition -> the scene grows the
+  // template's mechanics (main_reels + bonus_meter) with no manual step.
+  await page.getByTestId('menu-view').click();
+  await page.getByTestId('view-open-game-structure/editor').click();
+  await expect(page.getByTestId('gs-tab-mechanics')).toBeVisible();
+  // Game Structure lands in the same dockview group and hides the scene tab;
+  // re-opening Game Scene focuses it (panes contract) so the engine frame is reachable.
+  await openGameScene(page);
+  await expect
+    .poll(() => engineEval(page, () => (window as any).__engineModel?.toDocument().nodes['main_reels:cell:0:0'] != null), { timeout: 30000 })
+    .toBe(true);
+  expect(await engineEval(page, () => Object.keys((window as any).__engineModel.toDocument().nodes).some((k) => k.startsWith('bonus_meter')))).toBe(true);
 
-  // Rendering fixes — assert the RENDERED end-state, not just the model:
-  // (a) live Add Reels rebuilds on a SINGLE canvas (idempotent re-init, no duplicate mount).
-  expect(await frame.evaluate(() => document.querySelectorAll('#stage canvas').length)).toBe(1);
-  // (b) the grid is centered, not pinned to the stage corner.
-  const reelX = await frame.evaluate(() => (window as any).__engineModel.toDocument().nodes['reels:reel:0'].props.position.x);
-  expect(reelX).toBeGreaterThan(0);
-  // (c) the label is a sibling Text, never a child of the cell Sprite (Pixi v8 forbids Sprite children).
-  expect(await frame.evaluate(() => (window as any).__engineRenderer.objects.get('reels:cell:0:0').children.length)).toBe(0);
-  expect(await frame.evaluate(() => (window as any).__engineRenderer.labels.has('reels:cell:0:0'))).toBe(true);
+  // The definition save (seed) auto-builds the package; wait for the dir-mode
+  // runtime server to serve it.
+  await expect.poll(async () => (await fetch(`${RUNTIME}/handshake?package=${gameId}`)).status, { timeout: 360_000, intervals: [3000] }).toBe(200);
 
-  // 2. Spin -> the backend evaluates a round and broadcasts an outcome.
+  // Spin -> the backend proxies the authoritative server and broadcasts a trace.
   await page.getByTestId('game-spin').click();
-  await expect.poll(() => page.evaluate(() => (window as any).__gameLastSpinOutcome ?? null), { timeout: 20000 }).not.toBeNull();
-  const outcome = await page.evaluate(() => (window as any).__gameLastSpinOutcome as { grid: string[][] });
+  await expect.poll(() => page.evaluate(() => (window as any).__gameLastSpinTrace ?? null), { timeout: 30000 }).not.toBeNull();
+  const trace = await page.evaluate(() => (window as any).__gameLastSpinTrace.trace as Array<any>);
+  expect(trace.at(-1)?.t).toBe('round_end');
 
-  // 3. End-state: the engine settles to idle and the RENDERED grid equals the
-  //    server's outcome (assert reconciliation, not dispatch).
-  await expect.poll(() => frame.evaluate(() => (window as any).__engineModules.state().phase), { timeout: 10000 }).toBe('idle');
-  const rendered = await frame.evaluate(() => (window as any).__engineModules.state().grid);
-  expect(rendered).toEqual(outcome.grid);
-
-  // 4. And the landed cells took the outcome's colors (structure plane updated).
-  const landedFill = await frame.evaluate(() => (window as any).__engineModel.toDocument().nodes['reels:cell:0:0'].props.fill);
-  expect(String(landedFill)).toMatch(/^#[0-9a-f]{6}$/i);
-
-  // No engine errors during the session.
-  expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
+  // End-state: reels settle to idle on the trace's grid (assert reconciliation,
+  // not dispatch) and no error bar is shown.
+  await expect.poll(() => engineEval(page, () => (window as any).__engineModules.state().phase), { timeout: 20000 }).toBe('idle');
+  const trigger = trace.find((e) => e.t === 'trigger' && e.data?.kind === 'reels');
+  expect(trigger).toBeTruthy();
+  const rendered = await engineEval(page, () => (window as any).__engineModules.state().grid);
+  expect(rendered).toEqual(trigger.data.grid.map((reel: number[]) => reel.map(String)));
+  await expect(page.getByTestId('game-spin-error')).toHaveCount(0);
 });

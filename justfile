@@ -77,7 +77,7 @@ backend-e2e:
 # Backend port + Mongo DB + media dir all follow BLOOM_PORT_OFFSET so parallel
 # worktrees never share data. Offset 0 keeps the defaults (8000 / bloom_studio / var/media).
 backend-serve-replay:
-    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; PROVIDER_MODE=replay MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --port $((8000 + off))
+    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; PROVIDER_MODE=replay RUNTIME_SERVER_URL="http://localhost:$((9300 + off))" MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --port $((8000 + off))
 
 # Preflight: refuse to "serve to a human" if the backend is in replay mode.
 preflight:

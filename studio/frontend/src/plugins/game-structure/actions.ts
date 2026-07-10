@@ -4,11 +4,12 @@ import {
   putGameDefinition,
   validateGameDefinition,
   buildGameDefinition,
+  type IComposeMetrics,
   type IGameDefinitionWireDoc,
   type IPutGameDefinitionPatch,
 } from './restClient';
 import { normalizeDefinition, type IGameDefinition } from './model';
-import { gameStructureSock, setDefinitionChangedHandler, type IDefinitionChangedEvent } from './socketClient';
+import { gameStructureSock, setBuildStatusHandler, setDefinitionChangedHandler, type IBuildStatusEvent, type IDefinitionChangedEvent } from './socketClient';
 
 export const SAVE_DEBOUNCE_MS = 600;
 export const VALIDATE_DEBOUNCE_MS = 800;
@@ -18,11 +19,13 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 let validateEpoch = 0; // drop out-of-order responses
+let hydrateEpoch = 0; // drop out-of-order hydrate responses (mirrors validateEpoch)
 let dirty = { definition: false, presentation: false };
 
 export function initGameStructure(): void {
   gameStructureSock().connect();
   setDefinitionChangedHandler(handleDefinitionChanged);
+  setBuildStatusHandler(applyBuildStatus);
 }
 
 function draftFor(definition: IGameDefinition, presentation: Record<string, unknown>): string {
@@ -40,13 +43,28 @@ function hydrateDoc(doc: IGameDefinitionWireDoc): void {
   if (doc.updatedAt > s.watermark.get()) s.watermark.set(doc.updatedAt);
 }
 
+/**
+ * Fetches the definition doc and hydrates state — unless a newer hydrate has since started/landed
+ * (stale-response guard, same idea as validateEpoch) or the user has unsaved local edits (dirty),
+ * either of which means this response must not clobber what's already there. Returns whether it applied.
+ */
+async function fetchAndHydrate(gameId: string): Promise<boolean> {
+  const epoch = ++hydrateEpoch;
+  const doc = await getGameDefinition(gameId);
+  // When dirty, the external change is dropped by design (not deferred): convergence
+  // relies on the next game_definition_changed event to re-trigger this hydrate.
+  if (epoch !== hydrateEpoch || dirty.definition || dirty.presentation) return false;
+  hydrateDoc(doc);
+  return true;
+}
+
 export async function openGameStructure(gameId: string): Promise<void> {
   const s = gameStructureSlice();
   s.activeGameId.set(gameId);
   s.loadStatus.set('loading');
   gameStructureSock().join(gameId);
   try {
-    hydrateDoc(await getGameDefinition(gameId));
+    await fetchAndHydrate(gameId);
     s.loadStatus.set('idle');
   } catch {
     s.loadStatus.set('error');
@@ -65,6 +83,7 @@ export function closeGameStructure(): void {
   validateTimer = null;
   dirty = { definition: false, presentation: false };
   validateEpoch++;
+  hydrateEpoch++;
   s.set(makeInitialState());
 }
 
@@ -163,6 +182,15 @@ export async function buildPackage(): Promise<void> {
   }
 }
 
+/** Mirrors the backend's debounced auto-build (Task 3) into the same build slice the manual Build button uses. */
+export function applyBuildStatus(p: IBuildStatusEvent): void {
+  const s = gameStructureSlice();
+  if (s.activeGameId.get() !== p.gameId) return;
+  if (p.status === 'building') s.build.set({ status: 'building', metrics: null, errors: [] });
+  else if (p.status === 'done') s.build.set({ status: 'done', metrics: (p.metrics as IComposeMetrics) ?? null, errors: [] });
+  else s.build.set({ status: 'error', metrics: null, errors: p.errors ?? ['build failed'] });
+}
+
 export function handleDefinitionChanged(p: IDefinitionChangedEvent): void {
   const s = gameStructureSlice();
   if (s.activeGameId.get() !== p.gameId) return;
@@ -178,11 +206,13 @@ async function rehydrateExternal(source: string): Promise<void> {
   const s = gameStructureSlice();
   const gameId = s.activeGameId.get();
   if (!gameId) return;
+  let applied: boolean;
   try {
-    hydrateDoc(await getGameDefinition(gameId));
+    applied = await fetchAndHydrate(gameId);
   } catch {
     return; // transient fetch failure: keep current state
   }
+  if (!applied) return; // stale response, or user has unsaved local edits — don't clobber
   s.sync.set('external');
   s.externalSource.set(source);
   if (flashTimer) clearTimeout(flashTimer);

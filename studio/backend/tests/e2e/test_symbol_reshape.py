@@ -32,7 +32,12 @@ async def _make_room(base_url: str) -> tuple[str, str]:
     async with httpx.AsyncClient(base_url=base_url) as http:
         resp = await http.post("/rooms", json={"name": "SymbolReshapeE2E"})
         data = resp.json()
-        return data["id"], data["gameId"]
+        room_id, game_id = data["id"], data["gameId"]
+        # Mirror the studio's room-open: GET the game definition, which seeds it
+        # and (via sync_scene_modules) pre-populates the scene with root+modules.
+        # The seed-scene-high1 cassette parents its nodes under that root.
+        await http.get(f"/games/{game_id}/game-definition")
+        return room_id, game_id
 
 
 async def _seed_gdd_high1(base_url: str, game_id: str) -> None:

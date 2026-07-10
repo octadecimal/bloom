@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     compose_bin: str = ""  # optional path to a prebuilt compose_json; "" => cargo run
     compose_timeout_s: float = 180.0
     packages_dir: str = "var/packages"  # repo-root-relative; runtime server dir mode reads it
+    runtime_server_url: str = ""  # "" => http://localhost:{9000+BLOOM_PORT_OFFSET}; e2e replay backend points at the 9300-family server
     asset_regen_retries: int = 2        # max regenerate->re-judge cycles (matches ComposeBounds)
     asset_floor_regen_budget: int = 2   # bounded regen budget for an ad-hoc direct generate
     skills_dir: str = str(

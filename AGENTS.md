@@ -140,7 +140,8 @@ directory and branch — so the protocol is short:
   working where before you touch anything.
 - **Per-worktree port offset.** Each worktree gets a `BLOOM_PORT_OFFSET` (the
   primary checkout is `0`); every dev-stack port derives as `base + offset` —
-  backend `8000+N`, studio frontend `4200+N`, runtime client `4300+N` — and the
+  backend `8000+N`, studio frontend `4200+N`, runtime client `4300+N`, runtime
+  game server `9000+N` (the e2e harness boots its own on `9300+N`) — and the
   replay backend isolates its data as `bloom_studio_wt{N}` / `var/media_wt{N}` on
   the one shared `mongod`. `just wt-new` auto-assigns the lowest free offset into
   the new worktree's `.env`. This lets parallel worktrees run `just

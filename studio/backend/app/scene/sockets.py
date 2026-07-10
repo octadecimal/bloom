@@ -1,13 +1,10 @@
 import secrets
 from app.scene.document import OpError
-from app.scene.reels_spin import derive_reels_config, map_grid
-
-# Default canvas used when a game has no Root yet (idempotent: ensure_root keeps
-# an existing Root's canvas).
-_DEFAULT_CANVAS = (1080, 1920)
+from app.scene.composed_spin import ComposedSpinError
+from app.scene.reels_spin import map_grid
 
 
-def register_scene_handlers(sio, hub, broker, model_store, spin_runner):
+def register_scene_handlers(sio, hub, broker, model_store, spin_runner, compose_store, composed_spin):
     @sio.on("join_scene")
     async def join_scene(sid, data):
         await hub.attach(data["gameId"], sid)
@@ -59,17 +56,26 @@ def register_scene_handlers(sio, hub, broker, model_store, spin_runner):
         doc = await model_store.get_or_seed(game_id)
         return doc.model
 
-    @sio.on("scene_add_module")
-    async def scene_add_module(sid, data):
-        game_id = data.get("gameId")
-        mtype = data.get("type", "reels")
-        await hub.ensure_root(game_id, _DEFAULT_CANVAS)
-        config = derive_reels_config(await _model_for(game_id))
-        await hub.set_modules(game_id, [{"id": "reels", "type": mtype, "config": config}])
-
     @sio.on("scene_spin")
     async def scene_spin(sid, data):
         game_id = data.get("gameId")
+        # A game WITH a composed definition plays the real math: the runtime
+        # server draws/audits the round and returns a walkable trace. get(),
+        # not get_or_seed(): a Spin must never conjure a definition.
+        doc = await compose_store.get(game_id)
+        if doc is not None:
+            try:
+                res = await composed_spin.spin(game_id)
+            except ComposedSpinError as e:
+                await sio.emit("scene_spin_error",
+                               {"gameId": game_id, "message": str(e)}, room=game_id)
+                return
+            await sio.emit("scene_spin_trace",
+                           {"gameId": game_id, "seed": res.get("seed"),
+                            "outcome": res.get("outcome"), "trace": res.get("trace") or []},
+                           room=game_id)
+            return
+        # Legacy SlotModel-era games: evaluate one round via spin_json.
         seed = data.get("seed")
         if seed is None:
             seed = secrets.randbelow(2 ** 63)
