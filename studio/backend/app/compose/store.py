@@ -47,16 +47,19 @@ class ComposeStore:
         existing = await self.get(game_id)
         if existing is not None:
             return existing
-        doc = await self._insert_seed(game_id)
-        if self._on_change is not None:
+        doc, inserted = await self._insert_seed(game_id)
+        if inserted and self._on_change is not None:
             await self._on_change(doc, "seed")
         return doc
 
-    async def _insert_seed(self, game_id: str) -> GameDefinitionDoc:
+    async def _insert_seed(self, game_id: str) -> tuple[GameDefinitionDoc, bool]:
         # Insert-if-missing with no on_change firing — shared by get_or_seed
-        # (which fires "seed" itself) and put() (whose own source event
-        # already covers the write; firing here too would double-fire on a
-        # brand-new game_id).
+        # (which fires "seed" itself, but only when inserted is True) and
+        # put() (whose own source event already covers the write; firing here
+        # too would double-fire on a brand-new game_id).
+        # Returns (doc, inserted). The DuplicateKeyError path collapses the
+        # concurrent-seeder race and returns inserted=False — the loser must
+        # NOT fire "seed" for a doc it didn't insert (exactly-once per insert).
         now = _now()
         doc = GameDefinitionDoc(
             id=str(uuid.uuid4()),
@@ -69,8 +72,8 @@ class ComposeStore:
         try:
             await self._docs.insert_one(_to_doc(doc))
         except DuplicateKeyError:
-            return await self.get(game_id)  # concurrent seeder won
-        return doc
+            return await self.get(game_id), False  # concurrent seeder won
+        return doc, True
 
     async def put(
         self,

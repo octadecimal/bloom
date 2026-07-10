@@ -62,3 +62,39 @@ async def test_seeding_fires_on_change_once_with_source_seed(mongo_db):
     await store.get_or_seed("g-seed")          # read-only -> silent
     await store.get("g-seed")                  # read-only -> silent
     assert events == [("g-seed", "seed")]
+
+
+class _RacingDocs:
+    """Delegates to the real collection, but insert_one loses the seed race."""
+
+    def __init__(self, docs, insert_one):
+        self._docs = docs
+        self.insert_one = insert_one
+
+    def __getattr__(self, name):
+        return getattr(self._docs, name)
+
+
+@pytest.mark.asyncio
+async def test_lost_seed_race_does_not_fire_on_change(mongo_db):
+    # Deterministic concurrent-seeder race: the doc is missing at get() time,
+    # but a rival wins the insert so ours raises DuplicateKeyError. The loser
+    # must NOT fire "seed" for a doc it didn't insert.
+    from pymongo.errors import DuplicateKeyError
+
+    events = []
+
+    async def on_change(doc, source):
+        events.append((doc.game_id, source))
+
+    rival = ComposeStore(mongo_db)
+    store = ComposeStore(mongo_db, on_change=on_change)
+
+    async def losing_insert_one(raw):
+        await rival.get_or_seed("g-race")  # rival wins first
+        raise DuplicateKeyError("duplicate game_id")
+
+    store._docs = _RacingDocs(store._docs, losing_insert_one)
+    doc = await store.get_or_seed("g-race")
+    assert doc.game_id == "g-race"
+    assert events == []
