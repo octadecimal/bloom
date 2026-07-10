@@ -18,6 +18,7 @@ from app.assets.store import AssetStore
 from app.chat_service import ChatService
 from app.compose.rest import router as compose_router
 from app.compose.runner import build_compose_runner
+from app.compose.scene_sync import sync_scene_modules
 from app.compose.store import ComposeStore
 from app.config import Settings, get_settings
 from app.gdd.hub import GddHub
@@ -115,15 +116,17 @@ def build(settings: Settings) -> AppContext:
     math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
 
     async def _on_game_definition_change(doc, source: str) -> None:
-        # Single choke point: every definition/presentation write reaches any
-        # open Game Structure pane. Room join reuses the existing join_sim
-        # handler (the room is the bare gameId). ponytail: no compose hub —
-        # add one only when compose grows push flows beyond this one event.
+        # Single choke point: every definition/presentation write (incl. first
+        # seed) reaches any open Game Structure pane AND drives the Game
+        # Scene — the composed definition is the source of truth for scene
+        # mechanics modules. Room join reuses the existing join_sim handler
+        # (the room is the bare gameId).
         await sio.emit(
             "game_definition_changed",
             {"gameId": doc.game_id, "updatedAt": doc.updated_at, "source": source},
             room=doc.game_id,
         )
+        await sync_scene_modules(scene_hub, doc.game_id, doc.definition, doc.presentation)
 
     compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
     compose_runner = build_compose_runner(settings)

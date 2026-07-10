@@ -47,6 +47,16 @@ class ComposeStore:
         existing = await self.get(game_id)
         if existing is not None:
             return existing
+        doc = await self._insert_seed(game_id)
+        if self._on_change is not None:
+            await self._on_change(doc, "seed")
+        return doc
+
+    async def _insert_seed(self, game_id: str) -> GameDefinitionDoc:
+        # Insert-if-missing with no on_change firing — shared by get_or_seed
+        # (which fires "seed" itself) and put() (whose own source event
+        # already covers the write; firing here too would double-fire on a
+        # brand-new game_id).
         now = _now()
         doc = GameDefinitionDoc(
             id=str(uuid.uuid4()),
@@ -70,7 +80,9 @@ class ComposeStore:
         presentation: dict | None = None,
         source: str = "api",
     ) -> GameDefinitionDoc:
-        await self.get_or_seed(game_id)
+        existing = await self.get(game_id)
+        if existing is None:
+            await self._insert_seed(game_id)
         fields: dict = {"updated_at": _now()}
         if definition is not None:
             fields["definition"] = definition

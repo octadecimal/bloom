@@ -48,3 +48,17 @@ async def test_put_with_no_fields_does_not_fire_on_change(mongo_db):
     store = ComposeStore(mongo_db, on_change=on_change)
     await store.put("g1", source="noop")
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_seeding_fires_on_change_once_with_source_seed(mongo_db):
+    events: list[tuple[str, str]] = []
+
+    async def on_change(doc, source):
+        events.append((doc.game_id, source))
+
+    store = ComposeStore(mongo_db, on_change=on_change)
+    await store.get_or_seed("g-seed")          # inserts -> fires
+    await store.get_or_seed("g-seed")          # read-only -> silent
+    await store.get("g-seed")                  # read-only -> silent
+    assert events == [("g-seed", "seed")]
