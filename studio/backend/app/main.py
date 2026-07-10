@@ -19,7 +19,7 @@ from app.chat_service import ChatService
 from app.compose.autobuild import AutoBuilder
 from app.compose.rest import router as compose_router
 from app.compose.runner import build_compose_runner
-from app.compose.scene_sync import sync_scene_modules
+from app.compose.scene_sync import apply_definition_change
 from app.compose.store import ComposeStore
 from app.config import Settings, get_settings
 from app.gdd.hub import GddHub
@@ -122,14 +122,9 @@ def build(settings: Settings) -> AppContext:
         # seed) reaches any open Game Structure pane AND drives the Game
         # Scene — the composed definition is the source of truth for scene
         # mechanics modules. Room join reuses the existing join_sim handler
-        # (the room is the bare gameId).
-        await sio.emit(
-            "game_definition_changed",
-            {"gameId": doc.game_id, "updatedAt": doc.updated_at, "source": source},
-            room=doc.game_id,
-        )
-        await sync_scene_modules(scene_hub, doc.game_id, doc.definition, doc.presentation)
-        auto_builder.schedule(doc.game_id, doc.definition, doc.presentation)
+        # (the room is the bare gameId). Failure isolation + wiring lives in
+        # apply_definition_change so it's unit-testable without the app factory.
+        await apply_definition_change(sio, scene_hub, auto_builder, doc, source)
 
     compose_runner = build_compose_runner(settings)
     auto_builder = AutoBuilder(compose_runner, settings, sio)

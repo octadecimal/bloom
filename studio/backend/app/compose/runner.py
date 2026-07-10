@@ -42,6 +42,12 @@ class SubprocessComposeRunner:
             kill_proc_tree(proc.pid)
             await proc.wait()
             return {"ok": False, "errors": [f"compose timed out after {self._timeout_s}s"]}
+        except asyncio.CancelledError:
+            # Cancel (e.g. superseded build) must kill the subprocess, not
+            # orphan it — an orphan can finish last and overwrite the newer .pkg.
+            kill_proc_tree(proc.pid)
+            await proc.wait()
+            raise
         for line in out.decode().splitlines():
             line = line.strip()
             if not line:

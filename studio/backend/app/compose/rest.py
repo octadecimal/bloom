@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
-from app.compose.jobs import GAME_ID_RE, SEED_COUNT, build_job, master_seed
+from app.compose.jobs import GAME_ID_RE, build_job, master_seed
 from app.compose.models import compose_wire
 
 router = APIRouter()

@@ -51,6 +51,8 @@ function hydrateDoc(doc: IGameDefinitionWireDoc): void {
 async function fetchAndHydrate(gameId: string): Promise<boolean> {
   const epoch = ++hydrateEpoch;
   const doc = await getGameDefinition(gameId);
+  // When dirty, the external change is dropped by design (not deferred): convergence
+  // relies on the next game_definition_changed event to re-trigger this hydrate.
   if (epoch !== hydrateEpoch || dirty.definition || dirty.presentation) return false;
   hydrateDoc(doc);
   return true;
