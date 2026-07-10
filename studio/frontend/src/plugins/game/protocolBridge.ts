@@ -6,6 +6,7 @@ type InboundMessage =
   | { v: 1; kind: 'op'; id: string; op: ISceneOp }
   | { v: 1; kind: 'batch'; id: string; ops: ISceneOp[] }
   | { v: 1; kind: 'spin'; id: string; outcome: { grid: string[][] } }
+  | { v: 1; kind: 'trace'; id: string; entries: unknown[] }
   | { v: 1; kind: 'capture'; id: string };
 
 type OutboundMessage =
@@ -58,6 +59,11 @@ export class ProtocolBridge {
   /** Drive a spin round: the engine settles the reels onto `outcome.grid`. */
   spin(outcome: { grid: string[][] }): void {
     this.send({ v: 1, kind: 'spin', id: this.nextId(), outcome });
+  }
+
+  /** Play back a served composed round: the engine walks the trace through its modules. */
+  trace(entries: unknown[]): void {
+    this.send({ v: 1, kind: 'trace', id: this.nextId(), entries });
   }
 
   /** Request a render-settled frame capture. The engine replies with `captured`,
