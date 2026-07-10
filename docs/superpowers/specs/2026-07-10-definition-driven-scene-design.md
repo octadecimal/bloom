@@ -52,7 +52,7 @@ engine's ModuleManager already renders both module types.
 - Games without a composed definition are untouched (no sync, no modules
   removed); their GDD/scene-art flows are unaffected.
 
-*Rejected alternative:* client-side sync (Game Structure pane emitting
+_Rejected alternative:_ client-side sync (Game Structure pane emitting
 `scene_add_module`) — two writers, and non-UI definition edits would bypass
 it.
 
@@ -87,7 +87,7 @@ For a game with a composed definition, `scene_spin` no longer touches
 - No subprocess on this path → the Windows `--reload` bug cannot occur.
 - Runtime server URL from backend config, default
   `http://localhost:{9000 + BLOOM_PORT_OFFSET}`. `just
-  runtime-serve-packages` joins the documented dev stack.
+runtime-serve-packages` joins the documented dev stack.
 - If the runtime server is unreachable, the scene receives a spin error and
   the pane shows a toast naming the fix (`just runtime-serve-packages`).
 
