@@ -47,6 +47,12 @@ async def test_5xx_surfaces_status():
         await _client(lambda r: httpx.Response(500, text="audit down")).spin("g1")
 
 
+@pytest.mark.asyncio
+async def test_malformed_json_maps_to_user_facing_error():
+    with pytest.raises(ComposedSpinError, match="invalid JSON"):
+        await _client(lambda r: httpx.Response(200, text="not json")).spin("g1")
+
+
 def test_default_url_derives_from_port_offset(monkeypatch):
     monkeypatch.setenv("BLOOM_PORT_OFFSET", "2")
     c = build_composed_spin_client(Settings(runtime_server_url=""))

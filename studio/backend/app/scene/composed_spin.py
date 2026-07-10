@@ -31,7 +31,10 @@ class ComposedSpinClient:
             )
         if r.status_code != 200:
             raise ComposedSpinError(f"runtime server error {r.status_code}: {r.text[:200]}")
-        return r.json()
+        try:
+            return r.json()
+        except ValueError as exc:  # JSONDecodeError subclasses ValueError; httpx may raise either
+            raise ComposedSpinError(f"runtime server returned invalid JSON: {exc}") from exc
 
 
 def build_composed_spin_client(settings) -> ComposedSpinClient:
