@@ -6,7 +6,9 @@ same SlotModel, so the outcome always fills the projected grid."""
 import asyncio
 import json
 import shutil
+import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Protocol
 from app.subprocess_guard import watch_proc_tree
@@ -104,5 +106,41 @@ class FakeSpinRunner:
         return self._result
 
 
+class _LoopSafeSpinRunner:
+    """SpinRunner analogue of compose/runner._LoopSafeComposeRunner: under
+    `uvicorn --reload` on Windows the app runs on a SelectorEventLoop, which
+    cannot asyncio-spawn a subprocess (scene Spin died with NotImplementedError);
+    drive the inner coroutine on a private ProactorEventLoop in a worker thread.
+    Pure passthrough on subprocess-capable loops."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    async def run(self, model: dict, seed: int) -> dict:
+        loop = asyncio.get_running_loop()
+        if not (sys.platform == "win32" and isinstance(loop, asyncio.SelectorEventLoop)):
+            return await self._inner.run(model, seed)
+
+        result: list[dict] = []
+        error: list[BaseException] = []
+        ready = asyncio.Event()
+
+        def worker():
+            inner_loop = asyncio.ProactorEventLoop()
+            try:
+                result.append(inner_loop.run_until_complete(self._inner.run(model, seed)))
+            except BaseException as exc:  # surfaced on the caller's loop below
+                error.append(exc)
+            finally:
+                inner_loop.close()
+                loop.call_soon_threadsafe(ready.set)
+
+        threading.Thread(target=worker, daemon=True, name="loop-safe-spin-runner").start()
+        await ready.wait()
+        if error:
+            raise error[0]
+        return result[0]
+
+
 def build_spin_runner(settings) -> SpinRunner:
-    return SubprocessSpinRunner(settings)
+    return _LoopSafeSpinRunner(SubprocessSpinRunner(settings))
