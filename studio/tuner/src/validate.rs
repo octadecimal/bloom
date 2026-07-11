@@ -80,6 +80,7 @@ pub fn validate(
             cfg.final_candidate_count, MAX_CANDIDATE_COUNT
         ));
     }
+    bloom_simulator::validate_constraints(seed_model, target)?;
     Ok(())
 }
 
@@ -230,5 +231,19 @@ mod tests {
         assert!(validate(&model(1), &target(1), &c)
             .unwrap_err()
             .contains("final_candidate_count"));
+    }
+
+    #[test]
+    fn rejects_constraints_referencing_unknown_symbols() {
+        let mut t = target(1);
+        t.pay_constraints = vec![bloom_simulator::target::PayConstraint {
+            symbol: 99,
+            relation: bloom_simulator::target::PayRelation::Floor,
+            count: None,
+            value: 5,
+        }];
+        assert!(validate(&model(1), &t, &cfg())
+            .unwrap_err()
+            .contains("unknown model symbol"));
     }
 }

@@ -15,7 +15,7 @@ use bloom_simulator::measure::{measure, simulate};
 use bloom_simulator::profile::profile;
 use bloom_simulator::run::verify;
 use bloom_simulator::seedgen::generate_seeds;
-use bloom_simulator::target::TargetSpec;
+use bloom_simulator::target::{PayConstraint, TargetSpec};
 
 const FINAL_SALT: u64 = 0xF1A1_5EED_C0DE_0001;
 
@@ -49,7 +49,13 @@ fn confirmation_seeds(master_seed: u64, generation: usize, count: usize) -> Vec<
 
 /// Mutate a genome in place, then repair. Each gene mutates with probability
 /// `cfg.mutation_rate`; numeric genes step within their bounds.
-fn mutate(g: &mut Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut SplitMix64) {
+fn mutate(
+    g: &mut Genome,
+    template: &SlotModel,
+    cfg: &TunerConfig,
+    rng: &mut SplitMix64,
+    constraints: &[PayConstraint],
+) {
     let b = &cfg.bounds;
     for counts in &mut g.reel_counts {
         // move one unit between two buckets (preserves sum; repair re-normalizes).
@@ -90,7 +96,7 @@ fn mutate(g: &mut Genome, template: &SlotModel, cfg: &TunerConfig, rng: &mut Spl
                 + (rng.next_u64() as u8 % (b.min_count_max - b.min_count_min.max(1) + 1));
         }
     }
-    repair(g, template, &cfg.bounds);
+    repair(g, template, &cfg.bounds, constraints);
 }
 
 /// Uniform crossover of two parents (gene-wise coin flip), then repair.
@@ -100,6 +106,7 @@ fn crossover(
     template: &SlotModel,
     cfg: &TunerConfig,
     rng: &mut SplitMix64,
+    constraints: &[PayConstraint],
 ) -> Genome {
     if unit(rng) >= cfg.crossover_rate {
         return p1.clone();
@@ -120,7 +127,7 @@ fn crossover(
             *c = p2.bonuses[i].clone();
         }
     }
-    repair(&mut child, template, &cfg.bounds);
+    repair(&mut child, template, &cfg.bounds, constraints);
     child
 }
 
@@ -154,7 +161,7 @@ pub fn tune_with_progress(
                 base.clone()
             } else {
                 let mut g = base.clone();
-                mutate(&mut g, seed_model, cfg, &mut rng);
+                mutate(&mut g, seed_model, cfg, &mut rng, &target.pay_constraints);
                 g
             }
         })
@@ -322,8 +329,14 @@ pub fn tune_with_progress(
         while next.len() < cfg.population {
             let p1 = tournament(&scored, &mut rng).clone();
             let p2 = tournament(&scored, &mut rng).clone();
-            let mut child = crossover(&p1, &p2, seed_model, cfg, &mut rng);
-            mutate(&mut child, seed_model, cfg, &mut rng);
+            let mut child = crossover(&p1, &p2, seed_model, cfg, &mut rng, &target.pay_constraints);
+            mutate(
+                &mut child,
+                seed_model,
+                cfg,
+                &mut rng,
+                &target.pay_constraints,
+            );
             next.push(child);
         }
         pop = next;
@@ -671,7 +684,7 @@ mod tests {
         for _ in 0..500 {
             let mut g = encode_with_locks(&seed, &c.locks);
             let before = g.payouts.clone();
-            mutate(&mut g, &seed, &c, &mut rng);
+            mutate(&mut g, &seed, &c, &mut rng, &[]);
             for (a, b) in before.iter().zip(&g.payouts) {
                 let moved = a.abs_diff(*b);
                 assert!(moved <= span_step, "payout jumped {moved} (> {span_step})");
@@ -831,5 +844,56 @@ mod tests {
         assert_eq!(a.model, b.model);
         assert_eq!(a.metrics.rtp, b.metrics.rtp);
         assert_eq!(a.trace.generations_run, b.trace.generations_run);
+    }
+
+    #[test]
+    fn tuned_model_honors_a_top_paying_constraint() {
+        // toy(1): sym1@1→1, sym2@1→1 (detuned, RTP ~0.5; target 0.9).
+        // Constrain sym2 to be top-paying: every candidate the GA ever
+        // evaluates is repaired to sym1 ≤ sym2, and the winner must both
+        // PASS and honor the constraint.
+        let mut t = target_09();
+        t.pay_constraints = vec![bloom_simulator::target::PayConstraint {
+            symbol: 2,
+            relation: bloom_simulator::target::PayRelation::TopPaying,
+            count: None,
+            value: 0,
+        }];
+        let out = GeneticTuner.tune(&toy(1), &t, &cfg(7));
+        let pay = |sym: u8| {
+            out.model
+                .paytable
+                .entries
+                .iter()
+                .find(|e| e.symbol == sym)
+                .unwrap()
+                .payout
+        };
+        assert!(
+            pay(2) >= pay(1),
+            "constraint violated: sym1 {} > sym2 {}",
+            pay(1),
+            pay(2)
+        );
+        assert!(
+            matches!(out.verdict, Verdict::Pass),
+            "verdict {:?}",
+            out.verdict
+        );
+    }
+
+    #[test]
+    fn constrained_tune_is_deterministic() {
+        let mut t = target_09();
+        t.pay_constraints = vec![bloom_simulator::target::PayConstraint {
+            symbol: 2,
+            relation: bloom_simulator::target::PayRelation::TopPaying,
+            count: None,
+            value: 0,
+        }];
+        let a = GeneticTuner.tune(&toy(1), &t, &cfg(2026));
+        let b = GeneticTuner.tune(&toy(1), &t, &cfg(2026));
+        assert_eq!(a.model, b.model);
+        assert_eq!(a.metrics.rtp, b.metrics.rtp);
     }
 }
