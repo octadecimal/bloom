@@ -5,30 +5,10 @@
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::run::{run_curation_streamed, CurationProgress, RunError};
-use bloom_simulator::target::{HitRateBand, TargetSpec};
+use bloom_simulator::target::TargetFile;
 use ed25519_dalek::SigningKey;
-use serde::Deserialize;
 use serde_json::json;
 use std::fs;
-
-#[derive(Deserialize)]
-struct BandJson {
-    min: f64,
-    max: f64,
-}
-
-#[derive(Deserialize)]
-struct TargetJson {
-    rtp_target: f64,
-    rtp_tolerance: f64,
-    volatility_min: f64,
-    volatility_max: f64,
-    bonus_hit_rate_bands: Vec<BandJson>,
-    pool_size: usize,
-    candidate_count: usize,
-    realized_correction_band: f64,
-    master_seed: u64,
-}
 
 fn progress_line(p: &CurationProgress) -> String {
     match p {
@@ -61,6 +41,7 @@ fn result_line(
             "rtp": se.rtp,
             "volatility": se.volatility,
             "bonusHitRates": se.bonus_hit_rates,
+            "hitFrequency": se.hit_frequency,
         },
         "realizedRtp": realized_rtp,
         "poolSize": pool_size,
@@ -90,7 +71,7 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let tj: TargetJson = match fs::read_to_string(&args[2])
+    let tf: TargetFile = match fs::read_to_string(&args[2])
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
     {
@@ -100,26 +81,13 @@ fn main() {
             std::process::exit(2);
         }
     };
-
-    let target = TargetSpec {
-        rtp_target: tj.rtp_target,
-        rtp_tolerance: tj.rtp_tolerance,
-        volatility_min: tj.volatility_min,
-        volatility_max: tj.volatility_max,
-        bonus_hit_rate_bands: tj
-            .bonus_hit_rate_bands
-            .iter()
-            .map(|b| HitRateBand {
-                min: b.min,
-                max: b.max,
-            })
-            .collect(),
-        pool_size: tj.pool_size,
-        candidate_count: tj.candidate_count,
-        realized_correction_band: tj.realized_correction_band,
-    };
+    let target = tf.spec;
 
     if let Err(e) = bloom_simulator::validate_target(&target) {
+        eprintln!("invalid target: {e}");
+        std::process::exit(2);
+    }
+    if let Err(e) = bloom_simulator::validate_constraints(&model, &target) {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
@@ -129,7 +97,7 @@ fn main() {
     let s = run_curation_streamed(
         &model,
         &target,
-        tj.master_seed,
+        tf.master_seed,
         &args[3],
         &[],
         &signing_key,
@@ -150,12 +118,21 @@ fn main() {
                 None,
             )
         }
-        Err(RunError::VerifyFailed(_)) => (
-            "fail",
-            None,
-            None,
-            Some("measured characteristics missed the target bands".to_string()),
-        ),
+        Err(RunError::VerifyFailed(_)) => {
+            let sv = bloom_simulator::static_violations(&model, &target);
+            let msg = if sv.is_empty() {
+                "measured characteristics missed the target bands".to_string()
+            } else {
+                format!(
+                    "constraint violations: {}",
+                    sv.iter()
+                        .map(|v| v.metric.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            ("fail", None, None, Some(msg))
+        }
         Err(RunError::Curate(e)) => (
             "fail",
             None,
@@ -215,6 +192,7 @@ mod tests {
         assert!((v["se"]["rtp"].as_f64().unwrap() - 2.5 / 100.0).abs() < 1e-12);
         assert!(v["se"]["volatility"].as_f64().unwrap() > 0.0);
         assert_eq!(v["se"]["bonusHitRates"].as_array().unwrap().len(), 1);
+        assert!(v["se"]["hitFrequency"].is_number());
     }
 
     #[test]

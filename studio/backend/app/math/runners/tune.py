@@ -92,7 +92,8 @@ def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
         base_rtp=m["baseRtp"], feature_rtp=m["featureRtp"],
         bonus_hit_rates=m.get("bonusHitRates", []),
         se=MetricSEWire(rtp=se_d["rtp"], volatility=se_d["volatility"],
-                        bonus_hit_rates=se_d.get("bonusHitRates", [])) if se_d else None,
+                        bonus_hit_rates=se_d.get("bonusHitRates", []),
+                        hit_frequency=se_d.get("hitFrequency")) if se_d else None,
     )
     verdict = d["verdict"]  # "pass" | "near_miss"
     profile_d = d.get("profile")

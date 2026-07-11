@@ -121,6 +121,9 @@ export function worstMiss(metrics: IMetrics, target: ITargetSpec): { metric: str
     { metric: 'rtp', measured: metrics.rtp, lo: target.rtp_target - target.rtp_tolerance, hi: target.rtp_target + target.rtp_tolerance },
     { metric: 'volatility', measured: metrics.volatility, lo: target.volatility_min, hi: target.volatility_max },
     ...target.bonus_hit_rate_bands.map((b, i) => ({ metric: `bonus[${i}]`, measured: metrics.bonusHitRates[i] ?? 0, lo: b.min, hi: b.max })),
+    ...(target.hit_frequency_band
+      ? [{ metric: 'hit_frequency', measured: metrics.hitFrequency, lo: target.hit_frequency_band.min, hi: target.hit_frequency_band.max }]
+      : []),
   ];
   let worst: { metric: string; distance: number; side: 'below' | 'above'; rel: number } | null = null;
   for (const g of gates) {

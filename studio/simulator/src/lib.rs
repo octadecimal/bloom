@@ -3,6 +3,7 @@
 //! characteristics; the pool is a faithful sample (see the design spec).
 
 pub mod compose;
+pub mod constraints;
 pub mod curate;
 pub mod measure;
 pub mod profile;
@@ -11,4 +12,5 @@ pub mod seedgen;
 pub mod target;
 pub mod validate;
 
+pub use constraints::{static_violations, theoretical_max_win, validate_constraints};
 pub use validate::validate_target;

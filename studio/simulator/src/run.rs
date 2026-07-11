@@ -2,6 +2,7 @@
 //! → build+sign. Approach A: a model that misses targets FAILS; the simulator
 //! never reshapes the pool to force a target.
 
+use crate::constraints::static_violations;
 use crate::curate::{freeze_pool, CurateError, Pool};
 use crate::measure::{measure, simulate};
 use crate::seedgen::generate_seeds;
@@ -10,13 +11,21 @@ use bloom_math::mechanics::slots::{to_payload, SlotModel};
 use bloom_package::{build, Envelope, PackageContent};
 use ed25519_dalek::SigningKey;
 
-/// Check measured metrics against the target bands (RTP, volatility, and EACH
-/// feature's hit-rate), allowing a miss of up to K_SIGMA standard errors of
-/// the n-sample measurement — a sub-SE band miss is statistical noise, not a
-/// defect (spec 2026-07-05-noise-aware-verdicts-design.md). Err carries the
-/// metrics so the caller can see what missed. The band count must equal the
-/// feature count.
-pub fn verify(metrics: &Metrics, target: &TargetSpec, n: usize) -> Result<(), Metrics> {
+/// Check measured metrics against the target bands (RTP, volatility, EACH
+/// feature's hit-rate, and base-game hit-frequency), allowing a miss of up to
+/// K_SIGMA standard errors of the n-sample measurement — a sub-SE band miss
+/// is statistical noise, not a defect (spec
+/// 2026-07-05-noise-aware-verdicts-design.md). Also gates on `model`'s static
+/// constraint violations (max-win band, pay constraints): deterministic game
+/// facts get no SE allowance — a hard pass/fail (spec 2026-07-09 §6). Err
+/// carries the metrics so the caller can see what missed. The band count
+/// must equal the feature count.
+pub fn verify(
+    model: &SlotModel,
+    metrics: &Metrics,
+    target: &TargetSpec,
+    n: usize,
+) -> Result<(), Metrics> {
     assert_eq!(
         target.bonus_hit_rate_bands.len(),
         metrics.bonus_hit_rates.len(),
@@ -37,8 +46,17 @@ pub fn verify(metrics: &Metrics, target: &TargetSpec, n: usize) -> Result<(), Me
         .iter()
         .zip(metrics.bonus_hit_rates.iter().zip(&se.bonus_hit_rates))
         .all(|(band, (&rate, &se_hit))| outside(rate, band.min, band.max) <= K_SIGMA * se_hit);
+    let hf_ok = match &target.hit_frequency_band {
+        Some(band) => {
+            outside(metrics.hit_frequency, band.min, band.max) <= K_SIGMA * se.hit_frequency
+        }
+        None => true,
+    };
+    // Constraints are properties of the game, not of tuning: deterministic
+    // model facts get no SE allowance (spec §6).
+    let static_ok = static_violations(model, target).is_empty();
 
-    if rtp_ok && vol_ok && bonuses_ok {
+    if rtp_ok && vol_ok && hf_ok && bonuses_ok && static_ok {
         Ok(())
     } else {
         Err(metrics.clone())
@@ -108,7 +126,7 @@ pub fn run_curation_streamed(
     let metrics = measure(&samples);
 
     on_progress(CurationProgress::Phase("verify"));
-    if let Err(m) = verify(&metrics, target, samples.len()) {
+    if let Err(m) = verify(model, &metrics, target, samples.len()) {
         return StreamedOutcome {
             metrics,
             outcome: Err(RunError::VerifyFailed(m)),
@@ -250,6 +268,7 @@ mod tests {
             pool_size: 10_000,
             candidate_count: 200_000,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
@@ -307,6 +326,7 @@ mod tests {
             pool_size: 100,
             candidate_count: 1000,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
@@ -327,19 +347,37 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(verify(&metrics(0.955, 3.0, vec![0.02]), &t, 1_000_000).is_ok());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![0.02]),
+            &t,
+            1_000_000
+        )
+        .is_ok());
     }
 
     #[test]
     fn rtp_out_of_band_fails() {
         let t = target(vec![]);
-        assert!(verify(&metrics(0.80, 3.0, vec![]), &t, 1_000_000).is_err());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.80, 3.0, vec![]),
+            &t,
+            1_000_000
+        )
+        .is_err());
     }
 
     #[test]
     fn volatility_out_of_band_fails() {
         let t = target(vec![]);
-        assert!(verify(&metrics(0.955, 0.5, vec![]), &t, 1_000_000).is_err());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 0.5, vec![]),
+            &t,
+            1_000_000
+        )
+        .is_err());
     }
 
     #[test]
@@ -348,7 +386,13 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(verify(&metrics(0.955, 3.0, vec![0.20]), &t, 1_000_000).is_err());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![0.20]),
+            &t,
+            1_000_000
+        )
+        .is_err());
     }
 
     // Noise-aware boundary: rtp measured 0.978 vs band 0.95–0.97 (miss 0.008),
@@ -357,13 +401,25 @@ mod tests {
     #[test]
     fn rtp_miss_within_2_se_passes() {
         let t = target(vec![]);
-        assert!(verify(&metrics(0.978, 2.0, vec![]), &t, 160_000).is_ok());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.978, 2.0, vec![]),
+            &t,
+            160_000
+        )
+        .is_ok());
     }
 
     #[test]
     fn rtp_miss_beyond_2_se_fails() {
         let t = target(vec![]);
-        assert!(verify(&metrics(0.978, 2.0, vec![]), &t, 4_000_000).is_err());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.978, 2.0, vec![]),
+            &t,
+            4_000_000
+        )
+        .is_err());
     }
 
     #[test]
@@ -374,7 +430,13 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(verify(&metrics(0.955, 3.0, vec![0.06]), &t, 100).is_ok());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![0.06]),
+            &t,
+            100
+        )
+        .is_ok());
     }
 
     #[test]
@@ -384,7 +446,13 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(verify(&metrics(0.955, 3.0, vec![0.06]), &t, 10_000).is_err());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![0.06]),
+            &t,
+            10_000
+        )
+        .is_err());
     }
 
     #[test]
@@ -400,8 +468,15 @@ mod tests {
             pool_size: 100,
             candidate_count: 200_000,
             realized_correction_band: 0.05,
+            ..Default::default()
         };
-        assert!(verify(&metrics(0.9819, 2.8, vec![]), &t, 200_000).is_ok());
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.9819, 2.8, vec![]),
+            &t,
+            200_000
+        )
+        .is_ok());
     }
 
     #[test]
@@ -447,6 +522,67 @@ mod tests {
         );
         assert!(matches!(s.outcome, Err(RunError::VerifyFailed(_))));
         assert!((s.metrics.rtp - 0.9).abs() < 0.02); // metrics still measured
+    }
+
+    #[test]
+    fn hit_frequency_out_of_band_fails_and_2_se_noise_passes() {
+        // fixture hit_frequency is 0.3. Band 0.35–0.45: miss 0.05.
+        let mut t = target(vec![]);
+        t.hit_frequency_band = Some(HitRateBand {
+            min: 0.35,
+            max: 0.45,
+        });
+        // n=1_000_000 → SE ≈ 0.00046 → allowance ≈ 0.0009 → FAIL.
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![]),
+            &t,
+            1_000_000
+        )
+        .is_err());
+        // n=300 → SE ≈ 0.0265 → allowance ≈ 0.053 ≥ 0.05 → PASS (noise).
+        assert!(verify(&measurable_model(), &metrics(0.955, 3.0, vec![]), &t, 300).is_ok());
+        // No band → no gate.
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![]),
+            &target(vec![]),
+            100
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn static_violations_fail_verify_regardless_of_metrics() {
+        // measurable_model(): top pay 5, no bonuses → theoretical max win 5.
+        let mut t = target(vec![]);
+        t.max_win_band = Some(HitRateBand {
+            min: 100.0,
+            max: 1000.0,
+        });
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![]),
+            &t,
+            1_000_000
+        )
+        .is_err());
+
+        let mut t = target(vec![]);
+        t.pay_constraints = vec![crate::target::PayConstraint {
+            symbol: 1,
+            relation: crate::target::PayRelation::TopPaying,
+            count: None,
+            value: 0,
+        }];
+        // sym2 pays 5 > sym1's 1 → top-paying violated → hard fail.
+        assert!(verify(
+            &measurable_model(),
+            &metrics(0.955, 3.0, vec![]),
+            &t,
+            1_000_000
+        )
+        .is_err());
     }
 
     #[test]

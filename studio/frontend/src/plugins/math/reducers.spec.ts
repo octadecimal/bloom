@@ -303,4 +303,17 @@ describe('worstMiss', () => {
     // vol 5 → miss 5, rel 5/10 = 0.5; rtp in band → vol is the (only) miss.
     expect(worstMiss(metrics(0.96, 5), high)).toEqual({ metric: 'volatility', distance: 5, side: 'below' });
   });
+
+  it('reports an out-of-band hit frequency when the target carries the band', () => {
+    const targetWithBand: ITargetSpec = {
+      rtp_target: 0.96,
+      rtp_tolerance: 0.1,
+      volatility_min: 0,
+      volatility_max: 1e9,
+      bonus_hit_rate_bands: [],
+      hit_frequency_band: { min: 0.3, max: 0.4 },
+    };
+    const m: IMetrics = { rtp: 0.96, volatility: 3, hitFrequency: 0.2, baseRtp: 0.96, featureRtp: 0, bonusHitRates: [] };
+    expect(worstMiss(m, targetWithBand)).toEqual({ metric: 'hit_frequency', distance: expect.closeTo(0.1, 6), side: 'below' });
+  });
 });

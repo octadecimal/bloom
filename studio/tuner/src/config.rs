@@ -22,6 +22,8 @@ pub struct Weights {
     pub rtp: f64,
     pub volatility: f64,
     pub hit_rate: f64,
+    /// Weight of the base-game hit-frequency band (Plan 2).
+    pub hit_frequency: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]

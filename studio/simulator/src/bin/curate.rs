@@ -14,29 +14,9 @@
 
 use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::run::run_curation_streamed;
-use bloom_simulator::target::{HitRateBand, TargetSpec};
+use bloom_simulator::target::TargetFile;
 use ed25519_dalek::SigningKey;
-use serde::Deserialize;
 use std::fs;
-
-#[derive(Deserialize)]
-struct BandJson {
-    min: f64,
-    max: f64,
-}
-
-#[derive(Deserialize)]
-struct TargetJson {
-    rtp_target: f64,
-    rtp_tolerance: f64,
-    volatility_min: f64,
-    volatility_max: f64,
-    bonus_hit_rate_bands: Vec<BandJson>,
-    pool_size: usize,
-    candidate_count: usize,
-    realized_correction_band: f64,
-    master_seed: u64,
-}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -49,28 +29,15 @@ fn main() {
 
     let model: SlotModel = serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model"))
         .expect("parse model");
-    let tj: TargetJson = serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target"))
+    let tf: TargetFile = serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target"))
         .expect("parse target");
-
-    let target = TargetSpec {
-        rtp_target: tj.rtp_target,
-        rtp_tolerance: tj.rtp_tolerance,
-        volatility_min: tj.volatility_min,
-        volatility_max: tj.volatility_max,
-        bonus_hit_rate_bands: tj
-            .bonus_hit_rate_bands
-            .iter()
-            .map(|b| HitRateBand {
-                min: b.min,
-                max: b.max,
-            })
-            .collect(),
-        pool_size: tj.pool_size,
-        candidate_count: tj.candidate_count,
-        realized_correction_band: tj.realized_correction_band,
-    };
+    let target = tf.spec;
 
     if let Err(e) = bloom_simulator::validate_target(&target) {
+        eprintln!("invalid target: {e}");
+        std::process::exit(2);
+    }
+    if let Err(e) = bloom_simulator::validate_constraints(&model, &target) {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
@@ -85,7 +52,7 @@ fn main() {
     let streamed = run_curation_streamed(
         &model,
         &target,
-        tj.master_seed,
+        tf.master_seed,
         &args[3],
         &presentation,
         &signing_key,

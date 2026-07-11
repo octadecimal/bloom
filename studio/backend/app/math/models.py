@@ -22,6 +22,7 @@ class CurationParams(_WireModel):
     rtp_tolerance: float
     realized_correction_band: float
     bonus_rate_tolerance: float  # relative ± band around the GDD bonus rate
+    max_win_tolerance: float = 0.5  # relative ± band around the GDD max-win intent
 
 
 class MetricSEWire(_WireModel):
@@ -30,6 +31,7 @@ class MetricSEWire(_WireModel):
     rtp: float
     volatility: float
     bonus_hit_rates: list[float] = Field(default_factory=list)
+    hit_frequency: float | None = None
 
 
 class MetricsWire(_WireModel):
@@ -67,6 +69,7 @@ class TuneWeights(_WireModel):
     rtp: float
     volatility: float
     hit_rate: float
+    hit_frequency: float = 1.0  # base-game hit-frequency band (Plan 2)
 
 
 class TuningParams(_WireModel):

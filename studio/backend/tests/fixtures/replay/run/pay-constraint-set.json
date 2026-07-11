@@ -1,0 +1,15 @@
+{
+  "prompt": "the gold coin should pay the most",
+  "tool_calls": [
+    {
+      "name": "set_gdd_fields",
+      "args": {
+        "aspect": "paytable",
+        "fields": {
+          "pay_constraints": [{ "symbol": "sym2", "relation": "top-paying" }]
+        }
+      }
+    }
+  ],
+  "final": ["Set Paytable → pay constraints: sym2 is top-paying."]
+}

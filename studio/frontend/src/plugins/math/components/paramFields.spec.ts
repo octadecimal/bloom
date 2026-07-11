@@ -14,7 +14,7 @@ const tunerParams = {
   crossoverRate: 0.9,
   stagnationWindow: 12,
   maxAttempts: 4,
-  weights: { rtp: 1, volatility: 1, hitRate: 1 },
+  weights: { rtp: 1, volatility: 1, hitRate: 1, hitFrequency: 1 },
 };
 
 const curationParams = {
@@ -31,12 +31,17 @@ beforeEach(() => {
 });
 
 describe('paramFields registry', () => {
-  it('covers all 19 wire fields with unique keys and preserves the legacy testid keys', () => {
+  it('covers all 20 wire fields with unique keys and preserves the legacy testid keys', () => {
     const keys = PARAM_FIELDS.map((f) => f.key);
-    expect(keys).toHaveLength(19);
-    expect(new Set(keys).size).toBe(19);
+    expect(keys).toHaveLength(20);
+    expect(new Set(keys).size).toBe(20);
     expect(keys).toContain('master-seed'); // legacy testid param-master-seed
     expect(keys).toContain('pool-size'); // legacy testid param-pool-size
+  });
+
+  it('exposes the hit-frequency weight', () => {
+    const f = PARAM_FIELDS.find((x) => x.key === 'weight-hit-frequency')!;
+    expect(f.group).toBe('weights');
   });
 
   it('has six semantic groups, each non-empty', () => {
@@ -62,6 +67,7 @@ describe('paramFields registry', () => {
       'weight-rtp': 1.0,
       'weight-volatility': 1.0,
       'weight-hit-rate': 1.0,
+      'weight-hit-frequency': 1.0,
       'pool-size': 1000,
       candidates: 50000,
       'sim-seed': 2026,
@@ -96,7 +102,7 @@ describe('paramFields registry', () => {
     const byGroup = (id: string) => PARAM_FIELDS.filter((f) => f.group === id).map((f) => f.key);
     expect(byGroup('search')).toEqual(['population', 'generations', 'search-spins', 'final-spins', 'stagnation', 'attempts']);
     expect(byGroup('genetics')).toEqual(['mutation', 'crossover', 'elitism']);
-    expect(byGroup('weights')).toEqual(['weight-rtp', 'weight-volatility', 'weight-hit-rate']);
+    expect(byGroup('weights')).toEqual(['weight-rtp', 'weight-volatility', 'weight-hit-rate', 'weight-hit-frequency']);
     expect(byGroup('verification')).toEqual(['candidates', 'rtp-tolerance', 'bonus-tolerance']);
     expect(byGroup('pool')).toEqual(['pool-size', 'correction-band']);
     expect(byGroup('repro')).toEqual(['master-seed', 'sim-seed']);

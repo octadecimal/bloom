@@ -6,6 +6,7 @@ use crate::config::{GeneBounds, SectionLocks};
 use bloom_math::mechanics::slots::{
     BonusFeature, FreeSpinsConfig, Paytable, PaytableEntry, SlotModel, Symbol, TriggerSpec,
 };
+use bloom_simulator::target::{PayConstraint, PayRelation};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BonusGenes {
@@ -178,7 +179,12 @@ fn clamp_u8(v: u8, lo: u8, hi: u8) -> u8 {
 
 /// Force every gene back into the feasible set. Deterministic. After repair,
 /// `decode` always yields a structurally valid `SlotModel`.
-pub fn repair(genome: &mut Genome, template: &SlotModel, bounds: &GeneBounds) {
+pub fn repair(
+    genome: &mut Genome,
+    template: &SlotModel,
+    bounds: &GeneBounds,
+    constraints: &[PayConstraint],
+) {
     // Reel counts: rescale (deterministically) so each reel sums to its fixed
     // strip length, keeping at least the original number of distinct symbols.
     for (reel, counts) in template.reels.iter().zip(&mut genome.reel_counts) {
@@ -207,6 +213,46 @@ pub fn repair(genome: &mut Genome, template: &SlotModel, bounds: &GeneBounds) {
 
     for p in &mut genome.payouts {
         *p = clamp_u64(*p, bounds.payout_min, bounds.payout_max);
+    }
+
+    // GDD pay constraints (spec §6): floors/ceilings are per-gene clamps
+    // layered ON TOP of GeneBounds (the designed constraint wins); TopPaying
+    // is a deterministic post-clamp fix-up in fixed entry order. A locked
+    // paytable has no payout genes — nothing to enforce here; verify still
+    // reports violations on the stored paytable.
+    if !genome.payouts.is_empty() {
+        for (e, p) in template.paytable.entries.iter().zip(&mut genome.payouts) {
+            for c in constraints {
+                if c.symbol != e.symbol || c.count.is_some_and(|cc| cc != e.count) {
+                    continue;
+                }
+                match c.relation {
+                    PayRelation::Floor => *p = (*p).max(c.value),
+                    PayRelation::Ceiling => *p = (*p).min(c.value),
+                    PayRelation::TopPaying => {}
+                }
+            }
+        }
+        if let Some(top_sym) = constraints
+            .iter()
+            .find(|c| matches!(c.relation, PayRelation::TopPaying))
+            .map(|c| c.symbol)
+        {
+            let top = template
+                .paytable
+                .entries
+                .iter()
+                .zip(&genome.payouts)
+                .filter(|(e, _)| e.symbol == top_sym)
+                .map(|(_, &p)| p)
+                .max()
+                .unwrap_or(0);
+            for (e, p) in template.paytable.entries.iter().zip(&mut genome.payouts) {
+                if e.symbol != top_sym && *p > top {
+                    *p = top;
+                }
+            }
+        }
     }
 
     for b in &mut genome.bonuses {
@@ -337,7 +383,7 @@ mod tests {
                 *c = 0;
             }
         }
-        repair(&mut g, &m, &bounds());
+        repair(&mut g, &m, &bounds(), &[]);
         for (reel, counts) in m.reels.iter().zip(&g.reel_counts) {
             assert_eq!(counts.iter().sum::<u32>() as usize, reel.len());
         }
@@ -352,7 +398,7 @@ mod tests {
         g.payouts[0] = u64::MAX;
         g.bonuses[0].min_count = 250;
         g.bonuses[0].spins_awarded = 0;
-        repair(&mut g, &m, &bounds());
+        repair(&mut g, &m, &bounds(), &[]);
         // every reel's counts sum to its fixed strip length:
         for (reel, counts) in m.reels.iter().zip(&g.reel_counts) {
             assert_eq!(counts.iter().sum::<u32>() as usize, reel.len());
@@ -405,7 +451,7 @@ mod tests {
         };
         let mut g = encode_with_locks(&m, &l);
         g.payouts[0] = u64::MAX;
-        repair(&mut g, &m, &bounds());
+        repair(&mut g, &m, &bounds(), &[]);
         let d = decode(&g, &m);
         assert_eq!(d.reels, m.reels);
         assert!(d.paytable.entries[0].payout <= 100);
@@ -417,5 +463,104 @@ mod tests {
         let m = model();
         let g = encode_with_locks(&m, &SectionLocks::default());
         assert_eq!(g, encode(&m));
+    }
+
+    use bloom_simulator::target::{PayConstraint, PayRelation};
+
+    fn floor(symbol: u8, count: Option<u8>, value: u64) -> PayConstraint {
+        PayConstraint {
+            symbol,
+            relation: PayRelation::Floor,
+            count,
+            value,
+        }
+    }
+
+    #[test]
+    fn repair_applies_floor_and_ceiling_clamps() {
+        let m = model();
+        let mut g = encode(&m);
+        g.payouts = vec![1, 90];
+        repair(
+            &mut g,
+            &m,
+            &bounds(),
+            &[
+                floor(0, None, 10),
+                PayConstraint {
+                    symbol: 1,
+                    relation: PayRelation::Ceiling,
+                    count: Some(2),
+                    value: 40,
+                },
+            ],
+        );
+        assert_eq!(g.payouts[0], 10); // floored up
+        assert_eq!(g.payouts[1], 40); // ceilinged down
+    }
+
+    #[test]
+    fn constraint_floor_wins_over_gene_bounds_ceiling() {
+        // bounds().payout_max is 100; a floor of 200 must still hold — the
+        // designed floor is the stronger intent (deterministic resolution).
+        let m = model();
+        let mut g = encode(&m);
+        g.payouts = vec![1, 5];
+        repair(&mut g, &m, &bounds(), &[floor(0, None, 200)]);
+        assert_eq!(g.payouts[0], 200);
+    }
+
+    #[test]
+    fn repair_caps_competitors_at_the_top_paying_symbol() {
+        let m = model();
+        let mut g = encode(&m);
+        g.payouts = vec![80, 30]; // sym0 outpays sym1
+        repair(
+            &mut g,
+            &m,
+            &bounds(),
+            &[PayConstraint {
+                symbol: 1,
+                relation: PayRelation::TopPaying,
+                count: None,
+                value: 0,
+            }],
+        );
+        assert_eq!(g.payouts[1], 30); // designated symbol untouched
+        assert_eq!(g.payouts[0], 30); // competitor capped AT its top pay (tie ok)
+    }
+
+    #[test]
+    fn repair_with_constraints_is_deterministic() {
+        let m = model();
+        let cs = [
+            floor(0, None, 10),
+            PayConstraint {
+                symbol: 1,
+                relation: PayRelation::TopPaying,
+                count: None,
+                value: 0,
+            },
+        ];
+        let mut a = encode(&m);
+        a.payouts = vec![97, 13];
+        let mut b = a.clone();
+        repair(&mut a, &m, &bounds(), &cs);
+        repair(&mut b, &m, &bounds(), &cs);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn locked_paytable_skips_constraint_enforcement() {
+        // payouts omitted from the genome → nothing to clamp; verify still
+        // reports violations on the decoded model (Task 3), repair must not panic.
+        let m = model();
+        let l = SectionLocks {
+            paytable: true,
+            ..Default::default()
+        };
+        let mut g = encode_with_locks(&m, &l);
+        repair(&mut g, &m, &bounds(), &[floor(0, None, 10)]);
+        assert!(g.payouts.is_empty());
     }
 }

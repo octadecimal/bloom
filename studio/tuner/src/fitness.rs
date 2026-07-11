@@ -7,6 +7,8 @@
 
 use crate::config::Weights;
 use crate::outcome::BandMiss;
+use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::constraints::static_violations;
 use bloom_simulator::target::{outside, standard_errors, Metrics, TargetSpec, K_SIGMA};
 
 /// `fitness <= 0`; `0.0` at dead center. In-band values lie in `[-1, 0]`,
@@ -24,6 +26,11 @@ pub fn fitness(m: &Metrics, t: &TargetSpec, w: &Weights) -> f64 {
         d += w.hit_rate * outside(rate, band.min, band.max) / width;
     }
 
+    if let Some(band) = &t.hit_frequency_band {
+        let width = (band.max - band.min).abs().max(1e-9);
+        d += w.hit_frequency * outside(m.hit_frequency, band.min, band.max) / width;
+    }
+
     if d > 0.0 {
         return -1.0 - d;
     }
@@ -39,13 +46,19 @@ pub fn fitness(m: &Metrics, t: &TargetSpec, w: &Weights) -> f64 {
         center += w.hit_rate * (rate - mid).abs() / half;
         total_w += w.hit_rate;
     }
+    if let Some(band) = &t.hit_frequency_band {
+        let mid = (band.min + band.max) / 2.0;
+        let half = ((band.max - band.min) / 2.0).abs().max(1e-9);
+        center += w.hit_frequency * (m.hit_frequency - mid).abs() / half;
+        total_w += w.hit_frequency;
+    }
     -(center / total_w.max(1e-9)).min(1.0)
 }
 
 /// The bands the measured metrics miss by more than `K_SIGMA` standard
 /// errors (empty ⟺ the noise-aware `verify` passes). Used to explain a
 /// near-miss verdict in the report.
-pub fn band_misses(m: &Metrics, t: &TargetSpec, n: usize) -> Vec<BandMiss> {
+pub fn band_misses(model: &SlotModel, m: &Metrics, t: &TargetSpec, n: usize) -> Vec<BandMiss> {
     let se = standard_errors(m, n);
     let mut out = Vec::new();
     let rtp_lo = t.rtp_target - t.rtp_tolerance;
@@ -81,6 +94,24 @@ pub fn band_misses(m: &Metrics, t: &TargetSpec, n: usize) -> Vec<BandMiss> {
             });
         }
     }
+    if let Some(band) = &t.hit_frequency_band {
+        if outside(m.hit_frequency, band.min, band.max) > K_SIGMA * se.hit_frequency {
+            out.push(BandMiss {
+                metric: "hit_frequency".into(),
+                measured: m.hit_frequency,
+                band_lo: band.min,
+                band_hi: band.max,
+            });
+        }
+    }
+    for v in static_violations(model, t) {
+        out.push(BandMiss {
+            metric: v.metric,
+            measured: v.measured,
+            band_lo: v.band_lo,
+            band_hi: v.band_hi,
+        });
+    }
     out
 }
 
@@ -95,6 +126,7 @@ mod tests {
             rtp: 1.0,
             volatility: 1.0,
             hit_rate: 1.0,
+            hit_frequency: 1.0,
         }
     }
 
@@ -108,6 +140,7 @@ mod tests {
             pool_size: 100,
             candidate_count: 1000,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
@@ -119,6 +152,50 @@ mod tests {
             bonus_hit_rates: bonus,
             base_rtp: rtp,
             feature_rtp: 0.0,
+        }
+    }
+
+    // Mirrors genetic.rs's `toy(payout_sym2)` 1-reel fixture (here sym2 pays
+    // 5, deliberately beating sym1's 1) — verify() needs a model to check
+    // static constraints against, and the top_paying test needs a real
+    // violation to detect.
+    fn toy_model() -> bloom_math::mechanics::slots::SlotModel {
+        use bloom_math::mechanics::slots::{
+            Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
+        };
+        SlotModel {
+            symbols: vec![
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 1,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 2,
+                    role: SymbolRole::Normal,
+                },
+            ],
+            reels: vec![vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
+            rows: 1,
+            paylines: vec![vec![0]],
+            paytable: Paytable {
+                entries: vec![
+                    PaytableEntry {
+                        symbol: 1,
+                        count: 1,
+                        payout: 1,
+                    },
+                    PaytableEntry {
+                        symbol: 2,
+                        count: 1,
+                        payout: 5,
+                    },
+                ],
+            },
+            bonuses: vec![],
         }
     }
 
@@ -177,14 +254,68 @@ mod tests {
     }
 
     #[test]
+    fn hit_frequency_band_pulls_fitness_when_out_of_band() {
+        let mut t = target(vec![]);
+        t.hit_frequency_band = Some(HitRateBand {
+            min: 0.35,
+            max: 0.45,
+        });
+        // fixture hit_frequency 0.3 → out of band → below -1.
+        let out = fitness(&metrics(0.96, 3.0, vec![]), &t, &weights());
+        assert!(
+            out < -1.0,
+            "out-of-band hit frequency must be infeasible: {out}"
+        );
+        // In band (0.25–0.35) → in-band, centered scoring applies.
+        t.hit_frequency_band = Some(HitRateBand {
+            min: 0.25,
+            max: 0.35,
+        });
+        let centered = fitness(&metrics(0.96, 3.0, vec![]), &t, &weights());
+        assert!(centered <= 0.0 && centered > -1.0);
+    }
+
+    #[test]
+    fn zero_weight_disables_the_hit_frequency_pull() {
+        let mut t = target(vec![]);
+        t.hit_frequency_band = Some(HitRateBand {
+            min: 0.35,
+            max: 0.45,
+        });
+        let mut w = weights();
+        w.hit_frequency = 0.0;
+        assert_eq!(fitness(&metrics(0.96, 3.0, vec![]), &t, &w), 0.0);
+    }
+
+    #[test]
+    fn band_misses_reports_hit_frequency_and_static_violations() {
+        let mut t = target(vec![]);
+        t.hit_frequency_band = Some(HitRateBand {
+            min: 0.35,
+            max: 0.45,
+        });
+        t.pay_constraints = vec![bloom_simulator::target::PayConstraint {
+            symbol: 1,
+            relation: bloom_simulator::target::PayRelation::TopPaying,
+            count: None,
+            value: 0,
+        }];
+        // toy_model(): sym2 pays 5 > sym1's 1 → top_paying violated.
+        let misses = band_misses(&toy_model(), &metrics(0.96, 3.0, vec![]), &t, 4_000_000);
+        let names: Vec<&str> = misses.iter().map(|m| m.metric.as_str()).collect();
+        assert!(names.contains(&"hit_frequency"));
+        assert!(names.iter().any(|n| n.starts_with("top_paying[")));
+    }
+
+    #[test]
     fn band_misses_ignores_sub_2_se_misses() {
         // rtp 0.978 vs band 0.95–0.97 (miss 0.008), vol 2.0:
         // n=160_000 → allowance 0.01 → no miss; n=4_000_000 → allowance
         // 0.002 → "rtp" reported. (Mirrors the verify boundary tests.)
         let t = target(vec![]);
         let m = metrics(0.978, 2.0, vec![]);
-        assert!(band_misses(&m, &t, 160_000).is_empty());
-        let misses = band_misses(&m, &t, 4_000_000);
+        assert!(band_misses(&toy_model(), &m, &t, 160_000).is_empty());
+        let misses = band_misses(&toy_model(), &m, &t, 4_000_000);
         assert_eq!(misses.len(), 1);
         assert_eq!(misses[0].metric, "rtp");
     }
@@ -203,9 +334,24 @@ mod tests {
             (metrics(0.955, 3.0, vec![0.02]), 1_000_000),
         ] {
             assert_eq!(
-                band_misses(&m, &t, n).is_empty(),
-                verify(&m, &t, n).is_ok(),
+                band_misses(&toy_model(), &m, &t, n).is_empty(),
+                verify(&toy_model(), &m, &t, n).is_ok(),
                 "band_misses and verify disagree at n={n}"
+            );
+        }
+        // static violation: any n, agreement must hold
+        {
+            let mut t2 = t.clone();
+            t2.pay_constraints = vec![bloom_simulator::target::PayConstraint {
+                symbol: 1,
+                relation: bloom_simulator::target::PayRelation::TopPaying,
+                count: None,
+                value: 0,
+            }];
+            let m = metrics(0.955, 3.0, vec![0.02]);
+            assert_eq!(
+                band_misses(&toy_model(), &m, &t2, 1_000_000).is_empty(),
+                verify(&toy_model(), &m, &t2, 1_000_000).is_ok(),
             );
         }
     }
@@ -224,7 +370,7 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        let misses = band_misses(&metrics(0.80, 0.5, vec![0.20]), &t, 1_000_000);
+        let misses = band_misses(&toy_model(), &metrics(0.80, 0.5, vec![0.20]), &t, 1_000_000);
         let names: Vec<&str> = misses.iter().map(|m| m.metric.as_str()).collect();
         assert!(names.contains(&"rtp"));
         assert!(names.contains(&"volatility"));
@@ -237,6 +383,12 @@ mod tests {
             min: 0.0,
             max: 0.05,
         }]);
-        assert!(band_misses(&metrics(0.955, 3.0, vec![0.02]), &t, 1_000_000).is_empty());
+        assert!(band_misses(
+            &toy_model(),
+            &metrics(0.955, 3.0, vec![0.02]),
+            &t,
+            1_000_000
+        )
+        .is_empty());
     }
 }

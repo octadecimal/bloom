@@ -48,6 +48,9 @@ _TARGET = {
     "volatility_max": 1e9, "bonus_hit_rate_bands": [{"min": 0.0, "max": 1.0}],
     "pool_size": 200, "candidate_count": 2000,
     "realized_correction_band": 0.5, "master_seed": 2026,
+    "hit_frequency_band": {"min": 0.0, "max": 1.0},
+    "max_win_band": {"min": 0.0, "max": 1e12},
+    "pay_constraints": [{"symbol": 0, "relation": "floor", "value": 0}],
 }
 
 

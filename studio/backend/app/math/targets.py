@@ -76,7 +76,63 @@ def derive_num_bonuses(features_data: dict, model: dict) -> int:
     return len(features)
 
 
-def derive_target(math_model: dict, params: CurationParams, num_bonuses: int) -> dict:
+_RELATIONS = ("top-paying", "floor", "ceiling")
+
+
+def _compile_pay_constraints(paytable_data: dict, symbols_data: dict) -> list[dict]:
+    """GDD pay_constraints rows -> the Rust PayConstraint JSON, resolving each
+    row's symbol (slot or name) to the model symbol id via the model_id join
+    key (spec §5-§6). TargetGap on an unresolvable symbol: the join key is
+    written by realization, so a miss means the model needs re-realizing."""
+    rows = (paytable_data or {}).get("pay_constraints") or []
+    if not rows:
+        return []
+    ids: dict[str, int] = {}
+    for srow in (symbols_data or {}).get("symbols") or []:
+        mid = srow.get("model_id")
+        if not isinstance(mid, (int, float)) or isinstance(mid, bool):
+            continue
+        for key in (srow.get("slot"), srow.get("name")):
+            k = str(key or "").strip().lower()
+            if k:
+                ids.setdefault(k, int(mid))
+    out: list[dict] = []
+    for row in rows:
+        name = str(row.get("symbol", "")).strip().lower()
+        relation = str(row.get("relation", "")).strip().lower()
+        if relation not in _RELATIONS:
+            raise TargetGap(f"unknown pay-constraint relation '{row.get('relation')}'")
+        if name not in ids:
+            raise TargetGap(
+                f"pay constraint references symbol '{row.get('symbol')}' with no "
+                f"model_id join key; re-realize the model (shape is stale).")
+        c: dict = {"symbol": ids[name], "relation": relation}
+        raw_count = row.get("count")
+        if raw_count not in (None, ""):
+            try:
+                c["count"] = int(float(str(raw_count)))
+            except ValueError:
+                raise TargetGap(
+                    f"pay constraint for '{row.get('symbol')}' has a malformed "
+                    f"count '{raw_count}'")
+        if relation != "top-paying":
+            raw_value = row.get("value")
+            if raw_value in (None, ""):
+                raise TargetGap(
+                    f"pay constraint '{relation}' for '{row.get('symbol')}' needs a value")
+            try:
+                c["value"] = int(float(str(raw_value).strip().lower().rstrip("x")))
+            except ValueError:
+                raise TargetGap(
+                    f"pay constraint for '{row.get('symbol')}' has a malformed "
+                    f"value '{raw_value}'")
+        out.append(c)
+    return out
+
+
+def derive_target(math_model: dict, params: CurationParams, num_bonuses: int,
+                  paytable_data: dict | None = None,
+                  symbols_data: dict | None = None) -> dict:
     rtp_target = normalize_percent(_require(math_model, "rtp"))
 
     vol_key = str(_require(math_model, "volatility")).strip().lower()
@@ -91,7 +147,7 @@ def derive_target(math_model: dict, params: CurationParams, num_bonuses: int) ->
         band = {"min": center * (1.0 - tol), "max": center * (1.0 + tol)}
         bands = [dict(band) for _ in range(num_bonuses)]
 
-    return {
+    target = {
         "rtp_target": rtp_target,
         "rtp_tolerance": params.rtp_tolerance,
         "volatility_min": vmin,
@@ -102,3 +158,21 @@ def derive_target(math_model: dict, params: CurationParams, num_bonuses: int) ->
         "realized_correction_band": params.realized_correction_band,
         "master_seed": params.master_seed,
     }
+
+    hf = math_model.get("hit_frequency")
+    if hf not in (None, ""):
+        center = normalize_percent(hf)
+        tol = params.bonus_rate_tolerance  # same statistic kind as bonus rates
+        target["hit_frequency_band"] = {"min": center * (1.0 - tol),
+                                        "max": center * (1.0 + tol)}
+
+    mw = math_model.get("max_win")
+    if mw not in (None, ""):
+        val = float(str(mw).strip().lower().rstrip("x"))
+        tol = params.max_win_tolerance
+        target["max_win_band"] = {"min": val * (1.0 - tol), "max": val * (1.0 + tol)}
+
+    constraints = _compile_pay_constraints(paytable_data or {}, symbols_data or {})
+    if constraints:
+        target["pay_constraints"] = constraints
+    return target
