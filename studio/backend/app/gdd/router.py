@@ -50,6 +50,14 @@ Decide what the latest user message is:
    fields (reels, rows, paylines, the symbols table, features) re-realize the
    game's math model; if the model has been hand-tuned the studio will ask the
    human to approve first.
+   A pay-RELATION intent — which symbol should pay the most, or a minimum or
+   maximum pay for a symbol (e.g. "the wild should pay the most", "the dragon
+   pays at least 500x") — is a `paytable.pay_constraints` edit: call
+   `set_gdd_fields` on "paytable" with the FULL pay_constraints row list
+   (symbol = that symbol's slot or name from the symbols table; relation one of
+   top-paying / floor / ceiling; value in x-bet for floor/ceiling; count only
+   when the user names an N-of-a-kind). Exact payout NUMBERS are realized by
+   the math tuner — never invent a payouts table.
 2. A change to a SYMBOL's identity or art (e.g. "make the high symbol a dragon",
    "the wild should be a rune stone"): first call `set_gdd_fields` on
    "symbols-reels" to update that symbol row's name/art_desc (keep its `slot`

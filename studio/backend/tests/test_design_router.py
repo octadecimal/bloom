@@ -90,3 +90,9 @@ def test_router_binds_adjust_element_for_layout_edits():
     assert "adjust_element" in body
     # branch 5 must distinguish a pure layout change from an art regenerate
     assert "move" in body or "reposition" in body or "resize" in body
+
+
+def test_branch1_routes_pay_relations_to_pay_constraints():
+    low = build_design_router_spec().body.lower()
+    assert "pay_constraints" in low
+    assert "top-paying" in low
