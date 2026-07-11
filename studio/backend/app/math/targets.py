@@ -109,13 +109,23 @@ def _compile_pay_constraints(paytable_data: dict, symbols_data: dict) -> list[di
         c: dict = {"symbol": ids[name], "relation": relation}
         raw_count = row.get("count")
         if raw_count not in (None, ""):
-            c["count"] = int(float(str(raw_count)))
+            try:
+                c["count"] = int(float(str(raw_count)))
+            except ValueError:
+                raise TargetGap(
+                    f"pay constraint for '{row.get('symbol')}' has a malformed "
+                    f"count '{raw_count}'")
         if relation != "top-paying":
             raw_value = row.get("value")
             if raw_value in (None, ""):
                 raise TargetGap(
                     f"pay constraint '{relation}' for '{row.get('symbol')}' needs a value")
-            c["value"] = int(float(str(raw_value)))
+            try:
+                c["value"] = int(float(str(raw_value).strip().lower().rstrip("x")))
+            except ValueError:
+                raise TargetGap(
+                    f"pay constraint for '{row.get('symbol')}' has a malformed "
+                    f"value '{raw_value}'")
         out.append(c)
     return out
 

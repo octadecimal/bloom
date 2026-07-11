@@ -77,3 +77,34 @@ def test_floor_without_value_raises_target_gap():
     with pytest.raises(TargetGap, match="value"):
         derive_target(_math_model(), default_params(), 0,
                       paytable_data=rows, symbols_data=_SYMBOLS)
+
+
+def test_unknown_relation_raises_target_gap():
+    rows = {"pay_constraints": [{"symbol": "wild", "relation": "biggest"}]}
+    with pytest.raises(TargetGap, match="relation"):
+        derive_target(_math_model(), default_params(), 0,
+                      paytable_data=rows, symbols_data=_SYMBOLS)
+
+
+def test_value_with_x_suffix_compiles_for_a_floor():
+    rows = {"pay_constraints": [
+        {"symbol": "Dragon", "relation": "floor", "value": "500x"}]}
+    t = derive_target(_math_model(), default_params(), 0,
+                      paytable_data=rows, symbols_data=_SYMBOLS)
+    assert t["pay_constraints"] == [{"symbol": 0, "relation": "floor", "value": 500}]
+
+
+def test_malformed_value_raises_target_gap():
+    rows = {"pay_constraints": [
+        {"symbol": "Dragon", "relation": "floor", "value": "lots"}]}
+    with pytest.raises(TargetGap, match="Dragon|value"):
+        derive_target(_math_model(), default_params(), 0,
+                      paytable_data=rows, symbols_data=_SYMBOLS)
+
+
+def test_malformed_count_raises_target_gap():
+    rows = {"pay_constraints": [
+        {"symbol": "Dragon", "relation": "floor", "count": "many", "value": "5"}]}
+    with pytest.raises(TargetGap, match="Dragon|count"):
+        derive_target(_math_model(), default_params(), 0,
+                      paytable_data=rows, symbols_data=_SYMBOLS)

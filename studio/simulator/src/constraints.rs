@@ -141,6 +141,12 @@ pub fn validate_constraints(model: &SlotModel, target: &TargetSpec) -> Result<()
         }
         if matches!(c.relation, PayRelation::TopPaying) {
             top_paying += 1;
+            if !model.paytable.entries.iter().any(|e| e.symbol == c.symbol) {
+                return Err(format!(
+                    "top-paying symbol {} has no paytable entries (line-pay symbols only)",
+                    c.symbol
+                ));
+            }
         }
     }
     if top_paying > 1 {
@@ -377,5 +383,20 @@ mod tests {
             .contains("floor"));
 
         assert!(validate_constraints(&model(), &target_with(vec![])).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_top_paying_on_a_symbol_with_no_paytable_entries() {
+        // sym2 is a scatter with no paytable entries — TopPaying on it would
+        // make repair's `top = ...max().unwrap_or(0)` cap every competitor to 0.
+        let no_entries = target_with(vec![PayConstraint {
+            symbol: 2,
+            relation: PayRelation::TopPaying,
+            count: None,
+            value: 0,
+        }]);
+        assert!(validate_constraints(&model(), &no_entries)
+            .unwrap_err()
+            .contains("no paytable entries"));
     }
 }

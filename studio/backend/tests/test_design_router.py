@@ -96,3 +96,4 @@ def test_branch1_routes_pay_relations_to_pay_constraints():
     low = build_design_router_spec().body.lower()
     assert "pay_constraints" in low
     assert "top-paying" in low
+    assert "never invent a payouts table" in low
