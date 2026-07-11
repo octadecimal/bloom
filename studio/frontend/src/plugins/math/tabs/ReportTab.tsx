@@ -65,6 +65,7 @@ const CONFIG_ROWS: IConfigRowDef[] = [
   { testId: 'config-weight-rtp', label: 'Weight · RTP', value: (p) => `${p.weights.rtp}` },
   { testId: 'config-weight-volatility', label: 'Weight · Volatility', value: (p) => `${p.weights.volatility}` },
   { testId: 'config-weight-hit-rate', label: 'Weight · Hit rate', value: (p) => `${p.weights.hitRate}` },
+  { testId: 'config-weight-hit-frequency', label: 'Weight · Hit frequency', value: (p) => `${p.weights.hitFrequency ?? 1}` },
 ];
 
 /** The tune configuration that produced this run — the `ITuningParams` the

@@ -13,6 +13,8 @@ export interface ITuneWeights {
   rtp: number;
   volatility: number;
   hitRate: number;
+  /** Base-game hit-frequency weight (constraint seam); absent on pre-Plan-2 payloads. */
+  hitFrequency?: number;
 }
 
 export interface ITuningParams {
@@ -32,6 +34,7 @@ export interface ITuningParams {
 export interface IMetricSE {
   rtp: number;
   volatility: number;
+  hitFrequency?: number | null;
   bonusHitRates: number[];
 }
 
@@ -165,6 +168,9 @@ export interface ITargetSpec {
   volatility_min: number;
   volatility_max: number;
   bonus_hit_rate_bands: { min: number; max: number }[];
+  hit_frequency_band?: { min: number; max: number } | null;
+  max_win_band?: { min: number; max: number } | null;
+  pay_constraints?: { symbol: number; relation: string; count?: number | null; value?: number }[];
 }
 
 /** Raw editable strings mirrored from the GDD math-model `data` dict. */

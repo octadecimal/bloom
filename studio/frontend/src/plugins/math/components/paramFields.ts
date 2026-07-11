@@ -242,6 +242,26 @@ export const PARAM_FIELDS: IParamFieldDef[] = [
     get: (s) => s.tunerParams.ornull?.weights.hitRate.get() ?? null,
     set: (s, v) => s.tunerParams.ornull?.weights.hitRate.set(v),
   },
+  {
+    key: 'weight-hit-frequency',
+    label: 'Hit frequency',
+    group: 'weights',
+    tooltip: {
+      title: 'Hit-frequency weight',
+      body: 'Relative importance of base-game hit-frequency error in the fitness score.',
+      effect: 'Higher = the GA prioritizes matching hit frequency.',
+    },
+    min: 0,
+    step: 0.1,
+    integer: false,
+    defaultValue: 1.0,
+    get: (s) => {
+      const weights = s.tunerParams.ornull?.weights;
+      if (!weights) return null;
+      return (weights.get({ noproxy: true }) as { hitFrequency?: number }).hitFrequency ?? 1.0;
+    },
+    set: (s, v) => s.tunerParams.ornull?.weights.merge({ hitFrequency: v }),
+  },
   // ── verification ───────────────────────────────────────────────────────
   {
     key: 'candidates',
