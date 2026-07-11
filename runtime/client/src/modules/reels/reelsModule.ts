@@ -4,7 +4,7 @@ import type { IGameModule, IModuleHost, IOutcome } from '../module';
 import { validateConfig, type IConfigSchema } from '../schema';
 import { reconcileOps, type IDesiredNode, type IDesiredScene } from '../reconcile';
 import type { IDisplayHandle } from '../../render/renderer';
-import { advance, blurFor, easeOutCubic, reelDelay, settleT, symbolAt, wrap } from './reelsMath';
+import { advance, blurFor, finalRow, reelDelay, settleOffset, settleT, settleTarget, symbolAt, wrap } from './reelsMath';
 import type { Op } from '../../model/ops';
 import { colorForSymbol } from './symbolColor';
 import type { ITriggerData } from '../../play/composedTypes';
@@ -99,6 +99,8 @@ export class ReelsModule implements IGameModule {
 
   private phase: 'idle' | 'spinning' | 'settling' = 'idle';
   private offsets: number[] = [];
+  private settleStarts: number[] = [];
+  private settleTargets: number[] = [];
   private elapsed = 0;
   private outcome: IOutcome | null = null;
   private offTick: (() => void) | null = null;
@@ -162,6 +164,30 @@ export class ReelsModule implements IGameModule {
   stopSpinning(outcome: IOutcome): void {
     this.outcome = outcome;
     this.elapsed = 0;
+    const cfg = resolveConfig(this.config);
+    const span = cfg.cellSize + cfg.spacing;
+    const total = cfg.rows + cfg.buffer;
+    // Natural residual travel of the old decaying-speed settle (integral of 1-easeOutCubic).
+    const minTravel = (ReelsModule.SPIN_SPEED * ReelsModule.SETTLE_MS) / 4;
+    this.settleStarts = [...this.offsets];
+    this.settleTargets = [];
+    const ops: Op[] = [];
+    for (let c = 0; c < cfg.cols; c++) {
+      // Each column keeps full speed through its stagger delay, then eases from `base`
+      // to a target on an exact cell boundary — so it lands aligned, no snap.
+      const base = this.offsets[c] + ReelsModule.SPIN_SPEED * reelDelay(c, ReelsModule.STAGGER_MS);
+      const target = settleTarget(base, minTravel, span);
+      this.settleTargets.push(target);
+      // Stamp each cell with the symbol of the row it will land on, now, under max
+      // blur — the real stop symbols then scroll into view during the final wraps.
+      const strip = this.stopStrip(c, cfg.symbols);
+      for (let r = 0; r < total; r++) {
+        const sym = symbolAt(strip, finalRow(r, target, span, total));
+        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'fill', value: colorForSymbol(sym) });
+        ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'label', value: sym });
+      }
+    }
+    this.host.emit(ops);
     this.phase = 'settling';
   }
 
@@ -191,39 +217,35 @@ export class ReelsModule implements IGameModule {
     if (this.phase === 'spinning') {
       for (let c = 0; c < cfg.cols; c++) {
         this.offsets[c] = advance(this.offsets[c], ReelsModule.SPIN_SPEED, dtMs);
-        this.renderReel(c, cfg, span, ReelsModule.SPIN_SPEED, cfg.symbols);
+        this.renderReel(c, cfg, span, ReelsModule.SPIN_SPEED);
       }
       return;
     }
 
-    // settling
+    // settling — positional easing: each column is a pure function of elapsed,
+    // so it lands exactly on its cell-boundary target instead of freezing mid-cell.
     this.elapsed += dtMs;
     let allDone = true;
     for (let c = 0; c < cfg.cols; c++) {
-      const t = settleT(this.elapsed, reelDelay(c, ReelsModule.STAGGER_MS), ReelsModule.SETTLE_MS);
-      if (t < 1) allDone = false;
-      const eased = easeOutCubic(t);
-      // Decelerate: residual speed shrinks to 0 as eased -> 1.
-      const speed = ReelsModule.SPIN_SPEED * (1 - eased);
-      this.offsets[c] = advance(this.offsets[c], speed, dtMs);
-      const stripForReel = this.stopStrip(c, cfg.symbols);
-      this.renderReel(c, cfg, span, speed, stripForReel);
+      const delay = reelDelay(c, ReelsModule.STAGGER_MS);
+      if (settleT(this.elapsed, delay, ReelsModule.SETTLE_MS) < 1) allDone = false;
+      const prev = this.offsets[c];
+      this.offsets[c] = settleOffset(this.elapsed, delay, ReelsModule.SETTLE_MS, this.settleStarts[c], this.settleTargets[c], ReelsModule.SPIN_SPEED);
+      const speed = dtMs > 0 ? (this.offsets[c] - prev) / dtMs : 0;
+      this.renderReel(c, cfg, span, speed);
     }
 
     if (allDone) this.finishSettle(cfg);
   }
 
-  private renderReel(col: number, cfg: IReelsConfig, span: number, speed: number, strip: string[]): void {
+  private renderReel(col: number, cfg: IReelsConfig, span: number, speed: number): void {
     const blur = blurFor(speed, ReelsModule.MAX_BLUR, ReelsModule.REF_SPEED);
     const total = cfg.rows + cfg.buffer;
-    const scrolled = Math.floor(this.offsets[col] / span);
     for (let r = 0; r < total; r++) {
       const handle = this.host.resolve(cellId(this.id, col, r));
       if (!handle) continue;
       handle.position.y = wrap(r * span + this.offsets[col], total * span) - span;
       handle.setBlur(blur);
-      // Recycle: the visible symbol for this slot scrolls with the strip.
-      void symbolAt(strip, r - scrolled);
     }
   }
 
@@ -233,6 +255,8 @@ export class ReelsModule implements IGameModule {
     return stops.length ? stops : symbols;
   }
 
+  /** Safety net: columns already land on cell boundaries showing the outcome, so
+   *  these writes re-canonicalize cell ids to rows without changing visible content. */
   private finishSettle(cfg: IReelsConfig): void {
     const grid: string[][] = [];
     for (let c = 0; c < cfg.cols; c++) {
