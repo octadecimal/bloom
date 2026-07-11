@@ -21,7 +21,8 @@ from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
-from app.math.targets import derive_target, derive_num_bonuses, TargetGap
+from app.math.target_flow import derive_target_for
+from app.math.targets import derive_num_bonuses, TargetGap
 from app.math.models import TuningParams
 from app.math.realize_flow import realize_game
 from app.math.shape import is_shape_change, is_target_change
@@ -1322,13 +1323,11 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
         paytable = (model.get("paytable") or {}).get("entries") or []
         p = sim_doc.tuner_params
 
-        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
-        math_model = getattr(gdd, "data", {}) if gdd is not None else {}
         features_doc = await ctx.gdd_store.get_doc(ctx.game_id, "bonus-features")
         try:
             num_bonuses = derive_num_bonuses(
                 features_doc.data if features_doc else {}, model)
-            target = derive_target(math_model, sim_doc.params, num_bonuses)
+            target = await derive_target_for(ctx.gdd_store, ctx.game_id, sim_doc)
             target_line = (
                 f"target: RTP {target['rtp_target']} ±{target['rtp_tolerance']}, "
                 f"volatility {target['volatility_min']}–{target['volatility_max']}, "
@@ -1445,14 +1444,8 @@ def build_set_tuner_params_tool(ctx: ToolContext) -> BaseTool:
 def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
     async def tune_slot_model() -> str:
         sim_doc = await ctx.math_store.get_or_seed(ctx.game_id)
-        model = sim_doc.model or {}
-        gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
-        math_model = getattr(gdd, "data", {}) if gdd is not None else {}
-        features_doc = await ctx.gdd_store.get_doc(ctx.game_id, "bonus-features")
         try:
-            num_bonuses = derive_num_bonuses(
-                features_doc.data if features_doc else {}, model)
-            derive_target(math_model, sim_doc.params, num_bonuses)   # gap pre-check
+            await derive_target_for(ctx.gdd_store, ctx.game_id, sim_doc)   # gap pre-check
         except TargetGap as gap:
             return (f"Cannot tune: {gap.message}. Complete the GDD math-model intent "
                     f"(RTP, volatility, bonus rate) first, then tune again.")
