@@ -282,13 +282,20 @@ pub fn tune_with_progress(
             // low-fidelity read alone. The prefilter keeps hopeless targets
             // (miss ≫ 2·SE even at search fidelity) ending early as Stagnated
             // and skips pointless final-fidelity simulations.
-            if verify(&bm, target, cfg.search_candidate_count).is_ok() {
+            if verify(&best_model, &bm, target, cfg.search_candidate_count).is_ok() {
                 let candidate = decode(&scored[0].0, seed_model);
                 let conf_samples = simulate(
                     &candidate,
                     &confirmation_seeds(cfg.master_seed, g, cfg.final_candidate_count),
                 );
-                if verify(&measure(&conf_samples), target, cfg.final_candidate_count).is_ok() {
+                if verify(
+                    &candidate,
+                    &measure(&conf_samples),
+                    target,
+                    cfg.final_candidate_count,
+                )
+                .is_ok()
+                {
                     feasible = Some((candidate, conf_samples));
                     stop_reason = StopReason::Feasible;
                     break;
@@ -369,7 +376,7 @@ pub fn tune_with_progress(
         }
     };
     let metrics = measure(&final_samples);
-    let verdict = match verify(&metrics, target, final_samples.len()) {
+    let verdict = match verify(&model, &metrics, target, final_samples.len()) {
         Ok(()) => Verdict::Pass,
         Err(_) => Verdict::NearMiss {
             missed: band_misses(&metrics, target, final_samples.len()),

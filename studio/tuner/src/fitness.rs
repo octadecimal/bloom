@@ -124,6 +124,48 @@ mod tests {
         }
     }
 
+    // Mirrors genetic.rs's `toy(1)` 1-reel fixture — verify() needs a model
+    // to check static constraints against, though this target carries none.
+    fn toy_model() -> bloom_math::mechanics::slots::SlotModel {
+        use bloom_math::mechanics::slots::{
+            Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
+        };
+        SlotModel {
+            symbols: vec![
+                SymbolDef {
+                    id: 0,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 1,
+                    role: SymbolRole::Normal,
+                },
+                SymbolDef {
+                    id: 2,
+                    role: SymbolRole::Normal,
+                },
+            ],
+            reels: vec![vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
+            rows: 1,
+            paylines: vec![vec![0]],
+            paytable: Paytable {
+                entries: vec![
+                    PaytableEntry {
+                        symbol: 1,
+                        count: 1,
+                        payout: 1,
+                    },
+                    PaytableEntry {
+                        symbol: 2,
+                        count: 1,
+                        payout: 1,
+                    },
+                ],
+            },
+            bonuses: vec![],
+        }
+    }
+
     #[test]
     fn dead_center_scores_zero_and_off_center_in_band_scores_below() {
         let t = target(vec![]);
@@ -206,7 +248,7 @@ mod tests {
         ] {
             assert_eq!(
                 band_misses(&m, &t, n).is_empty(),
-                verify(&m, &t, n).is_ok(),
+                verify(&toy_model(), &m, &t, n).is_ok(),
                 "band_misses and verify disagree at n={n}"
             );
         }

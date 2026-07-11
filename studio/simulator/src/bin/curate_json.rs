@@ -87,6 +87,10 @@ fn main() {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
+    if let Err(e) = bloom_simulator::validate_constraints(&model, &target) {
+        eprintln!("invalid target: {e}");
+        std::process::exit(2);
+    }
 
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only (umbrella §9)
     let mut on_progress = |p: CurationProgress| emit(progress_line(&p));
@@ -114,12 +118,21 @@ fn main() {
                 None,
             )
         }
-        Err(RunError::VerifyFailed(_)) => (
-            "fail",
-            None,
-            None,
-            Some("measured characteristics missed the target bands".to_string()),
-        ),
+        Err(RunError::VerifyFailed(_)) => {
+            let sv = bloom_simulator::static_violations(&model, &target);
+            let msg = if sv.is_empty() {
+                "measured characteristics missed the target bands".to_string()
+            } else {
+                format!(
+                    "constraint violations: {}",
+                    sv.iter()
+                        .map(|v| v.metric.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            ("fail", None, None, Some(msg))
+        }
         Err(RunError::Curate(e)) => (
             "fail",
             None,

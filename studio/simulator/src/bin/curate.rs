@@ -37,6 +37,10 @@ fn main() {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
+    if let Err(e) = bloom_simulator::validate_constraints(&model, &target) {
+        eprintln!("invalid target: {e}");
+        std::process::exit(2);
+    }
 
     let presentation: Vec<u8> = if args.len() == 7 {
         fs::read(&args[6]).expect("read presentation")
