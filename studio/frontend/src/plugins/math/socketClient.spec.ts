@@ -16,6 +16,16 @@ vi.mock('socket.io-client', () => ({
   }),
 }));
 
+// sync.ts's refresh helpers run for real (end-state assertions); only their fetches are mocked.
+const getSlotModel = vi.fn();
+const getTarget = vi.fn();
+const getTuner = vi.fn();
+vi.mock('./restClient', () => ({
+  getSlotModel: (gameId: string) => getSlotModel(gameId),
+  getTarget: (gameId: string) => getTarget(gameId),
+  getTuner: (gameId: string) => getTuner(gameId),
+}));
+
 import { createMathSocket } from './socketClient';
 
 function run(id: string): IMathRun {
@@ -49,6 +59,9 @@ beforeEach(() => {
   for (const k of Object.keys(handlers)) delete handlers[k];
   emit.mockReset();
   disconnect.mockReset();
+  getSlotModel.mockReset().mockRejectedValue(new Error('not stubbed'));
+  getTarget.mockReset().mockRejectedValue(new Error('not stubbed'));
+  getTuner.mockReset().mockRejectedValue(new Error('not stubbed'));
   mathSlice().activeGameId.set('g1');
 });
 
@@ -157,6 +170,23 @@ describe('generate_status', () => {
     expect(mathSlice().genStatus.get()).toBe('done');
   });
 
+  it('phase done refreshes verdictStale from the slot-model doc (tune completion emits no slot_model_changed)', async () => {
+    createMathSocket().connect();
+    mathSlice().verdictStale.set(true); // stale from an earlier target/model edit
+    getSlotModel.mockResolvedValue({
+      id: 'sm1',
+      gameId: 'g1',
+      model: {},
+      params: { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 },
+      locks: { reels: false, paytable: false, bonus: false },
+      result: null,
+      updatedAt: 't',
+      verdictStale: false, // backend cleared the flag when it saved the tune result
+    });
+    handlers['generate_status']({ gameId: 'g1', phase: 'done' });
+    await vi.waitFor(() => expect(mathSlice().verdictStale.get()).toBe(false));
+  });
+
   it('generate_status cancelled resets progress and sets genStatus', () => {
     createMathSocket().connect();
     mathSlice().genStatus.set('cancelling');
@@ -210,13 +240,14 @@ describe('curation_progress/complete/failed', () => {
     const params = { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 };
     handlers['curation_complete']({
       gameId: 'g1',
-      doc: { id: 'sm1', gameId: 'g1', model: {}, params, locks, result, updatedAt: 't' },
+      doc: { id: 'sm1', gameId: 'g1', model: {}, params, locks, result, updatedAt: 't', verdictStale: false },
     });
     expect(mathSlice().verifyResult.get({ noproxy: true })).toEqual(result);
     expect(mathSlice().verifyStatus.get()).toBe('pass');
     expect(mathSlice().verifyProgress.get()).toBeNull();
     expect(mathSlice().locks.get({ noproxy: true })).toEqual(locks);
     expect(mathSlice().curationParams.get({ noproxy: true })).toEqual(params);
+    expect(mathSlice().verdictStale.get()).toBe(false);
   });
 
   it('curation_complete falls back to idle verifyStatus when result is null', () => {

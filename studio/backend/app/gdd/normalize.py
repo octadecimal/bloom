@@ -3,7 +3,9 @@ import re
 from app.gdd.schemas import Field
 
 
-def normalize_value(field: Field, raw) -> tuple[object, str | None]:
+def normalize_value(
+    field: Field, raw, ignore_missing: frozenset[str] = frozenset()
+) -> tuple[object, str | None]:
     if field.type == "percent":
         return _percent(raw)
     if field.type == "ratio":
@@ -13,7 +15,7 @@ def normalize_value(field: Field, raw) -> tuple[object, str | None]:
     if field.type == "enum":
         return _enum(field, raw)
     if field.type == "table":
-        return _table(field, raw)
+        return _table(field, raw, ignore_missing)
     if field.type == "list":
         return _list(raw)
     if field.type == "range":
@@ -72,7 +74,9 @@ def _enum(field: Field, raw) -> tuple[object, str | None]:
     return (s, f"'{raw}' is not one of {list(allowed)} for {field.key}")
 
 
-def _table(field: Field, raw) -> tuple[object, str | None]:
+def _table(
+    field: Field, raw, ignore_missing: frozenset[str] = frozenset()
+) -> tuple[object, str | None]:
     cols = field.columns or ()
     col_keys = [c.key for c in cols]
     if not isinstance(raw, list):
@@ -84,7 +88,7 @@ def _table(field: Field, raw) -> tuple[object, str | None]:
             warns.append(f"{field.key} row {i} is not an object")
             continue
         rows.append({c: row.get(c, "") for c in col_keys})
-        missing = [c for c in col_keys if c not in row]
+        missing = [c for c in col_keys if c not in row and c not in ignore_missing]
         if missing:
             warns.append(f"{field.key} row {i} missing {missing}")
         for col in cols:

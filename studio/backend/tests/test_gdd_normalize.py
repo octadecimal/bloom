@@ -6,8 +6,8 @@ RATIO = Field("bonus_hit_rate", "Bonus hit rate", "ratio", "param")
 NUMBER = Field("max_win", "Max win", "number", "param")
 ENUM = Field("volatility", "Volatility", "enum", "param",
              enum=("low", "medium", "medium-high", "high"))
-TABLE = Field("payouts", "Payouts", "table", "param",
-              columns=(Column("symbol", "Symbol"), Column("5oak", "5 OAK")))
+TABLE = Field("constraints", "Constraints", "table", "param",
+              columns=(Column("symbol", "Symbol"), Column("value", "Value")))
 LIST = Field("sfx", "SFX", "list", "param")
 TEXT = Field("name", "Name", "text", "param")
 
@@ -43,10 +43,10 @@ def test_enum_normalizes_case_and_warns_on_unknown():
 
 
 def test_table_coerces_rows_and_warns_on_missing_columns():
-    rows = [{"symbol": "Wild", "5oak": 500}, {"symbol": "Seven"}]
+    rows = [{"symbol": "Wild", "value": 500}, {"symbol": "Seven"}]
     value, warn = normalize_value(TABLE, rows)
-    assert value == [{"symbol": "Wild", "5oak": 500}, {"symbol": "Seven", "5oak": ""}]
-    assert warn is not None  # row 1 missing 5oak
+    assert value == [{"symbol": "Wild", "value": 500}, {"symbol": "Seven", "value": ""}]
+    assert warn is not None  # row 1 missing value
     bad, bad_warn = normalize_value(TABLE, "not a list")
     assert bad == "not a list" and bad_warn is not None
 

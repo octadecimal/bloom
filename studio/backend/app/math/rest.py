@@ -7,7 +7,7 @@ from pydantic.alias_generators import to_camel
 from app.math import templates
 from app.math.models import CurationParams, SectionLocks, TuningParams, sim_wire, tuner_view
 from app.math.models import math_run_wire
-from app.math.targets import derive_target, TargetGap
+from app.math.targets import derive_target, derive_num_bonuses, TargetGap
 
 router = APIRouter()
 
@@ -44,6 +44,16 @@ async def put_slot_model(game_id: str, body: PutSlotModelBody, request: Request)
         game_id, model=body.model, params=body.params,
         presentation=body.presentation, locks=body.locks, source=body.source)
     return sim_wire(doc)
+
+
+@router.post("/games/{game_id}/slot-model/realize")
+async def realize_slot_model_rest(game_id: str, request: Request) -> dict:
+    from app.math.realize_flow import realize_game
+    res = await realize_game(request.app.state.math_store,
+                             request.app.state.gdd_store, game_id,
+                             gdd_hub=request.app.state.gdd_hub)
+    return {"realized": res.realized, "errors": res.errors,
+            "warnings": res.warnings}
 
 
 @router.post("/games/{game_id}/slot-model/curate", status_code=202)
@@ -97,10 +107,12 @@ async def put_tuner(game_id: str, body: PutTunerBody, request: Request) -> dict:
 async def get_tuner_target(game_id: str, request: Request) -> dict:
     doc = await request.app.state.math_store.get_or_seed(game_id)
     model = doc.model or {}
-    num_bonuses = len(model.get("bonuses", []) or [])
     gdd = await request.app.state.gdd_store.get_doc(game_id, "math-model")
     math_model = getattr(gdd, "data", {}) if gdd is not None else {}
     try:
+        features_doc = await request.app.state.gdd_store.get_doc(game_id, "bonus-features")
+        num_bonuses = derive_num_bonuses(
+            features_doc.data if features_doc else {}, model)
         return {"target": derive_target(math_model, doc.params, num_bonuses)}
     except TargetGap as gap:
         return {"gap": gap.message}

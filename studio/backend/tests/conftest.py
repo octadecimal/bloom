@@ -19,7 +19,7 @@ def ctx(settings):
 _COLLECTIONS = [
     "rooms", "messages", "games", "assets", "runs",
     "slot_models", "region_overrides", "tuner_jobs", "math_runs",
-    "game_definitions",
+    "gdd_docs", "game_definitions",
 ]
 
 

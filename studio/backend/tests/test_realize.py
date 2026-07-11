@@ -16,8 +16,8 @@ _GDD_PAYTABLE = {"payouts": [
     {"symbol": "Dragon", "3oak": "5", "4oak": "20", "5oak": "100"},
     {"symbol": "Ten", "3oak": "2", "4oak": "8", "5oak": "40"},
 ]}
-_GDD_BONUS = {"free_spins": [
-    {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
+_GDD_BONUS = {"features": [
+    {"name": "Free Spins", "trigger": "3 scatters", "description": "wheel"}]}
 
 
 def test_realize_golden_vector():
@@ -34,8 +34,8 @@ def test_realize_golden_vector():
     assert m["paytable"]["entries"][0] == {"symbol": 0, "count": 3, "payout": 5}
     assert m["bonuses"] == [{"FreeSpins": {
         "trigger": {"symbol": 3, "min_count": 3},
-        "config": {"spins_awarded": 10, "retrigger": True,
-                   "multiplier": 2, "feature_reels": None}}}]
+        "config": {"spins_awarded": 10, "retrigger": False,
+                   "multiplier": 1, "feature_reels": None}}}]
 
 
 def test_realize_returns_none_on_hard_error():
@@ -288,22 +288,22 @@ def test_paylines_ways_over_cap_is_hard_error():
     assert any("MAX_PAYLINES" in e for e in errors)
 
 
-def test_bonuses_map_free_spins_to_external_tagged_freespins():
-    bf = {"free_spins": [
-        {"trigger": "3 scatters", "count": "10", "retrigger": "yes", "multiplier": "2"}]}
+def test_bonuses_map_features_to_external_tagged_freespins():
+    bf = {"features": [{"name": "Free Spins", "trigger": "3 scatters",
+                        "description": "wheel"}]}
     out, errors, warnings = _realize_bonuses(bf, _DEFS)
     assert errors == []
     assert out == [{"FreeSpins": {
         "trigger": {"symbol": 3, "min_count": 3},
-        "config": {"spins_awarded": 10, "retrigger": True,
-                   "multiplier": 2, "feature_reels": None},
+        "config": {"spins_awarded": 10, "retrigger": False,
+                   "multiplier": 1, "feature_reels": None},
     }}]
 
 
 def test_bonuses_without_trigger_symbol_warns_and_skips():
     defs_no_scatter = [{"id": 0, "role": "normal"}, {"id": 1, "role": "wild"}]
     out, errors, warnings = _realize_bonuses(
-        {"free_spins": [{"count": "5"}]}, defs_no_scatter)
+        {"features": [{"name": "Free Spins"}]}, defs_no_scatter)
     assert out == []
     assert any("trigger symbol" in w for w in warnings)
 
@@ -346,3 +346,39 @@ def test_realize_reels_clamps_oversized_strip_length():
     assert errors == []
     assert all(len(r) == 1000 for r in reels)  # clamped to MAX_STRIP_LEN
     assert any("MAX_STRIP_LEN" in w for w in warnings)
+
+
+def _symbols(rows):
+    return {"symbols": rows}
+
+
+def test_existing_ids_preserved_and_new_ids_fresh():
+    rows = [
+        {"slot": "wild", "name": "Wild", "kind": "wild", "model_id": 3},
+        {"slot": "thor", "name": "Thor", "kind": "high"},   # new symbol
+    ]
+    res = realize_slot_model({}, _symbols(rows), {}, {},
+                             existing_ids={"wild": 3})
+    assert res.model is not None
+    assert res.slot_ids == {"wild": 3, "thor": 4}
+    ids = {d["id"] for d in res.model["symbols"]}
+    assert ids == {3, 4}
+    # reels/paytable must reference the preserved ids, not row indexes
+    assert set(sum(res.model["reels"], [])) <= ids
+
+
+def test_slot_ids_returned_without_existing_ids():
+    rows = [{"slot": "a", "kind": "high"}, {"slot": "b", "kind": "low"}]
+    res = realize_slot_model({}, _symbols(rows), {}, {})
+    assert res.slot_ids == {"a": 0, "b": 1}
+
+
+def test_bonuses_realized_from_features_table():
+    rows = [{"slot": "scat", "kind": "scatter"}, {"slot": "a", "kind": "high"}]
+    bonus = {"features": [{"name": "Free Spins", "trigger": "3 scatters",
+                           "description": "wheel"}]}
+    res = realize_slot_model({}, _symbols(rows), {}, bonus)
+    assert len(res.model["bonuses"]) == 1
+    fs = res.model["bonuses"][0]["FreeSpins"]
+    assert fs["config"]["spins_awarded"] == 10
+    assert fs["trigger"]["min_count"] == 3

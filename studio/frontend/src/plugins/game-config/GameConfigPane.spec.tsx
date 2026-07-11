@@ -55,6 +55,15 @@ describe('GameConfigPane', () => {
     expect(screen.getByTestId('gc-sync-pill').textContent).toContain('updated externally · tuner');
   });
 
+  it('shows shape-stale pill when the doc is shape-stale', () => {
+    render(<GameConfigPane {...({} as never)} />);
+    expect(screen.queryByTestId('config-shape-stale')).toBeNull();
+    act(() => {
+      gameConfigSlice().shapeStale.set(true);
+    });
+    expect(screen.getByTestId('config-shape-stale')).toHaveTextContent('re-realize or revert');
+  });
+
   it('switches tabs and shows a warning dot for tabs with issues', () => {
     // paytable references symbol 0 twice → duplicate warning
     act(() => {

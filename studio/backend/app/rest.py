@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.catalog import build_model_catalog
 from app.gdd.models import gdd_wire
+from app.math.realize_flow import apply_math_hooks
 from app.models import message_wire, room_wire
 from app.runs import run_wire
 from app.scene.intent_rebuild import is_intent_change, rebuild_after_intent
@@ -138,7 +139,9 @@ async def set_gdd_fields_rest(
     rebuilt = False
     if is_intent_change(aspect, body.fields):
         rebuilt = (await rebuild_after_intent(request.app.state, game_id)) is not None
-    return {"doc": gdd_wire(doc), "warnings": warnings, "rebuilt": rebuilt}
+    realize = await apply_math_hooks(request.app.state, game_id, aspect, body.fields)
+    return {"doc": gdd_wire(doc), "warnings": warnings, "rebuilt": rebuilt,
+            "realize": realize}
 
 
 @router.get("/games/{game_id}/scene/overrides")

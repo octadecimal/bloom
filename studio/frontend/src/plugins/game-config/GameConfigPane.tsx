@@ -70,6 +70,7 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
   const activeTab = s.activeTab.get();
   const locks = s.locks.get({ noproxy: true }) as ISectionLocks;
   const sync = s.sync.get();
+  const shapeStale = s.shapeStale.get();
   const syncLabel =
     sync === 'saving' ? 'saving…' : sync === 'external' ? `updated externally · ${s.externalSource.get() ?? ''}` : sync === 'error' ? 'save failed' : 'saved';
   const syncTone: StatusTone = sync === 'external' ? 'warning' : sync === 'error' ? 'danger' : sync === 'saved' ? 'success' : 'neutral';
@@ -94,6 +95,11 @@ export function GameConfigPane(_props: IDockviewPanelProps) {
           <StatusPill data-testid="gc-sync-pill" tone={syncTone}>
             {syncLabel}
           </StatusPill>
+          {shapeStale && (
+            <StatusPill data-testid="config-shape-stale" tone="warning">
+              Design shape differs — re-realize or revert
+            </StatusPill>
+          )}
         </span>
       </div>
 

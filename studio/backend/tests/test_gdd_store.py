@@ -101,3 +101,39 @@ async def test_upsert_doc_raises_when_aspect_unseeded(mongo_db):
     # Must be a real, clear error -- not a bare AssertionError.
     assert not isinstance(excinfo.value, AssertionError)
     assert "seed" in str(excinfo.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_set_fields_preserves_model_id_on_omitted_writes(mongo_db):
+    store = GddStore(mongo_db)
+    await store.seed_taxonomy("g10")
+    # Simulate the join-key write-back realize_game does after a birth realize.
+    await store.set_fields("g10", "symbols-reels", {"symbols": [
+        {"slot": "wild", "kind": "wild", "model_id": 0},
+        {"slot": "a", "kind": "high", "model_id": 1},
+    ]})
+    # A roster edit that omits model_id, per the schema's own help text telling
+    # agents/humans not to set it by hand.
+    doc, warnings = await store.set_fields("g10", "symbols-reels", {"symbols": [
+        {"slot": "wild", "kind": "wild"},
+        {"slot": "a", "kind": "high"},
+        {"slot": "b", "kind": "low"},
+    ]})
+    by_slot = {r["slot"]: r["model_id"] for r in doc.data["symbols"]}
+    assert by_slot["wild"] == 0 and by_slot["a"] == 1   # preserved
+    assert by_slot["b"] in (None, "")                    # new row: still blank
+    assert not any("model_id" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_evicted_keys_stripped_on_read(mongo_db):
+    store = GddStore(mongo_db)
+    await store.seed_taxonomy("g9")
+    # simulate a pre-rework doc with evicted keys persisted
+    await store._docs.update_one(
+        {"game_id": "g9", "aspect": "paytable"},
+        {"$set": {"data": {"payouts": [{"symbol": "a"}], "notes": "keep"}}},
+    )
+    doc = await store.get_doc("g9", "paytable")
+    assert "payouts" not in doc.data
+    assert doc.data["notes"] == "keep"

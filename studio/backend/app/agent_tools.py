@@ -21,8 +21,10 @@ from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
-from app.math.targets import derive_target, TargetGap
+from app.math.targets import derive_target, derive_num_bonuses, TargetGap
 from app.math.models import TuningParams
+from app.math.realize_flow import realize_game
+from app.math.shape import is_shape_change, is_target_change
 
 
 @dataclass
@@ -929,6 +931,44 @@ def build_set_gdd_fields_tool(ctx: ToolContext) -> BaseTool:
                f"status now {doc.status}.")
         if warnings:
             msg += " Warnings: " + "; ".join(warnings)
+
+        if ctx.math_store is None:
+            return msg
+
+        if is_target_change(aspect, fields):
+            mdoc = await ctx.math_store.get_or_seed(ctx.game_id)
+            if mdoc.result is not None or mdoc.tune_result is not None:
+                await ctx.math_store.set_stale_flags(ctx.game_id, verdict_stale=True)
+                msg += " The last math verdict is now stale — re-verify."
+
+        if is_shape_change(aspect, fields):
+            mdoc = await ctx.math_store.get_or_seed(ctx.game_id)
+            if mdoc.touched:
+                label = ("Re-realize the math model to the new design shape? "
+                         "Hand-edited/tuned values in the affected sections "
+                         "will be regenerated (locked sections are kept).")
+                decision = interrupt(
+                    {"tool": "set_gdd_fields", "args": {"aspect": aspect},
+                     "label": label})
+                if decision != "approve":
+                    await ctx.math_store.set_stale_flags(ctx.game_id, shape_stale=True)
+                    return msg + (" Re-realize declined — the model is now marked "
+                                  "shape-stale until it is re-realized or the "
+                                  "design is reverted.")
+            if mdoc.shape_stale:
+                # Earlier drift was never resolved (a prior denial, or a
+                # sectional realize elsewhere) — a sectional realize here would
+                # clear the flag without fixing it, so escalate to full.
+                res = await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id,
+                                         gdd_hub=ctx.gdd_hub)
+            else:
+                res = await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id,
+                                         aspect=aspect, fields=fields,
+                                         gdd_hub=ctx.gdd_hub)
+            if res.realized:
+                msg += " Model re-realized to the new shape."
+            elif res.errors:
+                msg += " Model not realized: " + "; ".join(res.errors)
         return msg
 
     return StructuredTool.from_function(
@@ -1284,7 +1324,10 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
 
         gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
         math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        features_doc = await ctx.gdd_store.get_doc(ctx.game_id, "bonus-features")
         try:
+            num_bonuses = derive_num_bonuses(
+                features_doc.data if features_doc else {}, model)
             target = derive_target(math_model, sim_doc.params, num_bonuses)
             target_line = (
                 f"target: RTP {target['rtp_target']} ±{target['rtp_tolerance']}, "
@@ -1403,10 +1446,12 @@ def build_tune_slot_model_tool(ctx: ToolContext) -> BaseTool:
     async def tune_slot_model() -> str:
         sim_doc = await ctx.math_store.get_or_seed(ctx.game_id)
         model = sim_doc.model or {}
-        num_bonuses = len(model.get("bonuses", []) or [])
         gdd = await ctx.gdd_store.get_doc(ctx.game_id, "math-model")
         math_model = getattr(gdd, "data", {}) if gdd is not None else {}
+        features_doc = await ctx.gdd_store.get_doc(ctx.game_id, "bonus-features")
         try:
+            num_bonuses = derive_num_bonuses(
+                features_doc.data if features_doc else {}, model)
             derive_target(math_model, sim_doc.params, num_bonuses)   # gap pre-check
         except TargetGap as gap:
             return (f"Cannot tune: {gap.message}. Complete the GDD math-model intent "

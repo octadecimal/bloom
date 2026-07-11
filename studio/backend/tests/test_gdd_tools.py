@@ -55,11 +55,11 @@ async def test_set_gdd_fields_writes_a_table(mongo_db):
     await store.seed_taxonomy("g1")
     ctx = _ctx(store, hub)
     setter = _factory(store, hub).build(["set_gdd_fields"], ctx)[0]
-    await setter.ainvoke({"aspect": "paytable", "fields": {"payouts": [
-        {"symbol": "Wild", "3oak": 10, "4oak": 50, "5oak": 500},
+    await setter.ainvoke({"aspect": "paytable", "fields": {"pay_constraints": [
+        {"symbol": "Wild", "relation": "top-paying", "count": 5, "value": 500},
     ]}})
     body = (await store.get_doc("g1", "paytable")).body
-    assert "| Wild | 10 | 50 | 500 |" in body
+    assert "| Wild | top-paying | 5 | 500 |" in body
 
 
 @pytest.mark.asyncio

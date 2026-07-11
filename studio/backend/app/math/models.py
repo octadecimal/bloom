@@ -213,6 +213,11 @@ class SlotModelDoc(_WireModel):
     tuner_params: TuningParams = Field(default_factory=default_tuning_params)
     locks: SectionLocks = Field(default_factory=SectionLocks)
     presentation: dict = {}  # editor-side symbol labels/colors; opaque here
+    # provenance + staleness (spec 2026-07-09 §4/§5)
+    origin: Literal["template", "realized"] = "template"
+    touched: bool = False           # human PUT or tuner apply happened
+    verdict_stale: bool = False     # result no longer describes the model/targets
+    shape_stale: bool = False       # GDD shape != model (gated re-realize denied)
     result: CurationResult | None = None       # last curation of the STORED model
     tune_result: TuneResult | None = None      # last tune (tuned_model pending Apply)
     created_at: str

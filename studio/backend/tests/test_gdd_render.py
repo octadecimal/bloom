@@ -5,15 +5,15 @@ from app.gdd.render import render
 def test_paytable_renders_concrete_table():
     schema = schema_for("paytable")
     data = {
-        "payouts": [
-            {"symbol": "Wild", "3oak": 10, "4oak": 50, "5oak": 500},
-            {"symbol": "Seven", "3oak": 5, "4oak": 25, "5oak": 200},
+        "pay_constraints": [
+            {"symbol": "Wild", "relation": "top-paying", "count": 5, "value": 500},
+            {"symbol": "Seven", "relation": "floor", "count": 3, "value": 10},
         ],
         "notes": "Wild carries the top end.",
     }
     out = render(schema, data)
-    assert "| Symbol | 3 OAK | 4 OAK | 5 OAK |" in out
-    assert "| Wild | 10 | 50 | 500 |" in out
+    assert "| Symbol | Relation | Count | Value (x bet) |" in out
+    assert "| Wild | top-paying | 5 | 500 |" in out
     assert "Wild carries the top end." in out
 
 
@@ -26,8 +26,8 @@ def test_percent_and_ratio_format_in_params_block():
 
 
 def test_missing_required_field_marked_needs_input():
-    schema = schema_for("paytable")
-    out = render(schema, {"notes": "tbd"})
+    schema = schema_for("bonus-features")
+    out = render(schema, {"bonus_buy": "tbd"})
     assert "needs input" in out.lower()
 
 

@@ -146,6 +146,35 @@ describe('ResultStrip', () => {
     expect(screen.getByText(/band 0.955–0.965/)).toBeTruthy();
   });
 
+  describe('verdictStale', () => {
+    it('shows STALE chip when verdictStale and idle', () => {
+      mathSlice().runs.set([baseRun()]);
+      mathSlice().verdictStale.set(true);
+      render(<ResultStrip />);
+      expect(screen.getByTestId('math-verdict-stale')).toBeInTheDocument();
+    });
+
+    it('hides STALE chip while a run is in flight', () => {
+      mathSlice().runs.set([baseRun()]);
+      mathSlice().verdictStale.set(true);
+      mathSlice().genStatus.set('tuning');
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('math-verdict-stale')).toBeNull();
+    });
+
+    it('hides STALE chip when there is no verdict yet', () => {
+      mathSlice().verdictStale.set(true);
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('math-verdict-stale')).toBeNull();
+    });
+
+    it('omits STALE chip when verdictStale is false', () => {
+      mathSlice().runs.set([baseRun()]);
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('math-verdict-stale')).toBeNull();
+    });
+  });
+
   describe('in-flight state', () => {
     // A previous result rich enough that every hideable element would render.
     const staleRun = () =>

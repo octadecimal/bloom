@@ -19,10 +19,12 @@ export function ResultStrip() {
   const genStatus = s.genStatus.get();
   const verifyStatus = s.verifyStatus.get();
   const applied = s.applied.get();
+  const verdictStale = s.verdictStale.get();
 
   const running = genStatus === 'tuning' || genStatus === 'verifying' || genStatus === 'cancelling' || verifyStatus === 'running';
 
   const verdict = outcomeVerdict(outcome);
+  const showStale = !running && verdictStale && verdict !== null;
   const badge = running
     ? genStatus === 'cancelling'
       ? 'CANCELLING…'
@@ -97,6 +99,15 @@ export function ResultStrip() {
         <span data-testid="result-verdict" className={`text-sm font-semibold ${badgeClass}`}>
           {badge}
         </span>
+        {showStale && (
+          <span
+            data-testid="math-verdict-stale"
+            title="Design intent or model changed since this verdict — re-verify."
+            className="text-sm font-semibold text-text-2"
+          >
+            STALE
+          </span>
+        )}
         {!running && stopLabel && (
           <span data-testid="result-stop-reason" className="text-text-3">
             {stopLabel}

@@ -51,17 +51,23 @@ class RealizeResult:
     model: dict | None
     errors: list[str]
     warnings: list[str]
+    slot_ids: dict[str, int] | None = None
 
 
 def _realize_symbols(
-    symbols_reels: dict,
+    symbols_reels: dict, existing_ids: dict[str, int] | None = None,
 ) -> tuple[list[dict], dict[str, int], list[str], list[str]]:
-    """Build SymbolDef rows + a {slot/name -> id} map. id == row index."""
+    """Build SymbolDef rows + a {slot/name -> id} map. Ids of surviving slots
+    are preserved via existing_ids; new slots get fresh sequential ids (spec §5
+    join-key stability)."""
     rows = symbols_reels.get("symbols") or []
+    existing_ids = existing_ids or {}
     errors: list[str] = []
     warnings: list[str] = []
     defs: list[dict] = []
     name_to_id: dict[str, int] = {}
+    used = set(existing_ids.values())
+    next_id = max(used, default=-1) + 1
     for i, row in enumerate(rows):
         kind = str(row.get("kind", "")).strip().lower()
         role = _KIND_TO_ROLE.get(kind)
@@ -70,11 +76,15 @@ def _realize_symbols(
             warnings.append(
                 f"symbol row {i} kind '{row.get('kind')}' unknown; role defaulted to normal"
             )
-        defs.append({"id": i, "role": role})
-        for key in ("slot", "name"):
-            v = str(row.get(key, "")).strip().lower()
-            if v:
-                name_to_id[v] = i
+        keys = [str(row.get(k, "")).strip().lower() for k in ("slot", "name")]
+        keys = [k for k in keys if k]
+        sid = next((existing_ids[k] for k in keys if k in existing_ids), None)
+        if sid is None:
+            sid = next_id
+            next_id += 1
+        defs.append({"id": sid, "role": role})
+        for k in keys:
+            name_to_id[k] = sid
     if not defs:
         errors.append("no symbols defined; cannot realize a model")
     return defs, name_to_id, errors, warnings
@@ -266,9 +276,11 @@ def _realize_paytable(
 def _realize_bonuses(
     bonus_features: dict, symbol_defs: list[dict]
 ) -> tuple[list[dict], list[str], list[str]]:
+    """One FreeSpins bonus per GDD features row. The numeric config is a seed
+    the GA owns (free_spins was evicted from the GDD — spec §3)."""
     errors: list[str] = []
     warnings: list[str] = []
-    rows = bonus_features.get("free_spins") or []
+    rows = bonus_features.get("features") or []
     if not rows:
         return [], errors, warnings
     trigger = next((d["id"] for d in symbol_defs if d["role"] == "scatter"), None)
@@ -279,14 +291,12 @@ def _realize_bonuses(
         )
         return [], errors, warnings
     bonuses: list[dict] = []
-    for row in rows:
+    for _row in rows:
         bonuses.append({"FreeSpins": {
             "trigger": {"symbol": trigger, "min_count": BONUS_MIN_COUNT},
             "config": {
-                "spins_awarded": _to_int(row.get("count"), 0),
-                "retrigger": _to_bool(row.get("retrigger")),
-                "multiplier": _to_int(row.get("multiplier"), 1),
-                "feature_reels": None,
+                "spins_awarded": 10, "retrigger": False,
+                "multiplier": 1, "feature_reels": None,
             },
         }})
     return bonuses, errors, warnings
@@ -297,13 +307,14 @@ def realize_slot_model(
     symbols_reels: dict,
     paytable: dict,
     bonus_features: dict,
+    existing_ids: dict[str, int] | None = None,
 ) -> RealizeResult:
     """Compile the structured GDD math aspects into a SlotModel dict. Fail-loud:
     model is None iff a hard structural contradiction was found."""
     errors: list[str] = []
     warnings: list[str] = []
 
-    symbol_defs, name_to_id, e, w = _realize_symbols(symbols_reels)
+    symbol_defs, name_to_id, e, w = _realize_symbols(symbols_reels, existing_ids)
     errors += e
     warnings += w
     if not symbol_defs:
@@ -347,4 +358,9 @@ def realize_slot_model(
         "paytable": paytable_out,
         "bonuses": bonuses,
     }
-    return RealizeResult(model, errors, warnings)
+    slot_ids = {
+        str(row.get("slot", "")).strip().lower(): name_to_id[str(row.get("slot", "")).strip().lower()]
+        for row in (symbols_reels.get("symbols") or [])
+        if str(row.get("slot", "")).strip()
+    }
+    return RealizeResult(model, errors, warnings, slot_ids)

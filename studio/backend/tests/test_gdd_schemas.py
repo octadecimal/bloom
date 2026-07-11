@@ -21,14 +21,14 @@ def test_math_model_has_required_bonus_hit_rate_ratio():
     assert "medium-high" in fields["volatility"].enum
 
 
-def test_paytable_payouts_is_required_table_with_columns():
-    payouts = {f.key: f for f in schema_for("paytable")}["payouts"]
-    assert payouts.type == "table" and payouts.required
-    assert [c.key for c in payouts.columns] == ["symbol", "3oak", "4oak", "5oak"]
+def test_paytable_pay_constraints_is_optional_table_with_columns():
+    pay_constraints = {f.key: f for f in schema_for("paytable")}["pay_constraints"]
+    assert pay_constraints.type == "table" and not pay_constraints.required
+    assert [c.key for c in pay_constraints.columns] == ["symbol", "relation", "count", "value"]
 
 
 def test_required_param_keys_lists_only_required():
-    assert required_param_keys("paytable") == ["payouts"]
+    assert required_param_keys("paytable") == []
     assert set(required_param_keys("math-model")) == {
         "rtp", "volatility", "bonus_hit_rate",
     }
@@ -52,7 +52,7 @@ def test_field_catalog_covers_all_aspects_with_field_metadata():
 def test_symbols_table_has_slot_column():
     symbols = next(f for f in schema_for("symbols-reels") if f.key == "symbols")
     cols = [c.key for c in symbols.columns]
-    assert cols == ["slot", "name", "kind", "art_desc"]
+    assert cols == ["slot", "name", "kind", "art_desc", "model_id"]
 
 
 def test_math_model_payline_topology_is_structured():
@@ -61,11 +61,9 @@ def test_math_model_payline_topology_is_structured():
     assert fields["payline_mode"].type == "enum"
     assert fields["payline_mode"].enum == ("lines", "ways")
     assert fields["payline_count"].type == "number"
-    assert fields["payline_overrides"].type == "list"
-    # all new fields are optional
+    # all payline fields are optional
     assert not fields["payline_mode"].required
     assert not fields["payline_count"].required
-    assert not fields["payline_overrides"].required
 
 
 def test_symbols_reels_has_strip_length_range_and_no_composition():
@@ -90,3 +88,43 @@ def test_field_catalog_emits_column_enums():
     # non-table fields carry columns=None
     rtp = next(f for f in cat["math-model"] if f["key"] == "rtp")
     assert rtp["columns"] is None
+
+
+def _keys(aspect):
+    return [f.key for f in ASPECT_SCHEMAS[aspect]]
+
+
+def test_evicted_fields_gone():
+    assert "payouts" not in _keys("paytable")
+    assert "special_pays" not in _keys("paytable")
+    assert "free_spins" not in _keys("bonus-features")
+    assert "payline_overrides" not in _keys("math-model")
+    assert "bet_range" not in _keys("math-model")
+
+
+def test_pay_constraints_field():
+    from app.gdd.schemas import field_catalog
+    field = next(f for f in ASPECT_SCHEMAS["paytable"] if f.key == "pay_constraints")
+    assert field.type == "table"
+    assert field.required is False
+    cols = {c.key: c for c in field.columns}
+    assert set(cols) == {"symbol", "relation", "count", "value"}
+    assert cols["relation"].enum == ("top-paying", "floor", "ceiling")
+
+
+def test_symbols_table_has_model_id_column():
+    field = next(f for f in ASPECT_SCHEMAS["symbols-reels"] if f.key == "symbols")
+    assert "model_id" in {c.key for c in field.columns}
+
+
+def test_paytable_no_longer_required():
+    # payouts was the only required paytable field; after eviction the aspect
+    # has no required params (derive_status: data present -> drafted).
+    assert not [f for f in ASPECT_SCHEMAS["paytable"] if f.required]
+
+
+def test_catalog_reflects_schema():
+    from app.gdd.schemas import field_catalog
+    cat = field_catalog()
+    assert "pay_constraints" in [f["key"] for f in cat["paytable"]]
+    assert "payouts" not in [f["key"] for f in cat["paytable"]]

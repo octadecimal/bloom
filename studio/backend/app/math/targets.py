@@ -60,6 +60,22 @@ def _require(math_model: dict, key: str):
     return val
 
 
+def derive_num_bonuses(features_data: dict, model: dict) -> int:
+    """Bonus-band count. GDD features are the intent (spec §5); the model must
+    agree once realized — disagreement means the model needs re-realization and
+    must fail loudly, not tune against the wrong band count."""
+    features = features_data.get("features") or []
+    model_count = len(model.get("bonuses") or [])
+    if not features:
+        return model_count
+    if len(features) != model_count:
+        raise TargetGap(
+            f"GDD declares {len(features)} bonus feature(s) but the realized "
+            f"model has {model_count}; re-realize the model (shape is stale)."
+        )
+    return len(features)
+
+
 def derive_target(math_model: dict, params: CurationParams, num_bonuses: int) -> dict:
     rtp_target = normalize_percent(_require(math_model, "rtp"))
 

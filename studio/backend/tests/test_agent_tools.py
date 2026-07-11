@@ -261,3 +261,91 @@ def test_compose_scene_advertises_canonical_hud_roles():
     desc = tool.description.lower()
     assert "meter_left" in desc and "meter_right" in desc
     assert "multiplier" in desc
+
+
+# --- Task 7: gated re-realize in set_gdd_fields ---
+
+from app.agent_tools import build_set_gdd_fields_tool
+from app.gdd.store import GddStore
+from app.gdd.hub import GddHub
+from app.math.store import MathStore
+
+_T7_GDD_SEED = {
+    "math-model": {"reels": 5, "rows": 3, "payline_count": 10},
+    "symbols-reels": {"symbols": [
+        {"slot": "wild", "kind": "wild"}, {"slot": "a", "kind": "high"},
+        {"slot": "scat", "kind": "scatter"},
+    ]},
+    "bonus-features": {"features": [{"name": "FS", "trigger": "3 scat"}]},
+}
+
+
+async def _seed_symbols(ctx):
+    """Seed a minimally realizable GDD (math-model dims + a symbols table +
+    one bonus feature) so realize_game can produce a real model."""
+    await ctx.gdd_store.seed_taxonomy(ctx.game_id)
+    for aspect, fields in _T7_GDD_SEED.items():
+        await ctx.gdd_store.set_fields(ctx.game_id, aspect, fields)
+
+
+class _SilentSio:
+    async def emit(self, *a, **k): ...
+    async def enter_room(self, *a, **k): ...
+
+
+@pytest.fixture
+async def ctx(mongo_db):
+    await mongo_db["gdd_docs"].delete_many({})
+    await mongo_db["slot_models"].delete_many({})
+    store = GddStore(mongo_db)
+    hub = GddHub(_SilentSio(), store)
+    return ToolContext(room_id="r1", game_id="g1", asset_store=None, asset_hub=None,
+                       gdd_store=store, gdd_hub=hub, math_store=MathStore(mongo_db))
+
+
+async def test_set_gdd_fields_shape_untouched_realizes_silently(ctx, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.agent_tools.interrupt",
+                        lambda payload: calls.append(payload) or "approve")
+    await _seed_symbols(ctx)  # helper: symbols table so the game is realizable
+    tool = build_set_gdd_fields_tool(ctx)
+    out = await tool.coroutine(aspect="math-model", fields={"reels": 4})
+    assert calls == []                       # no gate on untouched model
+    doc = await ctx.math_store.get(ctx.game_id)
+    assert doc.origin == "realized" and len(doc.model["reels"]) == 4
+    assert "realized" in out.lower()
+
+
+async def test_set_gdd_fields_shape_touched_gates_and_deny_marks_stale(ctx, monkeypatch):
+    monkeypatch.setattr("app.agent_tools.interrupt", lambda payload: "deny")
+    await _seed_symbols(ctx)
+    await ctx.math_store.put(ctx.game_id, model={"rows": 3}, source="api")  # touched
+    tool = build_set_gdd_fields_tool(ctx)
+    out = await tool.coroutine(aspect="math-model", fields={"reels": 4})
+    doc = await ctx.math_store.get(ctx.game_id)
+    assert doc.shape_stale is True
+    assert "stale" in out.lower() or "declined" in out.lower()
+
+
+async def test_set_gdd_fields_escalates_full_realize_when_shape_stale(ctx, monkeypatch):
+    monkeypatch.setattr("app.agent_tools.interrupt",
+                        lambda payload: "approve")
+    await _seed_symbols(ctx)
+    # Untouched baseline realize, then simulate an earlier denied bonuses edit
+    # that left drift behind (shape_stale flagged, model never re-realized).
+    from app.math.realize_flow import realize_game
+    await realize_game(ctx.math_store, ctx.gdd_store, ctx.game_id)
+    await ctx.gdd_store.set_fields(ctx.game_id, "bonus-features", {"features": [
+        {"name": "FS", "trigger": "3 scat"},
+        {"name": "Pick", "trigger": "bonus symbol"},
+    ]})
+    await ctx.math_store.set_stale_flags(ctx.game_id, shape_stale=True)
+
+    tool = build_set_gdd_fields_tool(ctx)
+    out = await tool.coroutine(aspect="math-model", fields={"reels": 4})
+
+    doc = await ctx.math_store.get(ctx.game_id)
+    assert len(doc.model["bonuses"]) == 2   # the previously-drifted section too
+    assert len(doc.model["reels"]) == 4
+    assert doc.shape_stale is False
+    assert "realized" in out.lower()

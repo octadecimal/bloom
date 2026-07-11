@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.gdd.models import GDD_TAXONOMY, GddDoc, Status, derive_status
-from app.gdd.schemas import schema_for
+from app.gdd.schemas import ASPECT_SCHEMAS, schema_for
 from app.gdd.normalize import normalize_value
 from app.gdd.render import render
 
@@ -10,6 +10,35 @@ from app.gdd.render import render
 class GddEditError(Exception):
     """Raised when a targeted (game, aspect) doc does not exist
     (e.g. set_fields or upsert is called before the taxonomy is seeded)."""
+
+
+# (aspect, field key) -> table column that is machine-managed (written back by
+# realization, not meant to be hand-set — see the schema help text). A write
+# that omits it must not blank it out for rows that already had one.
+_MACHINE_MANAGED: dict[tuple[str, str], str] = {("symbols-reels", "symbols"): "model_id"}
+
+
+def _preserve_machine_managed(prior_rows, incoming_rows, column: str):
+    if not isinstance(incoming_rows, list):
+        return incoming_rows
+    prior_by_key: dict[str, object] = {}
+    for row in prior_rows or []:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("slot") or row.get("name") or "").strip().lower()
+        value = row.get(column)
+        if key and value not in (None, ""):
+            prior_by_key[key] = value
+    out = []
+    for row in incoming_rows:
+        if not isinstance(row, dict) or row.get(column) not in (None, ""):
+            out.append(row)
+            continue
+        key = str(row.get("slot") or row.get("name") or "").strip().lower()
+        if key in prior_by_key:
+            row = {**row, column: prior_by_key[key]}
+        out.append(row)
+    return out
 
 
 def _now() -> datetime:
@@ -25,6 +54,10 @@ def _to_doc(doc: GddDoc) -> dict:
 def _from_doc(raw: dict) -> GddDoc:
     data = dict(raw)
     data["id"] = data.pop("_id")
+    aspect = data.get("aspect")
+    if aspect in ASPECT_SCHEMAS and isinstance(data.get("data"), dict):
+        allowed = {f.key for f in ASPECT_SCHEMAS[aspect]}
+        data["data"] = {k: v for k, v in data["data"].items() if k in allowed}
     return GddDoc.model_validate(data)
 
 
@@ -92,7 +125,12 @@ class GddStore:
             if field is None:
                 warnings.append(f"unknown field '{key}' for aspect '{aspect}'")
                 continue
-            value, warn = normalize_value(field, raw)
+            managed_col = _MACHINE_MANAGED.get((aspect, key))
+            ignore_missing: frozenset[str] = frozenset()
+            if managed_col:
+                raw = _preserve_machine_managed(new_data.get(key), raw, managed_col)
+                ignore_missing = frozenset({managed_col})
+            value, warn = normalize_value(field, raw, ignore_missing)
             if warn:
                 warnings.append(warn)
             new_data[key] = value

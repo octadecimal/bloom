@@ -28,6 +28,7 @@ export interface ISlotModelWire {
   locks: ISectionLocks;
   result: ICurationResult | null;
   updatedAt: string;
+  verdictStale?: boolean;
 }
 
 export interface ITunerWire {
