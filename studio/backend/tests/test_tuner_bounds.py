@@ -49,3 +49,8 @@ def test_build_config_carries_locks():
 def test_build_config_defaults_locks_unlocked():
     cfg = build_config(default_tuning_params(), derive_bounds({}))
     assert cfg["locks"] == {"reels": False, "paytable": False, "bonus": False}
+
+
+def test_build_config_carries_hit_frequency_weight():
+    cfg = build_config(default_tuning_params(), derive_bounds({}))
+    assert cfg["weights"]["hit_frequency"] == 1.0

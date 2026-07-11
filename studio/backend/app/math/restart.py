@@ -47,4 +47,7 @@ def miss_score(metrics: MetricsWire | None, target: dict) -> float:
     for band, rate in zip(target["bonus_hit_rate_bands"],
                           metrics.bonus_hit_rates):
         score += _gate(rate, band["min"], band["max"])
+    hf = target.get("hit_frequency_band")
+    if hf:
+        score += _gate(metrics.hit_frequency, hf["min"], hf["max"])
     return score

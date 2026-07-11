@@ -114,3 +114,13 @@ def test_miss_score_includes_bonus_bands():
 
 def test_miss_score_missing_metrics_is_infinite():
     assert miss_score(None, TARGET) == math.inf
+
+
+def test_miss_score_gates_hit_frequency_band():
+    m = MetricsWire(rtp=0.96, volatility=3.0, hit_frequency=0.2,
+                    base_rtp=0.96, feature_rtp=0.0, bonus_hit_rates=[])
+    target = {"rtp_target": 0.96, "rtp_tolerance": 0.01,
+              "volatility_min": 0.0, "volatility_max": 1e9,
+              "bonus_hit_rate_bands": [],
+              "hit_frequency_band": {"min": 0.3, "max": 0.4}}
+    assert miss_score(m, target) > 0.0

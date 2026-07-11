@@ -151,4 +151,5 @@ def test_metrics_wire_dumps_se_camel_case():
                     feature_rtp=0.35, bonus_hit_rates=[0.1],
                     se=MetricSEWire(rtp=0.025, volatility=0.0177, bonus_hit_rates=[0.003]))
     d = m.model_dump(by_alias=True, mode="json")
-    assert d["se"] == {"rtp": 0.025, "volatility": 0.0177, "bonusHitRates": [0.003]}
+    assert d["se"] == {"rtp": 0.025, "volatility": 0.0177, "bonusHitRates": [0.003],
+                       "hitFrequency": None}

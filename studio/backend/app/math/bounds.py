@@ -39,6 +39,7 @@ def build_config(params: TuningParams, bounds: dict,
             "rtp": params.weights.rtp,
             "volatility": params.weights.volatility,
             "hit_rate": params.weights.hit_rate,
+            "hit_frequency": params.weights.hit_frequency,
         },
         "locks": {"reels": lk.reels, "paytable": lk.paytable, "bonus": lk.bonus},
     }
