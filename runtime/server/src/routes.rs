@@ -1,8 +1,8 @@
 //! axum handlers. Thin orchestration over the AppState seams.
 
-use crate::state::AppState;
+use crate::state::{AppState, LoadedGame, ResolveError};
 use crate::wire::{HandshakeResponse, OutcomeWire, SpinResponse};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use bloom_math::mechanics::slots::evaluate;
@@ -17,27 +17,60 @@ pub struct HealthResponse {
     pub mechanic: String,
 }
 
-pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok",
-        package_id: state.package.envelope.package_id.clone(),
-        package_version: state.package.envelope.package_version,
-        mechanic: state.package.envelope.mechanic.clone(),
-    })
+fn resolve_status(e: ResolveError) -> StatusCode {
+    match e {
+        ResolveError::PackageParamRequired => StatusCode::BAD_REQUEST,
+        ResolveError::NotFound(_) => StatusCode::NOT_FOUND,
+        ResolveError::Load(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub async fn health(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<HealthResponse>, StatusCode> {
+    match &state.source {
+        crate::state::PackageSource::Single(lp) => Ok(Json(HealthResponse {
+            status: "ok",
+            package_id: lp.package.envelope.package_id.clone(),
+            package_version: lp.package.envelope.package_version,
+            mechanic: lp.package.envelope.mechanic.clone(),
+        })),
+        crate::state::PackageSource::Dir { .. } => Ok(Json(HealthResponse {
+            status: "ok",
+            package_id: String::new(),
+            package_version: 0,
+            mechanic: "packages-dir".to_string(),
+        })),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct HandshakeQuery {
+    pub package: Option<String>,
 }
 
 /// Hand the untrusted client the package presentation (parsed as JSON; null if
 /// empty or non-JSON) plus the envelope. SP1 demo packages carry a small JSON
 /// manifest. Consuming this is SP2.
-pub async fn handshake(State(state): State<Arc<AppState>>) -> Json<HandshakeResponse> {
+pub async fn handshake(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<HandshakeQuery>,
+) -> Result<Json<HandshakeResponse>, StatusCode> {
+    let lp = state
+        .resolve(q.package.as_deref(), true)
+        .map_err(resolve_status)?;
     let presentation =
-        serde_json::from_slice(&state.package.presentation).unwrap_or(serde_json::Value::Null);
-    Json(HandshakeResponse {
-        package_id: state.package.envelope.package_id.clone(),
-        package_version: state.package.envelope.package_version,
-        mechanic: state.package.envelope.mechanic.clone(),
+        serde_json::from_slice(&lp.package.presentation).unwrap_or(serde_json::Value::Null);
+    Ok(Json(HandshakeResponse {
+        package_id: lp.package.envelope.package_id.clone(),
+        package_version: lp.package.envelope.package_version,
+        mechanic: lp.package.envelope.mechanic.clone(),
         presentation,
-    })
+        definition: match &lp.game {
+            LoadedGame::Composed(_) => serde_json::from_slice(&lp.package.math_payload).ok(),
+            LoadedGame::Slots(_) => None,
+        },
+    }))
 }
 
 fn default_bet() -> u64 {
@@ -48,6 +81,8 @@ fn default_bet() -> u64 {
 pub struct SpinRequest {
     #[serde(default = "default_bet")]
     pub bet: u64,
+    #[serde(default)]
+    pub package: Option<String>,
 }
 
 fn now_ms() -> u128 {
@@ -64,28 +99,51 @@ pub async fn spin(
     State(state): State<Arc<AppState>>,
     body: Option<Json<SpinRequest>>,
 ) -> Result<Json<SpinResponse>, StatusCode> {
-    let bet = body.map(|Json(b)| b.bet).unwrap_or(1);
+    let (bet, package) = match body {
+        Some(Json(b)) => (b.bet, b.package),
+        None => (1, None),
+    };
 
-    let idx = state.draw.index(state.package.seeds.len());
-    let seed = state.package.seeds[idx];
-    let outcome = OutcomeWire::from_round(&evaluate(&state.model, seed));
+    let lp = state
+        .resolve(package.as_deref(), false)
+        .map_err(resolve_status)?;
+    let idx = state.draw.index(lp.package.seeds.len());
+    let seed = lp.package.seeds[idx];
+    let (outcome, trace) = match &lp.game {
+        LoadedGame::Slots(model) => (OutcomeWire::from_round(&evaluate(model, seed)), None),
+        LoadedGame::Composed(game) => {
+            let t = bloom_math::mechanics::composed::evaluate(game, seed);
+            (
+                OutcomeWire::Composed {
+                    total_payout: t.total_payout,
+                },
+                Some(t.entries),
+            )
+        }
+    };
 
     let record = crate::audit::AuditRecord {
-        package_id: state.package.envelope.package_id.clone(),
-        package_version: state.package.envelope.package_version,
-        mechanic: state.package.envelope.mechanic.clone(),
+        package_id: lp.package.envelope.package_id.clone(),
+        package_version: lp.package.envelope.package_version,
+        mechanic: lp.package.envelope.mechanic.clone(),
         math_engine_version: bloom_math::ENGINE_VERSION.to_string(),
         seed,
         bet,
         timestamp_ms: now_ms(),
         outcome: outcome.clone(),
+        definition_hash: lp.definition_hash.clone(),
     };
     state
         .audit
         .append(&record)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(SpinResponse { seed, bet, outcome }))
+    Ok(Json(SpinResponse {
+        seed,
+        bet,
+        outcome,
+        trace,
+    }))
 }
 
 #[cfg(test)]
@@ -274,6 +332,16 @@ mod tests {
         (status, v)
     }
 
+    fn slots_model(state: &AppState) -> SlotModel {
+        let crate::state::PackageSource::Single(lp) = &state.source else {
+            panic!("test state is single-package");
+        };
+        match &lp.game {
+            LoadedGame::Slots(m) => m.clone(),
+            _ => panic!("test state is slots"),
+        }
+    }
+
     struct FailingSink;
     impl crate::audit::AuditSink for FailingSink {
         fn append(&self, _rec: &crate::audit::AuditRecord) -> std::io::Result<()> {
@@ -353,7 +421,7 @@ mod tests {
     #[tokio::test]
     async fn spin_returns_authoritative_reproducible_outcome() {
         let (state, _audit) = spin_state(2); // draws seeds[2] == 33
-        let model = state.model.clone();
+        let model = slots_model(&state);
         let app = build_app(state);
         let (status, v) = post_spin(app, "{}").await;
         assert_eq!(status, 200);
@@ -367,7 +435,7 @@ mod tests {
     #[tokio::test]
     async fn spin_appends_one_audit_record_that_reproduces() {
         let (state, audit) = spin_state(0); // seeds[0] == 11
-        let model = state.model.clone();
+        let model = slots_model(&state);
         let app = build_app(state);
         let (status, _v) = post_spin(app, "{}").await;
         assert_eq!(status, 200);
@@ -463,5 +531,112 @@ mod tests {
                 .map(|v| v.to_str().unwrap().to_string()),
             Some("*".to_string())
         );
+    }
+
+    use crate::state::LoadedGame;
+
+    fn composed_def_json() -> serde_json::Value {
+        serde_json::json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "reels", "type": "reels@1",
+                  "config": { "strips": [[0],[0],[0]], "rows": 1,
+                              "symbols": [{"id":0,"role":"normal"}],
+                              "paylines": [[0,0,0]],
+                              "paytable": { "entries": [{"symbol":0,"count":3,"payout":5}] } } }
+            ],
+            "states": [
+                { "id": "base", "bindings": [ { "mechanic": "reels" } ],
+                  "steps": { "budget": 1 }, "script": [ { "invoke": "reels.spin" } ] }
+            ],
+            "start": "base",
+            "transitions": [],
+            "caps": { "max_steps": 50 }
+        })
+    }
+
+    /// Composed state with a shared audit handle, mirroring `spin_state`.
+    fn composed_spin_state() -> (Arc<AppState>, Arc<MemoryAuditSink>) {
+        let content = PackageContent {
+            envelope: Envelope {
+                package_id: "pkg-composed-spin".into(),
+                package_version: 1,
+                mechanic: "composed@1".into(),
+            },
+            math_payload: serde_json::to_vec(&composed_def_json()).unwrap(),
+            seeds: vec![11, 22, 33],
+            presentation: Vec::new(),
+        };
+        let bytes = build(&content, &SigningKey::from_bytes(&[7u8; 32]));
+        let audit = Arc::new(MemoryAuditSink::new());
+        struct Shared(Arc<MemoryAuditSink>);
+        impl crate::audit::AuditSink for Shared {
+            fn append(&self, rec: &crate::audit::AuditRecord) -> std::io::Result<()> {
+                self.0.append(rec)
+            }
+        }
+        let state = AppState::from_package_bytes(
+            &bytes,
+            Box::new(FixedDraw { index: 0 }),
+            Box::new(Shared(audit.clone())),
+        )
+        .unwrap();
+        (Arc::new(state), audit)
+    }
+
+    #[tokio::test]
+    async fn composed_spin_returns_summary_outcome_and_walkable_trace() {
+        let (state, audit) = composed_spin_state(); // draws seeds[0] == 11
+        let app = build_app(state);
+        let (status, v) = post_spin(app, "{}").await;
+        assert_eq!(status, 200);
+        assert_eq!(v["seed"], "11");
+        assert_eq!(v["outcome"]["mechanic"], "composed@1");
+        // Forced single-symbol strips: one base step always pays 5.
+        assert_eq!(v["outcome"]["total_payout"], 5);
+        let trace = v["trace"]
+            .as_array()
+            .expect("composed spin carries a trace");
+        assert_eq!(trace.first().unwrap()["t"], "round_start");
+        assert_eq!(trace.first().unwrap()["seed"], "11");
+        assert_eq!(trace.last().unwrap()["t"], "round_end");
+        assert_eq!(trace.last().unwrap()["total_payout"], 5);
+        // Audit: summary-only (the record has no trace anywhere) + the hash.
+        let recs = audit.records();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].seed, 11);
+        assert_eq!(recs[0].definition_hash.len(), 64);
+        assert_eq!(recs[0].outcome, OutcomeWire::Composed { total_payout: 5 });
+        let audit_json = serde_json::to_value(&recs[0]).unwrap();
+        assert!(audit_json.get("trace").is_none());
+        assert!(audit_json["outcome"].get("trace").is_none());
+    }
+
+    #[tokio::test]
+    async fn slots_spin_response_has_no_trace_key_and_records_the_hash() {
+        let (state, audit) = spin_state(0);
+        let app = build_app(state);
+        let (status, v) = post_spin(app, "{}").await;
+        assert_eq!(status, 200);
+        assert!(
+            v.get("trace").is_none(),
+            "slots wire must not grow a trace key"
+        );
+        assert_eq!(audit.records()[0].definition_hash.len(), 64);
+    }
+
+    #[tokio::test]
+    async fn composed_handshake_carries_the_definition_and_slots_does_not() {
+        let (state, _audit) = composed_spin_state();
+        let (status, v) = get_json(build_app(state), "/handshake").await;
+        assert_eq!(status, 200);
+        assert_eq!(v["mechanic"], "composed@1");
+        assert_eq!(v["definition"]["family"], "composed@1");
+        assert_eq!(v["definition"]["start"], "base");
+
+        let slots_app = build_app(state_with_presentation(b""));
+        let (status, v) = get_json(slots_app, "/handshake").await;
+        assert_eq!(status, 200);
+        assert!(v.get("definition").is_none());
     }
 }

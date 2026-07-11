@@ -77,10 +77,10 @@ test('a correctly-wired sprite binds its texture, is centered, and is on the sta
   const gid = await openRoom(page);
   const ref = await generateAsset(page, gid);
   await openGamePane(page);
+  // root pre-exists (ensure_root/set_modules ran on room open) — reuse it.
   await page.evaluate(
     ({ gid, ref }) => {
       const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
-      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
       send({ kind: 'addNode', id: 'sym', type: 'Sprite', props: { position: { x: 640, y: 360 } } });
       send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
       send({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });
@@ -103,7 +103,6 @@ test('a reversed data edge is rejected by the engine', async ({ page }) => {
   const before = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length);
   await page.evaluate((gid) => {
     const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
     send({ kind: 'addNode', id: 'sym', type: 'Sprite' });
     send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: '/media/x.png' } });
     send({ kind: 'connect', edgeId: 'bad', type: 'data', from: { node: 'sym', port: 'data' }, to: { node: 'tex', port: 'texture' } });
@@ -117,9 +116,9 @@ test('removing the Root node is rejected by the engine', async ({ page }) => {
   const gid = await openRoom(page);
   await openGamePane(page);
   const before = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length);
+  // root pre-exists (ensure_root/set_modules ran on room open) — try to remove it directly.
   await page.evaluate((gid) => {
     const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
-    send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
     send({ kind: 'removeNode', id: 'root' });
   }, gid);
   await expect
@@ -135,7 +134,6 @@ test('adding a second sprite preserves the first (incremental, no rebuild)', asy
   await page.evaluate(
     ({ gid, ref }) => {
       const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
-      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
       send({ kind: 'addNode', id: 'a', type: 'Sprite', props: { position: { x: 400, y: 360 } } });
       send({ kind: 'addNode', id: 'texa', type: 'Texture', props: { src: ref } });
       send({ kind: 'connect', edgeId: 'e.a', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'a', port: 'parent' } });
@@ -168,7 +166,6 @@ test('an unparented sprite binds its texture but is not on the stage', async ({ 
   await page.evaluate(
     ({ gid, ref }) => {
       const send = (o: unknown) => (window as any).__gameApplyInbound('scene_op', { gameId: gid, op: o });
-      send({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 1280, height: 720 } });
       send({ kind: 'addNode', id: 'orphan', type: 'Sprite' });
       send({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
       send({ kind: 'connect', edgeId: 'e.data', type: 'data', from: { node: 'tex', port: 'data' }, to: { node: 'orphan', port: 'texture' } });

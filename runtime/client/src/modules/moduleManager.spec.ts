@@ -44,4 +44,12 @@ describe('ModuleManager', () => {
     manager.sync([{ id: 'reels', type: 'reels', config: { parentId: 'root' } }]);
     expect(manager.byType('reels')).not.toBe(first);
   });
+
+  it('byId returns the instance declared under that id', () => {
+    const { registry, host } = setup();
+    const manager = new ModuleManager({ registry, host });
+    manager.sync([{ id: 'main_reels', type: 'reels', config: { parentId: 'root' } }]);
+    expect(manager.byId('main_reels')?.id).toBe('main_reels');
+    expect(manager.byId('nope')).toBeUndefined();
+  });
 });

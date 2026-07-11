@@ -4,13 +4,9 @@ import type { IHandshakeResponse, IPresentation } from './wireTypes';
 /** A play-mode failure surfaced to the player (handshake/spin/validation). */
 export class PlayModeError extends Error {}
 
-/** Narrow an opaque handshake to a playable slots@1 presentation, or throw a
- *  PlayModeError the caller renders visibly (never a silent blank scene). */
-export function validatePresentation(hs: IHandshakeResponse): IPresentation {
-  if (hs.mechanic !== 'slots@1') {
-    throw new PlayModeError(`unsupported mechanic: ${hs.mechanic}`);
-  }
-  const p = hs.presentation;
+/** Shape-check an opaque presentation manifest (no mechanic gate) — the
+ *  composed path validates mechanic + definition separately. */
+export function validatePresentationShape(p: unknown): IPresentation {
   if (!p || typeof p !== 'object') {
     throw new PlayModeError('handshake presentation is empty');
   }
@@ -19,6 +15,15 @@ export function validatePresentation(hs: IHandshakeResponse): IPresentation {
     throw new PlayModeError('handshake presentation missing cols/rows/symbols');
   }
   return p as IPresentation;
+}
+
+/** Narrow an opaque handshake to a playable slots@1 presentation, or throw a
+ *  PlayModeError the caller renders visibly (never a silent blank scene). */
+export function validatePresentation(hs: IHandshakeResponse): IPresentation {
+  if (hs.mechanic !== 'slots@1') {
+    throw new PlayModeError(`unsupported mechanic: ${hs.mechanic}`);
+  }
+  return validatePresentationShape(hs.presentation);
 }
 
 /** Map the presentation to the reels module's config fields, defaulting the

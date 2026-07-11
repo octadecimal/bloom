@@ -27,7 +27,10 @@ const pkg = resolve(root, 'runtime/server/demo/demo.pkg');
 mkdirSync(resolve(root, 'runtime/server/var'), { recursive: true });
 
 // Mint the package on first run (bloom-simulator may need to compile — allow time).
-if (!existsSync(pkg)) {
+// Mint only when THIS instance serves the slots demo (composed.pkg is checked
+// in); prevents the two webServer launchers racing to write demo.pkg cold.
+const served = resolve(root, process.env.BLOOM_RUNTIME_PACKAGE || 'runtime/server/demo/demo.pkg');
+if (served === pkg && !existsSync(pkg)) {
   execFileSync(
     'cargo',
     [

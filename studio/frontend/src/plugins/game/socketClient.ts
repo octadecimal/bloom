@@ -25,6 +25,20 @@ export function applySpinOutcome(payload: { gameId: string; outcome: { grid: str
   getBridge()?.spin(payload.outcome);
 }
 
+export function applySpinTrace(payload: { gameId: string; trace: unknown[] }): void {
+  if (!isActive(payload.gameId)) return;
+  gameSlice().spinError.set(null);
+  if (!import.meta.env.PROD) {
+    (window as unknown as { __gameLastSpinTrace?: unknown }).__gameLastSpinTrace = payload;
+  }
+  getBridge()?.trace(payload.trace);
+}
+
+export function applySpinError(payload: { gameId: string; message: string }): void {
+  if (!isActive(payload.gameId)) return;
+  gameSlice().spinError.set(payload.message);
+}
+
 export function applyInbound(event: 'scene_snapshot' | 'scene_op', payload: unknown): void {
   if (event === 'scene_snapshot') {
     const p = payload as { gameId: string; document: ISceneDocument };
@@ -69,6 +83,8 @@ export function createGameSocket() {
     sock.on('scene_op', (p) => applyInbound('scene_op', p));
     sock.on('scene_capture_request', (p) => applyCaptureRequest(p as { gameId: string; captureId: string }));
     sock.on('scene_spin_outcome', (p) => applySpinOutcome(p as { gameId: string; outcome: { grid: string[][] } }));
+    sock.on('scene_spin_trace', (p) => applySpinTrace(p as { gameId: string; trace: unknown[] }));
+    sock.on('scene_spin_error', (p) => applySpinError(p as { gameId: string; message: string }));
     if (!import.meta.env.PROD) {
       (window as unknown as { __gameApplyInbound?: typeof applyInbound }).__gameApplyInbound = applyInbound;
       (window as unknown as { __gameJoinScene?: (gameId: string) => void }).__gameJoinScene = (gameId: string) => sock?.emit('join_scene', { gameId });
@@ -105,10 +121,6 @@ export function emitSceneApplyOp(gameId: string, op: ISceneOp): void {
 
 export function emitSceneCaptureResult(gameId: string, captureId: string, png: string): void {
   sock?.emit('scene_capture_result', { gameId, captureId, png });
-}
-
-export function emitSceneAddModule(gameId: string, type = 'reels'): void {
-  sock?.emit('scene_add_module', { gameId, type });
 }
 
 export function emitSceneSpin(gameId: string, seed?: number): void {

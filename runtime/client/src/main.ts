@@ -9,6 +9,7 @@ import { ReelsModule } from './modules/reels/reelsModule';
 import { resolveRuntimeServerUrl } from './play/runtimeServerUrl';
 import { createRuntimeClient } from './play/runtimeClient';
 import { startPlayMode } from './play/playMode';
+import type { ITriggerTarget } from './orchestration/traceWalker';
 
 const stage = document.getElementById('stage');
 if (!stage) throw new Error('missing #stage element');
@@ -16,8 +17,10 @@ if (!stage) throw new Error('missing #stage element');
 const params = new URLSearchParams(window.location.search);
 
 // Direct play-mode: the client talks straight to runtime/server (no studio).
-// Selected by an explicit ?server=<url> or a bare ?play flag.
-const isPlayMode = params.has('server') || params.has('play');
+// Selected by an explicit ?server=<url>, a bare ?play flag, or ?package=<id>
+// (dir-mode server: the client picks which package to play by id).
+const packageId = params.get('package') ?? undefined;
+const isPlayMode = params.has('server') || params.has('play') || packageId !== undefined;
 
 // When embedded by the studio, the iframe src carries ?parentOrigin=<studio origin>.
 // Standalone (no param) keeps Plan 1 behavior: accept any origin, post with '*'.
@@ -80,7 +83,7 @@ if (isPlayMode) {
   const env = import.meta.env as Record<string, string | undefined>;
   const defaultPort = Number(env.VITE_RUNTIME_SERVER_PORT ?? '9000') || 9000;
   const serverUrl = resolveRuntimeServerUrl(params, window.location, { defaultPort });
-  const client = createRuntimeClient(serverUrl);
+  const client = createRuntimeClient(serverUrl, fetch, packageId);
   const spinButton = document.getElementById('spin') as HTMLButtonElement;
   const errorEl = document.getElementById('play-error') as HTMLElement;
   void startPlayMode({
@@ -88,6 +91,10 @@ if (isPlayMode) {
     host,
     bus: modules.bus,
     orchestrator: modules.orchestrator,
+    resolveTarget: (id) => {
+      const m = modules.manager.byId(id) as unknown as Partial<ITriggerTarget> | undefined;
+      return m && typeof m.invoke === 'function' ? (m as ITriggerTarget) : null;
+    },
     spinButton,
     errorEl,
   });

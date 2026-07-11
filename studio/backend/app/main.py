@@ -16,6 +16,11 @@ from app.assets.rest import router as assets_router
 from app.assets.sockets import register_asset_handlers
 from app.assets.store import AssetStore
 from app.chat_service import ChatService
+from app.compose.autobuild import AutoBuilder
+from app.compose.rest import router as compose_router
+from app.compose.runner import build_compose_runner
+from app.compose.scene_sync import apply_definition_change
+from app.compose.store import ComposeStore
 from app.config import Settings, get_settings
 from app.gdd.hub import GddHub
 from app.gdd.sockets import register_gdd_handlers
@@ -28,6 +33,7 @@ from app.scene.art_critic import build_scene_art_critic
 from app.scene.layout.overrides import RegionOverrideStore
 from app.scene.sockets import register_scene_handlers
 from app.scene.reels_spin import build_spin_runner
+from app.scene.composed_spin import build_composed_spin_client
 from app.scene.store import GameSceneStore
 from app.math.hub import MathHub
 from app.math.rest import router as math_router
@@ -110,6 +116,19 @@ def build(settings: Settings) -> AppContext:
         )
 
     math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
+
+    async def _on_game_definition_change(doc, source: str) -> None:
+        # Single choke point: every definition/presentation write (incl. first
+        # seed) reaches any open Game Structure pane AND drives the Game
+        # Scene — the composed definition is the source of truth for scene
+        # mechanics modules. Room join reuses the existing join_sim handler
+        # (the room is the bare gameId). Failure isolation + wiring lives in
+        # apply_definition_change so it's unit-testable without the app factory.
+        await apply_definition_change(sio, scene_hub, auto_builder, doc, source)
+
+    compose_runner = build_compose_runner(settings)
+    auto_builder = AutoBuilder(compose_runner, settings, sio)
+    compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
     math_run_store = MathRunStore(mongo[settings.mongo_db])
     math_hub = MathHub(sio, math_store, math_run_store,
                        build_curation_runner(settings), build_tuner_runner(settings),
@@ -148,6 +167,8 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.asset_store = asset_store
     fastapi_app.state.gdd_store = gdd_store
     fastapi_app.state.skill_registry = skill_registry
+    fastapi_app.state.compose_store = compose_store
+    fastapi_app.state.compose_runner = compose_runner
     fastapi_app.state.math_store = math_store
     fastapi_app.state.math_hub = math_hub
     fastapi_app.state.math_run_store = math_run_store
@@ -161,13 +182,15 @@ def build(settings: Settings) -> AppContext:
     fastapi_app.state.scene_art_critic = scene_art_critic
     fastapi_app.include_router(assets_router)
     fastapi_app.include_router(math_router)
+    fastapi_app.include_router(compose_router)
     fastapi_app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
     register_asset_handlers(sio, asset_hub)
     register_gdd_handlers(sio, gdd_hub)
     fastapi_app.state.capture_broker = capture_broker
     spin_runner = build_spin_runner(settings)
-    register_scene_handlers(sio, scene_hub, capture_broker, math_store, spin_runner)
+    register_scene_handlers(sio, scene_hub, capture_broker, math_store, spin_runner,
+                            compose_store, build_composed_spin_client(settings))
     register_math_handlers(sio, math_hub)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)

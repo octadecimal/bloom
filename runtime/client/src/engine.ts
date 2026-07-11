@@ -9,7 +9,9 @@ import { ModuleRegistry } from './modules/registry';
 import { ModuleManager } from './modules/moduleManager';
 import { Orchestrator, type IReelsControl } from './orchestration/orchestrator';
 import { ReelsModule } from './modules/reels/reelsModule';
+import { MeterModule } from './modules/meter/meterModule';
 import { ViewportController, type IHostSurface } from './render/viewportController';
+import { TraceWalker, type ITriggerTarget } from './orchestration/traceWalker';
 
 export interface IEngineModules {
   registry: ModuleRegistry;
@@ -32,17 +34,26 @@ export function createEngine(deps: { renderer: IRenderer; post: (m: OutboundMess
 
   const registry = new ModuleRegistry();
   registry.register('reels', (args) => new ReelsModule(args));
+  registry.register('meter', (args) => new MeterModule(args));
   const manager = new ModuleManager({ registry, host: moduleHost });
 
   const orchestrator = new Orchestrator({
     bus,
     reels: () => (manager.byType('reels') as unknown as IReelsControl) ?? null,
   });
+  const walker = new TraceWalker({
+    bus,
+    resolve: (id) => {
+      const m = manager.byId(id) as unknown as Partial<ITriggerTarget> | undefined;
+      return m && typeof m.invoke === 'function' ? (m as ITriggerTarget) : null;
+    },
+  });
   const host = new ProtocolHost({
     model,
     reconciler,
     post: deps.post,
     onSpin: (o) => orchestrator.spin(o),
+    onTrace: (entries) => walker.walk(entries),
     onModules: (decls) => manager.sync(decls),
   });
 

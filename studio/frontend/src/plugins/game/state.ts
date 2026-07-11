@@ -8,6 +8,7 @@ export interface IGameState {
   connection: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
   activeGameId: string | null;
   status: 'idle' | 'loading' | 'error';
+  spinError: string | null;
 }
 
 export function makeInitialState(): IGameState {
@@ -15,6 +16,7 @@ export function makeInitialState(): IGameState {
     connection: 'disconnected',
     activeGameId: null,
     status: 'idle',
+    spinError: null,
   };
 }
 

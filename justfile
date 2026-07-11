@@ -77,7 +77,7 @@ backend-e2e:
 # Backend port + Mongo DB + media dir all follow BLOOM_PORT_OFFSET so parallel
 # worktrees never share data. Offset 0 keeps the defaults (8000 / bloom_studio / var/media).
 backend-serve-replay:
-    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; PROVIDER_MODE=replay MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --port $((8000 + off))
+    cd studio/backend && off="${BLOOM_PORT_OFFSET:-0}"; if [ "$off" = "0" ]; then db=bloom_studio; media=var/media; else db=bloom_studio_wt$off; media=var/media_wt$off; fi; PROVIDER_MODE=replay RUNTIME_SERVER_URL="http://localhost:$((9300 + off))" MONGO_DB="$db" MEDIA_DIR="$media" uv run uvicorn app.main:app --port $((8000 + off))
 
 # Preflight: refuse to "serve to a human" if the backend is in replay mode.
 preflight:
@@ -139,6 +139,22 @@ runtime-demo-pkg:
 # Run the authoritative runtime game server on the demo package.
 runtime-serve: runtime-demo-pkg
     cargo run --release -p bloom-runtime-server
+
+# Mint the composed@1 demo package (dev-signed, uncurated pool) from its fixture.
+composed-demo-pkg:
+    cargo run --release -p bloom-simulator --bin compose -- \
+      runtime/server/demo/composed.definition.json \
+      bloom-demo-composed 10000 20260709 \
+      runtime/server/demo/composed.pkg \
+      runtime/server/demo/composed.presentation.json
+
+# Run the authoritative runtime game server on the composed demo package.
+runtime-serve-composed: composed-demo-pkg
+    BLOOM_RUNTIME_PACKAGE=runtime/server/demo/composed.pkg cargo run --release -p bloom-runtime-server
+
+# Serve every studio-built package from var/packages (dir mode, lazy load).
+runtime-serve-packages:
+    BLOOM_RUNTIME_PACKAGES=var/packages cargo run --release -p bloom-runtime-server
 
 # Print the direct play-mode URL. Start the two servers first (separate shells):
 #   just runtime-serve            # authoritative server on 9000+offset

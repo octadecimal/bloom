@@ -53,10 +53,11 @@ test('ops are delivered to and acknowledged by the engine iframe (cross-frame, l
   // Capture baseline ack count before sending ops.
   const before: number = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'ack').length);
 
-  // Drive 3 ops through the real socket-dispatch path (same path as live ops from the backend).
+  // Drive 2 ops through the real socket-dispatch path (same path as live ops from the
+  // backend). The room already seeded a `root` node (ensure_root/set_modules run on
+  // room open — scenes are no longer born empty), so reuse it instead of re-adding it.
   await page.evaluate((gid) => {
     const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
-    apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
     apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 's', type: 'Sprite' } });
     apply('scene_op', {
       gameId: gid,
@@ -64,12 +65,12 @@ test('ops are delivered to and acknowledged by the engine iframe (cross-frame, l
     });
   }, gameId);
 
-  // Assert the engine acked all 3 ops (cross-frame render proof).
+  // Assert the engine acked both ops (cross-frame render proof).
   await expect
     .poll(() => page.evaluate((b: number) => (window as any).__engineMsgs.filter((m: any) => m.kind === 'ack').length - b, before), {
       timeout: 10000,
     })
-    .toBeGreaterThanOrEqual(3);
+    .toBeGreaterThanOrEqual(2);
 
   // Assert no engine errors during the session.
   expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
@@ -110,12 +111,13 @@ test('a generated asset renders as a real sprite texture in the engine iframe (l
   }, gameId);
   expect(imageRef).toMatch(/^\/media\//);
 
-  // 5. Build a root → sprite, add a Texture(src=imageRef), bind it with a data edge.
+  // 5. Add a sprite under the room's already-seeded root, add a Texture(src=imageRef),
+  //    bind it with a data edge. (root pre-exists — ensure_root/set_modules ran on
+  //    room open — so reuse it rather than re-adding it.)
   await page.evaluate(
     ({ gid, ref }) => {
       const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
       const op = (o: unknown) => apply('scene_op', { gameId: gid, op: o });
-      op({ kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } });
       op({ kind: 'addNode', id: 'sym', type: 'Sprite' });
       op({ kind: 'addNode', id: 'tex', type: 'Texture', props: { src: ref } });
       op({ kind: 'connect', edgeId: 'e.child', type: 'child', from: { node: 'root', port: 'children' }, to: { node: 'sym', port: 'parent' } });

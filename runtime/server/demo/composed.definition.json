@@ -1,0 +1,70 @@
+{
+  "family": "composed@1",
+  "mechanics": [
+    {
+      "id": "main_reels",
+      "type": "reels@1",
+      "config": {
+        "strips": [
+          [0, 1, 2, 0, 9, 1, 0, 2, 1, 0],
+          [1, 0, 2, 9, 0, 1, 2, 0, 0, 1],
+          [2, 1, 0, 0, 1, 9, 0, 2, 1, 0]
+        ],
+        "rows": 3,
+        "symbols": [
+          { "id": 0, "role": "normal" },
+          { "id": 1, "role": "normal" },
+          { "id": 2, "role": "normal" },
+          { "id": 9, "role": "scatter" }
+        ],
+        "paylines": [
+          [0, 0, 0],
+          [1, 1, 1],
+          [2, 2, 2]
+        ],
+        "paytable": {
+          "entries": [
+            { "symbol": 0, "count": 3, "payout": 5 },
+            { "symbol": 1, "count": 3, "payout": 10 },
+            { "symbol": 2, "count": 3, "payout": 20 },
+            { "symbol": 9, "count": 3, "payout": 2 }
+          ]
+        },
+        "events": [{ "symbol": 9, "min_count": 3, "emit": "scatters:3" }]
+      }
+    },
+    {
+      "id": "bonus_meter",
+      "type": "meter@1",
+      "config": { "target": 6, "count_symbol": 9, "reset_on_full": true }
+    }
+  ],
+  "states": [
+    {
+      "id": "base",
+      "bindings": [{ "mechanic": "main_reels" }, { "mechanic": "bonus_meter" }],
+      "steps": { "budget": 1 },
+      "script": [{ "invoke": "main_reels.spin" }, { "invoke": "bonus_meter.accumulate" }]
+    },
+    {
+      "id": "fs1",
+      "bindings": [{ "mechanic": "main_reels", "override": { "multiplier": 2 } }, { "mechanic": "bonus_meter" }],
+      "steps": { "budget": "awarded", "initial": 8 },
+      "script": [{ "invoke": "main_reels.spin" }, { "invoke": "bonus_meter.accumulate" }]
+    },
+    {
+      "id": "fs2",
+      "bindings": [{ "mechanic": "main_reels", "override": { "multiplier": 3 } }],
+      "steps": { "budget": 5 },
+      "script": [{ "invoke": "main_reels.spin" }]
+    }
+  ],
+  "start": "base",
+  "transitions": [
+    { "from": "base", "on": "scatters:3", "to": "fs1" },
+    { "from": "base", "on": "meter:full", "to": "fs2" },
+    { "from": "fs1", "on": "scatters:3", "effect": "steps:add:8" },
+    { "from": "fs1", "on": "meter:full", "to": "fs2" }
+  ],
+  "caps": { "max_steps": 1000 }
+}

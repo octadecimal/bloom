@@ -30,4 +30,30 @@ describe('createRuntimeClient', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({}, false, 500));
     await expect(createRuntimeClient('http://h:9001', fetchImpl as unknown as typeof fetch).spin()).rejects.toThrow(/spin failed: 500/);
   });
+
+  it('handshake and spin carry the package id when configured', async () => {
+    const calls: Array<{ url: string; body?: string }> = [];
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body ? String(init.body) : undefined });
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    const client = createRuntimeClient('http://s:9000', fetchImpl, 'g1');
+    await client.handshake();
+    await client.spin(2);
+    expect(calls[0].url).toBe('http://s:9000/handshake?package=g1');
+    expect(JSON.parse(calls[1].body!)).toEqual({ bet: 2, package: 'g1' });
+  });
+
+  it('omits the package field entirely when not configured', async () => {
+    const calls: Array<{ url: string; body?: string }> = [];
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body ? String(init.body) : undefined });
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    const client = createRuntimeClient('http://s:9000', fetchImpl);
+    await client.handshake();
+    await client.spin();
+    expect(calls[0].url).toBe('http://s:9000/handshake');
+    expect(JSON.parse(calls[1].body!)).toEqual({ bet: 1 });
+  });
 });

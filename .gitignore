@@ -34,3 +34,6 @@ blob-report
 
 # Runtime game-server audit output (append-only JSONL, runtime state not source)
 runtime/server/var/
+
+# Repo-root var dir (e.g. built .pkg packages) — runtime output, not source
+var/

@@ -43,7 +43,7 @@ async def _seed_sprite(hub):
 async def test_setprop_calls_hub_and_broadcasts(mongo_db):
     sio = FakeSio()
     hub = GameSceneHub(sio, GameSceneStore(mongo_db))
-    register_scene_handlers(sio, hub, None, None, None)
+    register_scene_handlers(sio, hub, None, None, None, None, None)
     await _seed_sprite(hub)
     sio.emitted.clear()
 
@@ -63,7 +63,7 @@ async def test_setprop_calls_hub_and_broadcasts(mongo_db):
 async def test_non_setprop_kind_is_rejected_without_touching_hub(mongo_db):
     sio = FakeSio()
     hub = GameSceneHub(sio, GameSceneStore(mongo_db))
-    register_scene_handlers(sio, hub, None, None, None)
+    register_scene_handlers(sio, hub, None, None, None, None, None)
     sio.emitted.clear()
 
     await sio.handlers["scene_apply_op"](
@@ -81,7 +81,7 @@ async def test_non_setprop_kind_is_rejected_without_touching_hub(mongo_db):
 async def test_operror_is_reported_as_rejection_to_sender(mongo_db):
     sio = FakeSio()
     hub = GameSceneHub(sio, GameSceneStore(mongo_db))
-    register_scene_handlers(sio, hub, None, None, None)
+    register_scene_handlers(sio, hub, None, None, None, None, None)
     sio.emitted.clear()
 
     # setProp on a node that does not exist -> OpError("unknown_node")
@@ -99,7 +99,7 @@ async def test_operror_is_reported_as_rejection_to_sender(mongo_db):
 async def test_setprop_missing_id_is_rejected_as_bad_op(mongo_db):
     sio = FakeSio()
     hub = GameSceneHub(sio, GameSceneStore(mongo_db))
-    register_scene_handlers(sio, hub, None, None, None)
+    register_scene_handlers(sio, hub, None, None, None, None, None)
     sio.emitted.clear()
 
     await sio.handlers["scene_apply_op"](
@@ -117,7 +117,7 @@ async def test_setprop_missing_id_is_rejected_as_bad_op(mongo_db):
 async def test_setprop_missing_value_key_is_rejected_as_bad_op(mongo_db):
     sio = FakeSio()
     hub = GameSceneHub(sio, GameSceneStore(mongo_db))
-    register_scene_handlers(sio, hub, None, None, None)
+    register_scene_handlers(sio, hub, None, None, None, None, None)
     sio.emitted.clear()
 
     await sio.handlers["scene_apply_op"](
@@ -136,7 +136,7 @@ async def test_setprop_value_null_is_not_rejected_as_bad_op(mongo_db):
     """value: null is a legitimate value; key presence, not truthiness, is what matters."""
     sio = FakeSio()
     hub = GameSceneHub(sio, GameSceneStore(mongo_db))
-    register_scene_handlers(sio, hub, None, None, None)
+    register_scene_handlers(sio, hub, None, None, None, None, None)
     await _seed_sprite(hub)
     sio.emitted.clear()
 

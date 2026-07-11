@@ -10,6 +10,7 @@ export interface IProtocolDeps {
   reconciler: Reconciler;
   post: (msg: OutboundMessage) => void;
   onSpin?: (outcome: IOutcome) => void;
+  onTrace?: (entries: import('../play/composedTypes').ITraceEntry[]) => Promise<void>;
   onModules?: (decls: import('../model/document').IModuleDecl[]) => void;
 }
 
@@ -36,6 +37,8 @@ export class ProtocolHost {
         await this.deps.reconciler.applyChanges(changes);
       } else if (msg.kind === 'spin') {
         this.deps.onSpin?.(msg.outcome);
+      } else if (msg.kind === 'trace') {
+        await this.deps.onTrace?.(msg.entries);
       } else if (msg.kind === 'capture') {
         const png = await this.deps.reconciler.capture();
         this.deps.post({ v: 1, kind: 'captured', id: msg.id, png });
