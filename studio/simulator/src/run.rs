@@ -250,6 +250,7 @@ mod tests {
             pool_size: 10_000,
             candidate_count: 200_000,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
@@ -307,6 +308,7 @@ mod tests {
             pool_size: 100,
             candidate_count: 1000,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
@@ -400,6 +402,7 @@ mod tests {
             pool_size: 100,
             candidate_count: 200_000,
             realized_correction_band: 0.05,
+            ..Default::default()
         };
         assert!(verify(&metrics(0.9819, 2.8, vec![]), &t, 200_000).is_ok());
     }

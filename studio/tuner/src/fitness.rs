@@ -95,6 +95,7 @@ mod tests {
             rtp: 1.0,
             volatility: 1.0,
             hit_rate: 1.0,
+            hit_frequency: 1.0,
         }
     }
 
@@ -108,6 +109,7 @@ mod tests {
             pool_size: 100,
             candidate_count: 1000,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 

@@ -4,7 +4,7 @@
 //! An all-locked config emits a {"type":"error"} frame and exits 0.
 
 use bloom_math::mechanics::slots::SlotModel;
-use bloom_simulator::target::{HitRateBand, TargetSpec};
+use bloom_simulator::target::TargetSpec;
 use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
 use bloom_tuner::genetic::tune_with_progress;
 use bloom_tuner::outcome::{GenSnapshot, RunProfile, TuneOutcome, Verdict};
@@ -12,24 +12,6 @@ use bloom_tuner::telemetry::PopulationStats;
 use serde::Deserialize;
 use serde_json::json;
 use std::fs;
-
-#[derive(Deserialize)]
-struct BandJson {
-    min: f64,
-    max: f64,
-}
-
-#[derive(Deserialize)]
-struct TargetJson {
-    rtp_target: f64,
-    rtp_tolerance: f64,
-    volatility_min: f64,
-    volatility_max: f64,
-    bonus_hit_rate_bands: Vec<BandJson>,
-    pool_size: usize,
-    candidate_count: usize,
-    realized_correction_band: f64,
-}
 
 #[derive(Deserialize)]
 struct BoundsJson {
@@ -48,6 +30,12 @@ struct WeightsJson {
     rtp: f64,
     volatility: f64,
     hit_rate: f64,
+    #[serde(default = "default_weight")]
+    hit_frequency: f64,
+}
+
+fn default_weight() -> f64 {
+    1.0
 }
 
 #[derive(Deserialize, Default)]
@@ -178,6 +166,7 @@ fn result_line(out: &TuneOutcome) -> String {
                 "rtp": se.rtp,
                 "volatility": se.volatility,
                 "bonusHitRates": se.bonus_hit_rates,
+                "hitFrequency": se.hit_frequency,
             },
         },
         "missed": missed,
@@ -217,26 +206,8 @@ fn main() {
     }
 
     let model: SlotModel = read_json(&args[1], "model");
-    let tj: TargetJson = read_json(&args[2], "target");
+    let target: TargetSpec = read_json(&args[2], "target"); // master_seed key ignored by serde
     let cj: ConfigJson = read_json(&args[3], "config");
-
-    let target = TargetSpec {
-        rtp_target: tj.rtp_target,
-        rtp_tolerance: tj.rtp_tolerance,
-        volatility_min: tj.volatility_min,
-        volatility_max: tj.volatility_max,
-        bonus_hit_rate_bands: tj
-            .bonus_hit_rate_bands
-            .iter()
-            .map(|b| HitRateBand {
-                min: b.min,
-                max: b.max,
-            })
-            .collect(),
-        pool_size: tj.pool_size,
-        candidate_count: tj.candidate_count,
-        realized_correction_band: tj.realized_correction_band,
-    };
 
     let cfg = TunerConfig {
         master_seed: cj.master_seed,
@@ -262,6 +233,7 @@ fn main() {
             rtp: cj.weights.rtp,
             volatility: cj.weights.volatility,
             hit_rate: cj.weights.hit_rate,
+            hit_frequency: cj.weights.hit_frequency,
         },
         locks: SectionLocks {
             reels: cj.locks.reels,
@@ -503,5 +475,6 @@ mod tests {
         assert!((v["metrics"]["se"]["rtp"].as_f64().unwrap() - expected).abs() < 1e-12);
         assert!(v["metrics"]["se"]["volatility"].is_number());
         assert!(v["metrics"]["se"]["bonusHitRates"].is_array());
+        assert!(v["metrics"]["se"]["hitFrequency"].is_number());
     }
 }

@@ -463,6 +463,7 @@ mod tests {
             pool_size: 0,
             candidate_count: 0,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
@@ -491,6 +492,7 @@ mod tests {
                 rtp: 1.0,
                 volatility: 1.0,
                 hit_rate: 1.0,
+                hit_frequency: 1.0,
             },
             locks: SectionLocks::default(),
         }

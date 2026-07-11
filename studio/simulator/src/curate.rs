@@ -151,6 +151,7 @@ mod tests {
             pool_size,
             candidate_count: 0,
             realized_correction_band: 0.05,
+            ..Default::default()
         }
     }
 
