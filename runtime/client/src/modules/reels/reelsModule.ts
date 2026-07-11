@@ -19,8 +19,14 @@ export const REELS_SCHEMA: IConfigSchema = {
   originX: { type: 'number', default: 0 },
   originY: { type: 'number', default: 0 },
   parentId: { type: 'string', default: 'root', binding: 'parent' },
-  buffer: { type: 'integer', default: 1, min: 0, max: 4 },
+  buffer: { type: 'integer', default: 2, min: 0, max: 4 },
 };
+
+/** Resting row for cell index `r`: the last buffer cell parks above the grid (row -1),
+ *  matching the scroll window renderReel wraps through — so settling needs no frame shift. */
+export function restRow(r: number, rows: number, buffer: number): number {
+  return buffer >= 1 && r === rows + buffer - 1 ? -1 : r;
+}
 
 export function containerId(moduleId: string, col: number): string {
   return `${moduleId}:reel:${col}`;
@@ -31,7 +37,7 @@ export function cellId(moduleId: string, col: number, row: number): string {
 }
 
 /** Centered origin so the visible rows×cols block sits in the middle of the safe area.
- *  (Buffer rows extend below, as today.) span = cellSize + spacing. */
+ *  (One buffer row sits above the grid, the rest below.) span = cellSize + spacing. */
 export function centeredOrigin(
   grid: { cols: number; rows: number; cellSize: number; spacing: number },
   safe: { width: number; height: number },
@@ -74,12 +80,13 @@ export function buildDesired(moduleId: string, raw: Record<string, JsonValue>): 
       parent: cfg.parentId,
     });
     for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
-      const sym = cfg.symbols[r % cfg.symbols.length];
+      const row = restRow(r, cfg.rows, cfg.buffer);
+      const sym = symbolAt(cfg.symbols, row);
       nodes.push({
         id: cellId(moduleId, c, r),
         type: 'Sprite',
         props: {
-          position: { x: 0, y: r * span },
+          position: { x: 0, y: row * span },
           symbol: sym,
           fill: colorForSymbol(sym),
           size: { width: cfg.cellSize, height: cfg.cellSize },
@@ -258,22 +265,24 @@ export class ReelsModule implements IGameModule {
   /** Safety net: columns already land on cell boundaries showing the outcome, so
    *  these writes re-canonicalize cell ids to rows without changing visible content. */
   private finishSettle(cfg: IReelsConfig): void {
+    const span = cfg.cellSize + cfg.spacing;
+    const total = cfg.rows + cfg.buffer;
     const grid: string[][] = [];
+    const ops: Op[] = [];
     for (let c = 0; c < cfg.cols; c++) {
       const stops = this.outcome?.grid[c] ?? [];
       grid.push(stops.slice(0, cfg.rows));
-      for (let r = 0; r < cfg.rows + cfg.buffer; r++) {
+      for (let r = 0; r < total; r++) {
+        const row = restRow(r, cfg.rows, cfg.buffer);
         const handle = this.host.resolve(cellId(this.id, c, r));
-        if (!handle) continue;
-        handle.setBlur(0);
-        handle.position.y = r * (cfg.cellSize + cfg.spacing);
-      }
-    }
-    const ops: Op[] = [];
-    for (let c = 0; c < cfg.cols; c++) {
-      for (let r = 0; r < cfg.rows; r++) {
-        const sym = grid[c]?.[r];
-        if (sym === undefined) continue;
+        if (handle) {
+          handle.setBlur(0);
+          handle.position.y = row * span;
+        }
+        if (!stops.length) continue;
+        // Same rest frame + same symbol-per-row the settle landed on, so nothing
+        // visibly moves — spare rows keep the strip's wraparound continuation.
+        const sym = symbolAt(stops, row);
         ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'fill', value: colorForSymbol(sym) });
         ops.push({ kind: 'setProp', id: cellId(this.id, c, r), path: 'label', value: sym });
       }

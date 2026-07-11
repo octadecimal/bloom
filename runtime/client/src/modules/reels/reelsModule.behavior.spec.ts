@@ -211,6 +211,20 @@ describe('ReelsModule behavior', () => {
     // The visible rows already show the outcome before finishSettle rewrites anything.
     expect(rowBefore.get(0)).toBe('X');
     expect(rowBefore.get(1)).toBe('Y');
+
+    // finishSettle must not shift any row: same occupied row set, same symbol per row,
+    // spare rows included — otherwise the whole strip visibly jumps one row at the end.
+    const finishLabel = new Map<string, string>();
+    for (const op of emitted.at(-1)!) {
+      if (op.kind === 'setProp' && op.path === 'label') finishLabel.set(op.id, op.value as string);
+    }
+    const rowAfter = new Map<number, string>();
+    for (let r = 0; r < 3; r++) {
+      const id = cellId('m', 0, r);
+      const finalY = yWrites.get(id)!.at(-1)!;
+      rowAfter.set(finalY / span, finishLabel.get(id) ?? stampedLabel.get(id)!);
+    }
+    expect(rowAfter).toEqual(rowBefore);
   });
 
   it('lands the outcome symbols colors+labels via setProp on settle', () => {

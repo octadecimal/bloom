@@ -44,6 +44,22 @@ describe('buildDesired', () => {
     expect(ids).toContain(cellId('m', 1, 3)); // buffer row index = rows
   });
 
+  it('rests the last buffer cell above the grid, matching the scroll window (no settle frame shift)', () => {
+    const desired = buildDesired('m', cfg); // rows 3, buffer 1, span 100
+    const y = (r: number) => (desired.nodes.find((n) => n.id === cellId('m', 0, r))!.props.position as { y: number }).y;
+    expect(y(0)).toBe(0);
+    expect(y(2)).toBe(200);
+    expect(y(3)).toBe(-100); // spare cell parks above the top row
+  });
+
+  it('defaults to buffer 2: one hidden row above and one below the visible grid', () => {
+    const desired = buildDesired('m', { rows: 3, cols: 1, symbols: ['A'], cellSize: 100, spacing: 0, originX: 0, originY: 0, parentId: 'root' });
+    const cells = desired.nodes.filter((n) => n.type === 'Sprite');
+    expect(cells).toHaveLength(5); // rows 3 + buffer 2
+    const ys = cells.map((c) => (c.props.position as { y: number }).y).sort((a, b) => a - b);
+    expect(ys).toEqual([-100, 0, 100, 200, 300]);
+  });
+
   it('parents reels under config.parentId and cells under their reel container', () => {
     const desired = buildDesired('m', cfg);
     const reel0 = desired.nodes.find((n) => n.id === containerId('m', 0))!;
