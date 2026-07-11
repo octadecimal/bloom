@@ -35,6 +35,25 @@ export function reelDelay(reelIndex: number, perReelMs: number): number {
   return reelIndex * perReelMs;
 }
 
+/** Smallest multiple of span at least minTravel past base — the settle landing offset. */
+export function settleTarget(base: number, minTravel: number, span: number): number {
+  return Math.ceil((base + minTravel) / span) * span;
+}
+
+/** Positional settle: full-speed linear through the stagger delay, then eased travel to target.
+ *  A pure function of elapsed — no per-frame integration, so it lands on target exactly. */
+export function settleOffset(elapsedMs: number, delayMs: number, durationMs: number, start: number, target: number, speedPxPerMs: number): number {
+  const linear = start + Math.min(elapsedMs, delayMs) * speedPxPerMs;
+  const base = start + delayMs * speedPxPerMs;
+  return linear + (target - base) * easeOutCubic(settleT(elapsedMs, delayMs, durationMs));
+}
+
+/** Resting row (top hidden row = -1) cell `cellIndex` occupies at a span-aligned offset.
+ *  Matches the render-frame formula wrap(cellIndex*span + offset, total*span) - span. */
+export function finalRow(cellIndex: number, offset: number, span: number, total: number): number {
+  return ((cellIndex + Math.round(offset / span)) % total) - 1;
+}
+
 /** Motion blur proportional to speed, capped at maxBlur. refSpeed maps to maxBlur. */
 export function blurFor(speedPxPerMs: number, maxBlur: number, refSpeed: number): number {
   if (refSpeed <= 0) return 0;
