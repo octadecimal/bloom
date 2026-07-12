@@ -76,10 +76,17 @@ async def test_validate_falls_back_to_stored_definition(mongo_db):
 async def test_build_shapes_job_and_response(mongo_db):
     store = ComposeStore(mongo_db)
     metrics = {"rtp": 0.93, "hitRate": 0.4, "maxWinX": 60, "stateVisits": {"base": 100}}
-    fake = FakeComposeRunner({"ok": True, "metrics": metrics})
+    verdict = {"status": "pass", "realizedRtp": 0.93, "poolSize": 100, "selfDerived": True}
+    fake = FakeComposeRunner({"ok": True, "metrics": metrics, "verdict": verdict})
     req = _req(compose_store=store, compose_runner=fake, settings=_settings())
     res = await rest.build_game_definition("g1", req)
-    assert res == {"ok": True, "errors": None, "metrics": metrics, "packageId": "g1"}
+    assert res == {
+        "ok": True,
+        "errors": None,
+        "metrics": metrics,
+        "verdict": verdict,
+        "packageId": "g1",
+    }
     job = fake.jobs[0]
     assert job["package_id"] == "g1"
     assert job["validate_only"] is False

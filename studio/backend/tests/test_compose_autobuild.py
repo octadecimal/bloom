@@ -29,7 +29,7 @@ def test_build_job_matches_the_rest_build_shape(tmp_path):
 
 @pytest.mark.asyncio
 async def test_debounced_build_emits_building_then_done():
-    runner = FakeComposeRunner({"ok": True, "metrics": {"rtp": 0.96}})
+    runner = FakeComposeRunner({"ok": True, "metrics": {"rtp": 0.96}, "verdict": {"status": "pass"}})
     sio = FakeSio()
     b = AutoBuilder(runner, Settings(), sio, debounce_s=0.01)
     b.schedule("g1", {"family": "composed@1"}, {})
@@ -40,6 +40,7 @@ async def test_debounced_build_emits_building_then_done():
     assert statuses == [("game_build_status", "building"), ("game_build_status", "done")]
     done = sio.emitted[-1][1]
     assert done["packageId"] == "g1" and done["metrics"] == {"rtp": 0.96}
+    assert done["verdict"] == {"status": "pass"}
 
 
 @pytest.mark.asyncio

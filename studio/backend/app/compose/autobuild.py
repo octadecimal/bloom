@@ -53,6 +53,7 @@ class AutoBuilder:
                 "status": "done" if ok else "error",
                 "errors": res.get("errors") or [],
                 "metrics": res.get("metrics"),
+                "verdict": res.get("verdict"),
                 "packageId": game_id,
             })
 

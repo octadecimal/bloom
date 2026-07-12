@@ -4,8 +4,8 @@
 //! 2026-07-09 §6). Enforcement during tuning lives in the tuner's repair();
 //! this module is the assertion side.
 
-use crate::target::{PayConstraint, PayRelation, TargetSpec};
-use bloom_math::mechanics::slots::{BonusFeature, SlotModel};
+use crate::target::{Band, PayConstraint, PayRelation, TargetSpec};
+use bloom_math::mechanics::slots::{BonusFeature, Paytable, SlotModel, SymbolDef};
 
 /// Finite stand-in for an open upper bound (floors have no ceiling). Follows
 /// the volatility-"high" precedent (hi = 1e9): keeps wire floats finite.
@@ -48,25 +48,27 @@ fn scoped(c: &PayConstraint, symbol: u8, count: u8) -> bool {
     c.symbol == symbol && c.count.is_none_or(|cc| cc == count)
 }
 
-/// Violations of the target's static invariants by `model`. Empty ⟺ the model
-/// satisfies every deterministic constraint.
-pub fn static_violations(model: &SlotModel, target: &TargetSpec) -> Vec<Violation> {
+/// A theoretical max win outside the target band. Shared by both families —
+/// deterministic game facts get no SE allowance (spec 2026-07-09 §6).
+pub fn max_win_violation(max_win: u64, band: &Option<Band>) -> Option<Violation> {
+    let band = band.as_ref()?;
+    let mw = max_win as f64;
+    (mw < band.min || mw > band.max).then(|| Violation {
+        metric: "max_win".into(),
+        measured: mw,
+        band_lo: band.min,
+        band_hi: band.max,
+    })
+}
+
+/// Pay-constraint checks over a paytable — the shared core for both families
+/// (spec §3.3: same math, different location in the artifact).
+pub fn pay_violations(paytable: &Paytable, constraints: &[PayConstraint]) -> Vec<Violation> {
     let mut out = Vec::new();
-    if let Some(band) = &target.max_win_band {
-        let mw = theoretical_max_win(model) as f64;
-        if mw < band.min || mw > band.max {
-            out.push(Violation {
-                metric: "max_win".into(),
-                measured: mw,
-                band_lo: band.min,
-                band_hi: band.max,
-            });
-        }
-    }
-    for c in &target.pay_constraints {
+    for c in constraints {
         match c.relation {
             PayRelation::Floor => {
-                for e in &model.paytable.entries {
+                for e in &paytable.entries {
                     if scoped(c, e.symbol, e.count) && e.payout < c.value {
                         out.push(Violation {
                             metric: format!("pay_floor[{}@{}]", e.symbol, e.count),
@@ -78,7 +80,7 @@ pub fn static_violations(model: &SlotModel, target: &TargetSpec) -> Vec<Violatio
                 }
             }
             PayRelation::Ceiling => {
-                for e in &model.paytable.entries {
+                for e in &paytable.entries {
                     if scoped(c, e.symbol, e.count) && e.payout > c.value {
                         out.push(Violation {
                             metric: format!("pay_ceiling[{}@{}]", e.symbol, e.count),
@@ -90,15 +92,14 @@ pub fn static_violations(model: &SlotModel, target: &TargetSpec) -> Vec<Violatio
                 }
             }
             PayRelation::TopPaying => {
-                let top = model
-                    .paytable
+                let top = paytable
                     .entries
                     .iter()
                     .filter(|e| e.symbol == c.symbol)
                     .map(|e| e.payout)
                     .max()
                     .unwrap_or(0);
-                for e in &model.paytable.entries {
+                for e in &paytable.entries {
                     if e.symbol != c.symbol && e.payout > top {
                         out.push(Violation {
                             metric: format!("top_paying[{}]", c.symbol),
@@ -114,10 +115,24 @@ pub fn static_violations(model: &SlotModel, target: &TargetSpec) -> Vec<Violatio
     out
 }
 
-/// `Err(message)` for nonsensical constraint/band inputs, BEFORE a search or
-/// curation runs on them: unknown symbol id, floor above ceiling, more than
-/// one top-paying, inverted bands (spec §6 "up-front validation").
-pub fn validate_constraints(model: &SlotModel, target: &TargetSpec) -> Result<(), String> {
+/// Violations of the target's static invariants by `model`. Empty ⟺ the model
+/// satisfies every deterministic constraint.
+pub fn static_violations(model: &SlotModel, target: &TargetSpec) -> Vec<Violation> {
+    let mut out = Vec::new();
+    out.extend(max_win_violation(
+        theoretical_max_win(model),
+        &target.max_win_band,
+    ));
+    out.extend(pay_violations(&model.paytable, &target.pay_constraints));
+    out
+}
+
+/// Up-front validation core over the constraint surface (symbols + paytable).
+pub fn validate_constraints_core(
+    symbols: &[SymbolDef],
+    paytable: &Paytable,
+    target: &TargetSpec,
+) -> Result<(), String> {
     if let Some(b) = &target.hit_frequency_band {
         if b.min > b.max {
             return Err(format!(
@@ -133,7 +148,7 @@ pub fn validate_constraints(model: &SlotModel, target: &TargetSpec) -> Result<()
     }
     let mut top_paying = 0usize;
     for c in &target.pay_constraints {
-        if !model.symbols.iter().any(|s| s.id == c.symbol) {
+        if !symbols.iter().any(|s| s.id == c.symbol) {
             return Err(format!(
                 "pay constraint references unknown model symbol id {}",
                 c.symbol
@@ -141,7 +156,7 @@ pub fn validate_constraints(model: &SlotModel, target: &TargetSpec) -> Result<()
         }
         if matches!(c.relation, PayRelation::TopPaying) {
             top_paying += 1;
-            if !model.paytable.entries.iter().any(|e| e.symbol == c.symbol) {
+            if !paytable.entries.iter().any(|e| e.symbol == c.symbol) {
                 return Err(format!(
                     "top-paying symbol {} has no paytable entries (line-pay symbols only)",
                     c.symbol
@@ -178,6 +193,13 @@ pub fn validate_constraints(model: &SlotModel, target: &TargetSpec) -> Result<()
         }
     }
     Ok(())
+}
+
+/// `Err(message)` for nonsensical constraint/band inputs, BEFORE a search or
+/// curation runs on them: unknown symbol id, floor above ceiling, more than
+/// one top-paying, inverted bands (spec §6 "up-front validation").
+pub fn validate_constraints(model: &SlotModel, target: &TargetSpec) -> Result<(), String> {
+    validate_constraints_core(&model.symbols, &model.paytable, target)
 }
 
 #[cfg(test)]

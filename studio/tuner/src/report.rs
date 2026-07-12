@@ -83,6 +83,7 @@ mod tests {
                 bonus_hit_rates: vec![],
                 base_rtp: 0.901,
                 feature_rtp: 0.0,
+                ..Default::default()
             },
             verdict,
             trace: TuningTrace {

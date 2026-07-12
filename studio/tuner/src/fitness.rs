@@ -152,6 +152,7 @@ mod tests {
             bonus_hit_rates: bonus,
             base_rtp: rtp,
             feature_rtp: 0.0,
+            ..Default::default()
         }
     }
 

@@ -2,12 +2,13 @@
 //! → build+sign. Approach A: a model that misses targets FAILS; the simulator
 //! never reshapes the pool to force a target.
 
+use crate::artifact::{self, MathArtifact};
 use crate::constraints::static_violations;
 use crate::curate::{freeze_pool, CurateError, Pool};
-use crate::measure::{measure, simulate};
+use crate::measure::measure;
 use crate::seedgen::generate_seeds;
 use crate::target::{outside, standard_errors, Metrics, TargetSpec, K_SIGMA};
-use bloom_math::mechanics::slots::{to_payload, SlotModel};
+use bloom_math::mechanics::slots::SlotModel;
 use bloom_package::{build, Envelope, PackageContent};
 use ed25519_dalek::SigningKey;
 
@@ -20,8 +21,8 @@ use ed25519_dalek::SigningKey;
 /// facts get no SE allowance — a hard pass/fail (spec 2026-07-09 §6). Err
 /// carries the metrics so the caller can see what missed. The band count
 /// must equal the feature count.
-pub fn verify(
-    model: &SlotModel,
+fn verify_with(
+    statics_ok: bool,
     metrics: &Metrics,
     target: &TargetSpec,
     n: usize,
@@ -54,13 +55,43 @@ pub fn verify(
     };
     // Constraints are properties of the game, not of tuning: deterministic
     // model facts get no SE allowance (spec §6).
-    let static_ok = static_violations(model, target).is_empty();
+    let static_ok = statics_ok;
 
     if rtp_ok && vol_ok && hf_ok && bonuses_ok && static_ok {
         Ok(())
     } else {
         Err(metrics.clone())
     }
+}
+
+/// Slots entry point — signature unchanged (the tuner's confirm gate).
+pub fn verify(
+    model: &SlotModel,
+    metrics: &Metrics,
+    target: &TargetSpec,
+    n: usize,
+) -> Result<(), Metrics> {
+    verify_with(
+        static_violations(model, target).is_empty(),
+        metrics,
+        target,
+        n,
+    )
+}
+
+/// Family-aware entry point used by the curation pipeline.
+pub fn verify_artifact(
+    artifact: &MathArtifact,
+    metrics: &Metrics,
+    target: &TargetSpec,
+    n: usize,
+) -> Result<(), Metrics> {
+    verify_with(
+        artifact.static_violations(target).is_empty(),
+        metrics,
+        target,
+        n,
+    )
 }
 
 /// Coarse progress signal for a curation run (cosmetic; never affects the result).
@@ -98,7 +129,7 @@ pub struct StreamedOutcome {
 /// Like `run_curation`, but reports progress and always returns the measured
 /// metrics. `run_curation` delegates here with a no-op callback.
 pub fn run_curation_streamed(
-    model: &SlotModel,
+    artifact: &MathArtifact,
     target: &TargetSpec,
     master_seed: u64,
     package_id: &str,
@@ -117,7 +148,7 @@ pub fn run_curation_streamed(
     let mut samples = Vec::with_capacity(total);
     let mut done = 0usize;
     for part in seeds.chunks(chunk) {
-        samples.extend(simulate(model, part));
+        samples.extend(artifact::simulate(artifact, part));
         done += part.len();
         on_progress(CurationProgress::Simulating { done, total });
     }
@@ -126,7 +157,7 @@ pub fn run_curation_streamed(
     let metrics = measure(&samples);
 
     on_progress(CurationProgress::Phase("verify"));
-    if let Err(m) = verify(model, &metrics, target, samples.len()) {
+    if let Err(m) = verify_artifact(artifact, &metrics, target, samples.len()) {
         return StreamedOutcome {
             metrics,
             outcome: Err(RunError::VerifyFailed(m)),
@@ -149,9 +180,9 @@ pub fn run_curation_streamed(
         envelope: Envelope {
             package_id: package_id.to_string(),
             package_version: 1,
-            mechanic: "slots@1".to_string(),
+            mechanic: artifact.family().to_string(),
         },
-        math_payload: to_payload(model),
+        math_payload: artifact.math_payload(),
         seeds: pool.seeds.clone(),
         presentation: presentation.to_vec(),
     };
@@ -165,10 +196,11 @@ pub fn run_curation_streamed(
         .collect::<Vec<_>>()
         .join("\n");
     let report = format!(
-        "package_id={package_id}\nmechanic=slots@1\nmaster_seed={master_seed}\n\
+        "package_id={package_id}\nmechanic={}\nmaster_seed={master_seed}\n\
          candidate_count={}\npool_size={}\n\
          measured_rtp={:.5}\nrealized_rtp={:.5}\nvolatility={:.5}\n\
          hit_frequency={:.5}\nbase_rtp={:.5}\nfeature_rtp={:.5}\n{}\n",
+        artifact.family(),
         target.candidate_count,
         target.pool_size,
         metrics.rtp,
@@ -193,14 +225,14 @@ pub fn run_curation_streamed(
 
 /// Generate → simulate → measure → verify → freeze → build+sign.
 pub fn run_curation(
-    model: &SlotModel,
+    artifact: &MathArtifact,
     target: &TargetSpec,
     master_seed: u64,
     package_id: &str,
     signing_key: &SigningKey,
 ) -> Result<CurationOutput, RunError> {
     run_curation_streamed(
-        model,
+        artifact,
         target,
         master_seed,
         package_id,
@@ -278,8 +310,14 @@ mod tests {
 
     #[test]
     fn run_curation_builds_a_loadable_package() {
-        let out =
-            run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let out = run_curation(
+            &MathArtifact::Slots(measurable_model()),
+            &target_09(),
+            2026,
+            "pkg-test",
+            &key(),
+        )
+        .unwrap();
         let content = verify_and_load(&out.package_bytes, &key().verifying_key()).expect("loads");
         assert_eq!(content.seeds.len(), 10_000);
         assert_eq!(content.envelope.mechanic, "slots@1");
@@ -287,16 +325,36 @@ mod tests {
 
     #[test]
     fn run_curation_is_reproducible() {
-        let a = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
-        let b = run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let a = run_curation(
+            &MathArtifact::Slots(measurable_model()),
+            &target_09(),
+            2026,
+            "pkg-test",
+            &key(),
+        )
+        .unwrap();
+        let b = run_curation(
+            &MathArtifact::Slots(measurable_model()),
+            &target_09(),
+            2026,
+            "pkg-test",
+            &key(),
+        )
+        .unwrap();
         assert_eq!(a.pool.seeds, b.pool.seeds);
         assert_eq!(a.package_bytes, b.package_bytes);
     }
 
     #[test]
     fn freeze_boundary_determinism_holds() {
-        let out =
-            run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let out = run_curation(
+            &MathArtifact::Slots(measurable_model()),
+            &target_09(),
+            2026,
+            "pkg-test",
+            &key(),
+        )
+        .unwrap();
         let content = verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
         let model = from_payload(&content.math_payload).unwrap();
         let sum: u64 = content
@@ -312,7 +370,14 @@ mod tests {
     fn missing_target_fails_loudly() {
         let mut t = target_09();
         t.rtp_target = 0.50; // model is ~0.9, far outside tolerance
-        let err = run_curation(&measurable_model(), &t, 2026, "pkg-test", &key()).unwrap_err();
+        let err = run_curation(
+            &MathArtifact::Slots(measurable_model()),
+            &t,
+            2026,
+            "pkg-test",
+            &key(),
+        )
+        .unwrap_err();
         assert!(matches!(err, RunError::VerifyFailed(_)));
     }
 
@@ -338,6 +403,7 @@ mod tests {
             bonus_hit_rates: bonus,
             base_rtp: rtp,
             feature_rtp: 0.0,
+            ..Default::default()
         }
     }
 
@@ -483,7 +549,7 @@ mod tests {
     fn streamed_matches_run_curation_on_pass() {
         let mut seen: Vec<String> = Vec::new();
         let s = run_curation_streamed(
-            &measurable_model(),
+            &MathArtifact::Slots(measurable_model()),
             &target_09(),
             2026,
             "pkg-test",
@@ -498,8 +564,14 @@ mod tests {
             },
         );
         // metrics always present; outcome equals the legacy path's package bytes.
-        let legacy =
-            run_curation(&measurable_model(), &target_09(), 2026, "pkg-test", &key()).unwrap();
+        let legacy = run_curation(
+            &MathArtifact::Slots(measurable_model()),
+            &target_09(),
+            2026,
+            "pkg-test",
+            &key(),
+        )
+        .unwrap();
         let streamed = s.outcome.expect("passes");
         assert_eq!(streamed.package_bytes, legacy.package_bytes);
         assert!((s.metrics.rtp - 0.9).abs() < 0.02);
@@ -512,7 +584,7 @@ mod tests {
         let mut t = target_09();
         t.rtp_target = 0.50; // model ~0.9 -> verify fails
         let s = run_curation_streamed(
-            &measurable_model(),
+            &MathArtifact::Slots(measurable_model()),
             &t,
             2026,
             "pkg-test",
@@ -589,7 +661,7 @@ mod tests {
     fn presentation_bytes_are_carried_into_the_package() {
         let pres = br#"{"cols":1}"#;
         let s = run_curation_streamed(
-            &measurable_model(),
+            &MathArtifact::Slots(measurable_model()),
             &target_09(),
             2026,
             "pkg-pres",
@@ -601,5 +673,73 @@ mod tests {
         let content =
             bloom_package::verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
         assert_eq!(content.presentation, pres.to_vec());
+    }
+
+    fn demo_composed_artifact() -> crate::artifact::MathArtifact {
+        let json = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../runtime/server/demo/composed.definition.json"
+        ))
+        .unwrap();
+        crate::artifact::MathArtifact::from_json_value(serde_json::from_str(&json).unwrap())
+            .unwrap()
+    }
+
+    #[test]
+    fn run_curation_builds_a_curated_composed_package() {
+        let art = demo_composed_artifact();
+        // center the target on a measurement over the SAME seed stream the
+        // curation run will use, so the gate passes (Task 4 wraps this as
+        // compose::self_target)
+        let m = crate::measure::measure(&crate::artifact::simulate(
+            &art,
+            &crate::seedgen::generate_seeds(7, 2_000),
+        ));
+        let target = TargetSpec {
+            rtp_target: m.rtp,
+            rtp_tolerance: 0.01,
+            volatility_min: 0.0,
+            volatility_max: 1e9,
+            bonus_hit_rate_bands: vec![],
+            pool_size: 1_000,
+            candidate_count: 2_000,
+            realized_correction_band: 0.05,
+            ..Default::default()
+        };
+        let out = run_curation(&art, &target, 7, "pkg-composed", &key()).unwrap();
+        let content = verify_and_load(&out.package_bytes, &key().verifying_key()).unwrap();
+        assert_eq!(content.envelope.mechanic, "composed@1");
+        assert_eq!(content.seeds.len(), 1_000);
+        assert!(bloom_math::mechanics::composed::from_payload(&content.math_payload).is_ok());
+        // freeze_pool's greedy swap search only guarantees landing within
+        // rtp_tolerance when the swap step size is fine relative to the
+        // candidate spread; the demo's composed volatility (feature payouts up
+        // to 147x against a pool of 1000) is coarse enough that the anti-
+        // oscillation guard (curate.rs: "stop on the first non-improving
+        // swap") locks in a closest-reachable pool before hitting the 0.01
+        // rtp_tolerance — still comfortably inside the honesty guardrail
+        // (realized_correction_band) freeze_pool actually promises callers.
+        assert!((out.pool.realized_rtp - m.rtp).abs() <= target.realized_correction_band);
+        // per-state extras came along
+        assert!(out.metrics.state_rtp.contains_key("base"));
+        assert!((out.metrics.state_visit_freq["base"] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn composed_verify_fail_is_a_valid_failed_outcome() {
+        let art = demo_composed_artifact();
+        let target = TargetSpec {
+            rtp_target: 50.0, // nowhere near the demo's RTP
+            rtp_tolerance: 0.001,
+            volatility_min: 0.0,
+            volatility_max: 1e9,
+            bonus_hit_rate_bands: vec![],
+            pool_size: 100,
+            candidate_count: 200,
+            realized_correction_band: 0.05,
+            ..Default::default()
+        };
+        let err = run_curation(&art, &target, 7, "pkg-composed", &key()).unwrap_err();
+        assert!(matches!(err, RunError::VerifyFailed(_)));
     }
 }

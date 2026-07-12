@@ -2,6 +2,7 @@
 //! freeze a faithful signed seed pool. Approach A — the model defines the
 //! characteristics; the pool is a faithful sample (see the design spec).
 
+pub mod artifact;
 pub mod compose;
 pub mod constraints;
 pub mod curate;

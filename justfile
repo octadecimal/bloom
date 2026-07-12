@@ -140,7 +140,7 @@ runtime-demo-pkg:
 runtime-serve: runtime-demo-pkg
     cargo run --release -p bloom-runtime-server
 
-# Mint the composed@1 demo package (dev-signed, uncurated pool) from its fixture.
+# Mint the composed@1 demo package (dev-signed, curated pool) from its fixture.
 composed-demo-pkg:
     cargo run --release -p bloom-simulator --bin compose -- \
       runtime/server/demo/composed.definition.json \

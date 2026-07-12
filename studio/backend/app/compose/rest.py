@@ -66,5 +66,6 @@ async def build_game_definition(game_id: str, request: Request) -> dict:
         "ok": bool(res.get("ok")),
         "errors": res.get("errors"),
         "metrics": res.get("metrics"),
+        "verdict": res.get("verdict"),
         "packageId": game_id,
     }
