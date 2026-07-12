@@ -37,6 +37,9 @@ fn result_line(
         "baseRtp": metrics.base_rtp,
         "featureRtp": metrics.feature_rtp,
         "bonusHitRates": metrics.bonus_hit_rates,
+        "maxWin": metrics.max_win,
+        "stateRtp": metrics.state_rtp,
+        "stateVisitFreq": metrics.state_visit_freq,
         "se": {
             "rtp": se.rtp,
             "volatility": se.volatility,
@@ -185,6 +188,7 @@ mod tests {
             bonus_hit_rates: vec![0.1],
             base_rtp: 0.60,
             feature_rtp: 0.35,
+            ..Default::default()
         };
         let se = bloom_simulator::target::standard_errors(&metrics, 10_000);
         let s = result_line("pass", &metrics, &se, Some(0.961), Some(1000), None);
@@ -204,6 +208,7 @@ mod tests {
             bonus_hit_rates: vec![0.1, 0.2],
             base_rtp: 0.60,
             feature_rtp: 0.35,
+            ..Default::default()
         };
         let se = bloom_simulator::target::standard_errors(&metrics, 10_000);
         let s = result_line("pass", &metrics, &se, Some(0.961), Some(1000), None);
@@ -231,6 +236,7 @@ mod tests {
             bonus_hit_rates: vec![0.09],
             base_rtp: 0.59,
             feature_rtp: 0.35,
+            ..Default::default()
         };
         let se = bloom_simulator::target::standard_errors(&metrics, 10_000);
         let s = result_line("fail", &metrics, &se, None, None, Some("missed bands"));

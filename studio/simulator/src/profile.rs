@@ -69,8 +69,8 @@ pub fn profile(samples: &[RoundSample], bet: u64) -> (WinDistribution, TailMetri
     let mut longest = 0u32;
 
     for smp in samples {
-        let mult = smp.payout as f64 / bet;
-        if smp.payout == 0 {
+        let mult = smp.total_payout as f64 / bet;
+        if smp.total_payout == 0 {
             zero_count += 1;
             losing += 1;
             streak += 1;
@@ -138,7 +138,7 @@ pub fn rtp_convergence(samples: &[RoundSample], points: usize) -> Vec<RtpPoint> 
     let mut out = Vec::with_capacity(sizes.len());
     for &size in &sizes {
         while cursor < size {
-            running += samples[cursor].payout as f64;
+            running += samples[cursor].total_payout as f64;
             cursor += 1;
         }
         out.push(RtpPoint {
@@ -155,12 +155,18 @@ mod tests {
     use crate::measure::RoundSample;
 
     fn s(payout: u64, feature: u64, trig: bool) -> RoundSample {
+        let base_payout = payout - feature;
+        let mut state_payouts = vec![("base".to_string(), base_payout)];
+        if trig {
+            state_payouts.push(("feature".to_string(), feature));
+        }
         RoundSample {
             seed: 0,
-            payout,
-            base_payout: payout - feature,
+            total_payout: payout,
+            base_payout,
             feature_payout: feature,
             feature_triggers: vec![trig],
+            state_payouts,
         }
     }
 
@@ -206,10 +212,11 @@ mod tests {
         // total 60x, of which 40 base + 20 feature -> bin [50,100) as FEATURE
         let pop = vec![RoundSample {
             seed: 0,
-            payout: 60,
+            total_payout: 60,
             base_payout: 40,
             feature_payout: 20,
             feature_triggers: vec![true],
+            state_payouts: vec![("base".to_string(), 40), ("feature".to_string(), 20)],
         }];
         let (dist, _) = profile(&pop, 1);
         let bin = dist.bins.iter().find(|b| b.bin_lo == 50.0).unwrap();
@@ -222,10 +229,11 @@ mod tests {
         let pop: Vec<RoundSample> = (0..10_000)
             .map(|i| RoundSample {
                 seed: i,
-                payout: (i % 2),
+                total_payout: (i % 2),
                 base_payout: (i % 2),
                 feature_payout: 0,
                 feature_triggers: vec![],
+                state_payouts: vec![("base".to_string(), i % 2)],
             })
             .collect();
         let series = rtp_convergence(&pop, 8);

@@ -1,6 +1,7 @@
 //! Target spec (desired characteristics) and measured metrics.
 
 use serde::Deserialize;
+use std::collections::BTreeMap;
 
 /// Verdicts allow a band miss of up to K_SIGMA standard errors (~95%
 /// two-sided). Shared by the simulator's verify and the tuner's confirm so
@@ -49,7 +50,7 @@ pub fn standard_errors(m: &Metrics, n: usize) -> MetricSE {
 
 /// Measured characteristics over a simulated population. Floats are fine here —
 /// this is studio measurement, never the certified outcome path.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Metrics {
     /// Return to player: mean payout (bet-multiples) per spin.
     pub rtp: f64,
@@ -63,6 +64,14 @@ pub struct Metrics {
     pub base_rtp: f64,
     /// RTP contributed by all features.
     pub feature_rtp: f64,
+    /// Largest single-round payout observed (bet-multiples).
+    pub max_win: u64,
+    /// Per-state RTP share: state id → mean payout per round. Slots uses the
+    /// two pseudo-states "base"/"feature"; composed uses real state ids.
+    pub state_rtp: BTreeMap<String, f64>,
+    /// State-visit frequency: state id → mean visits per round (composed
+    /// feature trigger frequency; groundwork for #160).
+    pub state_visit_freq: BTreeMap<String, f64>,
 }
 
 /// An acceptable inclusive range for one feature's hit-rate.
@@ -148,6 +157,7 @@ mod tests {
             bonus_hit_rates: bonus,
             base_rtp: rtp,
             feature_rtp: 0.0,
+            ..Default::default()
         }
     }
 

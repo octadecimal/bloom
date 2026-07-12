@@ -38,7 +38,7 @@ pub fn freeze_pool(
 
     let mut pool: Vec<usize> = (0..p).collect();
     let mut reserve: Vec<usize> = (p..samples.len()).collect();
-    let mut sum: u64 = pool.iter().map(|&i| samples[i].payout).sum();
+    let mut sum: u64 = pool.iter().map(|&i| samples[i].total_payout).sum();
 
     let realized = |sum: u64| sum as f64 / p as f64;
 
@@ -78,30 +78,30 @@ pub fn freeze_pool(
         let pool_pick = if raise {
             pool.iter()
                 .enumerate()
-                .min_by_key(|&(_, &i)| samples[i].payout)
+                .min_by_key(|&(_, &i)| samples[i].total_payout)
         } else {
             pool.iter()
                 .enumerate()
-                .max_by_key(|&(_, &i)| samples[i].payout)
+                .max_by_key(|&(_, &i)| samples[i].total_payout)
         };
         let res_pick = if raise {
             reserve
                 .iter()
                 .enumerate()
-                .max_by_key(|&(_, &i)| samples[i].payout)
+                .max_by_key(|&(_, &i)| samples[i].total_payout)
         } else {
             reserve
                 .iter()
                 .enumerate()
-                .min_by_key(|&(_, &i)| samples[i].payout)
+                .min_by_key(|&(_, &i)| samples[i].total_payout)
         };
 
         let (Some((pi, &pidx)), Some((ri, &ridx))) = (pool_pick, res_pick) else {
             break;
         };
 
-        let out_payout = samples[pidx].payout;
-        let in_payout = samples[ridx].payout;
+        let out_payout = samples[pidx].total_payout;
+        let in_payout = samples[ridx].total_payout;
         let new_sum = sum - out_payout + in_payout;
 
         // Accept only swaps that move realized RTP strictly closer to target.
@@ -134,10 +134,11 @@ mod tests {
     fn sample(seed: u64, payout: u64) -> RoundSample {
         RoundSample {
             seed,
-            payout,
+            total_payout: payout,
             base_payout: payout,
             feature_payout: 0,
             feature_triggers: vec![],
+            state_payouts: vec![("base".to_string(), payout)],
         }
     }
 
