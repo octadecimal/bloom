@@ -25,24 +25,24 @@
 
 ## File Structure
 
-| File | Change |
-|---|---|
-| `studio/simulator/src/measure.rs` | `RoundSample` gains `total_payout` (rename of `payout`) + `state_payouts`; `sample_slots` extracted; `measure` computes `max_win`, `state_rtp`, `state_visit_freq` |
-| `studio/simulator/src/target.rs` | `Metrics` derives `Default`, gains `max_win`, `state_rtp`, `state_visit_freq` |
-| `studio/simulator/src/artifact.rs` | **new** — `MathArtifact` enum: parse/family/payload/evaluate/simulate + constraint dispatch |
-| `studio/simulator/src/constraints.rs` | extract shared `pay_violations`, `max_win_violation`, `validate_constraints_core` |
-| `studio/simulator/src/run.rs` | `verify_with` core; `verify_artifact`; `run_curation_streamed`/`run_curation` take `&MathArtifact` |
-| `studio/simulator/src/curate.rs` | field rename only |
-| `studio/simulator/src/profile.rs` | field rename only |
-| `studio/simulator/src/compose.rs` | **rewritten** — `measure_pool`/`PoolMetrics` deleted; `self_target` + `build_composed` (curated pipeline) |
-| `studio/simulator/src/bin/curate_json.rs` | parses `MathArtifact`; result line gains `maxWin`/`stateRtp`/`stateVisitFreq` |
-| `studio/simulator/src/bin/compose_json.rs` | job gains optional `target`; result gains `verdict` + richer `metrics` |
-| `studio/simulator/src/bin/compose.rs` | routes through the curated build |
-| `studio/simulator/src/lib.rs` | `pub mod artifact;` |
-| `studio/tuner/src/{fitness,report}.rs`, `studio/tuner/src/bin/tune_json.rs` | test-only `Metrics` literal fixes (`..Default::default()`) |
-| `studio/backend/app/compose/{rest,autobuild}.py` | `verdict` passthrough |
-| `studio/backend/tests/{test_compose_rest,test_compose_autobuild}.py` | passthrough tests |
-| `runtime/server/demo/composed.pkg` | rebuilt with a curated pool |
+| File                                                                        | Change                                                                                                                                                             |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `studio/simulator/src/measure.rs`                                           | `RoundSample` gains `total_payout` (rename of `payout`) + `state_payouts`; `sample_slots` extracted; `measure` computes `max_win`, `state_rtp`, `state_visit_freq` |
+| `studio/simulator/src/target.rs`                                            | `Metrics` derives `Default`, gains `max_win`, `state_rtp`, `state_visit_freq`                                                                                      |
+| `studio/simulator/src/artifact.rs`                                          | **new** — `MathArtifact` enum: parse/family/payload/evaluate/simulate + constraint dispatch                                                                        |
+| `studio/simulator/src/constraints.rs`                                       | extract shared `pay_violations`, `max_win_violation`, `validate_constraints_core`                                                                                  |
+| `studio/simulator/src/run.rs`                                               | `verify_with` core; `verify_artifact`; `run_curation_streamed`/`run_curation` take `&MathArtifact`                                                                 |
+| `studio/simulator/src/curate.rs`                                            | field rename only                                                                                                                                                  |
+| `studio/simulator/src/profile.rs`                                           | field rename only                                                                                                                                                  |
+| `studio/simulator/src/compose.rs`                                           | **rewritten** — `measure_pool`/`PoolMetrics` deleted; `self_target` + `build_composed` (curated pipeline)                                                          |
+| `studio/simulator/src/bin/curate_json.rs`                                   | parses `MathArtifact`; result line gains `maxWin`/`stateRtp`/`stateVisitFreq`                                                                                      |
+| `studio/simulator/src/bin/compose_json.rs`                                  | job gains optional `target`; result gains `verdict` + richer `metrics`                                                                                             |
+| `studio/simulator/src/bin/compose.rs`                                       | routes through the curated build                                                                                                                                   |
+| `studio/simulator/src/lib.rs`                                               | `pub mod artifact;`                                                                                                                                                |
+| `studio/tuner/src/{fitness,report}.rs`, `studio/tuner/src/bin/tune_json.rs` | test-only `Metrics` literal fixes (`..Default::default()`)                                                                                                         |
+| `studio/backend/app/compose/{rest,autobuild}.py`                            | `verdict` passthrough                                                                                                                                              |
+| `studio/backend/tests/{test_compose_rest,test_compose_autobuild}.py`        | passthrough tests                                                                                                                                                  |
+| `runtime/server/demo/composed.pkg`                                          | rebuilt with a curated pool                                                                                                                                        |
 
 No `bloom-math` changes: `StateExit { state, payout }` trace entries already ARE the per-state attribution (invariant `total_payout == Σ StateExit.payout` is test-enforced at `trusted/math/src/mechanics/composed/eval.rs:537`). Composed internals are reached via the pub modules (`bloom_math::mechanics::composed::{reels::ReelsConfig, mechanic::MechanicConfig}`).
 
@@ -51,6 +51,7 @@ No `bloom-math` changes: `StateExit { state, payout }` trace entries already ARE
 ### Task 1: RoundSample per-state attribution + shared Metrics
 
 **Files:**
+
 - Modify: `studio/simulator/src/measure.rs`
 - Modify: `studio/simulator/src/target.rs:52-66` (Metrics)
 - Modify: `studio/simulator/src/curate.rs` (rename ripple)
@@ -60,8 +61,10 @@ No `bloom-math` changes: `StateExit { state, payout }` trace entries already ARE
 - Modify: `studio/tuner/src/fitness.rs:148`, `studio/tuner/src/report.rs:79`, `studio/tuner/src/bin/tune_json.rs:280` (test fixtures)
 
 **Interfaces:**
+
 - Consumes: `bloom_math::mechanics::slots::evaluate` (unchanged).
 - Produces (later tasks rely on these exact shapes):
+
   ```rust
   pub struct RoundSample {
       pub seed: u64,
@@ -281,12 +284,15 @@ git commit -m "feat(simulator): RoundSample per-state attribution + shared max-w
 ### Task 2: MathArtifact family seam
 
 **Files:**
+
 - Create: `studio/simulator/src/artifact.rs`
 - Modify: `studio/simulator/src/lib.rs`
 
 **Interfaces:**
+
 - Consumes: `RoundSample` + `sample_slots` from Task 1; `bloom_math::mechanics::composed::{compile, evaluate, GameDefinition, CompiledGame, TraceEntry, FAMILY, to_payload}`, `bloom_math::mechanics::composed::reels::ReelsConfig`, `bloom_math::mechanics::slots::{SlotModel, to_payload}`.
 - Produces (Tasks 3–4 rely on these):
+
   ```rust
   pub enum MathArtifact {
       Slots(SlotModel),
@@ -568,14 +574,17 @@ git commit -m "feat(simulator): MathArtifact family seam (slots@1 | composed@1)"
 ### Task 3: family-aware constraints, verify, and curation pipeline
 
 **Files:**
+
 - Modify: `studio/simulator/src/constraints.rs`
 - Modify: `studio/simulator/src/artifact.rs` (constraint dispatch methods)
 - Modify: `studio/simulator/src/run.rs`
 - Modify: `studio/simulator/src/bin/curate_json.rs`
 
 **Interfaces:**
+
 - Consumes: `MathArtifact` (Task 2), `Metrics`/`RoundSample` (Task 1).
 - Produces (Task 4 relies on):
+
   ```rust
   // constraints.rs — slots-typed fns KEEP their signatures (tuner untouched):
   pub fn pay_violations(paytable: &Paytable, constraints: &[PayConstraint]) -> Vec<Violation>;
@@ -873,6 +882,7 @@ pub fn verify_artifact(artifact: &MathArtifact, metrics: &Metrics, target: &Targ
 ```
 
 Then change `run_curation_streamed` / `run_curation` first params from `model: &SlotModel` to `artifact: &MathArtifact` and inside:
+
 - `simulate(model, part)` → `crate::artifact::simulate(artifact, part)`
 - `verify(model, &metrics, target, samples.len())` → `verify_artifact(artifact, &metrics, target, samples.len())`
 - `mechanic: "slots@1".to_string()` → `mechanic: artifact.family().to_string()`
@@ -922,13 +932,16 @@ git commit -m "feat(simulator): family-aware constraints, verify, and curation p
 ### Task 4: composed .pkg builds go curate → verify → freeze (retire measure_pool)
 
 **Files:**
+
 - Rewrite: `studio/simulator/src/compose.rs`
 - Modify: `studio/simulator/src/bin/compose_json.rs`
 - Modify: `studio/simulator/src/bin/compose.rs`
 
 **Interfaces:**
+
 - Consumes: `MathArtifact::from_definition`, `artifact::simulate`, `measure`, `run_curation_streamed`, `StreamedOutcome`, `RunError` (Tasks 1–3).
 - Produces:
+
   ```rust
   // compose.rs
   pub fn self_target(artifact: &MathArtifact, pool_size: usize, master_seed: u64) -> TargetSpec;
@@ -936,7 +949,9 @@ git commit -m "feat(simulator): family-aware constraints, verify, and curation p
       seed_count: usize, master_seed: u64, presentation: &[u8], signing_key: &SigningKey)
       -> Result<(TargetSpec, StreamedOutcome), Vec<DefinitionError>>;
   ```
+
   compose_json result wire (consumed by `app/compose` in Task 5):
+
   ```json
   {"type":"result","ok":true,
    "metrics":{"rtp":..,"hitRate":..,"maxWinX":..,"stateVisits":{"base":400},
@@ -944,6 +959,7 @@ git commit -m "feat(simulator): family-aware constraints, verify, and curation p
    "verdict":{"status":"pass","failure":null,"realizedRtp":..,"poolSize":..,
               "rtpTarget":..,"rtpTolerance":..,"selfDerived":true}}
   ```
+
   On verify/curate failure: `"ok": false`, `"errors": ["<failure>"]`, same `metrics` + `verdict` (status `"fail"`), **no** `.pkg` written. `validate_only` behavior unchanged. `TargetSpec` already derives `Deserialize`, so the job's optional `target` field parses the same snake_case keys as `target.json` (`rtp_target`, `pool_size`, `candidate_count`, ...).
 
 - [ ] **Step 1: Rewrite `studio/simulator/src/compose.rs`** (tests below in step 2 — write both, then run):
@@ -1236,6 +1252,7 @@ fn verdict_json(
 (Keep the `validate_only` branch and the `let Some(out_path) = job.out_path else { ... exit 2 }` guard exactly as they are, but hoist the guard ABOVE the build so a missing out_path still exits 2 before any simulation.)
 
 Test updates in the same file:
+
 - `job_defaults_apply`: add `assert!(j.target.is_none());`
 - `build_writes_pkg_and_reports_metrics` (seed_count 200 → 400 candidates): change the stateVisits assertion to `assert!(m["stateVisits"]["base"].as_u64().unwrap() == 400);` and add:
   ```rust
@@ -1332,11 +1349,13 @@ git commit -m "feat(simulator): composed .pkg builds run curate->verify->freeze;
 ### Task 5: app/compose verdict passthrough (Python)
 
 **Files:**
+
 - Modify: `studio/backend/app/compose/rest.py:59-70` (build endpoint)
 - Modify: `studio/backend/app/compose/autobuild.py:51-57` (`_run` emit)
 - Test: `studio/backend/tests/test_compose_rest.py`, `studio/backend/tests/test_compose_autobuild.py`
 
 **Interfaces:**
+
 - Consumes: the compose_json result wire from Task 4 (`verdict` key). The runner (`runner.py`) needs NO change — it already returns the whole result object; `jobs.py` needs NO change — `target` is optional and absent means self-derived.
 - Produces: build REST response and `game_build_status` socket event both carry `"verdict"`.
 
@@ -1406,11 +1425,13 @@ git commit -m "feat(compose): pass the build verify verdict through REST + autob
 ### Task 6: rebuild the demo package + whole-branch verification
 
 **Files:**
+
 - Regenerate: `runtime/server/demo/composed.pkg` (build artifact, checked in)
 
 - [ ] **Step 1: Rebuild the composed demo package with a curated pool** (this is `just composed-demo-pkg`, run directly because `just` can't find `sh` here):
 
 Run from the worktree root:
+
 ```bash
 cargo run --release -p bloom-simulator --bin compose -- \
   runtime/server/demo/composed.definition.json \
@@ -1418,6 +1439,7 @@ cargo run --release -p bloom-simulator --bin compose -- \
   runtime/server/demo/composed.pkg \
   runtime/server/demo/composed.presentation.json
 ```
+
 Expected: `composed package written: ... (N bytes, 10000 curated seeds, realized rtp ..., target rtp ..., master_seed 20260709)`.
 
 - [ ] **Step 2: Verify the runtime server still loads and serves it**
@@ -1444,6 +1466,7 @@ git commit -m "chore(runtime): rebuild composed demo pkg with a curated seed poo
 git push -u origin feat/sim-convergence
 gh pr create --title "feat(simulator): SP-A simulator convergence — MathArtifact seam + curated composed packages" --body "..."
 ```
+
 PR body must include: `Closes #172`, a pointer to the umbrella spec (PR #194, §3.1–§3.3, §7 SP-A), and the note that SP-B (tuner genome) is the next sub-project. Do NOT merge — hand back for review per subagent-driven-development's finish flow.
 
 ---
@@ -1453,4 +1476,4 @@ PR body must include: `Closes #172`, a pointer to the umbrella spec (PR #194, §
 - **Spec coverage:** §3.1 family seam → Task 2 (+ job `family` field: the composed definition's own top-level `family` key IS the explicit discriminator; bare SlotModel JSON defaults to slots per spec §4 "defaulting slots for legacy" — the backend keeps writing unwrapped model.json until SP-C). §3.2 RoundSample + shared metrics + per-state extras → Task 1. §3.3 verify bands both families / pay constraints on the reels@1 instance / freeze on samples / curated composed builds / measure_pool retired → Tasks 3–4. §7 SP-A "app/compose build hook" → Task 5. Demo/golden verification → Task 6.
 - **Out of scope honored:** no tuner genome work (SP-B), no backend math descriptor (SP-C), no GDD realizer (SP-D), no feature-level bands (#160).
 - **Type consistency:** `RoundSample.total_payout`/`state_payouts` names match across Tasks 1–4; `verify_artifact`/`run_curation_streamed(&MathArtifact, ...)` signatures match between Task 3's definition and Task 4's call sites; `build_composed` returns `(TargetSpec, StreamedOutcome)` in both its definition and the two bin call sites.
-- **Known judgment calls:** (1) self-centered default target — without stored GDD targets a fixed default (e.g. 0.96) would fail verify on nearly every mid-edit definition the AutoBuilder builds; centering on the measured RTP keeps every build a *curated, frozen, verified* pool (what #172 asks) while staying honest (`realized_correction_band` binds freeze to the measured mean). (2) `stateVisits` stays integer counts (over the candidate population) so the current game-structure pane readout keeps rendering until SP-C replaces it. (3) slots-typed `verify`/`simulate`/`static_violations` keep their signatures so bloom-tuner is untouched — SP-B owns that migration.
+- **Known judgment calls:** (1) self-centered default target — without stored GDD targets a fixed default (e.g. 0.96) would fail verify on nearly every mid-edit definition the AutoBuilder builds; centering on the measured RTP keeps every build a _curated, frozen, verified_ pool (what #172 asks) while staying honest (`realized_correction_band` binds freeze to the measured mean). (2) `stateVisits` stays integer counts (over the candidate population) so the current game-structure pane readout keeps rendering until SP-C replaces it. (3) slots-typed `verify`/`simulate`/`static_violations` keep their signatures so bloom-tuner is untouched — SP-B owns that migration.
