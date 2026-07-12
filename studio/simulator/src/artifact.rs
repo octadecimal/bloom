@@ -4,7 +4,10 @@
 //! (spec §2 decision 2). Composed is compiled ONCE at load; `evaluate` runs
 //! per seed (spec §3.1).
 
+use crate::constraints::{self, Violation};
 use crate::measure::{sample_slots, RoundSample};
+use crate::target::TargetSpec;
+use bloom_math::mechanics::composed::mechanic::MechanicConfig;
 use bloom_math::mechanics::composed::reels::ReelsConfig;
 use bloom_math::mechanics::composed::{
     self, compile, CompiledGame, DefinitionError, GameDefinition, TraceEntry,
@@ -100,6 +103,82 @@ impl MathArtifact {
                     feature_payout: trace.total_payout - base_payout,
                     feature_triggers: Vec::new(),
                     state_payouts,
+                }
+            }
+        }
+    }
+
+    /// Theoretical max win in bet-multiples. Composed: top pay of the reels
+    /// instance's paytable × the largest multiplier across every compiled
+    /// state's effective reels config (per-state overrides raise it).
+    /// ponytail: single-spin bound × top multiplier, mirroring slots —
+    /// ignores multi-step accumulation; tighten alongside #160/#161.
+    pub fn theoretical_max_win(&self) -> u64 {
+        match self {
+            MathArtifact::Slots(m) => constraints::theoretical_max_win(m),
+            MathArtifact::Composed {
+                compiled, reels, ..
+            } => {
+                let top_pay = reels
+                    .as_ref()
+                    .and_then(|r| r.paytable.entries.iter().map(|e| e.payout).max())
+                    .unwrap_or(0);
+                let top_mult = compiled
+                    .states
+                    .iter()
+                    .flat_map(|s| &s.configs)
+                    .filter_map(|c| match c {
+                        MechanicConfig::Reels(r) => Some(r.multiplier),
+                        _ => None,
+                    })
+                    .max()
+                    .unwrap_or(1)
+                    .max(1);
+                top_pay.saturating_mul(top_mult)
+            }
+        }
+    }
+
+    /// Deterministic constraint violations — same checks both families; for
+    /// composed they bind to the reels@1 instance's paytable (spec §3.3).
+    pub fn static_violations(&self, target: &TargetSpec) -> Vec<Violation> {
+        match self {
+            MathArtifact::Slots(m) => constraints::static_violations(m, target),
+            MathArtifact::Composed { reels, .. } => {
+                let mut out = Vec::new();
+                out.extend(constraints::max_win_violation(
+                    self.theoretical_max_win(),
+                    &target.max_win_band,
+                ));
+                if let Some(r) = reels {
+                    out.extend(constraints::pay_violations(
+                        &r.paytable,
+                        &target.pay_constraints,
+                    ));
+                }
+                out
+            }
+        }
+    }
+
+    /// Up-front target/constraint validation, family-aware.
+    pub fn validate_constraints(&self, target: &TargetSpec) -> Result<(), String> {
+        match self {
+            MathArtifact::Slots(m) => constraints::validate_constraints(m, target),
+            MathArtifact::Composed { reels, .. } => {
+                if !target.bonus_hit_rate_bands.is_empty() {
+                    return Err("composed targets take no bonus_hit_rate_bands \
+                         (feature-level bands are issue #160)"
+                        .into());
+                }
+                match reels {
+                    Some(r) => {
+                        constraints::validate_constraints_core(&r.symbols, &r.paytable, target)
+                    }
+                    None if target.pay_constraints.is_empty() => Ok(()),
+                    None => Err(
+                        "pay constraints given but the definition has no reels@1 instance".into(),
+                    ),
                 }
             }
         }
@@ -236,5 +315,61 @@ mod tests {
         assert_eq!(def.start, "base");
         let slots = MathArtifact::from_json_value(slots_model_value()).unwrap();
         assert!(bloom_math::mechanics::slots::from_payload(&slots.math_payload()).is_ok());
+    }
+
+    use crate::target::{HitRateBand, PayConstraint, PayRelation, TargetSpec};
+
+    #[test]
+    fn composed_theoretical_max_win_is_top_pay_times_top_state_multiplier() {
+        let art = MathArtifact::from_json_value(demo_def_value()).unwrap();
+        // demo: top pay 20 (sym2@3); fs2 overrides multiplier to 3 → 60
+        assert_eq!(art.theoretical_max_win(), 60);
+    }
+
+    #[test]
+    fn composed_static_violations_check_max_win_and_the_reels_paytable() {
+        let art = MathArtifact::from_json_value(demo_def_value()).unwrap();
+        let t = TargetSpec {
+            max_win_band: Some(HitRateBand {
+                min: 100.0,
+                max: 200.0,
+            }), // 60 < 100
+            pay_constraints: vec![PayConstraint {
+                symbol: 0,
+                relation: PayRelation::Floor,
+                count: Some(3),
+                value: 50, // sym0@3 pays 5 → violated
+            }],
+            ..Default::default()
+        };
+        let v = art.static_violations(&t);
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].metric, "max_win");
+        assert_eq!(v[1].metric, "pay_floor[0@3]");
+        assert!(art.static_violations(&TargetSpec::default()).is_empty());
+    }
+
+    #[test]
+    fn composed_validate_rejects_bonus_bands_and_unknown_symbols() {
+        let art = MathArtifact::from_json_value(demo_def_value()).unwrap();
+        let t = TargetSpec {
+            bonus_hit_rate_bands: vec![HitRateBand { min: 0.0, max: 1.0 }],
+            ..Default::default()
+        };
+        assert!(art.validate_constraints(&t).unwrap_err().contains("#160"));
+        let t = TargetSpec {
+            pay_constraints: vec![PayConstraint {
+                symbol: 42,
+                relation: PayRelation::Floor,
+                count: None,
+                value: 1,
+            }],
+            ..Default::default()
+        };
+        assert!(art
+            .validate_constraints(&t)
+            .unwrap_err()
+            .contains("unknown model symbol"));
+        assert!(art.validate_constraints(&TargetSpec::default()).is_ok());
     }
 }

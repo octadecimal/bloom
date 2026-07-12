@@ -3,7 +3,7 @@
 //! Verify/correction failures are valid results (exit 0, status="fail"); only
 //! bad input or IO errors exit non-zero.
 
-use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::run::{run_curation_streamed, CurationProgress, RunError};
 use bloom_simulator::target::TargetFile;
 use ed25519_dalek::SigningKey;
@@ -64,11 +64,12 @@ fn main() {
         std::process::exit(2);
     }
 
-    let model: SlotModel = match fs::read_to_string(&args[1])
+    let artifact: MathArtifact = match fs::read_to_string(&args[1])
         .map_err(|e| e.to_string())
-        .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string()))
+        .and_then(MathArtifact::from_json_value)
     {
-        Ok(m) => m,
+        Ok(a) => a,
         Err(e) => {
             eprintln!("bad model json: {e}");
             std::process::exit(2);
@@ -90,7 +91,7 @@ fn main() {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
-    if let Err(e) = bloom_simulator::validate_constraints(&model, &target) {
+    if let Err(e) = artifact.validate_constraints(&target) {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
@@ -98,7 +99,7 @@ fn main() {
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only (umbrella §9)
     let mut on_progress = |p: CurationProgress| emit(progress_line(&p));
     let s = run_curation_streamed(
-        &model,
+        &artifact,
         &target,
         tf.master_seed,
         &args[3],
@@ -122,7 +123,7 @@ fn main() {
             )
         }
         Err(RunError::VerifyFailed(_)) => {
-            let sv = bloom_simulator::static_violations(&model, &target);
+            let sv = artifact.static_violations(&target);
             let msg = if sv.is_empty() {
                 "measured characteristics missed the target bands".to_string()
             } else {

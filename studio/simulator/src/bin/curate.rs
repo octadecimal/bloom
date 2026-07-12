@@ -12,7 +12,7 @@
 //! NOTE: the demo signing key is fixed and for development only. Real signing
 //! keys are a sign-off-gate concern (umbrella §9), out of scope here.
 
-use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::run::run_curation_streamed;
 use bloom_simulator::target::TargetFile;
 use ed25519_dalek::SigningKey;
@@ -27,8 +27,10 @@ fn main() {
         std::process::exit(2);
     }
 
-    let model: SlotModel = serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model"))
-        .expect("parse model");
+    let model_value: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model"))
+            .expect("parse model");
+    let artifact = MathArtifact::from_json_value(model_value).expect("valid model/definition");
     let tf: TargetFile = serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target"))
         .expect("parse target");
     let target = tf.spec;
@@ -37,7 +39,7 @@ fn main() {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
-    if let Err(e) = bloom_simulator::validate_constraints(&model, &target) {
+    if let Err(e) = artifact.validate_constraints(&target) {
         eprintln!("invalid target: {e}");
         std::process::exit(2);
     }
@@ -50,7 +52,7 @@ fn main() {
 
     let signing_key = SigningKey::from_bytes(&[7u8; 32]); // dev-only
     let streamed = run_curation_streamed(
-        &model,
+        &artifact,
         &target,
         tf.master_seed,
         &args[3],
