@@ -1,10 +1,12 @@
 //! Studio compose bin: read one JSON job from stdin, validate (kernel compile)
-//! or build+measure a composed@1 package, print one NDJSON result line.
+//! or build+curate a composed@1 package, print one NDJSON result line.
 //! Mirrors curate_json's contract style; no streaming (compose is fast).
 //! Usage: compose_json  (job on stdin)
 
 use bloom_math::mechanics::composed::{compile, GameDefinition};
-use bloom_simulator::compose::{build_composed_package, measure_pool, PoolMetrics};
+use bloom_simulator::compose::build_composed;
+use bloom_simulator::run::RunError;
+use bloom_simulator::target::{Metrics, TargetSpec};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::json;
@@ -27,6 +29,10 @@ struct ComposeJob {
     out_path: Option<String>,
     #[serde(default)]
     validate_only: bool,
+    /// Full curation target (same snake_case keys as target.json). None →
+    /// self-centered default (compose::self_target).
+    #[serde(default)]
+    target: Option<TargetSpec>,
 }
 
 fn result_ok() -> String {
@@ -37,18 +43,39 @@ fn result_errors(errors: &[String]) -> String {
     json!({ "type": "result", "ok": false, "errors": errors }).to_string()
 }
 
-fn result_metrics(m: &PoolMetrics) -> String {
+fn metrics_json(m: &Metrics, n: usize) -> serde_json::Value {
+    let visits: std::collections::BTreeMap<String, u64> = m
+        .state_visit_freq
+        .iter()
+        .map(|(k, f)| (k.clone(), (f * n as f64).round() as u64))
+        .collect();
     json!({
-        "type": "result",
-        "ok": true,
-        "metrics": {
-            "rtp": m.rtp,
-            "hitRate": m.hit_rate,
-            "maxWinX": m.max_win_x,
-            "stateVisits": m.state_visits,
-        }
+        "rtp": m.rtp,
+        "hitRate": m.hit_frequency,
+        "maxWinX": m.max_win,
+        "stateVisits": visits,
+        "volatility": m.volatility,
+        "stateRtp": m.state_rtp,
+        "stateVisitFreq": m.state_visit_freq,
     })
-    .to_string()
+}
+
+fn verdict_json(
+    status: &str,
+    failure: Option<&str>,
+    realized_rtp: Option<f64>,
+    target: &TargetSpec,
+    self_derived: bool,
+) -> serde_json::Value {
+    json!({
+        "status": status,
+        "failure": failure,
+        "realizedRtp": realized_rtp,
+        "poolSize": target.pool_size,
+        "rtpTarget": target.rtp_target,
+        "rtpTolerance": target.rtp_tolerance,
+        "selfDerived": self_derived,
+    })
 }
 
 /// Run the job. Returns (stdout line, exit code). Writes the package file as a
@@ -76,27 +103,58 @@ fn run_job(job: ComposeJob) -> (String, i32) {
         None => Vec::new(),
     };
     let key = SigningKey::from_bytes(&[7u8; 32]); // dev-only, same as compose/curate
-    let bytes = match build_composed_package(
+    let self_derived = job.target.is_none();
+    let (target, s) = match build_composed(
         &def,
+        job.target,
         &job.package_id,
         job.seed_count,
         job.master_seed,
         &presentation,
         &key,
     ) {
-        Ok(b) => b,
+        Ok(pair) => pair,
         Err(errs) => {
             let msgs: Vec<String> = errs.iter().map(|e| format!("{e:?}")).collect();
             return (result_errors(&msgs), 0);
         }
     };
-    if let Err(e) = std::fs::write(&out_path, &bytes) {
-        eprintln!("write package failed: {e}");
-        return (String::new(), 1);
+    let n = target.candidate_count;
+    match s.outcome {
+        Ok(out) => {
+            if let Err(e) = std::fs::write(&out_path, &out.package_bytes) {
+                eprintln!("write package failed: {e}");
+                return (String::new(), 1);
+            }
+            let line = json!({
+                "type": "result",
+                "ok": true,
+                "metrics": metrics_json(&s.metrics, n),
+                "verdict": verdict_json(
+                    "pass", None, Some(out.pool.realized_rtp), &target, self_derived
+                ),
+            });
+            (line.to_string(), 0)
+        }
+        Err(e) => {
+            let failure = match e {
+                RunError::VerifyFailed(_) => {
+                    "measured characteristics missed the target bands".to_string()
+                }
+                RunError::Curate(e) => {
+                    format!("curation guardrail: {e:?} — retune the definition, not the pool")
+                }
+            };
+            let line = json!({
+                "type": "result",
+                "ok": false,
+                "errors": [failure],
+                "metrics": metrics_json(&s.metrics, n),
+                "verdict": verdict_json("fail", Some(&failure), None, &target, self_derived),
+            });
+            (line.to_string(), 0)
+        }
     }
-    let compiled = compile(&def).expect("compile succeeded during build");
-    let seeds = bloom_simulator::seedgen::generate_seeds(job.master_seed, job.seed_count);
-    (result_metrics(&measure_pool(&compiled, &seeds)), 0)
 }
 
 fn main() {
@@ -147,6 +205,7 @@ mod tests {
         assert!(!j.validate_only);
         assert!(j.out_path.is_none());
         assert!(j.presentation.is_none());
+        assert!(j.target.is_none());
     }
 
     #[test]
@@ -209,7 +268,12 @@ mod tests {
         assert_eq!(v["ok"], true);
         let m = &v["metrics"];
         assert!(m["rtp"].as_f64().unwrap() >= 0.0);
-        assert!(m["stateVisits"]["base"].as_u64().unwrap() == 200);
+        assert!(m["stateVisits"]["base"].as_u64().unwrap() == 400);
+        assert_eq!(v["verdict"]["status"], "pass");
+        assert_eq!(v["verdict"]["selfDerived"], true);
+        assert_eq!(v["verdict"]["poolSize"], 200);
+        assert!(v["verdict"]["realizedRtp"].is_number());
+        assert!(m["stateRtp"]["base"].is_number());
         let bytes = std::fs::read(&out).expect("package written");
         assert!(!bytes.is_empty());
         std::fs::remove_file(&out).ok();
@@ -224,5 +288,33 @@ mod tests {
         })));
         assert_eq!(code, 2);
         assert!(line.is_empty());
+    }
+
+    #[test]
+    fn explicit_failing_target_reports_a_fail_verdict_and_writes_nothing() {
+        let out =
+            std::env::temp_dir().join(format!("compose-json-fail-{}.pkg", std::process::id()));
+        let (line, code) = run_job(job(json!({
+            "definition": demo_definition_value(),
+            "package_id": "pkg-fail",
+            "seed_count": 100,
+            "master_seed": 42,
+            "out_path": out.to_string_lossy(),
+            "target": {
+                "rtp_target": 50.0, "rtp_tolerance": 0.001,
+                "volatility_min": 0.0, "volatility_max": 1e9,
+                "bonus_hit_rate_bands": [],
+                "pool_size": 50, "candidate_count": 100,
+                "realized_correction_band": 0.05
+            }
+        })));
+        assert_eq!(code, 0);
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["verdict"]["status"], "fail");
+        assert_eq!(v["verdict"]["selfDerived"], false);
+        assert!(!v["errors"].as_array().unwrap().is_empty());
+        assert!(v["metrics"]["rtp"].is_number()); // metrics still measured
+        assert!(!out.exists(), "a failed verify must not sign a package");
     }
 }

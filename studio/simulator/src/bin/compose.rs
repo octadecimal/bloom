@@ -1,5 +1,5 @@
-//! CLI: read a `composed@1` Game Definition JSON, validate it, and write the
-//! dev-signed package with an uncurated deterministic seed pool.
+//! CLI: read a `composed@1` Game Definition JSON, run it through curate →
+//! verify → freeze, and write the dev-signed package (self-derived target).
 //!
 //! Usage: compose <definition.json> <package_id> <seed_count> <master_seed> <out.pkg> [presentation.json]
 //!
@@ -7,7 +7,7 @@
 //! `curate`. Real signing keys are a sign-off-gate concern, out of scope.
 
 use bloom_math::mechanics::composed::GameDefinition;
-use bloom_simulator::compose::build_composed_package;
+use bloom_simulator::compose::build_composed;
 use ed25519_dalek::SigningKey;
 use std::fs;
 
@@ -32,17 +32,33 @@ fn main() {
     };
 
     let key = SigningKey::from_bytes(&[7u8; 32]);
-    match build_composed_package(&def, &args[2], seed_count, master_seed, &presentation, &key) {
-        Ok(bytes) => {
-            fs::write(&args[5], &bytes).expect("write package");
-            println!(
-                "composed package written: {} ({} bytes, {} seeds, master_seed {})",
-                args[5],
-                bytes.len(),
-                seed_count,
-                master_seed
-            );
-        }
+    match build_composed(
+        &def,
+        None,
+        &args[2],
+        seed_count,
+        master_seed,
+        &presentation,
+        &key,
+    ) {
+        Ok((target, s)) => match s.outcome {
+            Ok(out) => {
+                fs::write(&args[5], &out.package_bytes).expect("write package");
+                println!(
+                    "composed package written: {} ({} bytes, {} curated seeds, realized rtp {:.4}, target rtp {:.4}, master_seed {})",
+                    args[5],
+                    out.package_bytes.len(),
+                    out.pool.seeds.len(),
+                    out.pool.realized_rtp,
+                    target.rtp_target,
+                    master_seed
+                );
+            }
+            Err(e) => {
+                eprintln!("composed curation failed: {e:?}");
+                std::process::exit(1);
+            }
+        },
         Err(errors) => {
             eprintln!("invalid definition — nothing signed:");
             for e in &errors {
