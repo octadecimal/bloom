@@ -71,7 +71,7 @@ fn main() {
     {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("bad model json: {e}");
+            eprintln!("bad artifact json: {e}");
             std::process::exit(2);
         }
     };

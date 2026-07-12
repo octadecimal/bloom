@@ -104,6 +104,25 @@ fn run_job(job: ComposeJob) -> (String, i32) {
     };
     let key = SigningKey::from_bytes(&[7u8; 32]); // dev-only, same as compose/curate
     let self_derived = job.target.is_none();
+    if let Some(t) = &job.target {
+        // Caller-supplied targets must be validated before building — the
+        // self-derived default (None) is correct by construction and skips
+        // this. Compiling here duplicates the compile build_composed does
+        // internally, but compile is cheap next to simulation.
+        let artifact = match bloom_simulator::artifact::MathArtifact::from_definition(def.clone()) {
+            Ok(a) => a,
+            Err(errs) => {
+                let msgs: Vec<String> = errs.iter().map(|e| format!("{e:?}")).collect();
+                return (result_errors(&msgs), 0);
+            }
+        };
+        if let Err(msg) = bloom_simulator::validate_target(t) {
+            return (result_errors(&[format!("invalid target: {msg}")]), 0);
+        }
+        if let Err(msg) = artifact.validate_constraints(t) {
+            return (result_errors(&[format!("invalid target: {msg}")]), 0);
+        }
+    }
     let (target, s) = match build_composed(
         &def,
         job.target,
@@ -316,5 +335,62 @@ mod tests {
         assert!(!v["errors"].as_array().unwrap().is_empty());
         assert!(v["metrics"]["rtp"].is_number()); // metrics still measured
         assert!(!out.exists(), "a failed verify must not sign a package");
+    }
+
+    #[test]
+    fn caller_target_with_bonus_bands_is_rejected_not_panicked() {
+        let out = std::env::temp_dir().join(format!(
+            "compose-json-bonus-bands-{}.pkg",
+            std::process::id()
+        ));
+        let (line, code) = run_job(job(json!({
+            "definition": demo_definition_value(),
+            "package_id": "pkg-bonus-bands",
+            "seed_count": 100,
+            "master_seed": 42,
+            "out_path": out.to_string_lossy(),
+            "target": {
+                "rtp_target": 0.96, "rtp_tolerance": 0.01,
+                "volatility_min": 0.0, "volatility_max": 1e9,
+                "bonus_hit_rate_bands": [{"min": 0.0, "max": 1.0}],
+                "pool_size": 50, "candidate_count": 100,
+                "realized_correction_band": 0.05
+            }
+        })));
+        assert_eq!(code, 0, "must not panic (exit 101)");
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["ok"], false);
+        let msg = v["errors"][0].as_str().unwrap();
+        assert!(msg.contains("#160"), "got: {msg}");
+        assert!(!out.exists());
+    }
+
+    #[test]
+    fn caller_target_with_unknown_pay_symbol_is_rejected() {
+        let out = std::env::temp_dir().join(format!(
+            "compose-json-unknown-symbol-{}.pkg",
+            std::process::id()
+        ));
+        let (line, code) = run_job(job(json!({
+            "definition": demo_definition_value(),
+            "package_id": "pkg-unknown-symbol",
+            "seed_count": 100,
+            "master_seed": 42,
+            "out_path": out.to_string_lossy(),
+            "target": {
+                "rtp_target": 0.96, "rtp_tolerance": 0.01,
+                "volatility_min": 0.0, "volatility_max": 1e9,
+                "bonus_hit_rate_bands": [],
+                "pool_size": 50, "candidate_count": 100,
+                "realized_correction_band": 0.05,
+                "pay_constraints": [{"symbol": 42, "relation": "floor", "value": 1}]
+            }
+        })));
+        assert_eq!(code, 0);
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["ok"], false);
+        let msg = v["errors"][0].as_str().unwrap();
+        assert!(msg.contains("unknown model symbol"), "got: {msg}");
+        assert!(!out.exists());
     }
 }
