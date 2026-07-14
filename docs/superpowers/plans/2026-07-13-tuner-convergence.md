@@ -11,6 +11,7 @@
 **Spec:** umbrella spec §3.4 (`docs/superpowers/specs/2026-07-11-tooling-convergence-composed-design.md` on the `docs/tooling-convergence-spec` branch, PR #194). Key §3.4 text, verbatim:
 
 > `Genome` becomes a two-variant enum. The composed variant's genes:
+>
 > - **reels**: per-reels-binding strip counts — the instance base config plus each per-state override that defines strips (feature strips tune independently of base strips, which is how base-vs-feature RTP trade-off tuning works);
 > - **paytable**: the reels instance's paytable payouts (instance-level, shared across states);
 > - **features**: `meter@1` targets and `"awarded"` state initial budgets.
@@ -33,29 +34,31 @@
 
 ## Files (whole plan)
 
-| File | Change |
-|---|---|
-| `studio/simulator/src/artifact.rs` | Add `PartialEq` derive + `as_slots()` / `composed_def()` accessors (Task 1) |
-| `studio/tuner/src/genome.rs` | `Genome` enum, `ComposedGenome`, composed encode/decode (Task 1), shared repair helpers + composed repair (Task 2) |
-| `studio/tuner/src/config.rs` | `GeneBounds` gains `meter_target_min/max` (Task 2) |
-| `studio/tuner/src/outcome.rs` | `TuneOutcome.model: MathArtifact`; `GenSnapshot.best_state_rtp` (Task 3) |
-| `studio/tuner/src/lib.rs` | `Tuner` trait over `MathArtifact` (Task 3) |
-| `studio/tuner/src/validate.rs` | `validate(&MathArtifact, …)` (Task 3) |
-| `studio/tuner/src/fitness.rs` | `band_misses(&MathArtifact, …)` (Task 3) |
-| `studio/tuner/src/genetic.rs` | Artifact-typed loop, composed mutate/crossover arms, family-aware gene columns (Task 3) |
-| `studio/tuner/src/report.rs` | Test fixture only (Task 3) |
-| `studio/tuner/src/bin/tune.rs` | Artifact parse + family-aware model write (Task 4) |
-| `studio/tuner/src/bin/tune_json.rs` | Artifact parse, `family` + `stateRtp`/`stateVisitFreq` NDJSON, meter bounds JSON (Task 4) |
+| File                                | Change                                                                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `studio/simulator/src/artifact.rs`  | Add `PartialEq` derive + `as_slots()` / `composed_def()` accessors (Task 1)                                        |
+| `studio/tuner/src/genome.rs`        | `Genome` enum, `ComposedGenome`, composed encode/decode (Task 1), shared repair helpers + composed repair (Task 2) |
+| `studio/tuner/src/config.rs`        | `GeneBounds` gains `meter_target_min/max` (Task 2)                                                                 |
+| `studio/tuner/src/outcome.rs`       | `TuneOutcome.model: MathArtifact`; `GenSnapshot.best_state_rtp` (Task 3)                                           |
+| `studio/tuner/src/lib.rs`           | `Tuner` trait over `MathArtifact` (Task 3)                                                                         |
+| `studio/tuner/src/validate.rs`      | `validate(&MathArtifact, …)` (Task 3)                                                                              |
+| `studio/tuner/src/fitness.rs`       | `band_misses(&MathArtifact, …)` (Task 3)                                                                           |
+| `studio/tuner/src/genetic.rs`       | Artifact-typed loop, composed mutate/crossover arms, family-aware gene columns (Task 3)                            |
+| `studio/tuner/src/report.rs`        | Test fixture only (Task 3)                                                                                         |
+| `studio/tuner/src/bin/tune.rs`      | Artifact parse + family-aware model write (Task 4)                                                                 |
+| `studio/tuner/src/bin/tune_json.rs` | Artifact parse, `family` + `stateRtp`/`stateVisitFreq` NDJSON, meter bounds JSON (Task 4)                          |
 
 ---
 
 ### Task 1: Genome enum + composed encode/decode
 
 **Files:**
+
 - Modify: `studio/simulator/src/artifact.rs` (derive + accessors)
 - Modify: `studio/tuner/src/genome.rs`
 
 **Interfaces:**
+
 - Consumes: `MathArtifact` (SP-A, `bloom_simulator::artifact`), `GameDefinition`/`BudgetSpec` (`bloom_math::mechanics::composed`), `SectionLocks` (`crate::config`).
 - Produces (later tasks rely on these exact names):
   - `pub enum Genome { Slots(SlotsGenome), Composed(ComposedGenome) }` (derive `Debug, Clone, PartialEq`)
@@ -539,10 +542,12 @@ git commit -m "feat(tuner): Genome enum with composed variant + encode/decode"
 ### Task 2: Composed repair + shared constraint clamps + GeneBounds
 
 **Files:**
+
 - Modify: `studio/tuner/src/config.rs`
 - Modify: `studio/tuner/src/genome.rs`
 
 **Interfaces:**
+
 - Consumes: Task 1's `Genome`/`ComposedGenome`/`strip_surfaces`, `MathArtifact::Composed { reels, .. }` (the typed base `ReelsConfig` SP-A captures).
 - Produces:
   - `GeneBounds` gains `pub meter_target_min: u32, pub meter_target_max: u32`
@@ -824,6 +829,7 @@ git commit -m "feat(tuner): composed repair + shared strip/paytable clamp helper
 This is the type flip: `SlotModel` → `MathArtifact` through the whole search path, plus the composed arms of mutate/crossover and family-aware telemetry columns. It's one coherent change — the pieces don't compile independently.
 
 **Files:**
+
 - Modify: `studio/tuner/src/outcome.rs`
 - Modify: `studio/tuner/src/lib.rs`
 - Modify: `studio/tuner/src/validate.rs`
@@ -834,6 +840,7 @@ This is the type flip: `SlotModel` → `MathArtifact` through the whole search p
 - Modify: `studio/tuner/src/genome.rs` (delete the Task-1 shim)
 
 **Interfaces:**
+
 - Consumes: SP-A's `bloom_simulator::artifact::simulate(&MathArtifact, &[u64]) -> Vec<RoundSample>`, `bloom_simulator::run::verify_artifact(&MathArtifact, &Metrics, &TargetSpec, usize) -> Result<(), Metrics>`, `artifact.static_violations(&TargetSpec)`, `artifact.validate_constraints(&TargetSpec)`, `Metrics.state_rtp: BTreeMap<String, f64>`; Tasks 1–2's `encode_with_locks`/`decode`/`repair`.
 - Produces:
   - `pub trait Tuner { fn tune(&self, seed: &MathArtifact, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome; }`
@@ -1166,6 +1173,7 @@ use bloom_simulator::run::verify_artifact;
 (drop `measure::simulate` and `run::verify`; `SlotModel` stays only if a helper still needs it — it shouldn't.)
 
 Mechanical renames in `tune_with_progress` (delete the Task-1 shim usage):
+
 - signature: `pub fn tune_with_progress(seed: &MathArtifact, target: &TargetSpec, cfg: &TunerConfig, on_progress: &mut dyn FnMut(&GenSnapshot)) -> TuneOutcome`
 - `encode_with_locks_slots(seed_model, &cfg.locks)` → `encode_with_locks(seed, &cfg.locks)`
 - every `decode_slots(genome, seed_model)` → `decode(genome, seed)` (type `MathArtifact`)
@@ -1401,10 +1409,12 @@ git commit -m "feat(tuner): artifact-typed GA core with composed mutate/crossove
 ### Task 4: Family-aware CLIs (`tune_json`, `tune`)
 
 **Files:**
+
 - Modify: `studio/tuner/src/bin/tune_json.rs`
 - Modify: `studio/tuner/src/bin/tune.rs`
 
 **Interfaces:**
+
 - Consumes: `MathArtifact::from_json_value` (SP-A; slots default when no top-level `family`), Task 3's artifact-typed `validate`/`tune_with_progress`/`Tuner`, `MathArtifact::as_slots`/`composed_def`/`family()`.
 - Produces (wire contract, additive):
   - progress lines gain `"family"` and `"stateRtp"`
