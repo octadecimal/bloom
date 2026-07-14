@@ -120,21 +120,19 @@ export function NavRail() {
       data-testid="nav-rail"
       className={`flex flex-shrink-0 flex-col items-center gap-1 overflow-hidden border-r border-border bg-canvas py-2 transition-[width] duration-150 ${expanded ? 'w-44' : 'w-10'}`}
     >
-      {
-        groups.map((group, gi) => (
-          <div
-            key={gi}
-            className={`flex flex-col gap-1 ${expanded ? 'w-full px-1' : 'w-8 items-center'} ${
-              gi > 0 && (!expanded || !group.label) ? 'mt-1 border-t border-border pt-2' : ''
-            }`}
-          >
-            {expanded && group.label && <div className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</div>}
-            {group.panes.map((p) => (
-              <RailButton key={p.id} pane={p} expanded={expanded} />
-            ))}
-          </div>
-        ))
-      }
+      {groups.map((group, gi) => (
+        <div
+          key={gi}
+          className={`flex flex-col gap-1 ${expanded ? 'w-full px-1' : 'w-8 items-center'} ${
+            gi > 0 && (!expanded || !group.label) ? 'mt-1 border-t border-border pt-2' : ''
+          }`}
+        >
+          {expanded && group.label && <div className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</div>}
+          {group.panes.map((p) => (
+            <RailButton key={p.id} pane={p} expanded={expanded} />
+          ))}
+        </div>
+      ))}
       <div className="flex-1" />
       <div className={`flex flex-col gap-1 ${expanded ? 'w-full px-1' : 'w-8 items-center'}`}>
         {utility.map((p) => (
