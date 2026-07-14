@@ -33,13 +33,17 @@ const PANES = [
 beforeEach(() => {
   openPane.mockClear();
   _resetDockviewApiForTests();
+  localStorage.clear();
   setHost(fakeHost(PANES));
 });
 
 describe('NavRail', () => {
   it('renders one launcher per registered pane, curated order first, utilities last', () => {
     render(<NavRail />);
-    const ids = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid'));
+    const ids = screen
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('data-testid'))
+      .filter((id) => id?.startsWith('rail-open-'));
     expect(ids).toEqual([
       'rail-open-llm-chat/room',
       'rail-open-gdd/viewer',
@@ -84,5 +88,32 @@ describe('NavRail', () => {
     expect(screen.getByTestId('rail-open-game/preview').className).toContain('bg-selection');
     expect(screen.getByTestId('rail-open-llm-chat/room').className).toContain('text-foreground');
     expect(screen.getByTestId('rail-open-math/viewer').className).toContain('text-muted-foreground');
+  });
+});
+
+describe('NavRail expand/collapse', () => {
+  it('starts collapsed by default with an expand toggle', () => {
+    render(<NavRail />);
+    expect(screen.getByTestId('nav-rail').className).toContain('w-10');
+    const toggle = screen.getByTestId('rail-toggle');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('title', 'Expand navigation');
+  });
+
+  it('toggle expands the rail and persists the choice', () => {
+    render(<NavRail />);
+    fireEvent.click(screen.getByTestId('rail-toggle'));
+    expect(screen.getByTestId('nav-rail').className).toContain('w-44');
+    expect(screen.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(localStorage.getItem('bloom.navRailExpanded')).toBe('1');
+  });
+
+  it('mounts expanded when persisted; collapsing clears the key', () => {
+    localStorage.setItem('bloom.navRailExpanded', '1');
+    render(<NavRail />);
+    expect(screen.getByTestId('nav-rail').className).toContain('w-44');
+    fireEvent.click(screen.getByTestId('rail-toggle'));
+    expect(screen.getByTestId('nav-rail').className).toContain('w-10');
+    expect(localStorage.getItem('bloom.navRailExpanded')).toBeNull();
   });
 });

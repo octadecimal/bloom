@@ -12,6 +12,8 @@ import {
   Sigma,
   Settings,
   SquarePen,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { getHost } from '../state/hostRef';
 import { getDockviewApi, onDockviewApiChange } from '../state/dockviewApiRef';
@@ -41,6 +43,7 @@ const GROUP_ORDER: string[][] = [
   ['game-config/editor', 'game-structure/editor', 'math/viewer'], // math
 ];
 const UTILITY_IDS = ['llm-chat/settings', 'llm-chat/skill-editor'];
+const EXPAND_KEY = 'bloom.navRailExpanded';
 
 // Re-render on Dockview layout/active-panel changes so open/active state stays
 // honest. Before the api attaches, everything renders in the closed tier.
@@ -96,8 +99,18 @@ export function NavRail() {
   const rest = [...panes.values()].filter((p) => !curated.has(p.id));
   if (rest.length > 0) groups.push(rest);
   const utility = UTILITY_IDS.filter((id) => panes.has(id)).map((id) => panes.get(id)!);
+  const [expanded, setExpanded] = useState(() => localStorage.getItem(EXPAND_KEY) === '1');
+  const toggle = () => {
+    const next = !expanded;
+    if (next) localStorage.setItem(EXPAND_KEY, '1');
+    else localStorage.removeItem(EXPAND_KEY);
+    setExpanded(next);
+  };
   return (
-    <nav data-testid="nav-rail" className="flex w-10 flex-shrink-0 flex-col items-center gap-1 border-r border-border bg-canvas py-2">
+    <nav
+      data-testid="nav-rail"
+      className={`flex flex-shrink-0 flex-col items-center gap-1 overflow-hidden border-r border-border bg-canvas py-2 transition-[width] duration-150 ${expanded ? 'w-44' : 'w-10'}`}
+    >
       {groups.map((group, gi) => (
         <div key={gi} className={`flex w-8 flex-col items-center gap-1 ${gi > 0 ? 'mt-1 border-t border-border pt-2' : ''}`}>
           {group.map((p) => (
@@ -110,6 +123,22 @@ export function NavRail() {
         {utility.map((p) => (
           <RailButton key={p.id} pane={p} />
         ))}
+      </div>
+      <div className={`mt-1 flex w-full flex-col border-t border-border pt-2 ${expanded ? 'px-1' : 'items-center'}`}>
+        <button
+          type="button"
+          data-testid="rail-toggle"
+          aria-expanded={expanded}
+          title={expanded ? 'Collapse navigation' : 'Expand navigation'}
+          aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+          onClick={toggle}
+          className={`flex h-8 items-center rounded-md text-muted-foreground transition-colors hover:bg-raised-hover hover:text-foreground ${expanded ? 'w-full' : 'w-8 justify-center'}`}
+        >
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center">
+            {expanded ? <PanelLeftClose aria-hidden className="h-4 w-4" /> : <PanelLeftOpen aria-hidden className="h-4 w-4" />}
+          </span>
+          {expanded && <span className="whitespace-nowrap text-xs">Collapse</span>}
+        </button>
       </div>
     </nav>
   );
