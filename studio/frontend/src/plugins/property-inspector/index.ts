@@ -8,5 +8,4 @@ export const propertyInspector: IPlugin<IPropertyInspectorState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'property-inspector/panel', title: 'Inspector', component: InspectorPane as never }],
-  commands: [{ id: 'property-inspector/open', title: 'Open Inspector', run: (host) => host.openPane('property-inspector/panel') }],
 };

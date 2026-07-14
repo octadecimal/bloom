@@ -7,8 +7,7 @@ describe('propertyInspector plugin', () => {
     expect(propertyInspector.title).toBe('Inspector');
     expect(propertyInspector.panes.map((p) => p.id)).toContain('property-inspector/panel');
     expect(propertyInspector.panes.find((p) => p.id === 'property-inspector/panel')?.title).toBe('Inspector');
-    expect(propertyInspector.commands?.map((c) => c.id)).toContain('property-inspector/open');
-    expect(propertyInspector.commands?.find((c) => c.id === 'property-inspector/open')?.title).toBe('Open Inspector');
+    expect(propertyInspector.commands).toBeUndefined();
   });
 
   it('seeds a non-persistent initial state', () => {

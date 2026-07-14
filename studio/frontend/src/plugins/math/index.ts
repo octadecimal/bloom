@@ -9,6 +9,5 @@ export const math: IPlugin<IMathState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'math/viewer', title: 'Math', component: MathPane as never }],
-  commands: [{ id: 'math/open-viewer', title: 'Open Math', run: (host) => host.openPane('math/viewer') }],
   init: () => initMath(),
 };

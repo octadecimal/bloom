@@ -9,6 +9,5 @@ export const game: IPlugin<IGameState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'game/preview', title: 'Game Scene', component: GamePreviewPane as never }],
-  commands: [{ id: 'game/open-preview', title: 'Open Game Scene', run: (host) => host.openPane('game/preview') }],
   init: () => initGame(),
 };

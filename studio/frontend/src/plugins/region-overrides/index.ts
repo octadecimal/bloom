@@ -9,6 +9,5 @@ export const regionOverrides: IPlugin = {
   persist: false,
   initialState: {},
   panes: [{ id: 'region-overrides/preview', title: 'Layout Regions', component: RegionOverridePane as never }],
-  commands: [{ id: 'region-overrides/open', title: 'Open Layout Regions', run: (host) => host.openPane('region-overrides/preview') }],
   init: () => {},
 };

@@ -8,7 +8,7 @@ describe('llmChat plugin manifest', () => {
     expect(llmChat.panes.map((p) => p.id)).toEqual(['llm-chat/room', 'llm-chat/settings', 'llm-chat/skill-editor']);
   });
 
-  it('declares three commands', () => {
-    expect(llmChat.commands?.map((c) => c.id)).toEqual(['llm-chat/open-room', 'llm-chat/open-settings', 'llm-chat/open-skill-editor']);
+  it('declares no commands (palette auto-lists panes)', () => {
+    expect(llmChat.commands).toBeUndefined();
   });
 });
