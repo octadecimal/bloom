@@ -26,10 +26,12 @@
 ### Task 1: Journey-phase layout builtins
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/layoutPresets.builtins.ts`
 - Test: `studio/frontend/src/app/layoutPresets.builtins.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `LAYOUT_BUILTINS: Record<string, (api, reg) => void>` shape consumed by `createLayoutPresetsService` (`src/host/layoutPresets.ts`) — unchanged.
 - Produces: `LAYOUT_BUILTINS` with exactly four keys: `Design`, `Art`, `Math`, `Play`. Task 2 references `LAYOUT_BUILTINS.Art`; Task 3's switcher calls `presets.apply('<key>')` with these names.
 
@@ -187,10 +189,12 @@ git commit -m "feat(studio): journey-phase layout builtins (Design/Art/Math/Play
 ### Task 2: Default layout = Art phase (delete workbenchSetup.ts)
 
 **Files:**
+
 - Delete: `studio/frontend/src/app/workbenchSetup.ts`
 - Modify: `studio/frontend/src/app/setupApp.ts`
 
 **Interfaces:**
+
 - Consumes: `LAYOUT_BUILTINS.Art(api, paneRegistry)` from Task 1 (already imported in `setupApp.ts` as `LAYOUT_BUILTINS`).
 - Produces: nothing new — `setupApp` behavior only. The e2e default-layout contract (Task 6) becomes: first run / Reset shows `llm-chat/room` + `game/preview` + `property-inspector/panel` + `assets/board`.
 
@@ -207,20 +211,20 @@ import { DEFAULT_LAYOUT } from './workbenchSetup';
 Replace the two call sites:
 
 ```ts
-  const layoutService = createLayoutService({
-    paneRegistry,
-    defaultLayout: (a) => LAYOUT_BUILTINS.Art(a, paneRegistry),
-  });
+const layoutService = createLayoutService({
+  paneRegistry,
+  defaultLayout: (a) => LAYOUT_BUILTINS.Art(a, paneRegistry),
+});
 
-  const host = createHost({
-    paneRegistry,
-    commandRegistry,
-    getApi: () => api,
-    resetLayout: () => {
-      layoutService.reset();
-      if (api) LAYOUT_BUILTINS.Art(api, paneRegistry);
-    },
-  });
+const host = createHost({
+  paneRegistry,
+  commandRegistry,
+  getApi: () => api,
+  resetLayout: () => {
+    layoutService.reset();
+    if (api) LAYOUT_BUILTINS.Art(api, paneRegistry);
+  },
+});
 ```
 
 (`LAYOUT_BUILTINS` is already imported on line 14 — keep that import.)
@@ -255,11 +259,13 @@ git commit -m "feat(studio): default layout delegates to the Art phase preset"
 ### Task 3: PhaseSwitcher in the toolbar
 
 **Files:**
+
 - Create: `studio/frontend/src/app/PhaseSwitcher.tsx`
 - Create: `studio/frontend/src/app/PhaseSwitcher.spec.tsx`
 - Modify: `studio/frontend/src/app/Workbench.tsx`
 
 **Interfaces:**
+
 - Consumes: `getLayoutPresets()/setLayoutPresets()` from `src/state/layoutPresetsRef.ts`; `ILayoutPresetsService.apply(name: string): boolean`.
 - Produces: `<PhaseSwitcher />` (no props), testids `phase-switcher` and `phase-Design` / `phase-Art` / `phase-Math` / `phase-Play` (Task 6's e2e clicks `phase-Math`).
 
@@ -361,9 +367,9 @@ import { PhaseSwitcher } from './PhaseSwitcher';
 ```
 
 ```tsx
-        <div className="flex flex-1 items-center justify-center">
-          <PhaseSwitcher />
-        </div>
+<div className="flex flex-1 items-center justify-center">
+  <PhaseSwitcher />
+</div>
 ```
 
 - [ ] **Step 6: Verify typecheck + suite**
@@ -387,10 +393,12 @@ git commit -m "feat(studio): toolbar phase switcher applies journey presets"
 ### Task 4: Demo panes out of prod
 
 **Files:**
+
 - Modify: `studio/frontend/src/plugins/index.ts`
 - Create: `studio/frontend/src/plugins/index.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `import.meta.env.PROD` (same guard pattern as `__injectPlugins` in `setupApp.ts`).
 - Produces: `PLUGINS: IPlugin[]` — demo plugins present in dev, absent in prod. Nothing else changes.
 
@@ -482,9 +490,10 @@ git commit -m "feat(studio): gate demo panes out of prod builds"
 
 ---
 
-### Task 5: Palette — hint button, auto-listed panes, delete open-* commands
+### Task 5: Palette — hint button, auto-listed panes, delete open-\* commands
 
 **Files:**
+
 - Modify: `studio/frontend/src/app/CommandPalette.tsx`
 - Create: `studio/frontend/src/app/CommandPalette.spec.tsx`
 - Modify: `studio/frontend/src/app/Workbench.tsx`
@@ -492,6 +501,7 @@ git commit -m "feat(studio): gate demo panes out of prod builds"
 - Modify (manifest specs): `studio/frontend/src/plugins/llm-chat/index.spec.ts`, `assets/index.spec.ts`, `scene-graph/index.spec.ts`, `property-inspector/index.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `IPluginHost.listPanes(): IPaneDef[]`, `listCommands(): ICommandDef[]`, `openPane(id)`, `runCommand(id)` via `getHost()/setHost()` (`src/state/hostRef.ts`).
 - Produces: `CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void })` — now controlled; Workbench owns the state. Toolbar button testid `palette-hint`. `demo-counter/increment` is the ONLY plugin command left (e2e `chrome.spec.ts` runs it — do not delete it).
 
@@ -633,7 +643,7 @@ import { useState, type ReactNode } from 'react';
 Inside the component, before `return`:
 
 ```tsx
-  const [paletteOpen, setPaletteOpen] = useState(false);
+const [paletteOpen, setPaletteOpen] = useState(false);
 ```
 
 In the toolbar, immediately after the PhaseSwitcher flex-space div (before `{roomContext && …}`), add:
@@ -654,10 +664,10 @@ In the toolbar, immediately after the PhaseSwitcher flex-space div (before `{roo
 And change the palette render to:
 
 ```tsx
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+<CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 ```
 
-- [ ] **Step 5: Delete the hand-written open-* plugin commands**
+- [ ] **Step 5: Delete the hand-written open-\* plugin commands**
 
 Remove the entire `commands:` property from these 10 plugin manifests (the auto-listed pane entries replace them; `demo-counter/increment` in `demo-counter/index.ts` STAYS):
 
@@ -677,9 +687,9 @@ Remove the entire `commands:` property from these 10 plugin manifests (the auto-
 `src/plugins/llm-chat/index.spec.ts` — replace the `'declares three commands'` test with:
 
 ```ts
-  it('declares no commands (palette auto-lists panes)', () => {
-    expect(llmChat.commands).toBeUndefined();
-  });
+it('declares no commands (palette auto-lists panes)', () => {
+  expect(llmChat.commands).toBeUndefined();
+});
 ```
 
 `src/plugins/assets/index.spec.ts` — in the `'declares id, pane, and command'` test, replace the commands assertion line with `expect(assets.commands).toBeUndefined();` (and rename the test to `'declares id and pane'`).
@@ -709,10 +719,12 @@ git commit -m "feat(studio): palette hint button + auto-listed pane commands, dr
 ### Task 6: E2e updates — new default layout, builtin names, phase switcher
 
 **Files:**
+
 - Modify: `studio/frontend/e2e/layout-presets.spec.ts`
 - Modify: `studio/frontend/e2e/layout.spec.ts`
 
 **Interfaces:**
+
 - Consumes: testids from earlier tasks — `phase-Math`, `layout-apply-Design`; pane testids `chat-room-pane`, `asset-board`, `gdd-no-game`, `gc-no-game`, `math-no-game` (hermetic `gotoWorkbench` rooms have `gameId: null`, so the no-game placeholders render); dv `__wbApi` dev hook.
 - Produces: green Playwright specs encoding the new default-layout contract.
 
@@ -792,26 +804,26 @@ The old default pane used for close/persist/reset assertions was `llm-chat/setti
 Test 1 (`layout persists across reload…`): replace the close + waits:
 
 ```ts
-  // Close a DEFAULT pane (asset board) via __wbApi so it's missing from the layout.
-  await page.evaluate(() => (window as any).__wbApi?.getPanel('assets/board')?.api.close());
-  await page.getByTestId('asset-board').waitFor({ state: 'detached' });
+// Close a DEFAULT pane (asset board) via __wbApi so it's missing from the layout.
+await page.evaluate(() => (window as any).__wbApi?.getPanel('assets/board')?.api.close());
+await page.getByTestId('asset-board').waitFor({ state: 'detached' });
 
-  // Wait for the debounced (~250ms) layout save to flush — layout must NOT include the closed pane.
-  await page.waitForFunction(() => {
-    const val = localStorage.getItem('bloom.studio.layout');
-    return val != null && !val.includes('assets/board');
-  });
+// Wait for the debounced (~250ms) layout save to flush — layout must NOT include the closed pane.
+await page.waitForFunction(() => {
+  const val = localStorage.getItem('bloom.studio.layout');
+  return val != null && !val.includes('assets/board');
+});
 ```
 
 …and the two assertions after reload / after reset:
 
 ```ts
-  await expect(page.getByTestId('asset-board')).toHaveCount(0);
+await expect(page.getByTestId('asset-board')).toHaveCount(0);
 ```
 
 ```ts
-  // After reset: add-if-missing re-adds the asset board — proves reset re-applied the default.
-  await expect(page.getByTestId('asset-board')).toBeVisible();
+// After reset: add-if-missing re-adds the asset board — proves reset re-applied the default.
+await expect(page.getByTestId('asset-board')).toBeVisible();
 ```
 
 Test 2 (corrupt layout): update the stale comment — the fallback default is the Art phase — and keep the `chat-room-pane` assertion (still valid).
@@ -819,14 +831,14 @@ Test 2 (corrupt layout): update the stale comment — the fallback default is th
 Test 3 (drag smoke): the `Chat Settings` tab no longer exists by default. Drag the `Asset Board` tab instead:
 
 ```ts
-  const source = page.locator('.dv-tab', { hasText: 'Asset Board' }).first();
-  const target = page.getByTestId('chat-room-pane');
-  await source.dragTo(target, { force: true });
-  // Active panel content is attached — no crash or blank dockview.
-  await page.getByTestId('asset-board').waitFor({ state: 'attached' });
-  // Both tab-strip entries survive — neither panel was accidentally closed by the drag.
-  await expect(page.locator('.dv-tab', { hasText: 'Asset Board' })).toHaveCount(1);
-  await expect(page.locator('.dv-tab', { hasText: 'Chat Room' })).toHaveCount(1);
+const source = page.locator('.dv-tab', { hasText: 'Asset Board' }).first();
+const target = page.getByTestId('chat-room-pane');
+await source.dragTo(target, { force: true });
+// Active panel content is attached — no crash or blank dockview.
+await page.getByTestId('asset-board').waitFor({ state: 'attached' });
+// Both tab-strip entries survive — neither panel was accidentally closed by the drag.
+await expect(page.locator('.dv-tab', { hasText: 'Asset Board' })).toHaveCount(1);
+await expect(page.locator('.dv-tab', { hasText: 'Chat Room' })).toHaveCount(1);
 ```
 
 - [ ] **Step 3: Commit**
