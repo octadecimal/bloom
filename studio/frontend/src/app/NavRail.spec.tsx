@@ -135,6 +135,16 @@ describe('NavRail expand/collapse', () => {
     expect(screen.getByTestId('rail-open-math/viewer')).not.toHaveAttribute('title');
   });
 
+  it('expands as an overlay: the layout slot stays w-10 and the rail floats above the dock', () => {
+    render(<NavRail />);
+    const slot = screen.getByTestId('nav-rail-slot');
+    expect(slot.className).toContain('w-10');
+    fireEvent.click(screen.getByTestId('rail-toggle'));
+    // the slot never grows — the dock area must not resize on expand
+    expect(slot.className).toContain('w-10');
+    expect(screen.getByTestId('nav-rail').className).toContain('absolute');
+  });
+
   it('gives the uncurated overflow group no header when expanded', () => {
     setHost(fakeHost([...PANES, { id: 'mystery/pane', title: 'Zephyr' }]));
     render(<NavRail />);

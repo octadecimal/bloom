@@ -20,6 +20,22 @@ test('active tint follows the active panel', async ({ page }) => {
   await expect(page.getByTestId('rail-open-math/viewer')).not.toHaveClass(/bg-selection/);
 });
 
+test('expanding the rail overlays the dock without resizing it', async ({ page }) => {
+  await gotoWorkbench(page);
+  const dock = page.getByTestId('dock-area');
+  const before = await dock.boundingBox();
+  expect(before).not.toBeNull();
+
+  await page.getByTestId('rail-toggle').click();
+  await expect(page.getByTestId('nav-rail')).toContainText('Design');
+  // The dock never moves or resizes — the rail expands as an overlay.
+  expect(await dock.boundingBox()).toEqual(before);
+
+  await page.getByTestId('rail-toggle').click();
+  await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'false');
+  expect(await dock.boundingBox()).toEqual(before);
+});
+
 test('rail expands with labels, persists across reload, collapses back', async ({ page }) => {
   await gotoWorkbench(page);
   const toggle = page.getByTestId('rail-toggle');
