@@ -1,6 +1,7 @@
 """MathStore.family — the one backend answer to 'what family is this game'."""
 import pytest
 
+from app.compose.models import GameDefinitionDoc
 from app.math.store import MathStore
 
 
@@ -21,7 +22,16 @@ class _FakeComposeStore:
         self._has = has_doc
 
     async def get(self, game_id):
-        return object() if self._has else None
+        return self._doc() if self._has else None
+
+    async def get_or_seed(self, game_id):
+        # Task 2 dispatch calls this when family() already resolved composed@1
+        # (e.g. get_or_seed's own family check) — mirror ComposeStore's shape.
+        return self._doc()
+
+    def _doc(self):
+        return GameDefinitionDoc(id="fake", game_id="g1", definition={},
+                                 created_at="t0", updated_at="t0")
 
 
 def _store(mongo_db, *, compose_has=False, gdd_data=None):
