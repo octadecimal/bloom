@@ -210,14 +210,6 @@ pub fn decode(genome: &Genome, template: &MathArtifact) -> MathArtifact {
     }
 }
 
-/// Transitional slots-only shim; genetic.rs flips to the enum in Task 3.
-pub fn encode_with_locks_slots(model: &SlotModel, locks: &SectionLocks) -> SlotsGenome {
-    match encode_with_locks(&MathArtifact::Slots(model.clone()), locks) {
-        Genome::Slots(g) => g,
-        Genome::Composed(_) => unreachable!(),
-    }
-}
-
 pub fn decode_slots(genome: &SlotsGenome, template: &SlotModel) -> SlotModel {
     // An empty gene group means the group is locked (omitted from the genome)
     // or absent from the template: copy it verbatim from the template.

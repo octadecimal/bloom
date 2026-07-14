@@ -15,7 +15,7 @@ pub mod validate;
 pub use genetic::{tune_with_progress, GeneticTuner};
 pub use validate::validate;
 
-use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::TargetSpec;
 use config::TunerConfig;
 use outcome::TuneOutcome;
@@ -24,5 +24,5 @@ use outcome::TuneOutcome;
 /// A future hill-climb / CMA-ES / AI-designer is a new `impl Tuner` with no
 /// change to callers.
 pub trait Tuner {
-    fn tune(&self, seed_model: &SlotModel, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome;
+    fn tune(&self, seed: &MathArtifact, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome;
 }

@@ -4,6 +4,7 @@
 //! An all-locked config emits a {"type":"error"} frame and exits 0.
 
 use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::TargetSpec;
 use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
 use bloom_tuner::genetic::tune_with_progress;
@@ -154,7 +155,7 @@ fn result_line(out: &TuneOutcome) -> String {
     json!({
         "type": "result",
         "verdict": verdict,
-        "model": out.model,
+        "model": out.model.as_slots().expect("slots input"),
         "metrics": {
             "rtp": out.metrics.rtp,
             "volatility": out.metrics.volatility,
@@ -249,14 +250,15 @@ fn main() {
         return;
     }
 
-    if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {
+    let artifact = MathArtifact::Slots(model);
+    if let Err(e) = bloom_tuner::validate(&artifact, &target, &cfg) {
         eprintln!("invalid input: {e}");
         std::process::exit(2);
     }
 
     let max_generations = cfg.max_generations;
     let mut on_progress = |s: &GenSnapshot| emit(progress_line(s, max_generations));
-    let out = tune_with_progress(&model, &target, &cfg, &mut on_progress);
+    let out = tune_with_progress(&artifact, &target, &cfg, &mut on_progress);
     emit(result_line(&out));
 }
 
@@ -271,14 +273,14 @@ mod tests {
 
     fn outcome(verdict: Verdict) -> TuneOutcome {
         TuneOutcome {
-            model: SlotModel {
+            model: MathArtifact::Slots(SlotModel {
                 symbols: vec![],
                 reels: vec![],
                 rows: 1,
                 paylines: vec![],
                 paytable: Paytable { entries: vec![] },
                 bonuses: vec![],
-            },
+            }),
             metrics: Metrics {
                 rtp: 0.901,
                 volatility: 3.2,
@@ -298,6 +300,7 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
+                    best_state_rtp: Default::default(),
                     population: population_stats(&[-0.9, -0.5, -0.1]),
                     gene_agreement: vec![0.8, 0.6],
                 }],
@@ -339,6 +342,7 @@ mod tests {
             best_rtp: 0.85,
             best_volatility: 2.1,
             best_bonus_hit_rates: vec![],
+            best_state_rtp: Default::default(),
             population: population_stats(&[-0.25]),
             gene_agreement: vec![1.0],
         };
@@ -395,6 +399,7 @@ mod tests {
             best_rtp: 0.85,
             best_volatility: 2.1,
             best_bonus_hit_rates: vec![],
+            best_state_rtp: Default::default(),
             population: bloom_tuner::telemetry::PopulationStats {
                 min: -0.9,
                 q1: -0.7,

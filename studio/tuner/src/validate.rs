@@ -3,7 +3,7 @@
 //! `verify` asserts band-count == bonus-count).
 
 use crate::config::TunerConfig;
-use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::TargetSpec;
 
 /// Absurdity ceilings: far above any honest tune (defaults: population 24,
@@ -16,18 +16,17 @@ pub const MAX_CANDIDATE_COUNT: usize = 100_000_000;
 /// Returns `Err(message)` if the inputs would cause a downstream panic or are
 /// nonsensical. Checks: one hit-rate band per model bonus; every gene bound has
 /// `min <= max`; non-zero population.
-pub fn validate(
-    seed_model: &SlotModel,
-    target: &TargetSpec,
-    cfg: &TunerConfig,
-) -> Result<(), String> {
-    if target.bonus_hit_rate_bands.len() != seed_model.bonuses.len() {
-        return Err(format!(
-            "target has {} bonus_hit_rate_bands but model has {} bonuses (must match)",
-            target.bonus_hit_rate_bands.len(),
-            seed_model.bonuses.len()
-        ));
+pub fn validate(seed: &MathArtifact, target: &TargetSpec, cfg: &TunerConfig) -> Result<(), String> {
+    if let MathArtifact::Slots(m) = seed {
+        if target.bonus_hit_rate_bands.len() != m.bonuses.len() {
+            return Err(format!(
+                "target has {} bonus_hit_rate_bands but model has {} bonuses (must match)",
+                target.bonus_hit_rate_bands.len(),
+                m.bonuses.len()
+            ));
+        }
     }
+    // (composed: bonus bands are rejected by validate_constraints below — #160)
     let b = &cfg.bounds;
     if b.payout_min > b.payout_max {
         return Err(format!(
@@ -51,6 +50,12 @@ pub fn validate(
         return Err(format!(
             "min_count_min ({}) > min_count_max ({})",
             b.min_count_min, b.min_count_max
+        ));
+    }
+    if b.meter_target_min > b.meter_target_max {
+        return Err(format!(
+            "meter_target_min ({}) > meter_target_max ({})",
+            b.meter_target_min, b.meter_target_max
         ));
     }
     if cfg.population == 0 {
@@ -80,7 +85,7 @@ pub fn validate(
             cfg.final_candidate_count, MAX_CANDIDATE_COUNT
         ));
     }
-    bloom_simulator::validate_constraints(seed_model, target)?;
+    seed.validate_constraints(target)?;
     Ok(())
 }
 
@@ -89,6 +94,7 @@ mod tests {
     use super::*;
     use crate::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
     use bloom_math::mechanics::slots::{Paytable, SlotModel};
+    use bloom_simulator::artifact::MathArtifact;
     use bloom_simulator::target::{HitRateBand, TargetSpec};
 
     fn model(n_bonuses: usize) -> SlotModel {
@@ -173,12 +179,12 @@ mod tests {
 
     #[test]
     fn ok_when_counts_match_and_bounds_sane() {
-        assert!(validate(&model(1), &target(1), &cfg()).is_ok());
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &cfg()).is_ok());
     }
 
     #[test]
     fn rejects_band_bonus_count_mismatch() {
-        let err = validate(&model(1), &target(0), &cfg()).unwrap_err();
+        let err = validate(&MathArtifact::Slots(model(1)), &target(0), &cfg()).unwrap_err();
         assert!(err.contains("bonus_hit_rate_bands"));
     }
 
@@ -187,14 +193,14 @@ mod tests {
         let mut c = cfg();
         c.bounds.payout_min = 100;
         c.bounds.payout_max = 1;
-        assert!(validate(&model(1), &target(1), &c).is_err());
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &c).is_err());
     }
 
     #[test]
     fn rejects_zero_population() {
         let mut c = cfg();
         c.population = 0;
-        assert!(validate(&model(1), &target(1), &c)
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &c)
             .unwrap_err()
             .contains("population"));
     }
@@ -203,7 +209,7 @@ mod tests {
     fn rejects_oversized_population() {
         let mut c = cfg();
         c.population = MAX_POPULATION + 1;
-        assert!(validate(&model(1), &target(1), &c)
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &c)
             .unwrap_err()
             .contains("population"));
     }
@@ -212,7 +218,7 @@ mod tests {
     fn rejects_oversized_generations() {
         let mut c = cfg();
         c.max_generations = MAX_GENERATIONS + 1;
-        assert!(validate(&model(1), &target(1), &c)
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &c)
             .unwrap_err()
             .contains("max_generations"));
     }
@@ -221,7 +227,7 @@ mod tests {
     fn rejects_oversized_candidate_count() {
         let mut c = cfg();
         c.search_candidate_count = MAX_CANDIDATE_COUNT + 1;
-        assert!(validate(&model(1), &target(1), &c)
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &c)
             .unwrap_err()
             .contains("search_candidate_count"));
     }
@@ -230,7 +236,7 @@ mod tests {
     fn rejects_oversized_final_candidate_count() {
         let mut c = cfg();
         c.final_candidate_count = MAX_CANDIDATE_COUNT + 1;
-        assert!(validate(&model(1), &target(1), &c)
+        assert!(validate(&MathArtifact::Slots(model(1)), &target(1), &c)
             .unwrap_err()
             .contains("final_candidate_count"));
     }
@@ -244,8 +250,43 @@ mod tests {
             count: None,
             value: 5,
         }];
-        assert!(validate(&model(1), &t, &cfg())
+        assert!(validate(&MathArtifact::Slots(model(1)), &t, &cfg())
             .unwrap_err()
             .contains("unknown model symbol"));
+    }
+
+    fn composed() -> MathArtifact {
+        // reuse the smallest valid composed definition
+        let def = serde_json::from_value(serde_json::json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "main", "type": "reels@1",
+                  "config": { "strips": [[0, 1]], "rows": 1,
+                    "symbols": [{"id":0,"role":"normal"},{"id":1,"role":"normal"}],
+                    "paylines": [[0]],
+                    "paytable": { "entries": [{"symbol":1,"count":1,"payout":1}] } } }
+            ],
+            "states": [ { "id": "base", "bindings": [{ "mechanic": "main" }],
+                "steps": { "budget": 1 }, "script": [{ "invoke": "main.spin" }] } ],
+            "start": "base", "transitions": [], "caps": { "max_steps": 10 }
+        }))
+        .unwrap();
+        MathArtifact::from_definition(def).unwrap()
+    }
+
+    #[test]
+    fn composed_rejects_bonus_bands_via_constraints() {
+        let err = validate(&composed(), &target(1), &cfg()).unwrap_err();
+        assert!(err.contains("#160"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_inverted_meter_target_bounds() {
+        let mut c = cfg();
+        c.bounds.meter_target_min = 50;
+        c.bounds.meter_target_max = 1;
+        assert!(validate(&composed(), &target(0), &c)
+            .unwrap_err()
+            .contains("meter_target"));
     }
 }

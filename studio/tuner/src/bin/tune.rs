@@ -5,6 +5,7 @@
 //! Usage: tune <seed_model.json> <target.json> <tuner_config.json> <out_model.json> <out_report.txt>
 
 use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::TargetSpec;
 use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
 use bloom_tuner::outcome::Verdict;
@@ -115,14 +116,16 @@ fn main() {
         },
     };
 
-    if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {
+    let artifact = MathArtifact::Slots(model);
+    if let Err(e) = bloom_tuner::validate(&artifact, &target, &cfg) {
         eprintln!("invalid input: {e}");
         std::process::exit(2);
     }
 
-    let out = GeneticTuner.tune(&model, &target, &cfg);
+    let out = GeneticTuner.tune(&artifact, &target, &cfg);
     let report = render_report(&out);
-    let model_json = serde_json::to_string_pretty(&out.model).expect("serialize tuned model");
+    let model_json = serde_json::to_string_pretty(out.model.as_slots().expect("slots input"))
+        .expect("serialize tuned model");
 
     fs::write(&args[4], model_json).expect("write tuned model");
     fs::write(&args[5], &report).expect("write report");
