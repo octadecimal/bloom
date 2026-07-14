@@ -50,7 +50,7 @@ export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <div className="flex flex-1 overflow-hidden">
         <NavRail />
-        <div className="flex-1 overflow-hidden">
+        <div data-testid="dock-area" className="flex-1 overflow-hidden">
           <DockviewReact theme={bloomTheme} components={app.components as never} onReady={(e: DockviewReadyEvent) => app.attachDockview(e.api)} />
         </div>
       </div>
