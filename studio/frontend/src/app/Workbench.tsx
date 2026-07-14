@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { DockviewReact, type DockviewReadyEvent } from 'dockview-react';
 import { useApp } from './AppContext';
 import { useApplyTheme } from './useApplyTheme';
@@ -10,11 +10,13 @@ import { SwitchUser } from './SwitchUser';
 import { ModeBadge } from './ModeBadge';
 import { BrandMark } from './BrandMark';
 import { ToolbarDivider } from './ToolbarDivider';
+import { PhaseSwitcher } from './PhaseSwitcher';
 
 export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
   const app = useApp();
   useApplyTheme();
   useFocusChatShortcut();
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   return (
     <div data-testid="workbench" className="flex h-screen flex-col bg-canvas font-sans text-foreground">
@@ -22,7 +24,19 @@ export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
         <BrandMark />
         <ToolbarDivider />
         <AppMenubar />
-        <div className="flex-1" />
+        <div className="flex flex-1 items-center justify-center">
+          <PhaseSwitcher />
+        </div>
+        <button
+          type="button"
+          data-testid="palette-hint"
+          title="Open the command palette"
+          onClick={() => setPaletteOpen(true)}
+          className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-raised-hover hover:text-foreground"
+        >
+          Commands ⌘K
+        </button>
+        <ToolbarDivider />
         {roomContext && (
           <>
             {roomContext}
@@ -32,7 +46,7 @@ export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
         <ModeBadge />
         <SwitchUser />
       </div>
-      <CommandPalette />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <div className="flex-1 overflow-hidden">
         <DockviewReact theme={bloomTheme} components={app.components as never} onReady={(e: DockviewReadyEvent) => app.attachDockview(e.api)} />
       </div>

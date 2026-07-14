@@ -9,6 +9,5 @@ export const gdd: IPlugin<IGddState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'gdd/viewer', title: 'Game Design Doc', component: GddViewerPane as never }],
-  commands: [{ id: 'gdd/open-viewer', title: 'Open Game Design Doc', run: (host) => host.openPane('gdd/viewer') }],
   init: () => initGdd(),
 };

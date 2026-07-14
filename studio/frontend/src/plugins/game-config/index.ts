@@ -9,6 +9,5 @@ export const gameConfig: IPlugin<IGameConfigState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'game-config/editor', title: 'Game Config', component: GameConfigPane as never }],
-  commands: [{ id: 'game-config/open-editor', title: 'Open Game Config', run: (host) => host.openPane('game-config/editor') }],
   init: () => initGameConfig(),
 };

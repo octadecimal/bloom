@@ -16,3 +16,18 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
       dispatchEvent: () => false,
     }) as MediaQueryList;
 }
+
+// jsdom doesn't implement ResizeObserver or Element.scrollIntoView. cmdk
+// (CommandPalette's underlying list component) calls both on mount/selection,
+// so any test that renders it needs these polyfills even though it never
+// asserts on resize/scroll behavior.
+if (typeof window !== 'undefined' && !window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
