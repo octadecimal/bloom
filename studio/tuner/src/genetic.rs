@@ -216,6 +216,14 @@ fn tournament<'a>(scored: &'a [(Genome, f64)], rng: &mut SplitMix64) -> &'a Geno
 /// One column per tunable gene dimension for the agreement telemetry.
 /// Columns must be well-defined even under locks: a locked group is simply
 /// absent (no column), mirroring how the search space shrinks.
+///
+/// The inner `_ => unreachable!()` arms assume every genome in `scored` is the
+/// same `Genome` variant as `scored[0].0`. That invariant is enforced outside
+/// this function: a population is seeded from one `encode_with_locks(seed, ..)`
+/// call and every subsequent generation is built by `crossover`/`mutate`
+/// operating on that same seed's family (`crossover`'s own `_ => unreachable!`
+/// guards a stray cross-family pairing), so a run's population is always
+/// single-family.
 fn gene_columns(scored: &[(Genome, f64)]) -> Vec<Vec<f64>> {
     let mut cols: Vec<Vec<f64>> = Vec::new();
     match &scored[0].0 {

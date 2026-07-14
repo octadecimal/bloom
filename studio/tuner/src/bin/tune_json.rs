@@ -165,7 +165,7 @@ fn result_line(out: &TuneOutcome) -> String {
     let se =
         bloom_simulator::target::standard_errors(&out.metrics, out.trace.final_candidate_count);
     let model_json = match &out.model {
-        bloom_simulator::artifact::MathArtifact::Slots(m) => serde_json::to_value(m),
+        MathArtifact::Slots(m) => serde_json::to_value(m),
         a => serde_json::to_value(a.composed_def().expect("two families")),
     }
     .expect("model serializes");

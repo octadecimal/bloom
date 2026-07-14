@@ -114,16 +114,7 @@ fn is_awarded(s: &StateDef) -> bool {
 }
 
 pub fn encode_slots(model: &SlotModel) -> SlotsGenome {
-    let reel_counts = model
-        .reels
-        .iter()
-        .map(|reel| {
-            reel_symbols(reel)
-                .iter()
-                .map(|&sym| reel.iter().filter(|&&c| c == sym).count() as u32)
-                .collect()
-        })
-        .collect();
+    let reel_counts = model.reels.iter().map(|reel| strip_counts(reel)).collect();
 
     let payouts = model.paytable.entries.iter().map(|e| e.payout).collect();
 
@@ -477,10 +468,6 @@ pub fn repair_slots(
     }
 }
 
-fn clamp_u32_range(v: u32, lo: u32, hi: u32) -> u32 {
-    v.max(lo).min(hi)
-}
-
 fn repair_composed(
     genome: &mut ComposedGenome,
     def: &GameDefinition,
@@ -500,10 +487,10 @@ fn repair_composed(
         clamp_payout_constraints(&r.paytable.entries, &mut genome.payouts, constraints);
     }
     for t in &mut genome.meter_targets {
-        *t = clamp_u32_range(*t, bounds.meter_target_min.max(1), bounds.meter_target_max);
+        *t = clamp_u32(*t, bounds.meter_target_min.max(1), bounds.meter_target_max);
     }
     for b in &mut genome.awarded_budgets {
-        *b = clamp_u32_range(*b, bounds.spins_min.max(1), bounds.spins_max);
+        *b = clamp_u32(*b, bounds.spins_min.max(1), bounds.spins_max);
     }
 }
 
@@ -829,9 +816,6 @@ mod tests {
         assert!(g.payouts.is_empty());
     }
 
-    use bloom_math::mechanics::composed::GameDefinition;
-    use bloom_simulator::artifact::MathArtifact;
-
     /// Composed template with everything the genome touches: two strip
     /// surfaces (base + an fs override that redefines strips), a paytable,
     /// one meter, one awarded budget. Mirrors the demo definition's shape.
@@ -1098,5 +1082,39 @@ mod tests {
         assert_eq!(a, b);
         let Genome::Composed(cg) = &a else { panic!() };
         assert!(cg.payouts.is_empty()); // locked group untouched (nothing to clamp)
+    }
+
+    #[test]
+    fn repair_composed_handles_a_definition_with_no_reels_instance() {
+        // No reels@1 mechanic: `MathArtifact::Composed { reels, .. }` is None,
+        // so the pay-constraint clamp (which binds to the reels paytable) must
+        // be skipped rather than panic; `encode_composed` also finds no
+        // paytable to read, so payouts/surfaces stay empty groups.
+        let def: GameDefinition = serde_json::from_value(serde_json::json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "meter", "type": "meter@1",
+                  "config": { "target": 4, "count_symbol": 9 } }
+            ],
+            "states": [
+                { "id": "base", "bindings": [{ "mechanic": "meter" }],
+                  "steps": { "budget": 1 }, "script": [{ "invoke": "meter.accumulate" }] }
+            ],
+            "start": "base",
+            "transitions": [],
+            "caps": { "max_steps": 10 }
+        }))
+        .expect("fixture parses");
+        let art = MathArtifact::from_definition(def).expect("fixture compiles");
+        assert!(matches!(&art, MathArtifact::Composed { reels: None, .. }));
+
+        let mut g = Genome::Composed(encode_composed(art.composed_def().unwrap()));
+        repair(&mut g, &art, &composed_bounds(), &[floor(0, None, 10)]);
+        let Genome::Composed(cg) = &g else { panic!() };
+        assert!(cg.payouts.is_empty());
+        assert!(cg.surfaces.is_empty());
+
+        let d = decode(&g, &art);
+        assert_eq!(d.family(), "composed@1");
     }
 }
