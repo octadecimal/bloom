@@ -40,12 +40,12 @@ The rail owns a single `id → { icon, group }` map for the known panes. The
 journey grouping needs central curation anyway, so icons live in the same
 place; `IPaneDef` is unchanged and no plugin files are touched.
 
-| Group              | Panes (order)                                                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| design             | `llm-chat/room` (MessageSquare), `gdd/viewer` (FileText)                                                          |
-| art                | `game/preview` (Gamepad2), `property-inspector/panel` (SlidersHorizontal), `assets/board` (Images), `scene-graph/tree` (ListTree), `region-overrides/preview` (LayoutTemplate) |
-| math               | `game-config/editor` (Settings2), `game-structure/editor` (Network), `math/viewer` (Sigma)                        |
-| utility (bottom)   | `llm-chat/settings` (Settings), `llm-chat/skill-editor` (SquarePen)                                               |
+| Group            | Panes (order)                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| design           | `llm-chat/room` (MessageSquare), `gdd/viewer` (FileText)                                                                                                                       |
+| art              | `game/preview` (Gamepad2), `property-inspector/panel` (SlidersHorizontal), `assets/board` (Images), `scene-graph/tree` (ListTree), `region-overrides/preview` (LayoutTemplate) |
+| math             | `game-config/editor` (Settings2), `game-structure/editor` (Network), `math/viewer` (Sigma)                                                                                     |
+| utility (bottom) | `llm-chat/settings` (Settings), `llm-chat/skill-editor` (SquarePen)                                                                                                            |
 
 Hairline dividers between groups. Panes not in the map (future plugins, the
 dev-only demo panes) append to the end of the top stack before the spacer,

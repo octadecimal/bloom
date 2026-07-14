@@ -283,9 +283,7 @@ beforeEach(() => {
 describe('NavRail', () => {
   it('renders one launcher per registered pane, curated order first, utilities last', () => {
     render(<NavRail />);
-    const ids = screen
-      .getAllByRole('button')
-      .map((b) => b.getAttribute('data-testid'));
+    const ids = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid'));
     expect(ids).toEqual([
       'rail-open-llm-chat/room',
       'rail-open-gdd/viewer',
@@ -436,9 +434,7 @@ export function NavRail() {
   useDockviewVersion();
   const panes = new Map(host.listPanes().map((p) => [p.id, p]));
   const curated = new Set([...GROUP_ORDER.flat(), ...UTILITY_IDS]);
-  const groups = GROUP_ORDER.map((ids) => ids.filter((id) => panes.has(id)).map((id) => panes.get(id)!)).filter(
-    (g) => g.length > 0,
-  );
+  const groups = GROUP_ORDER.map((ids) => ids.filter((id) => panes.has(id)).map((id) => panes.get(id)!)).filter((g) => g.length > 0);
   const rest = [...panes.values()].filter((p) => !curated.has(p.id));
   if (rest.length > 0) groups.push(rest);
   const utility = UTILITY_IDS.filter((id) => panes.has(id)).map((id) => panes.get(id)!);
