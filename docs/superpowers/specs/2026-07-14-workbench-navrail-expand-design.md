@@ -36,7 +36,8 @@ untouched.
   mid-transition instead of wrapping.
 - The rail stays in normal flex flow (pushes the Dockview area, no overlay);
   Dockview already handles container resize.
-- `aria-expanded` on the `<nav>` reflects the state.
+- `aria-expanded` on the toggle button reflects the state (the ARIA-correct
+  host — `aria-expanded` belongs on the controlling element, not the `<nav>`).
 
 ### 3. Rows
 
