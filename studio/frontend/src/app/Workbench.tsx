@@ -11,6 +11,7 @@ import { ModeBadge } from './ModeBadge';
 import { BrandMark } from './BrandMark';
 import { ToolbarDivider } from './ToolbarDivider';
 import { PhaseSwitcher } from './PhaseSwitcher';
+import { NavRail } from './NavRail';
 
 export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
   const app = useApp();
@@ -47,8 +48,11 @@ export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
         <SwitchUser />
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-      <div className="flex-1 overflow-hidden">
-        <DockviewReact theme={bloomTheme} components={app.components as never} onReady={(e: DockviewReadyEvent) => app.attachDockview(e.api)} />
+      <div className="flex flex-1 overflow-hidden">
+        <NavRail />
+        <div className="flex-1 overflow-hidden">
+          <DockviewReact theme={bloomTheme} components={app.components as never} onReady={(e: DockviewReadyEvent) => app.attachDockview(e.api)} />
+        </div>
       </div>
     </div>
   );
