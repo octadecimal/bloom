@@ -19,7 +19,12 @@ export async function seedLocalStorage(page: Page, key: string, value: string) {
  * re-activates it in Dockview, which reattaches the engine iframe and reloads
  * it, dropping in-flight bridge ops. */
 export async function ensureGameSceneOpen(page: Page): Promise<void> {
-  if (!(await page.getByTestId('game-engine-frame').isVisible().catch(() => false))) {
+  if (
+    !(await page
+      .getByTestId('game-engine-frame')
+      .isVisible()
+      .catch(() => false))
+  ) {
     await page.getByTestId('menu-view').click();
     await page.getByTestId('view-open-game/preview').click();
   }
@@ -29,7 +34,10 @@ export async function ensureGameSceneOpen(page: Page): Promise<void> {
 export async function waitForSceneSync(page: Page): Promise<void> {
   await expect
     .poll(
-      () => page.evaluate(() => Object.values(((window as any).__gameSceneSnapshot?.document?.nodes ?? {}) as Record<string, any>).some((n: any) => n?.type === 'Root')),
+      () =>
+        page.evaluate(() =>
+          Object.values(((window as any).__gameSceneSnapshot?.document?.nodes ?? {}) as Record<string, any>).some((n: any) => n?.type === 'Root'),
+        ),
       { timeout: 15000 },
     )
     .toBe(true);
