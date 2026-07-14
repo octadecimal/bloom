@@ -292,21 +292,21 @@ if (rest.length > 0) groups.push({ label: '', panes: rest });
 4. Replace the group rendering inside the nav (expanded labeled groups swap the hairline divider for an uppercase `--text-2` header; the label-less overflow group keeps its divider in both states):
 
 ```tsx
-{groups.map((group, gi) => (
-  <div
-    key={gi}
-    className={`flex flex-col gap-1 ${expanded ? 'w-full px-1' : 'w-8 items-center'} ${
-      gi > 0 && (!expanded || !group.label) ? 'mt-1 border-t border-border pt-2' : ''
-    }`}
-  >
-    {expanded && group.label && (
-      <div className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</div>
-    )}
-    {group.panes.map((p) => (
-      <RailButton key={p.id} pane={p} expanded={expanded} />
-    ))}
-  </div>
-))}
+{
+  groups.map((group, gi) => (
+    <div
+      key={gi}
+      className={`flex flex-col gap-1 ${expanded ? 'w-full px-1' : 'w-8 items-center'} ${
+        gi > 0 && (!expanded || !group.label) ? 'mt-1 border-t border-border pt-2' : ''
+      }`}
+    >
+      {expanded && group.label && <div className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</div>}
+      {group.panes.map((p) => (
+        <RailButton key={p.id} pane={p} expanded={expanded} />
+      ))}
+    </div>
+  ));
+}
 ```
 
 5. Update the utility group wrapper and pass `expanded` to its buttons:
