@@ -26,6 +26,7 @@ import { seedLocalStorage, BACKEND_URL } from './helpers';
 // Scene node ids (from seed-scene-high1.json cassette):
 //   sym.high1  — Sprite node, props.slot=high1
 //   tex.high1  — Texture node, src=/media/g/seed/old.png (replaced by realize_symbol)
+//              — this placeholder 404s in the live engine by design (see step 11)
 //   e.tex.sym  — data edge: tex.high1 → sym.high1 (port: texture)
 
 // ---------------------------------------------------------------------------
@@ -39,7 +40,7 @@ async function openAppAtRoom(page: Page, username: string): Promise<string> {
     window.addEventListener('message', (e) => {
       const d = e.data;
       if (d && (d.kind === 'ack' || d.kind === 'ready' || d.kind === 'error')) {
-        (window as any).__engineMsgs.push({ origin: e.origin, kind: d.kind });
+        (window as any).__engineMsgs.push({ origin: e.origin, kind: d.kind, msg: JSON.stringify(d) });
       }
     });
   });
@@ -260,5 +261,10 @@ test('chat reshapes the high symbol and the rendered game re-paints', async ({ p
   // -----------------------------------------------------------------------
   // 11. No engine errors during the session.
   // -----------------------------------------------------------------------
-  expect(await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error').length)).toBe(0);
+  // The seed cassette's placeholder texture (/media/g/seed/old.png) intentionally
+  // 404s — the engine pane is open from room creation (default Art layout) and
+  // fetches it before realize_symbol swaps in the real texture. Any OTHER engine
+  // error is a real failure.
+  const engineErrors = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'error'));
+  expect(engineErrors.filter((m: any) => !String(m.msg).includes('/media/g/seed/old.png'))).toEqual([]);
 });

@@ -9,6 +9,5 @@ export const gameStructure: IPlugin<IGameStructureState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'game-structure/editor', title: 'Game Structure', component: GameStructurePane as never }],
-  commands: [{ id: 'game-structure/open-editor', title: 'Open Game Structure', run: (host) => host.openPane('game-structure/editor') }],
   init: () => initGameStructure(),
 };

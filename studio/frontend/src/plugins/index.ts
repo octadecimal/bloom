@@ -15,8 +15,6 @@ import { math } from './math';
 
 export const PLUGINS: IPlugin[] = [
   sceneStorePlugin,
-  demoCounter,
-  demoScratch,
   llmChat,
   assets,
   gdd,
@@ -28,3 +26,9 @@ export const PLUGINS: IPlugin[] = [
   regionOverrides,
   math,
 ];
+
+// Demo panes are dev-only fixtures (used by e2e chrome/panes/keyboard specs,
+// which run against the dev server).
+if (!import.meta.env.PROD) {
+  PLUGINS.push(demoCounter, demoScratch);
+}

@@ -8,5 +8,4 @@ export const sceneGraph: IPlugin<ISceneGraphState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'scene-graph/tree', title: 'Scene Graph', component: SceneGraphPane as never }],
-  commands: [{ id: 'scene-graph/open', title: 'Open Scene Graph', run: (host) => host.openPane('scene-graph/tree') }],
 };

@@ -9,6 +9,41 @@ export async function seedLocalStorage(page: Page, key: string, value: string) {
 }
 
 /**
+ * Wait for the backend's definition->scene sync snapshot to land. It always
+ * contains a Root node (ensure_root runs before set_modules broadcasts it,
+ * scene/hub.py:79). scene_snapshot wholesale-replaces the client document, so
+ * locally seeding via __gameApplyInbound before it lands gets wiped.
+ */
+/** Open the Game Scene pane via the View menu ONLY if it isn't already open.
+ * With the Art default layout it usually is — and re-opening an open pane
+ * re-activates it in Dockview, which reattaches the engine iframe and reloads
+ * it, dropping in-flight bridge ops. */
+export async function ensureGameSceneOpen(page: Page): Promise<void> {
+  if (
+    !(await page
+      .getByTestId('game-engine-frame')
+      .isVisible()
+      .catch(() => false))
+  ) {
+    await page.getByTestId('menu-view').click();
+    await page.getByTestId('view-open-game/preview').click();
+  }
+  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+}
+
+export async function waitForSceneSync(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          Object.values(((window as any).__gameSceneSnapshot?.document?.nodes ?? {}) as Record<string, any>).some((n: any) => n?.type === 'Root'),
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+}
+
+/**
  * Navigate to the workbench for a given room, fully hermetic:
  * - Seeds the session in localStorage.
  * - Stubs GET /rooms and GET /rooms/:id/messages so no live backend is needed.

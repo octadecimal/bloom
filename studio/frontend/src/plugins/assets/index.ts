@@ -10,6 +10,5 @@ export const assets: IPlugin<IAssetsState> = {
   persist: false,
   initialState: makeInitialState(),
   panes: [{ id: 'assets/board', title: 'Asset Board', component: AssetBoardPane as never }],
-  commands: [{ id: 'assets/open-board', title: 'Open Asset Board', run: (host) => host.openPane('assets/board') }],
   init: () => initAssets(),
 };

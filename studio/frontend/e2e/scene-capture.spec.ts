@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { ensureGameSceneOpen, seedLocalStorage, waitForSceneSync } from './helpers';
 
 // Local-only (browser e2e is never in CI). Requires the full stack:
 //   engine (runtime client), backend (replay), studio — all at this worktree's
@@ -35,15 +35,15 @@ async function openAppAtRoom(page: Page, username: string): Promise<void> {
 test('captures a render-settled PNG of the engine frame and posts it to the studio', async ({ page }) => {
   await openAppAtRoom(page, 'ada');
 
-  // Open the Game Scene pane and wait for the engine handshake (ready).
-  await page.getByTestId('menu-view').click();
-  await expect(page.getByTestId('view-open-game/preview')).toBeVisible();
-  await page.getByTestId('view-open-game/preview').click();
-  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  // Open the Game Scene pane (no-op if already open) and wait for the handshake.
+  await ensureGameSceneOpen(page);
   await expect.poll(() => page.evaluate(() => (window as any).__readyMsgs.length), { timeout: 20000 }).toBeGreaterThan(0);
 
   const gameId = await page.evaluate(() => (window as any).__gameActiveId ?? null);
   expect(gameId).toBeTruthy();
+
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
 
   // Place a root + sprite so the engine has a mounted, painted frame to capture.
   await page.evaluate((gid) => {

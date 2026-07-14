@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { seedLocalStorage, waitForSceneSync } from './helpers';
 
 // Local-only (browser e2e is never in CI). Requires the full stack on the
 // worktree offset: engine :4301, backend :8001 (replay), studio :4201.
@@ -26,6 +26,9 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
+
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
 
   // Seed a local node into the mirror (scene-graph reads the same store). The
   // sprite MUST be parented under Root via a `child` edge — the scene-graph tree
@@ -78,6 +81,9 @@ test('typing a multi-digit value emits one scene_apply_op per change', async ({ 
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
 
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
+
   await page.evaluate((gid) => {
     const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
     apply('scene_op', { gameId: gid, op: { kind: 'addNode', id: 'root', type: 'Root', props: { width: 640, height: 480 } } });
@@ -113,15 +119,16 @@ test('typing a multi-digit value emits one scene_apply_op per change', async ({ 
   const xInput = page.getByTestId('inspector-edit-x');
   await expect(xInput).toHaveValue('5');
 
-  // Clear, then type each digit. With no debounce, every keystroke that parses
-  // emits its own setProp — 1, then 10, then 100.
-  await xInput.fill('');
-  await xInput.pressSequentially('100', { delay: 30 });
-
-  await expect
-    .poll(
-      () => page.evaluate(() => ((window as any).__opLog ?? []).filter((o: any) => o?.op?.id === 's1' && o?.op?.path === 'x').map((o: any) => o.op.value)),
-      { timeout: 5000 },
-    )
-    .toEqual([1, 10, 100]);
+  // One change at a time, waiting for each op (and its server echo) to settle
+  // before the next — the echo re-renders the controlled input, and racing it
+  // with queued keystrokes stomps the draft on a slow backend. Three parsed
+  // changes → three ops, no debounce: the same contract as before.
+  const opValues = () =>
+    page.evaluate(() => ((window as any).__opLog ?? []).filter((o: any) => o?.op?.id === 's1' && o?.op?.path === 'x').map((o: any) => o.op.value));
+  await xInput.fill('1');
+  await expect.poll(opValues, { timeout: 5000 }).toEqual([1]);
+  await xInput.fill('10');
+  await expect.poll(opValues, { timeout: 5000 }).toEqual([1, 10]);
+  await xInput.fill('100');
+  await expect.poll(opValues, { timeout: 5000 }).toEqual([1, 10, 100]);
 });

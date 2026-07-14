@@ -5,7 +5,7 @@ describe('sceneGraph plugin', () => {
   it('declares the expected id, pane, and command', () => {
     expect(sceneGraph.id).toBe('scene-graph');
     expect(sceneGraph.panes.map((p) => p.id)).toContain('scene-graph/tree');
-    expect(sceneGraph.commands?.map((c) => c.id)).toContain('scene-graph/open');
+    expect(sceneGraph.commands).toBeUndefined();
   });
 
   it('seeds a non-persistent initial state', () => {
