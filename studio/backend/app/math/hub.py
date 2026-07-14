@@ -295,7 +295,8 @@ class MathHub:
             duration_ms = int((time.monotonic() - started) * 1000)
             await self.record_run(game_id, params, best, duration_ms,
                                   verify=best_verify, locks=locks,
-                                  attempts=attempts, loop_stop=loop_stop)
+                                  attempts=attempts, loop_stop=loop_stop,
+                                  family=(doc0.model or {}).get("family") or "slots@1")
             await self._status(game_id, "done")
             return True
         except Exception:
@@ -342,7 +343,8 @@ class MathHub:
                          verify: CurationResult | None = None,
                          locks: SectionLocks | None = None,
                          attempts: list[AttemptSummaryWire] | None = None,
-                         loop_stop: str | None = None) -> MathRunDoc | None:
+                         loop_stop: str | None = None,
+                         family: str | None = None) -> MathRunDoc | None:
         if result.status not in ("pass", "near_miss"):
             return None
         doc = MathRunDoc(
@@ -350,7 +352,7 @@ class MathHub:
             verdict=result.verdict, metrics=result.metrics, trace=result.trace,
             profile=result.profile, verify=verify, locks=locks,
             stop_reason=result.stop_reason,
-            attempts=attempts, loop_stop=loop_stop,
+            attempts=attempts, loop_stop=loop_stop, family=family,
             created_at=_now(), duration_ms=duration_ms,
         )
         saved = await self._runs.append(doc)

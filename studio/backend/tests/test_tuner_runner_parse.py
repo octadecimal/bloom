@@ -221,3 +221,36 @@ def test_parse_tune_result_line_without_se_is_none():
         "missed": [], "trace": [], "stopReason": "feasible",
     })
     assert parse_tune_result_line(line, ran_at="t").metrics.se is None
+
+
+def test_parse_tune_result_line_reads_state_fields_and_family():
+    line = json.dumps({
+        "type": "result", "verdict": "pass", "model": {"reels": [[0, 1]]},
+        "metrics": {
+            "rtp": 0.9, "volatility": 2.0, "hitFrequency": 0.4,
+            "baseRtp": 0.9, "featureRtp": 0.0, "bonusHitRates": [],
+            "maxWin": 150.0, "stateRtp": {"base": 0.9}, "stateVisitFreq": {"base": 1.0},
+        },
+        "missed": [], "trace": [],
+        "family": "composed@1",
+    })
+    r = parse_tune_result_line(line, ran_at="t")
+    assert r.metrics.max_win == 150.0
+    assert r.metrics.state_rtp == {"base": 0.9}
+    assert r.metrics.state_visit_freq == {"base": 1.0}
+    assert r.family == "composed@1"
+
+
+def test_parse_tune_result_line_without_state_fields_and_family_stays_none():
+    # legacy cassette lines predate SP-A and SP-C
+    line = json.dumps({
+        "type": "result", "verdict": "pass", "model": {},
+        "metrics": {"rtp": 0.9, "volatility": 3.2, "hitFrequency": 0.4,
+                    "baseRtp": 0.9, "featureRtp": 0.0, "bonusHitRates": []},
+        "missed": [], "trace": [], "stopReason": "feasible",
+    })
+    r = parse_tune_result_line(line, ran_at="t")
+    assert r.metrics.max_win is None
+    assert r.metrics.state_rtp is None
+    assert r.metrics.state_visit_freq is None
+    assert r.family is None

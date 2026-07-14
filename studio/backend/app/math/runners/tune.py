@@ -94,6 +94,8 @@ def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
         se=MetricSEWire(rtp=se_d["rtp"], volatility=se_d["volatility"],
                         bonus_hit_rates=se_d.get("bonusHitRates", []),
                         hit_frequency=se_d.get("hitFrequency")) if se_d else None,
+        max_win=m.get("maxWin"), state_rtp=m.get("stateRtp"),
+        state_visit_freq=m.get("stateVisitFreq"),
     )
     verdict = d["verdict"]  # "pass" | "near_miss"
     profile_d = d.get("profile")
@@ -103,7 +105,7 @@ def parse_tune_result_line(line: str, *, ran_at: str) -> TuneResult:
                              band_lo=x["bandLo"], band_hi=x["bandHi"]) for x in d.get("missed", [])],
         trace=[_parse_snapshot(s) for s in d.get("trace", [])],
         profile=_parse_profile(profile_d) if profile_d else None,
-        failure=None, stop_reason=d.get("stopReason"), ran_at=ran_at,
+        failure=None, stop_reason=d.get("stopReason"), family=d.get("family"), ran_at=ran_at,
     )
 
 

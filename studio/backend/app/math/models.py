@@ -42,6 +42,10 @@ class MetricsWire(_WireModel):
     feature_rtp: float
     bonus_hit_rates: list[float]
     se: MetricSEWire | None = None
+    # SP-A/SP-B wire additions (None on results that predate them / slots-only paths)
+    max_win: float | None = None
+    state_rtp: dict[str, float] | None = None
+    state_visit_freq: dict[str, float] | None = None
 
 
 class CurationResult(_WireModel):
@@ -171,6 +175,8 @@ class TuneResult(_WireModel):
     # Why the GA loop ended: "feasible" | "stagnated" | "budget" (None on
     # cassettes/results that predate it).
     stop_reason: str | None = None
+    # SP-C: family descriptor from the wire (None on cassettes that predate it).
+    family: str | None = None
     ran_at: str
 
 
@@ -242,6 +248,8 @@ class MathRunDoc(_WireModel):
     # Auto-restart telemetry (None on runs that predate the restart loop).
     attempts: list[AttemptSummaryWire] | None = None
     loop_stop: str | None = None  # pass | attempts_exhausted | not_improving | error
+    # SP-C: family descriptor the run was tuned with (None on runs that predate it).
+    family: str | None = None
     created_at: str
     duration_ms: int | None = None
 
