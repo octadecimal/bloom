@@ -57,13 +57,52 @@ describe('GameStructurePane', () => {
       ok: true,
       errors: null,
       metrics: { rtp: 0.9, hitRate: 0.31, maxWinX: 60, stateVisits: { base: 100, fs1: 4 } },
+      verdict: null,
       packageId: 'g1',
     });
     render(<GameStructurePane {...({} as never)} />);
     fireEvent.click(screen.getByTestId('gs-build'));
-    await screen.findByTestId('gs-metrics');
-    expect(screen.getByTestId('gs-metric-rtp').textContent).toContain('0.9');
-    const play = screen.getByTestId('gs-play') as HTMLAnchorElement;
-    expect(play.href).toContain('?package=g1');
+    const play = await screen.findByTestId('gs-play');
+    expect((play as HTMLAnchorElement).href).toContain('?package=g1');
+  });
+
+  it('build success renders the verify verdict, not raw candidate metrics', async () => {
+    seed();
+    (rest.buildGameDefinition as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      errors: [],
+      metrics: { rtp: 0.9, hitRate: 0.31, maxWinX: 60, stateVisits: { base: 100, fs1: 4 } },
+      verdict: { status: 'pass', failure: null, realizedRtp: 0.9612, poolSize: 10000, rtpTarget: 0.96, rtpTolerance: 0.01, selfDerived: true },
+      packageId: 'g1',
+    });
+    render(<GameStructurePane {...({} as never)} />);
+    fireEvent.click(screen.getByTestId('gs-build'));
+    expect(await screen.findByTestId('gs-verdict')).toHaveTextContent('PASS');
+    expect(screen.getByTestId('gs-verdict-rtp')).toHaveTextContent('0.961');
+    expect(screen.getByTestId('gs-verdict-self-derived')).toHaveTextContent('self-derived');
+    expect(screen.queryByTestId('gs-metrics')).toBeNull();
+  });
+
+  it('a fail verdict shows the failure reason', async () => {
+    seed();
+    (rest.buildGameDefinition as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      errors: ['rtp out of band'],
+      metrics: null,
+      verdict: {
+        status: 'fail',
+        failure: 'rtp 0.91 outside 0.96±0.01',
+        realizedRtp: 0.91,
+        poolSize: 10000,
+        rtpTarget: 0.96,
+        rtpTolerance: 0.01,
+        selfDerived: false,
+      },
+      packageId: 'g1',
+    });
+    render(<GameStructurePane {...({} as never)} />);
+    fireEvent.click(screen.getByTestId('gs-build'));
+    expect(await screen.findByTestId('gs-verdict')).toHaveTextContent('FAIL');
+    expect(screen.getByTestId('gs-verdict-failure')).toHaveTextContent('rtp 0.91 outside 0.96±0.01');
   });
 });

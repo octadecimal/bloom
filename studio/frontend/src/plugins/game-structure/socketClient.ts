@@ -3,6 +3,7 @@
 // actions.initGameStructure() — a seam that avoids an import cycle and eases testing.
 import { io, type Socket } from 'socket.io-client';
 import { BACKEND_URL } from './config';
+import type { IComposeVerdict } from './restClient';
 
 export interface IDefinitionChangedEvent {
   gameId: string;
@@ -22,6 +23,7 @@ export interface IBuildStatusEvent {
   status: 'building' | 'done' | 'error';
   errors?: string[];
   metrics?: unknown;
+  verdict?: IComposeVerdict | null;
   packageId?: string;
 }
 

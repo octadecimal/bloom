@@ -40,4 +40,15 @@ describe('restClient', () => {
     vi.stubGlobal('fetch', fetchMock);
     await expect(buildGameDefinition('g1')).rejects.toThrow('500');
   });
+
+  it('POSTs build and passes the verify verdict through untouched', async () => {
+    const verdict = { status: 'pass', failure: null, realizedRtp: 0.9612, poolSize: 10000, rtpTarget: 0.96, rtpTolerance: 0.01, selfDerived: true };
+    const fetchMock = vi.fn(async () => okResponse({ ok: true, errors: [], metrics: null, verdict, packageId: 'g1' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await buildGameDefinition('g1');
+    expect(res.verdict).toEqual(verdict);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain('/games/g1/game-definition/build');
+    expect(init.method).toBe('POST');
+  });
 });
