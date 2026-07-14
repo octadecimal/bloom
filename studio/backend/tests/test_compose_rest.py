@@ -7,6 +7,7 @@ from app.compose import rest
 from app.compose.runner import FakeComposeRunner
 from app.compose.store import ComposeStore
 from app.config import Settings
+from app.math.store import MathStore
 
 
 def _req(**state):
@@ -15,6 +16,13 @@ def _req(**state):
 
 def _settings() -> Settings:
     return Settings(provider_mode="replay", mongo_db="bloom_studio_test")
+
+
+class _NullGdd:
+    """No math-model intent: composed_build_target hits TargetGap -> None."""
+
+    async def get_doc(self, game_id, aspect):
+        return None
 
 
 @pytest.mark.asyncio
@@ -78,7 +86,9 @@ async def test_build_shapes_job_and_response(mongo_db):
     metrics = {"rtp": 0.93, "hitRate": 0.4, "maxWinX": 60, "stateVisits": {"base": 100}}
     verdict = {"status": "pass", "realizedRtp": 0.93, "poolSize": 100, "selfDerived": True}
     fake = FakeComposeRunner({"ok": True, "metrics": metrics, "verdict": verdict})
-    req = _req(compose_store=store, compose_runner=fake, settings=_settings())
+    math_store = MathStore(mongo_db, compose_store=store, gdd_store=_NullGdd())
+    req = _req(compose_store=store, compose_runner=fake, settings=_settings(),
+               gdd_store=_NullGdd(), math_store=math_store)
     res = await rest.build_game_definition("g1", req)
     assert res == {
         "ok": True,
@@ -103,8 +113,28 @@ async def test_build_shapes_job_and_response(mongo_db):
 async def test_build_rejects_a_game_id_that_escapes_the_packages_dir(mongo_db):
     store = ComposeStore(mongo_db)
     fake = FakeComposeRunner({"ok": True})
-    req = _req(compose_store=store, compose_runner=fake, settings=_settings())
+    math_store = MathStore(mongo_db, compose_store=store, gdd_store=_NullGdd())
+    req = _req(compose_store=store, compose_runner=fake, settings=_settings(),
+               gdd_store=_NullGdd(), math_store=math_store)
     with pytest.raises(HTTPException) as exc:
         await rest.build_game_definition("..\\foo", req)
     assert exc.value.status_code == 400
     assert fake.jobs == []
+
+
+@pytest.mark.asyncio
+async def test_build_carries_the_derived_target_into_the_job(mongo_db):
+    store = ComposeStore(mongo_db)
+    fake = FakeComposeRunner({"ok": True})
+
+    class _Gdd:
+        async def get_doc(self, game_id, aspect):
+            if aspect == "math-model":
+                return SimpleNamespace(data={"rtp": 0.95, "volatility": "medium"})
+            return None
+
+    math_store = MathStore(mongo_db, compose_store=store, gdd_store=_Gdd())
+    req = _req(compose_store=store, compose_runner=fake, settings=_settings(),
+               gdd_store=_Gdd(), math_store=math_store)
+    await rest.build_game_definition("g1", req)
+    assert fake.jobs[0]["target"]["rtp_target"] == 0.95

@@ -60,7 +60,11 @@ async def validate_game_definition(
 async def build_game_definition(game_id: str, request: Request) -> dict:
     _validate_game_id(game_id)
     doc = await request.app.state.compose_store.get_or_seed(game_id)
-    job = build_job(game_id, doc.definition, doc.presentation, request.app.state.settings)
+    from app.math.target_flow import composed_build_target
+    target = await composed_build_target(
+        request.app.state.gdd_store, request.app.state.math_store, game_id)
+    job = build_job(game_id, doc.definition, doc.presentation,
+                    request.app.state.settings, target=target)
     res = await request.app.state.compose_runner.run(job)
     return {
         "ok": bool(res.get("ok")),

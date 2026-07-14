@@ -28,3 +28,15 @@ async def derive_target_for(gdd_store, game_id: str, doc) -> dict:
     return derive_target(math_model, doc.params, num_bonuses,
                          paytable_data=await data("paytable"),
                          symbols_data=await data("symbols-reels"))
+
+
+async def composed_build_target(gdd_store, math_store, game_id: str) -> dict | None:
+    """Target for a composed .pkg build: GDD-derived family-agnostic bands when
+    the intent is complete, else None → the binary's self-centered default
+    (verdict flags selfDerived)."""
+    from app.math.targets import TargetGap
+    doc = await math_store.get_or_seed(game_id)
+    try:
+        return await derive_target_for(gdd_store, game_id, doc)
+    except TargetGap:
+        return None

@@ -164,6 +164,36 @@ async def test_apply_template_unknown_404(mongo_db):
     assert exc_info.value.status_code == 404
 
 
+async def _composed_math_store(mongo_db, game_id: str):
+    from app.compose.store import ComposeStore
+    compose = ComposeStore(mongo_db)
+    await compose.get_or_seed(game_id)  # family() checks a doc actually exists
+    return MathStore(mongo_db, compose_store=compose)
+
+
+@pytest.mark.asyncio
+async def test_apply_template_409s_on_a_composed_game(mongo_db):
+    store = await _composed_math_store(mongo_db, "g1")
+    req = _req(math_store=store)
+    body = rest.ApplyTemplateBody(name="classic-3x3")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await rest.apply_slot_model_template("g1", body, req)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "templates are slots@1-only"
+
+
+@pytest.mark.asyncio
+async def test_realize_409s_on_a_composed_game(mongo_db):
+    store = await _composed_math_store(mongo_db, "g1")
+    req = _req(math_store=store)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await rest.realize_slot_model_rest("g1", req)
+    assert exc_info.value.status_code == 409
+    assert "composed@1" in exc_info.value.detail
+
+
 # ── tuner (was test_tuner_rest.py) ───────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_get_seeds_and_put_params(mongo_db):

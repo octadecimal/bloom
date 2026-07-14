@@ -41,6 +41,7 @@ from app.math.runners.curate import build_curation_runner
 from app.math.runners.tune import build_tuner_runner
 from app.math.sockets import register_math_handlers
 from app.math.store import MathRunStore, MathStore
+from app.math.target_flow import composed_build_target
 from app.presence import PresenceRegistry
 from app.providers import build_provider, build_chat_model
 from app.rest import router
@@ -125,7 +126,12 @@ def build(settings: Settings) -> AppContext:
         await apply_definition_change(sio, scene_hub, auto_builder, doc, source)
 
     compose_runner = build_compose_runner(settings)
-    auto_builder = AutoBuilder(compose_runner, settings, sio)
+    # target_for closes over math_store, assigned a few lines below — Python
+    # resolves the name at call time (first scheduled build), well after this
+    # function has returned and math_store exists.
+    auto_builder = AutoBuilder(compose_runner, settings, sio,
+                               target_for=lambda gid: composed_build_target(
+                                   gdd_store, math_store, gid))
     compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
     math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change,
                            compose_store=compose_store, gdd_store=gdd_store)
