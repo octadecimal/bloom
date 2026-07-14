@@ -4,10 +4,11 @@ import app.agent_tools as agent_tools
 from app.agent_tools import (
     ToolContext,
     build_read_tuner_setup_tool,
-    build_tune_slot_model_tool,
-    build_apply_tuned_model_tool,
+    build_tune_math_tool,
+    build_apply_tuned_math_tool,
     build_set_tuner_params_tool,
 )
+from app.compose.store import ComposeStore
 from app.math.store import MathStore, MathRunStore
 from app.math.models import MetricsWire
 from app.math.runners.tune import FakeTunerRunner, TuneProgress
@@ -46,6 +47,49 @@ async def test_read_tuner_setup_reports_params_and_target(mongo_db):
     assert "population" in out.lower()
     assert "0.94" in out                            # derived RTP target
     assert "no tune has run" in out.lower()         # no result yet
+
+
+async def _composed_ctx(mongo_db, *, gdd_data):
+    compose = ComposeStore(mongo_db)
+    await compose.get_or_seed("g1")   # composed game exists (Task 2 fixture pattern)
+    return ToolContext(
+        "r1", "g1", None, None,
+        gdd_store=_StubGddStore(gdd_data),
+        math_store=MathStore(mongo_db, compose_store=compose, gdd_store=None),
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_tuner_setup_reports_composed_shape(mongo_db):
+    ctx = await _composed_ctx(mongo_db, gdd_data={"rtp": "0.94", "volatility": "high"})
+    tool = build_read_tuner_setup_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "Composed" in out and "states" in out
+
+
+@pytest.mark.asyncio
+async def test_apply_tuned_math_composed_routes_through_compose_store(mongo_db, monkeypatch):
+    monkeypatch.setattr(agent_tools, "interrupt", lambda payload: "approve")
+    events = []
+
+    async def on_change(doc, source):
+        events.append((doc.game_id, source))
+
+    compose = ComposeStore(mongo_db, on_change=on_change)
+    await compose.get_or_seed("g1")   # composed game exists (Task 2 fixture pattern)
+    math_store = MathStore(mongo_db, compose_store=compose, gdd_store=None)
+    ctx = ToolContext("r1", "g1", None, None, math_store=math_store)
+    tuned = {"family": "composed@1", "mechanics": [], "states": [], "start": "base", "transitions": []}
+    await math_store.save_tune_result("g1", TuneResult(
+        status="pass", verdict="pass", tuned_model=tuned, metrics=_metrics(0.94),
+        missed=[], trace=[], ran_at="t1"))
+    events.clear()
+    tool = build_apply_tuned_math_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "applied" in out.lower()
+    doc = await math_store.get("g1")
+    assert doc.model == tuned
+    assert events == [("g1", "tuner")]   # composed apply fires the compose on_change
 
 
 @pytest.mark.asyncio
@@ -149,6 +193,28 @@ async def test_set_tuner_params_accepts_zero_weight(mongo_db):
 # --- end Finding 1 new tests ---
 
 
+@pytest.mark.asyncio
+async def test_set_tuner_params_accepts_hit_frequency_weight(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    await ctx.math_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"weight_hit_frequency": 2.0})
+    doc = await ctx.math_store.get("g1")
+    assert doc.tuner_params.weights.hit_frequency == 2.0
+    assert "hit-freq" in out or "hit_frequency" in out
+
+
+@pytest.mark.asyncio
+async def test_set_tuner_params_rejects_negative_hit_frequency_weight(mongo_db):
+    ctx = _params_ctx(mongo_db)
+    seeded = await ctx.math_store.get_or_seed("g1")
+    tool = build_set_tuner_params_tool(ctx)
+    out = await tool.ainvoke({"weight_hit_frequency": -1.0})
+    assert "no change made" in out.lower()
+    doc = await ctx.math_store.get("g1")
+    assert doc.tuner_params.weights.hit_frequency == seeded.tuner_params.weights.hit_frequency
+
+
 class _FakeSio:
     def __init__(self): self.events = []
     async def enter_room(self, sid, room): pass
@@ -184,7 +250,7 @@ async def test_tune_slot_model_reports_pass(mongo_db):
                          metrics=_metrics(0.94), missed=[], trace=[], ran_at="t1")
     ctx = _tune_ctx(mongo_db, result=passing)
     await ctx.math_store.get_or_seed("g1")
-    tool = build_tune_slot_model_tool(ctx)
+    tool = build_tune_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "pass" in out.lower()
     assert "0.94" in out
@@ -201,7 +267,7 @@ async def test_tune_slot_model_reports_near_miss_with_missed_bands(mongo_db):
                       trace=[], ran_at="t1")
     ctx = _tune_ctx(mongo_db, result=near)
     await ctx.math_store.get_or_seed("g1")
-    tool = build_tune_slot_model_tool(ctx)
+    tool = build_tune_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "near" in out.lower()
     assert "rtp" in out.lower() and "0.91" in out
@@ -212,7 +278,7 @@ async def test_tune_slot_model_reports_gap_without_running(mongo_db):
     ctx = _tune_ctx(mongo_db, result=None)              # runner result unused
     ctx.gdd_store = _StubGddStore({})                   # missing intent -> TargetGap
     await ctx.math_store.get_or_seed("g1")
-    tool = build_tune_slot_model_tool(ctx)
+    tool = build_tune_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "missing required intent" in out.lower()
     saved = await ctx.math_store.get("g1")
@@ -236,7 +302,7 @@ async def test_apply_tuned_model_approve_writes_back(mongo_db, monkeypatch):
     ctx = _apply_ctx(mongo_db)
     await ctx.math_store.get_or_seed("g1")
     await _seed_result_with_model(ctx.math_store, {"reels": [["A"]]})
-    tool = build_apply_tuned_model_tool(ctx)
+    tool = build_apply_tuned_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "applied" in out.lower()
     doc = await ctx.math_store.get("g1")
@@ -249,7 +315,7 @@ async def test_apply_tuned_model_deny_leaves_model_unchanged(mongo_db, monkeypat
     ctx = _apply_ctx(mongo_db)
     seeded = await ctx.math_store.get_or_seed("g1")
     await _seed_result_with_model(ctx.math_store, {"reels": [["A"]]})
-    tool = build_apply_tuned_model_tool(ctx)
+    tool = build_apply_tuned_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "declined" in out.lower()
     doc = await ctx.math_store.get("g1")
@@ -261,6 +327,6 @@ async def test_apply_tuned_model_no_result_returns_friendly(mongo_db, monkeypatc
     def _boom(payload): raise AssertionError("interrupt must not be called")
     monkeypatch.setattr(agent_tools, "interrupt", _boom)
     ctx = _apply_ctx(mongo_db)
-    tool = build_apply_tuned_model_tool(ctx)
+    tool = build_apply_tuned_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "run a tune first" in out.lower()

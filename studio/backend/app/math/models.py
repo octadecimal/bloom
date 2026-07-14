@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 TUNER_TOOL_NAMES: set[str] = {
-    "read_tuner_setup", "set_tuner_params", "tune_slot_model", "apply_tuned_model",
+    "read_tuner_setup", "set_tuner_params", "tune_math", "apply_tuned_math",
 }
 
 

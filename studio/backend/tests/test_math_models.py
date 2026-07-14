@@ -92,6 +92,6 @@ def test_gen_snapshot_defaults():
     assert s.gene_agreement == []
 
 
-def test_tuner_tool_names_stable():
+def test_tuner_tool_names_are_family_neutral():
     assert TUNER_TOOL_NAMES == {"read_tuner_setup", "set_tuner_params",
-                                "tune_slot_model", "apply_tuned_model"}
+                                "tune_math", "apply_tuned_math"}
