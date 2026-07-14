@@ -4,7 +4,6 @@
 //!
 //! Usage: tune <seed_model.json> <target.json> <tuner_config.json> <out_model.json> <out_report.txt>
 
-use bloom_math::mechanics::slots::SlotModel;
 use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::TargetSpec;
 use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
@@ -24,6 +23,17 @@ struct BoundsJson {
     multiplier_max: u64,
     min_count_min: u8,
     min_count_max: u8,
+    #[serde(default = "default_meter_target_min")]
+    meter_target_min: u32,
+    #[serde(default = "default_meter_target_max")]
+    meter_target_max: u32,
+}
+
+fn default_meter_target_min() -> u32 {
+    1
+}
+fn default_meter_target_max() -> u32 {
+    100
 }
 
 #[derive(Deserialize)]
@@ -73,8 +83,10 @@ fn main() {
         std::process::exit(2);
     }
 
-    let model: SlotModel = serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model"))
-        .expect("parse model");
+    let model_value: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&args[1]).expect("read model"))
+            .expect("parse model");
+    let artifact = MathArtifact::from_json_value(model_value).expect("parse model");
     let target: TargetSpec =
         serde_json::from_str(&fs::read_to_string(&args[2]).expect("read target"))
             .expect("parse target");
@@ -100,8 +112,8 @@ fn main() {
             multiplier_max: cj.bounds.multiplier_max,
             min_count_min: cj.bounds.min_count_min,
             min_count_max: cj.bounds.min_count_max,
-            meter_target_min: 1,
-            meter_target_max: 100,
+            meter_target_min: cj.bounds.meter_target_min,
+            meter_target_max: cj.bounds.meter_target_max,
         },
         weights: Weights {
             rtp: cj.weights.rtp,
@@ -116,7 +128,6 @@ fn main() {
         },
     };
 
-    let artifact = MathArtifact::Slots(model);
     if let Err(e) = bloom_tuner::validate(&artifact, &target, &cfg) {
         eprintln!("invalid input: {e}");
         std::process::exit(2);
@@ -124,8 +135,11 @@ fn main() {
 
     let out = GeneticTuner.tune(&artifact, &target, &cfg);
     let report = render_report(&out);
-    let model_json = serde_json::to_string_pretty(out.model.as_slots().expect("slots input"))
-        .expect("serialize tuned model");
+    let model_json = match &out.model {
+        MathArtifact::Slots(m) => serde_json::to_string_pretty(m),
+        a => serde_json::to_string_pretty(a.composed_def().expect("two families")),
+    }
+    .expect("serialize tuned model");
 
     fs::write(&args[4], model_json).expect("write tuned model");
     fs::write(&args[5], &report).expect("write report");
