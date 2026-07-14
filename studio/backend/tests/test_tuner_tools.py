@@ -330,3 +330,55 @@ async def test_apply_tuned_model_no_result_returns_friendly(mongo_db, monkeypatc
     tool = build_apply_tuned_math_tool(ctx)
     out = await tool.ainvoke({})
     assert "run a tune first" in out.lower()
+
+
+# --- Regression tests for read_tuner_setup num_bonuses safe default + composed gating ---
+
+class _MultiKeyStubGddStore:
+    """Stub that can return different docs based on key."""
+    def __init__(self, docs): self._docs = docs
+    async def get_doc(self, game_id, key):
+        if key in self._docs:
+            return _StubGddDoc(self._docs[key])
+        return _StubGddDoc({})
+
+
+@pytest.mark.asyncio
+async def test_read_tuner_setup_slots_bonus_mismatch_returns_unavailable_not_unbound(mongo_db):
+    # Slots game has 1 bonus, but GDD bonus-features declares 2 features.
+    # derive_num_bonuses raises TargetGap; num_bonuses must have a safe default
+    # before the try block or UnboundLocalError would be raised when seed_line
+    # references it in the else branch.
+    store = _MultiKeyStubGddStore({
+        "bonus-features": {"features": [{"name": "a"}, {"name": "b"}]},
+        "base": {"rtp": "0.94", "volatility": "high", "bonus_hit_rate": "1:150"}
+    })
+    ctx = ToolContext(
+        "r1", "g1", None, None,
+        gdd_store=store,
+        math_store=MathStore(mongo_db),
+    )
+    await ctx.math_store.get_or_seed("g1")
+    tool = build_read_tuner_setup_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "unavailable" in out.lower()
+    assert "seed model" in out.lower()  # should still include seed_line with safe default num_bonuses
+
+
+@pytest.mark.asyncio
+async def test_read_tuner_setup_composed_ignores_gdd_bonus_features(mongo_db):
+    # Composed game with a populated bonus-features GDD doc must not
+    # call derive_num_bonuses (which only applies to slots). The composed
+    # seed_line doesn't reference num_bonuses; target derivation must succeed.
+    ctx = await _composed_ctx(mongo_db,
+                              gdd_data={
+                                  "rtp": "0.94", "volatility": "high",
+                                  "bonus-features": {"features": [{"name": "a"}, {"name": "b"}]}
+                              })
+    tool = build_read_tuner_setup_tool(ctx)
+    out = await tool.ainvoke({})
+    assert "composed" in out.lower()
+    assert "states" in out
+    # Should derive a target line (not UNAVAILABLE), since composed games
+    # don't use derive_num_bonuses and derive_target_for handles composed targets.
+    assert "target:" in out.lower() and "unavailable" not in out.lower()

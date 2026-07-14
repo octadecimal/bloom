@@ -1323,9 +1323,14 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
         p = sim_doc.tuner_params
 
         features_doc = await ctx.gdd_store.get_doc(ctx.game_id, "bonus-features")
+        # ponytail: safe default before try block to avoid UnboundLocalError if derive_num_bonuses raises
+        num_bonuses = len(model.get("bonuses", []) or [])
         try:
-            num_bonuses = derive_num_bonuses(
-                features_doc.data if features_doc else {}, model)
+            # Gate GDD reconciliation to slots only; composed games don't use num_bonuses in seed_line
+            # and derive_target_for already handles composed targets without bonus bands
+            if not _is_composed(model):
+                num_bonuses = derive_num_bonuses(
+                    features_doc.data if features_doc else {}, model)
             target = await derive_target_for(ctx.gdd_store, ctx.game_id, sim_doc)
             target_line = (
                 f"target: RTP {target['rtp_target']} ±{target['rtp_tolerance']}, "
