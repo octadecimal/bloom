@@ -116,4 +116,30 @@ describe('NavRail expand/collapse', () => {
     expect(screen.getByTestId('nav-rail').className).toContain('w-10');
     expect(localStorage.getItem('bloom.navRailExpanded')).toBeNull();
   });
+
+  it('shows pane labels and group headers only when expanded', () => {
+    render(<NavRail />);
+    expect(screen.queryByText('Design')).toBeNull();
+    expect(screen.getByTestId('rail-open-math/viewer')).not.toHaveTextContent('Math');
+    fireEvent.click(screen.getByTestId('rail-toggle'));
+    expect(screen.getByText('Design')).toBeInTheDocument();
+    expect(screen.getByText('Art')).toBeInTheDocument();
+    expect(screen.getByTestId('rail-open-math/viewer')).toHaveTextContent('Math');
+    expect(screen.getByTestId('rail-open-llm-chat/room')).toHaveTextContent('Chat Room');
+  });
+
+  it('drops the native tooltip when expanded (label is visible)', () => {
+    render(<NavRail />);
+    expect(screen.getByTestId('rail-open-math/viewer')).toHaveAttribute('title', 'Math');
+    fireEvent.click(screen.getByTestId('rail-toggle'));
+    expect(screen.getByTestId('rail-open-math/viewer')).not.toHaveAttribute('title');
+  });
+
+  it('gives the uncurated overflow group no header when expanded', () => {
+    setHost(fakeHost([...PANES, { id: 'mystery/pane', title: 'Zephyr' }]));
+    render(<NavRail />);
+    fireEvent.click(screen.getByTestId('rail-toggle'));
+    expect(screen.getByTestId('rail-open-mystery/pane')).toHaveTextContent('Zephyr');
+    expect(screen.queryByText('Other')).toBeNull();
+  });
 });
