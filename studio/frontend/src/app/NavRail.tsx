@@ -78,10 +78,11 @@ function RailButton({ pane }: { pane: IPaneDef }) {
       type="button"
       data-testid={`rail-open-${pane.id}`}
       title={pane.title}
+      aria-label={pane.title}
       onClick={() => host.openPane(pane.id)}
       className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-raised-hover hover:text-foreground ${tier}`}
     >
-      {Icon ? <Icon aria-hidden className="h-4 w-4" /> : <span className="text-xs">{pane.title.charAt(0)}</span>}
+      {Icon ? <Icon aria-hidden className="h-4 w-4" /> : <span className="text-xs">{pane.title.charAt(0).toUpperCase()}</span>}
     </button>
   );
 }
