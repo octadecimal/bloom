@@ -88,4 +88,21 @@ describe('MathProfileTab', () => {
     render(<MathProfileTab run={{ ...RUN, profile: null }} />);
     expect(screen.getByTestId('math-profile-no-data')).toBeTruthy();
   });
+
+  it('renders a state-share section with a proportional row per state when metrics carry stateRtp', () => {
+    render(
+      <MathProfileTab
+        run={{ ...RUN, metrics: { ...RUN.metrics!, rtp: 0.912, stateRtp: { base: 0.8, fs1: 0.112 }, stateVisitFreq: { base: 1.0, fs1: 0.02 } } }}
+      />,
+    );
+    const section = screen.getByTestId('profile-state-share');
+    expect(section).toBeTruthy();
+    expect(screen.getByTestId('profile-state-row-base').textContent).toContain('base');
+    expect(screen.getByTestId('profile-state-row-fs1').textContent).toContain('fs1');
+  });
+
+  it('omits the state-share section for a slots@1 run with no stateRtp', () => {
+    render(<MathProfileTab run={RUN} />);
+    expect(screen.queryByTestId('profile-state-share')).toBeNull();
+  });
 });

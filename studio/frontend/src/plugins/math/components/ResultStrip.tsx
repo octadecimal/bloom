@@ -49,6 +49,10 @@ export function ResultStrip() {
           : 'text-text-3';
   const metrics = outcome?.kind === 'run' ? (outcome.run.verify?.metrics ?? outcome.run.metrics) : (outcome?.result.metrics ?? null);
   const se = metrics?.se ?? null;
+  const family = s.family.get();
+  const composedStateIds = s.composedStateIds.get() as string[];
+  const visitFreq = metrics?.stateVisitFreq ?? null;
+  const deadStates = family === 'composed@1' && visitFreq ? composedStateIds.slice(1).filter((id) => (visitFreq[id] ?? 0) === 0) : [];
   const rtpOutsideBand = !!target && !!metrics && Math.abs(metrics.rtp - target.rtp_target) > target.rtp_tolerance;
   const volOutsideBand = !!target && !!metrics && (metrics.volatility < target.volatility_min || metrics.volatility > target.volatility_max);
   const withinNoise = !running && verdict === 'pass' && se != null && (rtpOutsideBand || volOutsideBand);
@@ -172,6 +176,21 @@ export function ResultStrip() {
             </tr>
           </tbody>
         </table>
+      )}
+      {!running && metrics && (metrics.stateRtp || metrics.stateVisitFreq) && (
+        <div data-testid="state-metrics" className="mt-1 text-text-2">
+          {Object.keys(metrics.stateRtp ?? metrics.stateVisitFreq ?? {}).map((id) => (
+            <span key={id} data-testid={`state-row-${id}`} className="mr-3">
+              {id}: RTP share {(metrics.stateRtp?.[id] ?? 0).toFixed(4)} · visits {(metrics.stateVisitFreq?.[id] ?? 0).toFixed(4)}
+            </span>
+          ))}
+        </div>
+      )}
+      {!running && deadStates.length > 0 && (
+        <p data-testid="dead-feature-warning" className="mt-1 text-danger">
+          Dead feature{deadStates.length > 1 ? 's' : ''}: {deadStates.join(', ')} — never visited in the measured pool. The tuner had no pressure to keep{' '}
+          {deadStates.length > 1 ? 'them' : 'it'} alive (#160). {/* design-allow-color: issue ref, not a color */}
+        </p>
       )}
       {!running && applied && (
         <p data-testid="math-applied" className="mt-1 text-success">

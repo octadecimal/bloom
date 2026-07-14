@@ -68,6 +68,18 @@ export function TargetStrip() {
             {' · '}vol {target.volatility_min}–{target.volatility_max >= 1e9 ? '∞' : target.volatility_max}
           </span>
         )}
+        {target?.max_win_band && (
+          <span data-testid="target-chip-max-win" className="text-text-3">
+            max win {target.max_win_band.min}–{target.max_win_band.max}x
+          </span>
+        )}
+        {(target?.pay_constraints ?? []).map((c, i) => (
+          <span key={i} data-testid={`target-chip-pay-${i}`} className="text-text-3">
+            {c.relation} s{c.symbol}
+            {c.count != null ? `@${c.count}` : ''}
+            {c.value != null ? ` ${c.value}x` : ''}
+          </span>
+        ))}
       </div>
       {gap && (
         <div data-testid="target-gap" className="mt-1 text-danger">
