@@ -15,7 +15,7 @@ use bloom_math::mechanics::composed::{
 use bloom_math::mechanics::slots::{self, SlotModel};
 use rayon::prelude::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MathArtifact {
     Slots(SlotModel),
     Composed {
@@ -61,6 +61,22 @@ impl MathArtifact {
             compiled: Box::new(compiled),
             reels,
         })
+    }
+
+    /// The slots model, when this is a slots artifact (test/CLI convenience).
+    pub fn as_slots(&self) -> Option<&SlotModel> {
+        match self {
+            MathArtifact::Slots(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    /// The composed definition, when this is a composed artifact.
+    pub fn composed_def(&self) -> Option<&GameDefinition> {
+        match self {
+            MathArtifact::Composed { def, .. } => Some(def),
+            _ => None,
+        }
     }
 
     pub fn family(&self) -> &'static str {

@@ -5,7 +5,7 @@
 
 use crate::config::TunerConfig;
 use crate::fitness::{band_misses, fitness};
-use crate::genome::{decode, encode_with_locks, repair, Genome};
+use crate::genome::{decode_slots, encode_with_locks_slots, repair_slots, SlotsGenome};
 use crate::outcome::{GenSnapshot, RunProfile, StopReason, TuneOutcome, TuningTrace, Verdict};
 use crate::telemetry::{gene_agreement, population_stats};
 use crate::Tuner;
@@ -50,7 +50,7 @@ fn confirmation_seeds(master_seed: u64, generation: usize, count: usize) -> Vec<
 /// Mutate a genome in place, then repair. Each gene mutates with probability
 /// `cfg.mutation_rate`; numeric genes step within their bounds.
 fn mutate(
-    g: &mut Genome,
+    g: &mut SlotsGenome,
     template: &SlotModel,
     cfg: &TunerConfig,
     rng: &mut SplitMix64,
@@ -96,18 +96,18 @@ fn mutate(
                 + (rng.next_u64() as u8 % (b.min_count_max - b.min_count_min.max(1) + 1));
         }
     }
-    repair(g, template, &cfg.bounds, constraints);
+    repair_slots(g, template, &cfg.bounds, constraints);
 }
 
 /// Uniform crossover of two parents (gene-wise coin flip), then repair.
 fn crossover(
-    p1: &Genome,
-    p2: &Genome,
+    p1: &SlotsGenome,
+    p2: &SlotsGenome,
     template: &SlotModel,
     cfg: &TunerConfig,
     rng: &mut SplitMix64,
     constraints: &[PayConstraint],
-) -> Genome {
+) -> SlotsGenome {
     if unit(rng) >= cfg.crossover_rate {
         return p1.clone();
     }
@@ -127,12 +127,12 @@ fn crossover(
             *c = p2.bonuses[i].clone();
         }
     }
-    repair(&mut child, template, &cfg.bounds, constraints);
+    repair_slots(&mut child, template, &cfg.bounds, constraints);
     child
 }
 
 /// Binary tournament: pick the fitter of two random candidates.
-fn tournament<'a>(scored: &'a [(Genome, f64)], rng: &mut SplitMix64) -> &'a Genome {
+fn tournament<'a>(scored: &'a [(SlotsGenome, f64)], rng: &mut SplitMix64) -> &'a SlotsGenome {
     let i = (rng.next_u64() as usize) % scored.len();
     let j = (rng.next_u64() as usize) % scored.len();
     if scored[i].1 >= scored[j].1 {
@@ -152,10 +152,10 @@ pub fn tune_with_progress(
     on_progress: &mut dyn FnMut(&GenSnapshot),
 ) -> TuneOutcome {
     let mut rng = SplitMix64::new(cfg.master_seed);
-    let base = encode_with_locks(seed_model, &cfg.locks);
+    let base = encode_with_locks_slots(seed_model, &cfg.locks);
 
     // Initial population: the seed model + mutated variants.
-    let mut pop: Vec<Genome> = (0..cfg.population)
+    let mut pop: Vec<SlotsGenome> = (0..cfg.population)
         .map(|i| {
             if i == 0 {
                 base.clone()
@@ -168,7 +168,7 @@ pub fn tune_with_progress(
         .collect();
 
     let mut snapshots: Vec<GenSnapshot> = Vec::new();
-    let mut best: Option<(Genome, f64)> = None;
+    let mut best: Option<(SlotsGenome, f64)> = None;
     let mut stagnation = 0usize;
     let mut generations_run = 0usize;
     let mut stop_reason = StopReason::Budget;
@@ -187,29 +187,29 @@ pub fn tune_with_progress(
     let final_fitness =
         |m: &SlotModel| fitness(&measure(&simulate(m, &final_seeds)), target, &cfg.weights);
     let mut feasible: Option<(SlotModel, Vec<bloom_simulator::measure::RoundSample>)> = None;
-    let mut last_top: Option<Genome> = None;
+    let mut last_top: Option<SlotsGenome> = None;
 
     for g in 0..max_generations {
         generations_run = g + 1;
         let seeds = generation_seeds(cfg.master_seed, g, cfg.search_candidate_count);
 
-        let mut scored: Vec<(Genome, f64)> = pop
+        let mut scored: Vec<(SlotsGenome, f64)> = pop
             .iter()
             .map(|genome| {
-                let model = decode(genome, seed_model);
+                let model = decode_slots(genome, seed_model);
                 let f = fitness(&measure(&simulate(&model, &seeds)), target, &cfg.weights);
                 (genome.clone(), f)
             })
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
-        let best_model = decode(&scored[0].0, seed_model);
+        let best_model = decode_slots(&scored[0].0, seed_model);
         let bm = measure(&simulate(&best_model, &seeds));
 
         let fitnesses: Vec<f64> = scored.iter().map(|(_, f)| *f).collect();
         let decoded: Vec<SlotModel> = scored
             .iter()
-            .map(|(gn, _)| decode(gn, seed_model))
+            .map(|(gn, _)| decode_slots(gn, seed_model))
             .collect();
         // one column per tunable gene dimension: mean payout, and (if present) the first
         // bonus's spins / multiplier / min_count. Guarded for models without bonuses.
@@ -290,7 +290,7 @@ pub fn tune_with_progress(
             // (miss ≫ 2·SE even at search fidelity) ending early as Stagnated
             // and skips pointless final-fidelity simulations.
             if verify(&best_model, &bm, target, cfg.search_candidate_count).is_ok() {
-                let candidate = decode(&scored[0].0, seed_model);
+                let candidate = decode_slots(&scored[0].0, seed_model);
                 let conf_samples = simulate(
                     &candidate,
                     &confirmation_seeds(cfg.master_seed, g, cfg.final_candidate_count),
@@ -321,7 +321,7 @@ pub fn tune_with_progress(
             break;
         }
 
-        let mut next: Vec<Genome> = scored
+        let mut next: Vec<SlotsGenome> = scored
             .iter()
             .take(cfg.elitism)
             .map(|s| s.0.clone())
@@ -350,7 +350,7 @@ pub fn tune_with_progress(
     // panel (common random numbers are right for comparison) — so the tuner
     // can never return a model that measures worse than its input.
     // The raw seed model is a candidate itself (not its genome round-trip —
-    // decode(encode(seed)) may re-arrange reel strips, which measures slightly
+    // decode_slots(encode_slots(seed)) may re-arrange reel strips, which measures slightly
     // differently), so an untunable input comes back byte-identical.
     let (model, final_samples) = match feasible {
         Some((model, conf_samples)) => {
@@ -366,9 +366,9 @@ pub fn tune_with_progress(
         }
         None => {
             let (best_genome, _) = best.expect("at least one generation always runs");
-            let mut candidates = vec![decode(&best_genome, seed_model)];
+            let mut candidates = vec![decode_slots(&best_genome, seed_model)];
             if let Some(top) = last_top {
-                let m = decode(&top, seed_model);
+                let m = decode_slots(&top, seed_model);
                 if !candidates.contains(&m) {
                     candidates.push(m);
                 }
@@ -682,7 +682,7 @@ mod tests {
         let mut rng = SplitMix64::new(9);
         let span_step = (c.bounds.payout_max - c.bounds.payout_min) / 10;
         for _ in 0..500 {
-            let mut g = encode_with_locks(&seed, &c.locks);
+            let mut g = encode_with_locks_slots(&seed, &c.locks);
             let before = g.payouts.clone();
             mutate(&mut g, &seed, &c, &mut rng, &[]);
             for (a, b) in before.iter().zip(&g.payouts) {
