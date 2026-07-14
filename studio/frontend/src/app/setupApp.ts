@@ -6,6 +6,7 @@ import { createLayoutPresetsService } from '../host/layoutPresets';
 import { boot } from '../host/boot';
 import { setHost } from '../state/hostRef';
 import { setLayoutPresets } from '../state/layoutPresetsRef';
+import { setDockviewApi } from '../state/dockviewApiRef';
 import { openSaveLayoutDialog } from '../state/saveLayoutDialogRef';
 import { registerSlicePersistence } from '../state/persistSlices';
 import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persistWorkspace';
@@ -75,6 +76,7 @@ export function setupApp(): IAppSetup {
     components: paneRegistry.asComponentMap(),
     attachDockview: (a: DockviewApi) => {
       api = a;
+      setDockviewApi(a);
       layoutService.attach(a);
       if (!import.meta.env.PROD) (window as unknown as { __wbApi?: unknown }).__wbApi = a;
     },
