@@ -145,4 +145,20 @@ describe('TargetStrip', () => {
     render(<TargetStrip />);
     expect(screen.queryByTestId('target-save-status')).toBeNull();
   });
+
+  it('hides the bonus-rate input for a composed@1 game but still renders RTP and volatility', () => {
+    mathSlice().targetFields.set({ rtp: '92%', volatility: 'medium', bonusHitRate: '1:150' });
+    mathSlice().family.set('composed@1');
+    render(<TargetStrip />);
+    expect(screen.queryByTestId('target-bonus-rate')).toBeNull();
+    expect(screen.getByTestId('target-rtp')).toBeTruthy();
+    expect(screen.getByTestId('target-volatility')).toBeTruthy();
+  });
+
+  it('renders the bonus-rate input for a slots@1 game', () => {
+    mathSlice().targetFields.set({ rtp: '92%', volatility: 'medium', bonusHitRate: '1:150' });
+    mathSlice().family.set('slots@1');
+    render(<TargetStrip />);
+    expect(screen.getByTestId('target-bonus-rate')).toBeTruthy();
+  });
 });

@@ -1,16 +1,20 @@
-import { mathSlice, makeInitialState, type ITargetFields, type ITuningParams, type ICurationParams } from './state';
+import { mathSlice, makeInitialState, type ITargetFields, type ITuningParams, type ICurationParams, type IMathRun } from './state';
 import {
   applyTuned,
   cancelGenerate,
   curate,
   fetchRuns,
   generate,
+  getComposedMathDoc,
   getGddDocs,
+  getMathDescriptor,
   getSlotModel,
   getTuner,
   putCurationParams,
   putMathModelFields,
   putTunerParams,
+  type IGddDocWire,
+  type ITunerWire,
 } from './restClient';
 import { mathSock } from './socketClient';
 import { fieldsFromGddData, refreshTarget } from './sync';
@@ -27,6 +31,22 @@ export function initMath(): void {
 export const TARGET_DEBOUNCE_MS = 600;
 let targetTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Shared tail of `openGameMath`'s two family branches: tuner state, the GDD
+ * math-model target fields + watermark, run history, and the derived-target
+ * refresh. Identical regardless of which artifact (slot-model vs
+ * game-definition) supplied locks/curationParams/verifyResult above it. */
+async function hydrateTail(s: ReturnType<typeof mathSlice>, gameId: string, tuner: ITunerWire, gddDocs: IGddDocWire[], runs: IMathRun[]): Promise<void> {
+  s.tunerParams.set(tuner.params);
+  s.tuneResult.set(tuner.result);
+  const mm = gddDocs.find((d) => d.aspect === 'math-model');
+  s.targetFields.set(mm ? fieldsFromGddData(mm.data) : { rtp: '', volatility: '', bonusHitRate: '' });
+  if (mm) s.gddWatermark.set(mm.updatedAt);
+  s.runs.set(runs as never);
+  s.selectedRunId.set(runs[0]?.id ?? null);
+  s.loadStatus.set('idle');
+  await refreshTarget(gameId);
+}
+
 export async function openGameMath(gameId: string): Promise<void> {
   if (targetTimer) {
     clearTimeout(targetTimer);
@@ -36,20 +56,26 @@ export async function openGameMath(gameId: string): Promise<void> {
   s.set({ ...makeInitialState(), activeGameId: gameId, loadStatus: 'loading' } as never);
   mathSock().joinMath(gameId);
   try {
-    const [doc, tuner, gddDocs, runs] = await Promise.all([getSlotModel(gameId), getTuner(gameId), getGddDocs(gameId), fetchRuns(gameId)]);
+    const { family } = await getMathDescriptor(gameId);
     if (s.activeGameId.get() !== gameId) return;
-    s.locks.set(doc.locks);
-    s.curationParams.set(doc.params);
-    s.verifyResult.set(doc.result);
-    s.tunerParams.set(tuner.params);
-    s.tuneResult.set(tuner.result);
-    const mm = gddDocs.find((d) => d.aspect === 'math-model');
-    s.targetFields.set(mm ? fieldsFromGddData(mm.data) : { rtp: '', volatility: '', bonusHitRate: '' });
-    if (mm) s.gddWatermark.set(mm.updatedAt);
-    s.runs.set(runs as never);
-    s.selectedRunId.set(runs[0]?.id ?? null);
-    s.loadStatus.set('idle');
-    await refreshTarget(gameId);
+    s.family.set(family);
+    if (family === 'composed@1') {
+      const [doc, tuner, gddDocs, runs] = await Promise.all([getComposedMathDoc(gameId), getTuner(gameId), getGddDocs(gameId), fetchRuns(gameId)]);
+      if (s.activeGameId.get() !== gameId) return;
+      s.locks.set(doc.locks);
+      s.curationParams.set(doc.params);
+      s.verifyResult.set(doc.result);
+      s.verdictStale.set(!!doc.verdictStale);
+      s.composedStateIds.set((doc.definition.states ?? []).map((st) => st.id));
+      await hydrateTail(s, gameId, tuner, gddDocs, runs);
+    } else {
+      const [doc, tuner, gddDocs, runs] = await Promise.all([getSlotModel(gameId), getTuner(gameId), getGddDocs(gameId), fetchRuns(gameId)]);
+      if (s.activeGameId.get() !== gameId) return;
+      s.locks.set(doc.locks);
+      s.curationParams.set(doc.params);
+      s.verifyResult.set(doc.result);
+      await hydrateTail(s, gameId, tuner, gddDocs, runs);
+    }
   } catch {
     s.loadStatus.set('error');
   }

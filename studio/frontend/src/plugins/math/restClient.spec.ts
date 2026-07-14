@@ -13,6 +13,8 @@ import {
   getTarget,
   getGddDocs,
   putMathModelFields,
+  getMathDescriptor,
+  getComposedMathDoc,
 } from './restClient';
 
 afterEach(() => vi.restoreAllMocks());
@@ -184,5 +186,31 @@ describe('math restClient', () => {
     expect(String(call[0])).toContain('/games/g1/gdd/math-model');
     expect(call[1].method).toBe('PUT');
     expect(JSON.parse(call[1].body)).toEqual({ fields });
+  });
+
+  it('getMathDescriptor GETs /games/g1/math/descriptor and returns the family', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ family: 'composed@1' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getMathDescriptor('g1');
+    expect(result.family).toBe('composed@1');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/games/g1/math/descriptor');
+  });
+
+  it('getComposedMathDoc GETs /games/g1/game-definition and returns the folded doc', async () => {
+    const doc = {
+      id: 'x',
+      gameId: 'g1',
+      definition: { family: 'composed@1', states: [{ id: 'base' }, { id: 'fs1' }] },
+      params: { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 },
+      locks: { reels: false, paytable: false, bonus: false },
+      result: null,
+      verdictStale: false,
+      updatedAt: 't',
+    };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => doc });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getComposedMathDoc('g1');
+    expect(result).toEqual(doc);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/games/g1/game-definition');
   });
 });

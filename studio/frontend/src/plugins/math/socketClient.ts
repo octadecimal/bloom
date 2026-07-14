@@ -116,6 +116,13 @@ export function createMathSocket() {
       if (!isActive(p.gameId)) return;
       void refreshDoc(p.gameId); // locks toggled in Game Config, template/agent writes, Apply echo
     });
+    sock.on('game_definition_changed', (p: { gameId: string; updatedAt: string; source: string }) => {
+      // composed@1's counterpart to slot_model_changed — a structure edit or
+      // agent apply must reconcile the open pane's doc-derived state + target.
+      if (!isActive(p.gameId) || mathSlice().family.get() !== 'composed@1') return;
+      void refreshDoc(p.gameId);
+      void refreshTarget(p.gameId);
+    });
     sock.on('gdd_doc_updated', (p: { gameId: string; doc: { aspect: string; data: Record<string, unknown>; updatedAt: string } }) => {
       if (!isActive(p.gameId) || p.doc.aspect !== 'math-model') return;
       const s = mathSlice();

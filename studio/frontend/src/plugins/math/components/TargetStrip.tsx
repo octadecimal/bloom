@@ -14,6 +14,7 @@ export function TargetStrip() {
   const target = s.derivedTarget.get() as ITargetSpec | null;
   const gap = s.targetGap.get();
   const save = s.targetSaveStatus.get();
+  const family = s.family.get();
   if (!fields) return null;
   return (
     <div className="flex-none border-b border-hairline p-2 text-xs text-text-2">
@@ -44,16 +45,18 @@ export function TargetStrip() {
             ))}
           </select>
         </label>
-        <label>
-          Bonus rate{' '}
-          <input
-            data-testid="target-bonus-rate"
-            value={fields.bonusHitRate}
-            placeholder="1:150"
-            onChange={(e) => editTargetField('bonusHitRate', e.target.value)}
-            className="ml-1 w-16 bg-canvas px-1 text-text-1"
-          />
-        </label>
+        {family !== 'composed@1' && (
+          <label>
+            Bonus rate{' '}
+            <input
+              data-testid="target-bonus-rate"
+              value={fields.bonusHitRate}
+              placeholder="1:150"
+              onChange={(e) => editTargetField('bonusHitRate', e.target.value)}
+              className="ml-1 w-16 bg-canvas px-1 text-text-1"
+            />
+          </label>
+        )}
         {save !== 'idle' && (
           <span data-testid="target-save-status" className={save === 'error' ? 'text-danger' : 'text-text-3'}>
             {save === 'saving' ? 'saving…' : save === 'saved' ? 'saved' : 'save failed'}
