@@ -10,7 +10,6 @@ import { openSaveLayoutDialog } from '../state/saveLayoutDialogRef';
 import { registerSlicePersistence } from '../state/persistSlices';
 import { hydrateWorkspace, registerWorkspacePersistence } from '../state/persistWorkspace';
 import { PLUGINS } from '../plugins';
-import { DEFAULT_LAYOUT } from './workbenchSetup';
 import { LAYOUT_BUILTINS } from './layoutPresets.builtins';
 import { notify } from '../lib/notify';
 import type { IPlugin, IPluginHost } from '../host/types';
@@ -34,7 +33,7 @@ export function setupApp(): IAppSetup {
 
   const layoutService = createLayoutService({
     paneRegistry,
-    defaultLayout: (a) => DEFAULT_LAYOUT(a, paneRegistry),
+    defaultLayout: (a) => LAYOUT_BUILTINS.Art(a, paneRegistry),
   });
 
   const host = createHost({
@@ -43,7 +42,7 @@ export function setupApp(): IAppSetup {
     getApi: () => api,
     resetLayout: () => {
       layoutService.reset();
-      if (api) DEFAULT_LAYOUT(api, paneRegistry);
+      if (api) LAYOUT_BUILTINS.Art(api, paneRegistry);
     },
   });
 
