@@ -3,7 +3,7 @@
 //! Pass/near-miss are valid results (exit 0); only bad input exits non-zero (2).
 //! An all-locked config emits a {"type":"error"} frame and exits 0.
 
-use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::TargetSpec;
 use bloom_tuner::config::{GeneBounds, SectionLocks, TunerConfig, Weights};
 use bloom_tuner::genetic::tune_with_progress;
@@ -23,6 +23,17 @@ struct BoundsJson {
     multiplier_max: u64,
     min_count_min: u8,
     min_count_max: u8,
+    #[serde(default = "default_meter_target_min")]
+    meter_target_min: u32,
+    #[serde(default = "default_meter_target_max")]
+    meter_target_max: u32,
+}
+
+fn default_meter_target_min() -> u32 {
+    1
+}
+fn default_meter_target_max() -> u32 {
+    100
 }
 
 #[derive(Deserialize)]
@@ -102,7 +113,7 @@ fn profile_json(p: &RunProfile) -> serde_json::Value {
     })
 }
 
-fn progress_line(snap: &GenSnapshot, max_generations: usize) -> String {
+fn progress_line(snap: &GenSnapshot, max_generations: usize, family: &str) -> String {
     json!({
         "type": "progress",
         "generation": snap.generation,
@@ -112,6 +123,8 @@ fn progress_line(snap: &GenSnapshot, max_generations: usize) -> String {
         "bestVolatility": snap.best_volatility,
         "population": pop_json(&snap.population),
         "geneAgreement": snap.gene_agreement,
+        "family": family,
+        "stateRtp": snap.best_state_rtp,
     })
     .to_string()
 }
@@ -151,10 +164,16 @@ fn result_line(out: &TuneOutcome) -> String {
         .collect();
     let se =
         bloom_simulator::target::standard_errors(&out.metrics, out.trace.final_candidate_count);
+    let model_json = match &out.model {
+        MathArtifact::Slots(m) => serde_json::to_value(m),
+        a => serde_json::to_value(a.composed_def().expect("two families")),
+    }
+    .expect("model serializes");
     json!({
         "type": "result",
         "verdict": verdict,
-        "model": out.model,
+        "family": out.model.family(),
+        "model": model_json,
         "metrics": {
             "rtp": out.metrics.rtp,
             "volatility": out.metrics.volatility,
@@ -162,6 +181,8 @@ fn result_line(out: &TuneOutcome) -> String {
             "baseRtp": out.metrics.base_rtp,
             "featureRtp": out.metrics.feature_rtp,
             "bonusHitRates": out.metrics.bonus_hit_rates,
+            "stateRtp": out.metrics.state_rtp,
+            "stateVisitFreq": out.metrics.state_visit_freq,
             "se": {
                 "rtp": se.rtp,
                 "volatility": se.volatility,
@@ -205,7 +226,17 @@ fn main() {
         std::process::exit(2);
     }
 
-    let model: SlotModel = read_json(&args[1], "model");
+    let artifact = match fs::read_to_string(&args[1])
+        .map_err(|e| e.to_string())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string()))
+        .and_then(MathArtifact::from_json_value)
+    {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("bad model json: {e}");
+            std::process::exit(2);
+        }
+    };
     let target: TargetSpec = read_json(&args[2], "target"); // master_seed key ignored by serde
     let cj: ConfigJson = read_json(&args[3], "config");
 
@@ -228,6 +259,8 @@ fn main() {
             multiplier_max: cj.bounds.multiplier_max,
             min_count_min: cj.bounds.min_count_min,
             min_count_max: cj.bounds.min_count_max,
+            meter_target_min: cj.bounds.meter_target_min,
+            meter_target_max: cj.bounds.meter_target_max,
         },
         weights: Weights {
             rtp: cj.weights.rtp,
@@ -247,14 +280,15 @@ fn main() {
         return;
     }
 
-    if let Err(e) = bloom_tuner::validate(&model, &target, &cfg) {
+    if let Err(e) = bloom_tuner::validate(&artifact, &target, &cfg) {
         eprintln!("invalid input: {e}");
         std::process::exit(2);
     }
 
+    let family = artifact.family();
     let max_generations = cfg.max_generations;
-    let mut on_progress = |s: &GenSnapshot| emit(progress_line(s, max_generations));
-    let out = tune_with_progress(&model, &target, &cfg, &mut on_progress);
+    let mut on_progress = |s: &GenSnapshot| emit(progress_line(s, max_generations, family));
+    let out = tune_with_progress(&artifact, &target, &cfg, &mut on_progress);
     emit(result_line(&out));
 }
 
@@ -269,14 +303,14 @@ mod tests {
 
     fn outcome(verdict: Verdict) -> TuneOutcome {
         TuneOutcome {
-            model: SlotModel {
+            model: MathArtifact::Slots(SlotModel {
                 symbols: vec![],
                 reels: vec![],
                 rows: 1,
                 paylines: vec![],
                 paytable: Paytable { entries: vec![] },
                 bonuses: vec![],
-            },
+            }),
             metrics: Metrics {
                 rtp: 0.901,
                 volatility: 3.2,
@@ -284,6 +318,8 @@ mod tests {
                 bonus_hit_rates: vec![],
                 base_rtp: 0.901,
                 feature_rtp: 0.0,
+                state_rtp: [("base".to_string(), 0.901)].into(),
+                state_visit_freq: [("base".to_string(), 1.0)].into(),
                 ..Default::default()
             },
             verdict,
@@ -296,6 +332,7 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
+                    best_state_rtp: Default::default(),
                     population: population_stats(&[-0.9, -0.5, -0.1]),
                     gene_agreement: vec![0.8, 0.6],
                 }],
@@ -337,10 +374,12 @@ mod tests {
             best_rtp: 0.85,
             best_volatility: 2.1,
             best_bonus_hit_rates: vec![],
+            best_state_rtp: Default::default(),
             population: population_stats(&[-0.25]),
             gene_agreement: vec![1.0],
         };
-        let v: serde_json::Value = serde_json::from_str(&progress_line(&snap, 40)).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&progress_line(&snap, 40, "slots@1")).unwrap();
         assert_eq!(v["type"], "progress");
         assert_eq!(v["generation"], 3);
         assert_eq!(v["maxGenerations"], 40);
@@ -393,6 +432,7 @@ mod tests {
             best_rtp: 0.85,
             best_volatility: 2.1,
             best_bonus_hit_rates: vec![],
+            best_state_rtp: Default::default(),
             population: bloom_tuner::telemetry::PopulationStats {
                 min: -0.9,
                 q1: -0.7,
@@ -404,7 +444,8 @@ mod tests {
             },
             gene_agreement: vec![0.8, 0.6],
         };
-        let v: serde_json::Value = serde_json::from_str(&progress_line(&snap, 40)).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&progress_line(&snap, 40, "slots@1")).unwrap();
         assert_eq!(v["population"]["diversity"], 0.4);
         assert_eq!(v["geneAgreement"][0], 0.8);
     }
@@ -477,5 +518,64 @@ mod tests {
         assert!(v["metrics"]["se"]["volatility"].is_number());
         assert!(v["metrics"]["se"]["bonusHitRates"].is_array());
         assert!(v["metrics"]["se"]["hitFrequency"].is_number());
+    }
+
+    #[test]
+    fn result_line_carries_family_and_state_shares() {
+        let v: serde_json::Value =
+            serde_json::from_str(&result_line(&outcome(Verdict::Pass))).unwrap();
+        assert_eq!(v["family"], "slots@1");
+        assert_eq!(v["metrics"]["stateRtp"]["base"], 0.901);
+        assert_eq!(v["metrics"]["stateVisitFreq"]["base"], 1.0);
+        // slots "model" keeps its legacy shape (an object with "reels")
+        assert!(v["model"]["reels"].is_array());
+    }
+
+    #[test]
+    fn composed_result_line_model_is_the_definition() {
+        let mut o = outcome(Verdict::Pass);
+        let def: bloom_math::mechanics::composed::GameDefinition = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../runtime/server/demo/composed.definition.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        o.model = bloom_simulator::artifact::MathArtifact::from_definition(def).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result_line(&o)).unwrap();
+        assert_eq!(v["family"], "composed@1");
+        assert_eq!(v["model"]["family"], "composed@1");
+        assert!(v["model"]["states"].is_array());
+        assert!(v["model"]["reels"].is_null()); // not a SlotModel shape
+    }
+
+    #[test]
+    fn progress_line_carries_family_and_state_rtp() {
+        let mut snap = GenSnapshot {
+            generation: 3,
+            best_fitness: -0.25,
+            best_rtp: 0.85,
+            best_volatility: 2.1,
+            best_bonus_hit_rates: vec![],
+            best_state_rtp: [("base".to_string(), 0.7), ("fs".to_string(), 0.15)].into(),
+            population: population_stats(&[-0.25]),
+            gene_agreement: vec![1.0],
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&progress_line(&snap, 40, "composed@1")).unwrap();
+        assert_eq!(v["family"], "composed@1");
+        assert_eq!(v["stateRtp"]["fs"], 0.15);
+        snap.best_state_rtp.clear();
+        let v: serde_json::Value =
+            serde_json::from_str(&progress_line(&snap, 40, "slots@1")).unwrap();
+        assert_eq!(v["family"], "slots@1");
+    }
+
+    #[test]
+    fn bounds_json_meter_target_defaults() {
+        let cj: ConfigJson = serde_json::from_str(&format!("{FULL_CONFIG}}}")).unwrap();
+        assert_eq!(cj.bounds.meter_target_min, 1);
+        assert_eq!(cj.bounds.meter_target_max, 100);
     }
 }

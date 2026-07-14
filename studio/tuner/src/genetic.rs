@@ -9,11 +9,11 @@ use crate::genome::{decode, encode_with_locks, repair, Genome};
 use crate::outcome::{GenSnapshot, RunProfile, StopReason, TuneOutcome, TuningTrace, Verdict};
 use crate::telemetry::{gene_agreement, population_stats};
 use crate::Tuner;
-use bloom_math::mechanics::slots::SlotModel;
 use bloom_math::rng::SplitMix64;
-use bloom_simulator::measure::{measure, simulate};
+use bloom_simulator::artifact::{simulate, MathArtifact};
+use bloom_simulator::measure::measure;
 use bloom_simulator::profile::profile;
-use bloom_simulator::run::verify;
+use bloom_simulator::run::verify_artifact;
 use bloom_simulator::seedgen::generate_seeds;
 use bloom_simulator::target::{PayConstraint, TargetSpec};
 
@@ -51,49 +51,91 @@ fn confirmation_seeds(master_seed: u64, generation: usize, count: usize) -> Vec<
 /// `cfg.mutation_rate`; numeric genes step within their bounds.
 fn mutate(
     g: &mut Genome,
-    template: &SlotModel,
+    template: &MathArtifact,
     cfg: &TunerConfig,
     rng: &mut SplitMix64,
     constraints: &[PayConstraint],
 ) {
     let b = &cfg.bounds;
-    for counts in &mut g.reel_counts {
-        // move one unit between two buckets (preserves sum; repair re-normalizes).
-        if counts.len() >= 2 && unit(rng) < cfg.mutation_rate {
-            let from = (rng.next_u64() as usize) % counts.len();
-            let to = (rng.next_u64() as usize) % counts.len();
-            if from != to && counts[from] > 0 {
-                counts[from] -= 1;
-                counts[to] += 1;
+    match g {
+        Genome::Slots(g) => {
+            for counts in &mut g.reel_counts {
+                // move one unit between two buckets (preserves sum; repair re-normalizes).
+                if counts.len() >= 2 && unit(rng) < cfg.mutation_rate {
+                    let from = (rng.next_u64() as usize) % counts.len();
+                    let to = (rng.next_u64() as usize) % counts.len();
+                    if from != to && counts[from] > 0 {
+                        counts[from] -= 1;
+                        counts[to] += 1;
+                    }
+                }
+            }
+            for p in &mut g.payouts {
+                if unit(rng) < cfg.mutation_rate {
+                    // Step, don't resample: a uniform jump across the whole bound span
+                    // makes the search a lottery at high mutation rates. ±(1..=span/10)
+                    // keeps mutation local while repair/crossover handle the rest.
+                    let step_max = ((b.payout_max - b.payout_min) / 10).max(1);
+                    let step = 1 + rng.next_u64() % step_max;
+                    *p = if unit(rng) < 0.5 {
+                        p.saturating_sub(step).max(b.payout_min)
+                    } else {
+                        p.saturating_add(step).min(b.payout_max)
+                    };
+                }
+            }
+            for bonus in &mut g.bonuses {
+                if unit(rng) < cfg.mutation_rate {
+                    bonus.spins_awarded =
+                        b.spins_min + (rng.next_u64() as u32 % (b.spins_max - b.spins_min + 1));
+                }
+                if unit(rng) < cfg.mutation_rate {
+                    bonus.multiplier = b.multiplier_min
+                        + (rng.next_u64() % (b.multiplier_max - b.multiplier_min + 1));
+                }
+                if unit(rng) < cfg.mutation_rate {
+                    bonus.min_count = b.min_count_min.max(1)
+                        + (rng.next_u64() as u8 % (b.min_count_max - b.min_count_min.max(1) + 1));
+                }
             }
         }
-    }
-    for p in &mut g.payouts {
-        if unit(rng) < cfg.mutation_rate {
-            // Step, don't resample: a uniform jump across the whole bound span
-            // makes the search a lottery at high mutation rates. ±(1..=span/10)
-            // keeps mutation local while repair/crossover handle the rest.
-            let step_max = ((b.payout_max - b.payout_min) / 10).max(1);
-            let step = 1 + rng.next_u64() % step_max;
-            *p = if unit(rng) < 0.5 {
-                p.saturating_sub(step).max(b.payout_min)
-            } else {
-                p.saturating_add(step).min(b.payout_max)
-            };
-        }
-    }
-    for bonus in &mut g.bonuses {
-        if unit(rng) < cfg.mutation_rate {
-            bonus.spins_awarded =
-                b.spins_min + (rng.next_u64() as u32 % (b.spins_max - b.spins_min + 1));
-        }
-        if unit(rng) < cfg.mutation_rate {
-            bonus.multiplier =
-                b.multiplier_min + (rng.next_u64() % (b.multiplier_max - b.multiplier_min + 1));
-        }
-        if unit(rng) < cfg.mutation_rate {
-            bonus.min_count = b.min_count_min.max(1)
-                + (rng.next_u64() as u8 % (b.min_count_max - b.min_count_min.max(1) + 1));
+        Genome::Composed(g) => {
+            // strips: same one-unit bucket move, per strip on every surface
+            for counts in g.surfaces.iter_mut().flatten() {
+                if counts.len() >= 2 && unit(rng) < cfg.mutation_rate {
+                    let from = (rng.next_u64() as usize) % counts.len();
+                    let to = (rng.next_u64() as usize) % counts.len();
+                    if from != to && counts[from] > 0 {
+                        counts[from] -= 1;
+                        counts[to] += 1;
+                    }
+                }
+            }
+            // payouts: same step-don't-resample op as slots
+            for p in &mut g.payouts {
+                if unit(rng) < cfg.mutation_rate {
+                    let step_max = ((b.payout_max - b.payout_min) / 10).max(1);
+                    let step = 1 + rng.next_u64() % step_max;
+                    *p = if unit(rng) < 0.5 {
+                        p.saturating_sub(step).max(b.payout_min)
+                    } else {
+                        p.saturating_add(step).min(b.payout_max)
+                    };
+                }
+            }
+            // features: resample within bounds, like slots' bonus genes
+            for t in &mut g.meter_targets {
+                if unit(rng) < cfg.mutation_rate {
+                    let lo = b.meter_target_min.max(1);
+                    *t = lo + (rng.next_u64() as u32 % (b.meter_target_max - lo + 1));
+                }
+            }
+            for a in &mut g.awarded_budgets {
+                if unit(rng) < cfg.mutation_rate {
+                    let lo = b.spins_min.max(1);
+                    *a = lo + (rng.next_u64() as u32 % (b.spins_max - lo + 1));
+                }
+            }
         }
     }
     repair(g, template, &cfg.bounds, constraints);
@@ -103,7 +145,7 @@ fn mutate(
 fn crossover(
     p1: &Genome,
     p2: &Genome,
-    template: &SlotModel,
+    template: &MathArtifact,
     cfg: &TunerConfig,
     rng: &mut SplitMix64,
     constraints: &[PayConstraint],
@@ -112,20 +154,49 @@ fn crossover(
         return p1.clone();
     }
     let mut child = p1.clone();
-    for (r, src) in child.reel_counts.iter_mut().zip(&p2.reel_counts) {
-        if unit(rng) < 0.5 {
-            *r = src.clone();
+    match (&mut child, p2) {
+        (Genome::Slots(c), Genome::Slots(p2)) => {
+            for (r, src) in c.reel_counts.iter_mut().zip(&p2.reel_counts) {
+                if unit(rng) < 0.5 {
+                    *r = src.clone();
+                }
+            }
+            for (i, v) in c.payouts.iter_mut().enumerate() {
+                if unit(rng) < 0.5 {
+                    *v = p2.payouts[i];
+                }
+            }
+            for (i, v) in c.bonuses.iter_mut().enumerate() {
+                if unit(rng) < 0.5 {
+                    *v = p2.bonuses[i].clone();
+                }
+            }
         }
-    }
-    for (i, c) in child.payouts.iter_mut().enumerate() {
-        if unit(rng) < 0.5 {
-            *c = p2.payouts[i];
+        (Genome::Composed(c), Genome::Composed(p2)) => {
+            for (surface, src) in c.surfaces.iter_mut().zip(&p2.surfaces) {
+                for (strip, s) in surface.iter_mut().zip(src) {
+                    if unit(rng) < 0.5 {
+                        *strip = s.clone();
+                    }
+                }
+            }
+            for (i, v) in c.payouts.iter_mut().enumerate() {
+                if unit(rng) < 0.5 {
+                    *v = p2.payouts[i];
+                }
+            }
+            for (i, v) in c.meter_targets.iter_mut().enumerate() {
+                if unit(rng) < 0.5 {
+                    *v = p2.meter_targets[i];
+                }
+            }
+            for (i, v) in c.awarded_budgets.iter_mut().enumerate() {
+                if unit(rng) < 0.5 {
+                    *v = p2.awarded_budgets[i];
+                }
+            }
         }
-    }
-    for (i, c) in child.bonuses.iter_mut().enumerate() {
-        if unit(rng) < 0.5 {
-            *c = p2.bonuses[i].clone();
-        }
+        _ => unreachable!("population is single-family"),
     }
     repair(&mut child, template, &cfg.bounds, constraints);
     child
@@ -142,17 +213,112 @@ fn tournament<'a>(scored: &'a [(Genome, f64)], rng: &mut SplitMix64) -> &'a Geno
     }
 }
 
+/// One column per tunable gene dimension for the agreement telemetry.
+/// Columns must be well-defined even under locks: a locked group is simply
+/// absent (no column), mirroring how the search space shrinks.
+///
+/// The inner `_ => unreachable!()` arms assume every genome in `scored` is the
+/// same `Genome` variant as `scored[0].0`. That invariant is enforced outside
+/// this function: a population is seeded from one `encode_with_locks(seed, ..)`
+/// call and every subsequent generation is built by `crossover`/`mutate`
+/// operating on that same seed's family (`crossover`'s own `_ => unreachable!`
+/// guards a stray cross-family pairing), so a run's population is always
+/// single-family.
+fn gene_columns(scored: &[(Genome, f64)]) -> Vec<Vec<f64>> {
+    let mut cols: Vec<Vec<f64>> = Vec::new();
+    match &scored[0].0 {
+        Genome::Slots(first) => {
+            if !first.payouts.is_empty() {
+                cols.push(
+                    scored
+                        .iter()
+                        .map(|(g, _)| match g {
+                            Genome::Slots(g) => {
+                                g.payouts.iter().map(|&p| p as f64).sum::<f64>()
+                                    / g.payouts.len().max(1) as f64
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                );
+            }
+            for dim in 0..first.bonuses.len() * 3 {
+                cols.push(
+                    scored
+                        .iter()
+                        .map(|(g, _)| match g {
+                            Genome::Slots(g) => {
+                                let b = &g.bonuses[dim / 3];
+                                match dim % 3 {
+                                    0 => b.spins_awarded as f64,
+                                    1 => b.multiplier as f64,
+                                    _ => b.min_count as f64,
+                                }
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                );
+            }
+        }
+        Genome::Composed(first) => {
+            if !first.payouts.is_empty() {
+                cols.push(
+                    scored
+                        .iter()
+                        .map(|(g, _)| match g {
+                            Genome::Composed(g) => {
+                                g.payouts.iter().map(|&p| p as f64).sum::<f64>()
+                                    / g.payouts.len().max(1) as f64
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                );
+            }
+            for i in 0..first.meter_targets.len() {
+                cols.push(
+                    scored
+                        .iter()
+                        .map(|(g, _)| match g {
+                            Genome::Composed(g) => g.meter_targets[i] as f64,
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                );
+            }
+            for i in 0..first.awarded_budgets.len() {
+                cols.push(
+                    scored
+                        .iter()
+                        .map(|(g, _)| match g {
+                            Genome::Composed(g) => g.awarded_budgets[i] as f64,
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                );
+            }
+        }
+    }
+    if cols.is_empty() {
+        // reels-only search: emit a constant column so the snapshot shape
+        // (non-empty agreement) is preserved.
+        cols.push(vec![1.0; scored.len()]);
+    }
+    cols
+}
+
 /// Like `GeneticTuner::tune`, but reports each generation's best snapshot through
 /// `on_progress` as it is produced. `tune` delegates here with a no-op callback,
 /// so the deterministic result is identical. Progress is cosmetic.
 pub fn tune_with_progress(
-    seed_model: &SlotModel,
+    seed: &MathArtifact,
     target: &TargetSpec,
     cfg: &TunerConfig,
     on_progress: &mut dyn FnMut(&GenSnapshot),
 ) -> TuneOutcome {
     let mut rng = SplitMix64::new(cfg.master_seed);
-    let base = encode_with_locks(seed_model, &cfg.locks);
+    let base = encode_with_locks(seed, &cfg.locks);
 
     // Initial population: the seed model + mutated variants.
     let mut pop: Vec<Genome> = (0..cfg.population)
@@ -161,7 +327,7 @@ pub fn tune_with_progress(
                 base.clone()
             } else {
                 let mut g = base.clone();
-                mutate(&mut g, seed_model, cfg, &mut rng, &target.pay_constraints);
+                mutate(&mut g, seed, cfg, &mut rng, &target.pay_constraints);
                 g
             }
         })
@@ -185,8 +351,8 @@ pub fn tune_with_progress(
     // the base final seeds.
     let final_seeds = generate_seeds(cfg.master_seed ^ FINAL_SALT, cfg.final_candidate_count);
     let final_fitness =
-        |m: &SlotModel| fitness(&measure(&simulate(m, &final_seeds)), target, &cfg.weights);
-    let mut feasible: Option<(SlotModel, Vec<bloom_simulator::measure::RoundSample>)> = None;
+        |m: &MathArtifact| fitness(&measure(&simulate(m, &final_seeds)), target, &cfg.weights);
+    let mut feasible: Option<(MathArtifact, Vec<bloom_simulator::measure::RoundSample>)> = None;
     let mut last_top: Option<Genome> = None;
 
     for g in 0..max_generations {
@@ -196,67 +362,17 @@ pub fn tune_with_progress(
         let mut scored: Vec<(Genome, f64)> = pop
             .iter()
             .map(|genome| {
-                let model = decode(genome, seed_model);
+                let model = decode(genome, seed);
                 let f = fitness(&measure(&simulate(&model, &seeds)), target, &cfg.weights);
                 (genome.clone(), f)
             })
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
-        let best_model = decode(&scored[0].0, seed_model);
+        let best_model = decode(&scored[0].0, seed);
         let bm = measure(&simulate(&best_model, &seeds));
 
         let fitnesses: Vec<f64> = scored.iter().map(|(_, f)| *f).collect();
-        let decoded: Vec<SlotModel> = scored
-            .iter()
-            .map(|(gn, _)| decode(gn, seed_model))
-            .collect();
-        // one column per tunable gene dimension: mean payout, and (if present) the first
-        // bonus's spins / multiplier / min_count. Guarded for models without bonuses.
-        let col_payout: Vec<f64> = decoded
-            .iter()
-            .map(|m| {
-                m.paytable
-                    .entries
-                    .iter()
-                    .map(|e| e.payout as f64)
-                    .sum::<f64>()
-                    / m.paytable.entries.len().max(1) as f64
-            })
-            .collect();
-        let mut cols = vec![col_payout];
-        if decoded.iter().all(|m| !m.bonuses.is_empty()) {
-            cols.push(
-                decoded
-                    .iter()
-                    .map(|m| match &m.bonuses[0] {
-                        bloom_math::mechanics::slots::BonusFeature::FreeSpins {
-                            config, ..
-                        } => config.spins_awarded as f64,
-                    })
-                    .collect(),
-            );
-            cols.push(
-                decoded
-                    .iter()
-                    .map(|m| match &m.bonuses[0] {
-                        bloom_math::mechanics::slots::BonusFeature::FreeSpins {
-                            config, ..
-                        } => config.multiplier as f64,
-                    })
-                    .collect(),
-            );
-            cols.push(
-                decoded
-                    .iter()
-                    .map(|m| match &m.bonuses[0] {
-                        bloom_math::mechanics::slots::BonusFeature::FreeSpins {
-                            trigger, ..
-                        } => trigger.min_count as f64,
-                    })
-                    .collect(),
-            );
-        }
 
         let snap = GenSnapshot {
             generation: g,
@@ -264,8 +380,9 @@ pub fn tune_with_progress(
             best_rtp: bm.rtp,
             best_volatility: bm.volatility,
             best_bonus_hit_rates: bm.bonus_hit_rates.clone(),
+            best_state_rtp: bm.state_rtp.clone(),
             population: population_stats(&fitnesses),
-            gene_agreement: gene_agreement(&cols),
+            gene_agreement: gene_agreement(&gene_columns(&scored)),
         };
         on_progress(&snap);
         snapshots.push(snap);
@@ -289,13 +406,13 @@ pub fn tune_with_progress(
             // low-fidelity read alone. The prefilter keeps hopeless targets
             // (miss ≫ 2·SE even at search fidelity) ending early as Stagnated
             // and skips pointless final-fidelity simulations.
-            if verify(&best_model, &bm, target, cfg.search_candidate_count).is_ok() {
-                let candidate = decode(&scored[0].0, seed_model);
+            if verify_artifact(&best_model, &bm, target, cfg.search_candidate_count).is_ok() {
+                let candidate = decode(&scored[0].0, seed);
                 let conf_samples = simulate(
                     &candidate,
                     &confirmation_seeds(cfg.master_seed, g, cfg.final_candidate_count),
                 );
-                if verify(
+                if verify_artifact(
                     &candidate,
                     &measure(&conf_samples),
                     target,
@@ -329,14 +446,8 @@ pub fn tune_with_progress(
         while next.len() < cfg.population {
             let p1 = tournament(&scored, &mut rng).clone();
             let p2 = tournament(&scored, &mut rng).clone();
-            let mut child = crossover(&p1, &p2, seed_model, cfg, &mut rng, &target.pay_constraints);
-            mutate(
-                &mut child,
-                seed_model,
-                cfg,
-                &mut rng,
-                &target.pay_constraints,
-            );
+            let mut child = crossover(&p1, &p2, seed, cfg, &mut rng, &target.pay_constraints);
+            mutate(&mut child, seed, cfg, &mut rng, &target.pay_constraints);
             next.push(child);
         }
         pop = next;
@@ -350,7 +461,7 @@ pub fn tune_with_progress(
     // panel (common random numbers are right for comparison) — so the tuner
     // can never return a model that measures worse than its input.
     // The raw seed model is a candidate itself (not its genome round-trip —
-    // decode(encode(seed)) may re-arrange reel strips, which measures slightly
+    // decode(encode_with_locks(seed)) may re-arrange reel strips, which measures slightly
     // differently), so an untunable input comes back byte-identical.
     let (model, final_samples) = match feasible {
         Some((model, conf_samples)) => {
@@ -358,23 +469,23 @@ pub fn tune_with_progress(
             // the confirmed candidate head-to-head on the base panel, keep the
             // seed (measured on that panel — it was never selected on anything,
             // so the panel is a fresh referee for it).
-            if *seed_model != model && final_fitness(seed_model) > final_fitness(&model) {
-                (seed_model.clone(), simulate(seed_model, &final_seeds))
+            if *seed != model && final_fitness(seed) > final_fitness(&model) {
+                (seed.clone(), simulate(seed, &final_seeds))
             } else {
                 (model, conf_samples)
             }
         }
         None => {
             let (best_genome, _) = best.expect("at least one generation always runs");
-            let mut candidates = vec![decode(&best_genome, seed_model)];
+            let mut candidates = vec![decode(&best_genome, seed)];
             if let Some(top) = last_top {
-                let m = decode(&top, seed_model);
+                let m = decode(&top, seed);
                 if !candidates.contains(&m) {
                     candidates.push(m);
                 }
             }
-            if !candidates.contains(seed_model) {
-                candidates.push(seed_model.clone());
+            if !candidates.contains(seed) {
+                candidates.push(seed.clone());
             }
             let mut winner = (&candidates[0], final_fitness(&candidates[0]));
             for m in &candidates[1..] {
@@ -389,7 +500,7 @@ pub fn tune_with_progress(
         }
     };
     let metrics = measure(&final_samples);
-    let verdict = match verify(&model, &metrics, target, final_samples.len()) {
+    let verdict = match verify_artifact(&model, &metrics, target, final_samples.len()) {
         Ok(()) => Verdict::Pass,
         Err(_) => Verdict::NearMiss {
             missed: band_misses(&model, &metrics, target, final_samples.len()),
@@ -420,8 +531,8 @@ pub fn tune_with_progress(
 }
 
 impl Tuner for GeneticTuner {
-    fn tune(&self, seed_model: &SlotModel, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome {
-        tune_with_progress(seed_model, target, cfg, &mut |_| {})
+    fn tune(&self, seed: &MathArtifact, target: &TargetSpec, cfg: &TunerConfig) -> TuneOutcome {
+        tune_with_progress(seed, target, cfg, &mut |_| {})
     }
 }
 
@@ -433,6 +544,10 @@ mod tests {
     use crate::Tuner;
     use bloom_math::mechanics::slots::{Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole};
     use bloom_simulator::target::TargetSpec;
+
+    fn slots(m: SlotModel) -> MathArtifact {
+        MathArtifact::Slots(m)
+    }
 
     // 1 reel, 1 row, 1 line. strip = 5x sym0, 4x sym1, 1x sym2 (10 cells).
     // paytable: sym1@1 -> 1, sym2@1 -> 5. Closed-form base RTP = 0.9.
@@ -507,6 +622,8 @@ mod tests {
                 multiplier_max: 10,
                 min_count_min: 1,
                 min_count_max: 5,
+                meter_target_min: 1,
+                meter_target_max: 100,
             },
             weights: Weights {
                 rtp: 1.0,
@@ -520,7 +637,7 @@ mod tests {
 
     #[test]
     fn stop_reason_feasible_when_target_reached() {
-        let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        let out = GeneticTuner.tune(&slots(toy(1)), &target_09(), &cfg(7));
         assert!(matches!(out.verdict, Verdict::Pass));
         assert_eq!(out.trace.stop_reason, StopReason::Feasible);
     }
@@ -532,7 +649,7 @@ mod tests {
         // run always spans at least stagnation_window generations.
         let mut c = cfg(7);
         c.stagnation_window = 6;
-        let out = GeneticTuner.tune(&toy(1), &target_09(), &c);
+        let out = GeneticTuner.tune(&slots(toy(1)), &target_09(), &c);
         assert_eq!(out.trace.stop_reason, StopReason::Feasible);
         assert!(
             out.trace.generations_run > c.stagnation_window,
@@ -546,7 +663,7 @@ mod tests {
         // The live failure: a seed already measuring in-band ended the run at
         // generation 0 with the model byte-identical. The run must now last
         // at least a stagnation window.
-        let seed_model = toy(5); // true RTP exactly 0.9 — in-band from gen 0
+        let seed_model = slots(toy(5)); // true RTP exactly 0.9 — in-band from gen 0
         let mut c = cfg(7);
         c.stagnation_window = 6;
         let out = GeneticTuner.tune(&seed_model, &target_09(), &c);
@@ -560,7 +677,7 @@ mod tests {
         let mut c = cfg(3);
         c.max_generations = 3;
         c.stagnation_window = 100; // never trips
-        let out = GeneticTuner.tune(&toy(1), &t, &c);
+        let out = GeneticTuner.tune(&slots(toy(1)), &t, &c);
         assert_eq!(out.trace.generations_run, 3);
         assert_eq!(out.trace.stop_reason, StopReason::Budget);
     }
@@ -572,7 +689,7 @@ mod tests {
         let mut c = cfg(3);
         c.max_generations = 200;
         c.stagnation_window = 3;
-        let out = GeneticTuner.tune(&toy(1), &t, &c);
+        let out = GeneticTuner.tune(&slots(toy(1)), &t, &c);
         assert!(out.trace.generations_run < 200);
         assert_eq!(out.trace.stop_reason, StopReason::Stagnated);
     }
@@ -600,7 +717,7 @@ mod tests {
         // A run that claims "feasible" must actually pass the final verify —
         // a lucky low-fidelity measurement is not feasibility.
         for seed in 0..20 {
-            let out = GeneticTuner.tune(&toy(1), &tight_target(), &noisy_cfg(seed));
+            let out = GeneticTuner.tune(&slots(toy(1)), &tight_target(), &noisy_cfg(seed));
             if out.trace.stop_reason == StopReason::Feasible {
                 assert!(
                     matches!(out.verdict, Verdict::Pass),
@@ -616,13 +733,19 @@ mod tests {
         // toy(5) is already in-band (true RTP 0.9). The tuner must never
         // return a model that measures worse than its input at final fidelity,
         // no matter how lucky some mutant got on the noisy search seeds.
-        let seed_model = toy(5);
+        let seed_model = slots(toy(5));
         let t = tight_target();
         for seed in 0..20 {
             let c = noisy_cfg(seed);
             let out = GeneticTuner.tune(&seed_model, &t, &c);
             let final_seeds = generate_seeds(c.master_seed ^ FINAL_SALT, c.final_candidate_count);
-            let fit = |m: &SlotModel| fitness(&measure(&simulate(m, &final_seeds)), &t, &c.weights);
+            let fit = |a: &MathArtifact| {
+                fitness(
+                    &measure(&bloom_simulator::artifact::simulate(a, &final_seeds)),
+                    &t,
+                    &c.weights,
+                )
+            };
             let (out_fit, seed_fit) = (fit(&out.model), fit(&seed_model));
             assert!(
                 out_fit >= seed_fit - 1e-12,
@@ -660,7 +783,7 @@ mod tests {
         // which one candidate per generation was already tested against
         // (reusing it reports the selected-on, optimism-biased draw).
         let c = cfg(7);
-        let out = GeneticTuner.tune(&toy(1), &target_09(), &c);
+        let out = GeneticTuner.tune(&slots(toy(1)), &target_09(), &c);
         assert_eq!(out.trace.stop_reason, StopReason::Feasible);
         let stop_gen = out.trace.generations_run - 1;
         let conf = confirmation_seeds(c.master_seed, stop_gen, c.final_candidate_count);
@@ -675,7 +798,7 @@ mod tests {
     fn payout_mutation_steps_rather_than_resamples() {
         // With a wide payout bound, one mutation must nudge a payout (at most
         // 10% of the span), not teleport it uniformly across the whole range.
-        let seed = toy(100);
+        let seed = slots(toy(100));
         let mut c = cfg(1);
         c.bounds.payout_max = 10_000;
         c.mutation_rate = 1.0; // force every gene to mutate
@@ -683,9 +806,16 @@ mod tests {
         let span_step = (c.bounds.payout_max - c.bounds.payout_min) / 10;
         for _ in 0..500 {
             let mut g = encode_with_locks(&seed, &c.locks);
-            let before = g.payouts.clone();
+            let before = match &g {
+                Genome::Slots(sg) => sg.payouts.clone(),
+                Genome::Composed(_) => unreachable!(),
+            };
             mutate(&mut g, &seed, &c, &mut rng, &[]);
-            for (a, b) in before.iter().zip(&g.payouts) {
+            let after = match &g {
+                Genome::Slots(sg) => sg.payouts.clone(),
+                Genome::Composed(_) => unreachable!(),
+            };
+            for (a, b) in before.iter().zip(&after) {
                 let moved = a.abs_diff(*b);
                 assert!(moved <= span_step, "payout jumped {moved} (> {span_step})");
                 assert!(*b >= c.bounds.payout_min && *b <= c.bounds.payout_max);
@@ -695,7 +825,7 @@ mod tests {
 
     #[test]
     fn reproducible_same_seed_same_outcome() {
-        let seed = toy(1); // detuned: sym2 pays 1 -> RTP ~0.5
+        let seed = slots(toy(1)); // detuned: sym2 pays 1 -> RTP ~0.5
         let a = GeneticTuner.tune(&seed, &target_09(), &cfg(2026));
         let b = GeneticTuner.tune(&seed, &target_09(), &cfg(2026));
         assert_eq!(a.model, b.model);
@@ -707,7 +837,7 @@ mod tests {
     #[test]
     fn converges_a_detuned_model_back_into_band() {
         // start far from target (sym2 pays 1 -> RTP ~0.5); tuner must reach 0.9 ± 0.02.
-        let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        let out = GeneticTuner.tune(&slots(toy(1)), &target_09(), &cfg(7));
         assert!(
             matches!(out.verdict, Verdict::Pass),
             "verdict was {:?}",
@@ -726,7 +856,7 @@ mod tests {
         let mut t = target_09();
         t.rtp_target = 50.0;
         t.rtp_tolerance = 0.1;
-        let out = GeneticTuner.tune(&toy(1), &t, &cfg(3));
+        let out = GeneticTuner.tune(&slots(toy(1)), &t, &cfg(3));
         match out.verdict {
             Verdict::NearMiss { missed } => assert!(missed.iter().any(|m| m.metric == "rtp")),
             Verdict::Pass => panic!("must not report PASS for an unreachable target"),
@@ -736,7 +866,7 @@ mod tests {
     #[test]
     fn progress_fires_once_per_generation_and_matches_tune() {
         use crate::genetic::tune_with_progress;
-        let seed = toy(1);
+        let seed = slots(toy(1));
         let t = target_09();
         let c = cfg(7);
 
@@ -759,7 +889,7 @@ mod tests {
 
     #[test]
     fn snapshots_carry_population_stats_and_profile_is_present() {
-        let out = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        let out = GeneticTuner.tune(&slots(toy(1)), &target_09(), &cfg(7));
         // every generation snapshot has population stats + one agreement value per gene dim
         assert!(out
             .trace
@@ -782,8 +912,8 @@ mod tests {
 
     #[test]
     fn telemetry_does_not_change_the_deterministic_result() {
-        let a = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
-        let b = GeneticTuner.tune(&toy(1), &target_09(), &cfg(7));
+        let a = GeneticTuner.tune(&slots(toy(1)), &target_09(), &cfg(7));
+        let b = GeneticTuner.tune(&slots(toy(1)), &target_09(), &cfg(7));
         assert_eq!(a.model, b.model);
         assert_eq!(a.metrics.rtp, b.metrics.rtp);
         assert_eq!(a.profile.tail.max_win, b.profile.tail.max_win);
@@ -801,7 +931,7 @@ mod tests {
         // toy(1) is detuned (RTP ~0.5); payouts alone can reach 0.9 exactly
         // (sym2 pays 5 with the seed composition), so a reels-locked run must
         // still pass — with the reels untouched.
-        let seed = toy(1);
+        let seed = slots(toy(1));
         let c = cfg_locked(
             7,
             SectionLocks {
@@ -810,7 +940,10 @@ mod tests {
             },
         );
         let out = GeneticTuner.tune(&seed, &target_09(), &c);
-        assert_eq!(out.model.reels, seed.reels);
+        assert_eq!(
+            out.model.as_slots().unwrap().reels,
+            seed.as_slots().unwrap().reels
+        );
         assert!(
             matches!(out.verdict, Verdict::Pass),
             "verdict was {:?}",
@@ -820,7 +953,7 @@ mod tests {
 
     #[test]
     fn locked_paytable_stays_byte_identical_across_a_full_tune() {
-        let seed = toy(1);
+        let seed = slots(toy(1));
         let c = cfg_locked(
             7,
             SectionLocks {
@@ -829,12 +962,15 @@ mod tests {
             },
         );
         let out = GeneticTuner.tune(&seed, &target_09(), &c);
-        assert_eq!(out.model.paytable, seed.paytable);
+        assert_eq!(
+            out.model.as_slots().unwrap().paytable,
+            seed.as_slots().unwrap().paytable
+        );
     }
 
     #[test]
     fn locked_run_is_deterministic_per_lock_set() {
-        let seed = toy(1);
+        let seed = slots(toy(1));
         let locks = SectionLocks {
             reels: true,
             ..Default::default()
@@ -859,9 +995,11 @@ mod tests {
             count: None,
             value: 0,
         }];
-        let out = GeneticTuner.tune(&toy(1), &t, &cfg(7));
+        let out = GeneticTuner.tune(&slots(toy(1)), &t, &cfg(7));
         let pay = |sym: u8| {
             out.model
+                .as_slots()
+                .unwrap()
                 .paytable
                 .entries
                 .iter()
@@ -891,9 +1029,196 @@ mod tests {
             count: None,
             value: 0,
         }];
-        let a = GeneticTuner.tune(&toy(1), &t, &cfg(2026));
-        let b = GeneticTuner.tune(&toy(1), &t, &cfg(2026));
+        let a = GeneticTuner.tune(&slots(toy(1)), &t, &cfg(2026));
+        let b = GeneticTuner.tune(&slots(toy(1)), &t, &cfg(2026));
         assert_eq!(a.model, b.model);
         assert_eq!(a.metrics.rtp, b.metrics.rtp);
+    }
+
+    use bloom_simulator::artifact::MathArtifact;
+
+    /// Composed twin of `toy()`: one reels instance, one base state, no
+    /// features. strip = 5x sym0, 4x sym1, 1x sym2; sym1@1 -> 1,
+    /// sym2@1 -> payout_sym2. Closed-form RTP = (4 + payout_sym2) / 10.
+    fn composed_toy(payout_sym2: u64) -> MathArtifact {
+        let def = serde_json::from_value(serde_json::json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "main", "type": "reels@1",
+                  "config": {
+                    "strips": [[0, 0, 0, 0, 0, 1, 1, 1, 1, 2]],
+                    "rows": 1,
+                    "symbols": [{"id":0,"role":"normal"},{"id":1,"role":"normal"},{"id":2,"role":"normal"}],
+                    "paylines": [[0]],
+                    "paytable": { "entries": [
+                        {"symbol":1,"count":1,"payout":1},
+                        {"symbol":2,"count":1,"payout":payout_sym2} ] } } }
+            ],
+            "states": [
+                { "id": "base", "bindings": [{ "mechanic": "main" }],
+                  "steps": { "budget": 1 }, "script": [{ "invoke": "main.spin" }] }
+            ],
+            "start": "base",
+            "transitions": [],
+            "caps": { "max_steps": 10 }
+        }))
+        .unwrap();
+        MathArtifact::from_definition(def).expect("toy compiles")
+    }
+
+    /// Composed def whose RTP is driven by the awarded free-spins budget:
+    /// base ev 0.4/spin, scatter (1 of 10 cells) sends base -> fs whose
+    /// budget B is the tunable. RTP(B) ~ 0.4 + 0.1 * B * 0.4.
+    fn composed_feature_toy() -> MathArtifact {
+        let def = serde_json::from_value(serde_json::json!({
+            "family": "composed@1",
+            "mechanics": [
+                { "id": "main", "type": "reels@1",
+                  "config": {
+                    "strips": [[0, 0, 0, 0, 0, 1, 1, 1, 1, 9]],
+                    "rows": 1,
+                    "symbols": [{"id":0,"role":"normal"},{"id":1,"role":"normal"},{"id":9,"role":"scatter"}],
+                    "paylines": [[0]],
+                    "paytable": { "entries": [{"symbol":1,"count":1,"payout":1}] },
+                    "events": [{ "symbol": 9, "min_count": 1, "emit": "scatter" }] } }
+            ],
+            "states": [
+                { "id": "base", "bindings": [{ "mechanic": "main" }],
+                  "steps": { "budget": 1 }, "script": [{ "invoke": "main.spin" }] },
+                { "id": "fs", "bindings": [{ "mechanic": "main" }],
+                  "steps": { "budget": "awarded", "initial": 2 },
+                  "script": [{ "invoke": "main.spin" }] }
+            ],
+            "start": "base",
+            "transitions": [ { "from": "base", "on": "scatter", "to": "fs" } ],
+            "caps": { "max_steps": 200 }
+        }))
+        .unwrap();
+        MathArtifact::from_definition(def).expect("feature toy compiles")
+    }
+
+    #[test]
+    fn converges_a_detuned_composed_definition_into_band() {
+        // payout_sym2 = 1 -> RTP 0.5; target 0.9 +/- 0.02 (sym2 -> 5 solves it).
+        let out = GeneticTuner.tune(&composed_toy(1), &target_09(), &cfg(7));
+        assert!(
+            matches!(out.verdict, Verdict::Pass),
+            "verdict was {:?}",
+            out.verdict
+        );
+        assert!(
+            (out.metrics.rtp - 0.9).abs() <= 0.02,
+            "rtp = {}",
+            out.metrics.rtp
+        );
+        assert_eq!(out.model.family(), "composed@1");
+    }
+
+    #[test]
+    fn composed_tune_is_deterministic() {
+        let a = GeneticTuner.tune(&composed_toy(1), &target_09(), &cfg(2026));
+        let b = GeneticTuner.tune(&composed_toy(1), &target_09(), &cfg(2026));
+        assert_eq!(a.model, b.model);
+        assert_eq!(a.metrics.rtp, b.metrics.rtp);
+        assert_eq!(a.trace.generations_run, b.trace.generations_run);
+    }
+
+    #[test]
+    fn composed_tune_never_mutates_structure() {
+        let seed = composed_toy(1);
+        let out = GeneticTuner.tune(&seed, &target_09(), &cfg(7));
+        let (t, d) = (
+            seed.composed_def().unwrap(),
+            out.model.composed_def().unwrap(),
+        );
+        assert_eq!(d.states, t.states); // no strips override in this toy -> identical
+        assert_eq!(d.transitions, t.transitions);
+        assert_eq!(d.start, t.start);
+        assert_eq!(d.caps, t.caps);
+        assert_eq!(
+            d.mechanics[0].config["paylines"],
+            t.mechanics[0].config["paylines"]
+        );
+        assert_eq!(
+            d.mechanics[0].config["symbols"],
+            t.mechanics[0].config["symbols"]
+        );
+        assert_eq!(d.mechanics[0].config["rows"], t.mechanics[0].config["rows"]);
+        // strip length preserved
+        let strips: Vec<Vec<u8>> =
+            serde_json::from_value(d.mechanics[0].config["strips"].clone()).unwrap();
+        assert_eq!(strips[0].len(), 10);
+    }
+
+    #[test]
+    fn composed_features_group_tunes_the_awarded_budget() {
+        // Reels + paytable locked: only meter targets / awarded budgets move.
+        // RTP(B) ~ 0.4(1 + 0.1B): B=2 -> ~0.48; band 0.88..0.96 needs B ~ 12-13.
+        let seed = composed_feature_toy();
+        let mut t = target_09();
+        t.rtp_tolerance = 0.04;
+        let c = TunerConfig {
+            locks: SectionLocks {
+                reels: true,
+                paytable: true,
+                bonus: false,
+            },
+            ..cfg(7)
+        };
+        let out = GeneticTuner.tune(&seed, &t, &c);
+        let (td, dd) = (
+            seed.composed_def().unwrap(),
+            out.model.composed_def().unwrap(),
+        );
+        // locked groups byte-identical
+        assert_eq!(
+            dd.mechanics[0].config["strips"],
+            td.mechanics[0].config["strips"]
+        );
+        assert_eq!(
+            dd.mechanics[0].config["paytable"],
+            td.mechanics[0].config["paytable"]
+        );
+        // the budget moved off its seed value and the tune passed
+        assert!(
+            matches!(out.verdict, Verdict::Pass),
+            "verdict was {:?} (rtp {})",
+            out.verdict,
+            out.metrics.rtp
+        );
+        assert_ne!(dd.states[1].steps.initial, Some(2));
+    }
+
+    #[test]
+    fn composed_tuned_model_never_worse_than_seed_at_final_fidelity() {
+        let seed = composed_toy(5); // already in-band (RTP 0.9)
+        let t = tight_target();
+        for master in 0..10 {
+            let c = noisy_cfg(master);
+            let out = GeneticTuner.tune(&seed, &t, &c);
+            let final_seeds = generate_seeds(c.master_seed ^ FINAL_SALT, c.final_candidate_count);
+            let fit = |a: &MathArtifact| {
+                fitness(
+                    &measure(&bloom_simulator::artifact::simulate(a, &final_seeds)),
+                    &t,
+                    &c.weights,
+                )
+            };
+            assert!(
+                fit(&out.model) >= fit(&seed) - 1e-12,
+                "master {master}: worse than seed"
+            );
+        }
+    }
+
+    #[test]
+    fn snapshots_carry_per_state_rtp_for_composed() {
+        let out = GeneticTuner.tune(&composed_toy(1), &target_09(), &cfg(7));
+        assert!(out
+            .trace
+            .snapshots
+            .iter()
+            .all(|s| s.best_state_rtp.contains_key("base")));
+        assert!(out.metrics.state_rtp.contains_key("base"));
     }
 }

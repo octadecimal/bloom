@@ -2,8 +2,9 @@
 //! PASS/near-miss verdict, and the search trace (for the audit report).
 
 use crate::telemetry::PopulationStats;
-use bloom_math::mechanics::slots::SlotModel;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::Metrics;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BandMiss {
@@ -27,6 +28,7 @@ pub struct GenSnapshot {
     pub best_rtp: f64,
     pub best_volatility: f64,
     pub best_bonus_hit_rates: Vec<f64>,
+    pub best_state_rtp: BTreeMap<String, f64>,
     pub population: PopulationStats,
     pub gene_agreement: Vec<f64>,
 }
@@ -75,7 +77,7 @@ pub struct TuningTrace {
 
 #[derive(Debug, Clone)]
 pub struct TuneOutcome {
-    pub model: SlotModel,
+    pub model: MathArtifact,
     pub metrics: Metrics,
     pub verdict: Verdict,
     pub trace: TuningTrace,

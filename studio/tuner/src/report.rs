@@ -63,19 +63,20 @@ mod tests {
     use crate::outcome::{GenSnapshot, RunProfile, TuneOutcome, TuningTrace, Verdict};
     use crate::telemetry::population_stats;
     use bloom_math::mechanics::slots::{Paytable, SlotModel};
+    use bloom_simulator::artifact::MathArtifact;
     use bloom_simulator::profile::WinDistribution;
     use bloom_simulator::target::Metrics;
 
     fn outcome(verdict: Verdict) -> TuneOutcome {
         TuneOutcome {
-            model: SlotModel {
+            model: MathArtifact::Slots(SlotModel {
                 symbols: vec![],
                 reels: vec![],
                 rows: 1,
                 paylines: vec![],
                 paytable: Paytable { entries: vec![] },
                 bonuses: vec![],
-            },
+            }),
             metrics: Metrics {
                 rtp: 0.901,
                 volatility: 3.2,
@@ -95,6 +96,7 @@ mod tests {
                     best_rtp: 0.5,
                     best_volatility: 2.0,
                     best_bonus_hit_rates: vec![],
+                    best_state_rtp: Default::default(),
                     population: population_stats(&[-0.5]),
                     gene_agreement: vec![1.0],
                 }],

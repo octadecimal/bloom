@@ -7,8 +7,7 @@
 
 use crate::config::Weights;
 use crate::outcome::BandMiss;
-use bloom_math::mechanics::slots::SlotModel;
-use bloom_simulator::constraints::static_violations;
+use bloom_simulator::artifact::MathArtifact;
 use bloom_simulator::target::{outside, standard_errors, Metrics, TargetSpec, K_SIGMA};
 
 /// `fitness <= 0`; `0.0` at dead center. In-band values lie in `[-1, 0]`,
@@ -58,7 +57,12 @@ pub fn fitness(m: &Metrics, t: &TargetSpec, w: &Weights) -> f64 {
 /// The bands the measured metrics miss by more than `K_SIGMA` standard
 /// errors (empty ⟺ the noise-aware `verify` passes). Used to explain a
 /// near-miss verdict in the report.
-pub fn band_misses(model: &SlotModel, m: &Metrics, t: &TargetSpec, n: usize) -> Vec<BandMiss> {
+pub fn band_misses(
+    artifact: &MathArtifact,
+    m: &Metrics,
+    t: &TargetSpec,
+    n: usize,
+) -> Vec<BandMiss> {
     let se = standard_errors(m, n);
     let mut out = Vec::new();
     let rtp_lo = t.rtp_target - t.rtp_tolerance;
@@ -104,7 +108,7 @@ pub fn band_misses(model: &SlotModel, m: &Metrics, t: &TargetSpec, n: usize) -> 
             });
         }
     }
-    for v in static_violations(model, t) {
+    for v in artifact.static_violations(t) {
         out.push(BandMiss {
             metric: v.metric,
             measured: v.measured,
@@ -160,11 +164,11 @@ mod tests {
     // 5, deliberately beating sym1's 1) — verify() needs a model to check
     // static constraints against, and the top_paying test needs a real
     // violation to detect.
-    fn toy_model() -> bloom_math::mechanics::slots::SlotModel {
+    fn toy_model() -> MathArtifact {
         use bloom_math::mechanics::slots::{
             Paytable, PaytableEntry, SlotModel, SymbolDef, SymbolRole,
         };
-        SlotModel {
+        MathArtifact::Slots(SlotModel {
             symbols: vec![
                 SymbolDef {
                     id: 0,
@@ -197,7 +201,7 @@ mod tests {
                 ],
             },
             bonuses: vec![],
-        }
+        })
     }
 
     #[test]
@@ -323,7 +327,7 @@ mod tests {
 
     #[test]
     fn band_misses_agrees_with_verify() {
-        use bloom_simulator::run::verify;
+        use bloom_simulator::run::verify_artifact;
         let t = target(vec![HitRateBand {
             min: 0.0,
             max: 0.05,
@@ -336,7 +340,7 @@ mod tests {
         ] {
             assert_eq!(
                 band_misses(&toy_model(), &m, &t, n).is_empty(),
-                verify(&toy_model(), &m, &t, n).is_ok(),
+                verify_artifact(&toy_model(), &m, &t, n).is_ok(),
                 "band_misses and verify disagree at n={n}"
             );
         }
@@ -352,7 +356,7 @@ mod tests {
             let m = metrics(0.955, 3.0, vec![0.02]);
             assert_eq!(
                 band_misses(&toy_model(), &m, &t2, 1_000_000).is_empty(),
-                verify(&toy_model(), &m, &t2, 1_000_000).is_ok(),
+                verify_artifact(&toy_model(), &m, &t2, 1_000_000).is_ok(),
             );
         }
     }
