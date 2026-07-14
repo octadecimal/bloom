@@ -10,6 +10,7 @@ import { SwitchUser } from './SwitchUser';
 import { ModeBadge } from './ModeBadge';
 import { BrandMark } from './BrandMark';
 import { ToolbarDivider } from './ToolbarDivider';
+import { PhaseSwitcher } from './PhaseSwitcher';
 
 export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
   const app = useApp();
@@ -22,7 +23,9 @@ export function Workbench({ roomContext }: { roomContext?: ReactNode }) {
         <BrandMark />
         <ToolbarDivider />
         <AppMenubar />
-        <div className="flex-1" />
+        <div className="flex flex-1 items-center justify-center">
+          <PhaseSwitcher />
+        </div>
         {roomContext && (
           <>
             {roomContext}
