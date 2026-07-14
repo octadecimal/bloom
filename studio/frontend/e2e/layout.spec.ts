@@ -6,7 +6,7 @@ test('layout persists across reload and Reset restores default (row 8)', async (
 
   // Close a DEFAULT pane (asset board) via __wbApi so it's missing from the layout.
   await page.evaluate(() => (window as any).__wbApi?.getPanel('assets/board')?.api.close());
-  await page.getByTestId('asset-board').waitFor({ state: 'detached' });
+  await page.getByTestId('board-no-game').waitFor({ state: 'detached' });
 
   // Wait for the debounced (~250ms) layout save to flush — layout must NOT include the closed pane.
   await page.waitForFunction(() => {
@@ -28,14 +28,14 @@ test('layout persists across reload and Reset restores default (row 8)', async (
 
   // Persistence: asset-board is STILL gone after reload (proves the closed state was saved).
   await page.getByTestId('workbench').waitFor({ state: 'visible' });
-  await expect(page.getByTestId('asset-board')).toHaveCount(0);
+  await expect(page.getByTestId('board-no-game')).toHaveCount(0);
 
   // Open File menu → Reset layout.
   await page.getByTestId('menu-layout').click();
   await page.getByTestId('menu-reset-layout').click();
 
   // After reset: add-if-missing re-adds the asset board — proves reset re-applied the default.
-  await expect(page.getByTestId('asset-board')).toBeVisible();
+  await expect(page.getByTestId('board-no-game')).toBeVisible();
 });
 
 test('a corrupt saved layout falls back to default without crashing (row 9)', async ({ page }) => {
@@ -57,7 +57,7 @@ test('real drag smoke: a tab can be dragged without crashing the workbench (row 
   const target = page.getByTestId('chat-room-pane');
   await source.dragTo(target, { force: true });
   // Active panel content is attached — no crash or blank dockview.
-  await page.getByTestId('asset-board').waitFor({ state: 'attached' });
+  await page.getByTestId('board-no-game').waitFor({ state: 'attached' });
   // Both tab-strip entries survive — neither panel was accidentally closed by the drag.
   await expect(page.locator('.dv-tab', { hasText: 'Asset Board' })).toHaveCount(1);
   await expect(page.locator('.dv-tab', { hasText: 'Chat Room' })).toHaveCount(1);
