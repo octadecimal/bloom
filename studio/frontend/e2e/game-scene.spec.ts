@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { ensureGameSceneOpen, seedLocalStorage, waitForSceneSync } from './helpers';
 
 // Local-only (browser e2e is never in CI). Requires the full stack:
 //   engine :4300 (nx serve client), backend :8000 (replay), studio :4200.
@@ -35,13 +35,8 @@ async function openAppAtRoom(page: Page, username: string): Promise<string> {
 test('ops are delivered to and acknowledged by the engine iframe (cross-frame, live, no reload)', async ({ page }) => {
   await openAppAtRoom(page, 'ada');
 
-  // Open the Game Scene pane via the View menu (data-testid="view-open-game/preview").
-  await page.getByTestId('menu-view').click();
-  await expect(page.getByTestId('view-open-game/preview')).toBeVisible();
-  await page.getByTestId('view-open-game/preview').click();
-
-  // Wait for the iframe to be visible (activeGameId must be set for it to render).
-  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  // Open the Game Scene pane (no-op if the Art default layout already has it).
+  await ensureGameSceneOpen(page);
 
   // Wait for the engine handshake — the engine posts {kind:'ready'} to window.parent.
   await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs.some((m: any) => m.kind === 'ready')), { timeout: 20000 }).toBe(true);
@@ -49,6 +44,9 @@ test('ops are delivered to and acknowledged by the engine iframe (cross-frame, l
   // Confirm gameId is set (openGame sets window.__gameActiveId in dev mode).
   const gameId = await page.evaluate(() => (window as any).__gameActiveId ?? null);
   expect(gameId).toBeTruthy();
+
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
 
   // Capture baseline ack count before sending ops.
   const before: number = await page.evaluate(() => (window as any).__engineMsgs.filter((m: any) => m.kind === 'ack').length);
@@ -93,14 +91,15 @@ test('a generated asset renders as a real sprite texture in the engine iframe (l
 
   // 2. Open the Game Scene pane and wait for the engine handshake.
   //    (Do this before fetching assets so that window.__gameActiveId is guaranteed set.)
-  await page.getByTestId('menu-view').click();
-  await page.getByTestId('view-open-game/preview').click();
-  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  await ensureGameSceneOpen(page);
   await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs?.some((m: any) => m.kind === 'ready')), { timeout: 20000 }).toBe(true);
 
   // 3. Read the actual game ID (set by openGame when the room route loaded).
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
+
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
 
   // 4. Read the asset's selected media path from the backend wire.
   const imageRef = await page.evaluate(async (gid) => {

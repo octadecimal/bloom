@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { seedLocalStorage, waitForSceneSync } from './helpers';
 
 // Local-only (browser e2e is never in CI). Requires the full stack on the
 // worktree offset: engine :4301, backend :8001 (replay), studio :4201.
@@ -27,15 +27,8 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
 
-  // Wait for the definition->scene sync snapshot (it always contains a Root —
-  // ensure_root runs before set_modules broadcasts it). Seeding before it lands
-  // would be wiped: scene_snapshot wholesale-replaces the client document.
-  await expect
-    .poll(
-      () => page.evaluate(() => Object.values(((window as any).__gameSceneSnapshot?.document?.nodes ?? {}) as Record<string, any>).some((n: any) => n?.type === 'Root')),
-      { timeout: 15000 },
-    )
-    .toBe(true);
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
 
   // Seed a local node into the mirror (scene-graph reads the same store). The
   // sprite MUST be parented under Root via a `child` edge — the scene-graph tree
@@ -88,15 +81,8 @@ test('typing a multi-digit value emits one scene_apply_op per change', async ({ 
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
 
-  // Wait for the definition->scene sync snapshot (it always contains a Root —
-  // ensure_root runs before set_modules broadcasts it). Seeding before it lands
-  // would be wiped: scene_snapshot wholesale-replaces the client document.
-  await expect
-    .poll(
-      () => page.evaluate(() => Object.values(((window as any).__gameSceneSnapshot?.document?.nodes ?? {}) as Record<string, any>).some((n: any) => n?.type === 'Root')),
-      { timeout: 15000 },
-    )
-    .toBe(true);
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  await waitForSceneSync(page);
 
   await page.evaluate((gid) => {
     const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;

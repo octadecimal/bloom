@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { seedLocalStorage } from './helpers';
+import { ensureGameSceneOpen, seedLocalStorage, waitForSceneSync } from './helpers';
 
 // Local-only (browser e2e is never in CI). Requires the full stack:
 //   engine :4300 (nx serve client), backend :8000 (replay), studio :4200.
@@ -38,6 +38,9 @@ async function openRoom(page: Page): Promise<string> {
   await expect.poll(() => page.evaluate(() => (window as any).__gameActiveId ?? null), { timeout: 15000 }).toBeTruthy();
   const gid = await page.evaluate(() => (window as any).__gameActiveId as string);
   expect(gid).toBeTruthy();
+  // Seed only after the definition-sync snapshot — it would wipe local nodes.
+  // (Every test in this file seeds via __gameApplyInbound after openRoom.)
+  await waitForSceneSync(page);
   return gid;
 }
 
@@ -64,11 +67,9 @@ async function generateAsset(page: Page, gid: string): Promise<string> {
   }, gid);
 }
 
-/** Open the Game/Preview pane and wait for the engine handshake. */
+/** Open the Game/Preview pane (no-op if already open) and wait for the engine handshake. */
 async function openGamePane(page: Page): Promise<void> {
-  await page.getByTestId('menu-view').click();
-  await page.getByTestId('view-open-game/preview').click();
-  await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
+  await ensureGameSceneOpen(page);
   await expect.poll(() => page.evaluate(() => (window as any).__engineMsgs.some((m: any) => m.kind === 'ready')), { timeout: 20000 }).toBe(true);
 }
 
