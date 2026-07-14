@@ -228,6 +228,8 @@ fn main() {
             multiplier_max: cj.bounds.multiplier_max,
             min_count_min: cj.bounds.min_count_min,
             min_count_max: cj.bounds.min_count_max,
+            meter_target_min: 1,
+            meter_target_max: 100,
         },
         weights: Weights {
             rtp: cj.weights.rtp,

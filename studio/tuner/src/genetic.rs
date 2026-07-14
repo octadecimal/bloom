@@ -507,6 +507,8 @@ mod tests {
                 multiplier_max: 10,
                 min_count_min: 1,
                 min_count_max: 5,
+                meter_target_min: 1,
+                meter_target_max: 100,
             },
             weights: Weights {
                 rtp: 1.0,

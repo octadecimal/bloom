@@ -379,6 +379,73 @@ fn clamp_u8(v: u8, lo: u8, hi: u8) -> u8 {
     v.max(lo).min(hi)
 }
 
+/// Rescale a count vector (deterministically) so it sums to `target`.
+/// Extracted from the slots repair — strip math is identical on both sides
+/// (spec §3.4).
+fn rescale_counts(counts: &mut [u32], target: u32) {
+    if counts.is_empty() {
+        return;
+    }
+    let sum: u32 = counts.iter().sum();
+    if sum == 0 {
+        let n = counts.len() as u32;
+        for (i, c) in counts.iter_mut().enumerate() {
+            *c = target / n + if (i as u32) < target % n { 1 } else { 0 };
+        }
+    } else if sum != target {
+        let mut acc = 0u32;
+        let last = counts.len() - 1;
+        for c in counts.iter_mut().take(last) {
+            *c = ((*c as u64 * target as u64) / sum as u64) as u32;
+            acc += *c;
+        }
+        counts[last] = target.saturating_sub(acc);
+    }
+}
+
+/// GDD pay-constraint clamps over a paytable's entries — the exact block
+/// from the slots repair, parameterized on the entry list so composed can
+/// bind it to the reels instance's paytable (spec §3.3).
+fn clamp_payout_constraints(
+    entries: &[PaytableEntry],
+    payouts: &mut [u64],
+    constraints: &[PayConstraint],
+) {
+    if payouts.is_empty() {
+        return;
+    }
+    for (e, p) in entries.iter().zip(payouts.iter_mut()) {
+        for c in constraints {
+            if c.symbol != e.symbol || c.count.is_some_and(|cc| cc != e.count) {
+                continue;
+            }
+            match c.relation {
+                PayRelation::Floor => *p = (*p).max(c.value),
+                PayRelation::Ceiling => *p = (*p).min(c.value),
+                PayRelation::TopPaying => {}
+            }
+        }
+    }
+    if let Some(top_sym) = constraints
+        .iter()
+        .find(|c| matches!(c.relation, PayRelation::TopPaying))
+        .map(|c| c.symbol)
+    {
+        let top = entries
+            .iter()
+            .zip(payouts.iter())
+            .filter(|(e, _)| e.symbol == top_sym)
+            .map(|(_, &p)| p)
+            .max()
+            .unwrap_or(0);
+        for (e, p) in entries.iter().zip(payouts.iter_mut()) {
+            if e.symbol != top_sym && *p > top {
+                *p = top;
+            }
+        }
+    }
+}
+
 /// Force every gene back into the feasible set. Deterministic. After repair,
 /// `decode` always yields a structurally valid `SlotModel`.
 pub fn repair_slots(
@@ -393,24 +460,7 @@ pub fn repair_slots(
         if counts.is_empty() {
             continue;
         }
-        let target = reel.len() as u32;
-        let sum: u32 = counts.iter().sum();
-        if sum == 0 {
-            // degenerate: distribute evenly, remainder to the first symbol.
-            let n = counts.len() as u32;
-            for (i, c) in counts.iter_mut().enumerate() {
-                *c = target / n + if (i as u32) < target % n { 1 } else { 0 };
-            }
-        } else if sum != target {
-            // scale to target, then fix the rounding drift on the last bucket.
-            let mut acc = 0u32;
-            let last = counts.len() - 1;
-            for c in counts.iter_mut().take(last) {
-                *c = ((*c as u64 * target as u64) / sum as u64) as u32;
-                acc += *c;
-            }
-            counts[last] = target.saturating_sub(acc);
-        }
+        rescale_counts(counts, reel.len() as u32);
     }
 
     for p in &mut genome.payouts {
@@ -422,40 +472,7 @@ pub fn repair_slots(
     // is a deterministic post-clamp fix-up in fixed entry order. A locked
     // paytable has no payout genes — nothing to enforce here; verify still
     // reports violations on the stored paytable.
-    if !genome.payouts.is_empty() {
-        for (e, p) in template.paytable.entries.iter().zip(&mut genome.payouts) {
-            for c in constraints {
-                if c.symbol != e.symbol || c.count.is_some_and(|cc| cc != e.count) {
-                    continue;
-                }
-                match c.relation {
-                    PayRelation::Floor => *p = (*p).max(c.value),
-                    PayRelation::Ceiling => *p = (*p).min(c.value),
-                    PayRelation::TopPaying => {}
-                }
-            }
-        }
-        if let Some(top_sym) = constraints
-            .iter()
-            .find(|c| matches!(c.relation, PayRelation::TopPaying))
-            .map(|c| c.symbol)
-        {
-            let top = template
-                .paytable
-                .entries
-                .iter()
-                .zip(&genome.payouts)
-                .filter(|(e, _)| e.symbol == top_sym)
-                .map(|(_, &p)| p)
-                .max()
-                .unwrap_or(0);
-            for (e, p) in template.paytable.entries.iter().zip(&mut genome.payouts) {
-                if e.symbol != top_sym && *p > top {
-                    *p = top;
-                }
-            }
-        }
-    }
+    clamp_payout_constraints(&template.paytable.entries, &mut genome.payouts, constraints);
 
     for b in &mut genome.bonuses {
         b.spins_awarded = clamp_u32(b.spins_awarded, bounds.spins_min, bounds.spins_max);
@@ -465,6 +482,51 @@ pub fn repair_slots(
             bounds.min_count_min.max(1),
             bounds.min_count_max,
         );
+    }
+}
+
+fn clamp_u32_range(v: u32, lo: u32, hi: u32) -> u32 {
+    v.max(lo).min(hi)
+}
+
+fn repair_composed(
+    genome: &mut ComposedGenome,
+    def: &GameDefinition,
+    reels: &Option<bloom_math::mechanics::composed::reels::ReelsConfig>,
+    bounds: &GeneBounds,
+    constraints: &[PayConstraint],
+) {
+    for ((_, strips), counts) in strip_surfaces(def).iter().zip(&mut genome.surfaces) {
+        for (strip, c) in strips.iter().zip(counts.iter_mut()) {
+            rescale_counts(c, strip.len() as u32);
+        }
+    }
+    for p in &mut genome.payouts {
+        *p = clamp_u64(*p, bounds.payout_min, bounds.payout_max);
+    }
+    if let Some(r) = reels {
+        clamp_payout_constraints(&r.paytable.entries, &mut genome.payouts, constraints);
+    }
+    for t in &mut genome.meter_targets {
+        *t = clamp_u32_range(*t, bounds.meter_target_min.max(1), bounds.meter_target_max);
+    }
+    for b in &mut genome.awarded_budgets {
+        *b = clamp_u32_range(*b, bounds.spins_min.max(1), bounds.spins_max);
+    }
+}
+
+pub fn repair(
+    genome: &mut Genome,
+    template: &MathArtifact,
+    bounds: &GeneBounds,
+    constraints: &[PayConstraint],
+) {
+    match (genome, template) {
+        (Genome::Slots(g), MathArtifact::Slots(m)) => repair_slots(g, m, bounds, constraints),
+        (Genome::Composed(g), MathArtifact::Composed { def, reels, .. }) => {
+            repair_composed(g, def, reels, bounds, constraints)
+        }
+        _ => unreachable!("a genome is only ever repaired against its own template"),
     }
 }
 
@@ -535,6 +597,8 @@ mod tests {
             multiplier_max: 10,
             min_count_min: 1,
             min_count_max: 5,
+            meter_target_min: 1,
+            meter_target_max: 100,
         }
     }
 
@@ -945,5 +1009,102 @@ mod tests {
         };
         let d = decode(&encode_with_locks(&art, &locks), &art);
         assert_eq!(d.composed_def().unwrap(), &composed_def());
+    }
+
+    fn composed_bounds() -> GeneBounds {
+        GeneBounds {
+            payout_min: 0,
+            payout_max: 100,
+            spins_min: 1,
+            spins_max: 50,
+            multiplier_min: 1,
+            multiplier_max: 10,
+            min_count_min: 1,
+            min_count_max: 5,
+            meter_target_min: 1,
+            meter_target_max: 100,
+        }
+    }
+
+    #[test]
+    fn composed_repair_rescales_every_surface_to_its_strip_length() {
+        let art = composed_artifact();
+        let mut g = Genome::Composed(encode_composed(&composed_def()));
+        if let Genome::Composed(cg) = &mut g {
+            cg.surfaces[0][0] = vec![999, 999, 999];
+            cg.surfaces[1][1] = vec![0, 0, 0];
+        }
+        repair(&mut g, &art, &composed_bounds(), &[]);
+        let Genome::Composed(cg) = &g else { panic!() };
+        for surface in &cg.surfaces {
+            for counts in surface {
+                assert_eq!(counts.iter().sum::<u32>(), 6); // fixture strips are 6 long
+            }
+        }
+        // and it still decodes + compiles
+        let d = decode(&g, &art);
+        assert_eq!(d.family(), "composed@1");
+    }
+
+    #[test]
+    fn composed_repair_clamps_payouts_targets_and_budgets() {
+        let art = composed_artifact();
+        let mut g = Genome::Composed(encode_composed(&composed_def()));
+        if let Genome::Composed(cg) = &mut g {
+            cg.payouts = vec![u64::MAX, 0];
+            cg.meter_targets = vec![0];
+            cg.awarded_budgets = vec![9999];
+        }
+        repair(&mut g, &art, &composed_bounds(), &[]);
+        let Genome::Composed(cg) = &g else { panic!() };
+        assert_eq!(cg.payouts[0], 100); // payout_max
+        assert_eq!(cg.meter_targets[0], 1); // meter_target_min floor
+        assert_eq!(cg.awarded_budgets[0], 50); // spins_max
+    }
+
+    #[test]
+    fn composed_repair_applies_pay_constraints_to_the_reels_paytable() {
+        // fixture paytable: sym0@2 -> 2, sym1@2 -> 6
+        let art = composed_artifact();
+        let mut g = Genome::Composed(encode_composed(&composed_def()));
+        if let Genome::Composed(cg) = &mut g {
+            cg.payouts = vec![80, 30]; // sym0 outpays sym1
+        }
+        repair(
+            &mut g,
+            &art,
+            &composed_bounds(),
+            &[
+                floor(1, None, 40),
+                PayConstraint {
+                    symbol: 1,
+                    relation: PayRelation::TopPaying,
+                    count: None,
+                    value: 0,
+                },
+            ],
+        );
+        let Genome::Composed(cg) = &g else { panic!() };
+        assert_eq!(cg.payouts[1], 40); // floored up to 40
+        assert_eq!(cg.payouts[0], 40); // competitor capped at sym1's top pay
+    }
+
+    #[test]
+    fn composed_repair_is_deterministic_and_skips_locked_groups() {
+        let art = composed_artifact();
+        let locks = SectionLocks {
+            paytable: true,
+            ..Default::default()
+        };
+        let mut a = encode_with_locks(&art, &locks);
+        if let Genome::Composed(cg) = &mut a {
+            cg.surfaces[0][0] = vec![7, 0, 2];
+        }
+        let mut b = a.clone();
+        repair(&mut a, &art, &composed_bounds(), &[floor(0, None, 10)]);
+        repair(&mut b, &art, &composed_bounds(), &[floor(0, None, 10)]);
+        assert_eq!(a, b);
+        let Genome::Composed(cg) = &a else { panic!() };
+        assert!(cg.payouts.is_empty()); // locked group untouched (nothing to clamp)
     }
 }

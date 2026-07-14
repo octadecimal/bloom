@@ -14,6 +14,11 @@ pub struct GeneBounds {
     pub multiplier_max: u64,
     pub min_count_min: u8,
     pub min_count_max: u8,
+    /// Bounds for composed `meter@1` targets (the features gene group rides
+    /// GeneBounds like slots' bonus genes; awarded budgets ride spins_min/max —
+    /// a budget IS spins awarded).
+    pub meter_target_min: u32,
+    pub meter_target_max: u32,
 }
 
 /// Per-metric weights for the distance-to-band objective.
