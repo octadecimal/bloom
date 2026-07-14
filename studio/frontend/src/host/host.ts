@@ -26,7 +26,9 @@ export function createHost(deps: IHostDeps): IPluginHost {
       if (!api) return;
       const existing = api.getPanel(paneId);
       if (existing) {
-        existing.api.setActive();
+        // Re-activating an already-active panel reattaches its DOM and reloads the
+        // engine iframe (issue #200's no-op case) — skip it.
+        if (!existing.api.isActive) existing.api.setActive();
         return;
       }
       api.addPanel({
