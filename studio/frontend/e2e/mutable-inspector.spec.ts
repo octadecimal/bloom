@@ -27,6 +27,10 @@ test('editing a scalar in the Inspector emits a setProp scene_apply_op', async (
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
 
+  // Wait for the server's join_scene snapshot to land BEFORE seeding local
+  // nodes — scene_snapshot wholesale-replaces the document and would wipe them.
+  await expect.poll(() => page.evaluate(() => (window as any).__gameSceneSnapshot != null), { timeout: 15000 }).toBe(true);
+
   // Seed a local node into the mirror (scene-graph reads the same store). The
   // sprite MUST be parented under Root via a `child` edge — the scene-graph tree
   // only shows nodes reachable from Root (buildTree), so an orphan sprite would
@@ -77,6 +81,10 @@ test('typing a multi-digit value emits one scene_apply_op per change', async ({ 
   await expect(page.getByTestId('game-engine-frame')).toBeVisible({ timeout: 15000 });
   const gameId = await page.evaluate(() => (window as any).__gameActiveId as string | null);
   expect(gameId).toBeTruthy();
+
+  // Wait for the server's join_scene snapshot to land BEFORE seeding local
+  // nodes — scene_snapshot wholesale-replaces the document and would wipe them.
+  await expect.poll(() => page.evaluate(() => (window as any).__gameSceneSnapshot != null), { timeout: 15000 }).toBe(true);
 
   await page.evaluate((gid) => {
     const apply = (window as any).__gameApplyInbound as (e: string, p: unknown) => void;
