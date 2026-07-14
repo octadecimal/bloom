@@ -5,8 +5,17 @@ payouts so the search can both raise and lower them."""
 from app.math.models import SectionLocks, TuningParams
 
 
+def _paytable_entries(model: dict) -> list:
+    if (model or {}).get("family") == "composed@1":
+        for m in model.get("mechanics") or []:
+            if m.get("type") == "reels@1":
+                return ((m.get("config") or {}).get("paytable") or {}).get("entries") or []
+        return []
+    return (model.get("paytable") or {}).get("entries") or []
+
+
 def derive_bounds(model: dict) -> dict:
-    entries = (model.get("paytable") or {}).get("entries") or []
+    entries = _paytable_entries(model)
     payouts = [int(e.get("payout", 0)) for e in entries]
     max_payout = max(payouts) if payouts else 0
     return {
