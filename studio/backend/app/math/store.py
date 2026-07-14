@@ -15,6 +15,9 @@ from app.math.models import (
 )
 
 
+FAMILIES = ("slots@1", "composed@1")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -32,13 +35,15 @@ def _from_doc(raw: dict) -> SlotModelDoc:
 
 
 class MathStore:
-    def __init__(self, db, on_change=None):
+    def __init__(self, db, on_change=None, compose_store=None, gdd_store=None):
         # on_change: async (doc: SlotModelDoc, source: str) -> None; fired after
         # any model/presentation/locks write. Wired to a socket emit in main.py —
         # the store itself stays socket-free.
         self._docs = db["slot_models"]
         self._legacy_tuner_jobs = db["tuner_jobs"]  # migration source only
         self._on_change = on_change
+        self._compose = compose_store
+        self._gdd = gdd_store
         self._indexed = False
 
     async def _ensure_unique_index(self) -> None:
@@ -59,6 +64,21 @@ class MathStore:
             await self._docs.delete_many({"_id": {"$in": twins}})
         await self._docs.create_index("game_id", unique=True)
         self._indexed = True
+
+    async def family(self, game_id: str) -> str:
+        """The math descriptor (spec §1). GDD intent wins; else which artifact
+        doc exists (composed checked first — legacy panes may have auto-seeded
+        a stray slots doc for a composed game); else slots."""
+        # ponytail: 2-3 lookups per call, no cache — replay DBs are small and
+        # correctness beats staleness here.
+        if self._gdd is not None:
+            doc = await self._gdd.get_doc(game_id, "math-model")
+            fam = (getattr(doc, "data", None) or {}).get("game_family") if doc else None
+            if fam in FAMILIES:
+                return fam
+        if self._compose is not None and await self._compose.get(game_id) is not None:
+            return "composed@1"
+        return "slots@1"
 
     async def get(self, game_id: str) -> SlotModelDoc | None:
         await self._ensure_unique_index()

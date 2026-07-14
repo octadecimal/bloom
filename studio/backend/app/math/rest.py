@@ -140,6 +140,11 @@ async def apply_tuner(game_id: str, request: Request) -> dict:
     return sim_wire(updated)
 
 
+@router.get("/games/{game_id}/math/descriptor")
+async def get_math_descriptor(game_id: str, request: Request) -> dict:
+    return {"family": await request.app.state.math_store.family(game_id)}
+
+
 # ── analytics (was app/analytics/rest.py) ───────────────────────────────────
 @router.get("/analytics/runs")
 async def list_runs(game_id: str, request: Request, limit: int = 50) -> list[dict]:

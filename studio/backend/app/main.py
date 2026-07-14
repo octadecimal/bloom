@@ -115,8 +115,6 @@ def build(settings: Settings) -> AppContext:
             room=doc.game_id,
         )
 
-    math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change)
-
     async def _on_game_definition_change(doc, source: str) -> None:
         # Single choke point: every definition/presentation write (incl. first
         # seed) reaches any open Game Structure pane AND drives the Game
@@ -129,6 +127,8 @@ def build(settings: Settings) -> AppContext:
     compose_runner = build_compose_runner(settings)
     auto_builder = AutoBuilder(compose_runner, settings, sio)
     compose_store = ComposeStore(mongo[settings.mongo_db], on_change=_on_game_definition_change)
+    math_store = MathStore(mongo[settings.mongo_db], on_change=_on_slot_model_change,
+                           compose_store=compose_store, gdd_store=gdd_store)
     math_run_store = MathRunStore(mongo[settings.mongo_db])
     math_hub = MathHub(sio, math_store, math_run_store,
                        build_curation_runner(settings), build_tuner_runner(settings),
