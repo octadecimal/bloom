@@ -10,6 +10,7 @@ class Column:
     key: str
     label: str
     enum: tuple[str, ...] | None = None
+    optional: bool = False
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,9 @@ class Field:
 
 def _t(*pairs: tuple) -> tuple[Column, ...]:
     return tuple(
-        Column(p[0], p[1], p[2]) if len(p) == 3 else Column(p[0], p[1])
+        Column(p[0], p[1], p[2], p[3]) if len(p) == 4
+        else Column(p[0], p[1], p[2]) if len(p) == 3
+        else Column(p[0], p[1])
         for p in pairs
     )
 
@@ -46,6 +49,10 @@ ASPECT_SCHEMAS: dict[str, list[Field]] = {
         Field("rtp", "RTP", "percent", "param", required=True),
         Field("volatility", "Volatility", "enum", "param", required=True,
               enum=("low", "medium", "medium-high", "high")),
+        Field("game_family", "Game family", "enum", "param",
+              default="slots@1", enum=("slots@1", "composed@1"),
+              help="Which math family realization targets: classic slots@1 "
+                   "or composed@1 state-machine games."),
         Field("reels", "Reels", "number", "param", default=5),
         Field("rows", "Rows", "number", "param", default=3),
         Field("payline_mode", "Payline mode", "enum", "param",
@@ -81,7 +88,13 @@ ASPECT_SCHEMAS: dict[str, list[Field]] = {
     "bonus-features": [
         Field("features", "Features", "table", "param", required=True,
               columns=_t(("name", "Name"), ("trigger", "Trigger"),
-                         ("description", "Description"))),
+                         ("description", "Description"),
+                         ("kind", "Kind", ("free-spins", "meter"), True),
+                         ("retrigger", "Retrigger", ("yes", "no"), True),
+                         ("budget", "Budget", None, True)),
+              help="kind/retrigger/budget drive the composed@1 realizer "
+                   "(budget = spins awarded for free-spins, fill target for "
+                   "meter); slots@1 realization ignores them."),
         Field("bonus_buy", "Bonus buy", "text", "param"),
     ],
     "ui-ux": [

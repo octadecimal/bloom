@@ -128,3 +128,43 @@ def test_catalog_reflects_schema():
     cat = field_catalog()
     assert "pay_constraints" in [f["key"] for f in cat["paytable"]]
     assert "payouts" not in [f["key"] for f in cat["paytable"]]
+
+
+def _field(aspect: str, key: str):
+    return next(f for f in schema_for(aspect) if f.key == key)
+
+
+def test_game_family_field_exists_and_normalizes():
+    from app.gdd.normalize import normalize_value
+    f = _field("math-model", "game_family")
+    assert f.type == "enum" and f.role == "param" and f.default == "slots@1"
+    assert f.enum == ("slots@1", "composed@1")
+    value, warn = normalize_value(f, "COMPOSED@1")
+    assert value == "composed@1" and warn is None
+    _, warn = normalize_value(f, "weird")
+    assert warn is not None
+
+
+def test_features_table_gains_optional_composed_columns():
+    f = _field("bonus-features", "features")
+    cols = {c.key: c for c in f.columns}
+    assert cols["kind"].enum == ("free-spins", "meter") and cols["kind"].optional
+    assert cols["retrigger"].enum == ("yes", "no") and cols["retrigger"].optional
+    assert "budget" in cols and cols["budget"].optional
+
+
+def test_optional_columns_missing_do_not_warn():
+    from app.gdd.normalize import normalize_value
+    f = _field("bonus-features", "features")
+    rows, warn = normalize_value(f, [{"name": "FS", "trigger": "3 scat",
+                                      "description": "wheel"}])
+    assert warn is None
+    assert rows[0]["kind"] == ""          # column key still present, empty
+
+
+def test_kind_enum_cell_warns_on_bad_value():
+    from app.gdd.normalize import normalize_value
+    f = _field("bonus-features", "features")
+    _, warn = normalize_value(f, [{"name": "FS", "trigger": "t",
+                                   "description": "", "kind": "jackpot"}])
+    assert warn is not None and "jackpot" in warn
