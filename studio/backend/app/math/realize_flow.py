@@ -5,7 +5,11 @@ import logging
 from dataclasses import dataclass, field
 
 from app.math.realize import realize_slot_model
-from app.math.shape import affected_sections, merge_sections
+from app.math.realize_composed import realize_game_definition
+from app.math.shape import (
+    affected_sections, composed_affected_groups, merge_composed_groups,
+    merge_sections,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,26 +42,39 @@ async def realize_game(math_store, gdd_store, game_id: str, *,
         doc = await gdd_store.get_doc(game_id, a)
         data[a] = dict(doc.data) if doc else {}
 
-    result = realize_slot_model(
-        data["math-model"], data["symbols-reels"], data["paytable"],
-        data["bonus-features"], existing_ids=_existing_ids(data["symbols-reels"]),
-    )
+    family = await math_store.family(game_id)
+    args = (data["math-model"], data["symbols-reels"], data["paytable"],
+            data["bonus-features"])
+    existing_ids = _existing_ids(data["symbols-reels"])
+    if family == "composed@1":
+        result = realize_game_definition(*args, existing_ids=existing_ids)
+    else:
+        result = realize_slot_model(*args, existing_ids=existing_ids)
     if result.model is None:
         return RealizeFlowResult(False, result.errors, result.warnings)
 
     existing = await math_store.get_or_seed(game_id)
-    # Always merge, honoring locks — a touched-but-never-realized doc (or any
-    # legacy backfilled doc) must not have its locked sections wiped just
-    # because it never went through save_realized before.
-    # aspect=None (explicit realize endpoint) means all sections, minus locks.
-    # First realize from a template base is also all-sections: a sectional
-    # merge would leave template residue (e.g. bonuses whose trigger symbol
-    # doesn't exist in the freshly realized strips).
-    sections = (affected_sections(aspect, fields or {})
-                if aspect and existing.origin != "template"
-                else {"symbols", "reels", "paylines", "paytable", "bonuses"})
-    model = merge_sections(existing.model, result.model, sections,
-                           existing.locks)
+    # Always merge, honoring locks (see the slots rationale below); a first
+    # realize from a template base covers all sections/groups.
+    if family == "composed@1":
+        groups = (composed_affected_groups(aspect, fields or {})
+                  if aspect and existing.origin != "template"
+                  else {"reels", "paytable", "features"})
+        model = merge_composed_groups(existing.model, result.model, groups,
+                                      existing.locks)
+    else:
+        # Always merge, honoring locks — a touched-but-never-realized doc (or
+        # any legacy backfilled doc) must not have its locked sections wiped
+        # just because it never went through save_realized before.
+        # aspect=None (explicit realize endpoint) means all sections, minus
+        # locks. First realize from a template base is also all-sections: a
+        # sectional merge would leave template residue (e.g. bonuses whose
+        # trigger symbol doesn't exist in the freshly realized strips).
+        sections = (affected_sections(aspect, fields or {})
+                    if aspect and existing.origin != "template"
+                    else {"symbols", "reels", "paylines", "paytable", "bonuses"})
+        model = merge_sections(existing.model, result.model, sections,
+                               existing.locks)
     await math_store.save_realized(game_id, model)
 
     # join-key write-back (spec §5) — direct store call, no entry-point hook
