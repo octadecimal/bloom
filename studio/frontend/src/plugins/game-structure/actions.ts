@@ -171,14 +171,14 @@ export async function buildPackage(): Promise<void> {
   const s = gameStructureSlice();
   const gameId = s.activeGameId.get();
   if (!gameId || s.build.status.get() === 'building') return;
-  s.build.set({ status: 'building', metrics: null, errors: [] });
+  s.build.set({ status: 'building', metrics: null, verdict: null, errors: [] });
   try {
     await flushPendingSave(); // build reads the STORED doc — persist edits first
     const res = await buildGameDefinition(gameId);
-    if (res.ok) s.build.set({ status: 'done', metrics: res.metrics, errors: [] });
-    else s.build.set({ status: 'error', metrics: null, errors: res.errors ?? ['build failed'] });
+    if (res.ok) s.build.set({ status: 'done', metrics: res.metrics, verdict: res.verdict ?? null, errors: [] });
+    else s.build.set({ status: 'error', metrics: null, verdict: res.verdict ?? null, errors: res.errors ?? ['build failed'] });
   } catch (e) {
-    s.build.set({ status: 'error', metrics: null, errors: [e instanceof Error ? e.message : 'build failed'] });
+    s.build.set({ status: 'error', metrics: null, verdict: null, errors: [e instanceof Error ? e.message : 'build failed'] });
   }
 }
 
@@ -186,9 +186,9 @@ export async function buildPackage(): Promise<void> {
 export function applyBuildStatus(p: IBuildStatusEvent): void {
   const s = gameStructureSlice();
   if (s.activeGameId.get() !== p.gameId) return;
-  if (p.status === 'building') s.build.set({ status: 'building', metrics: null, errors: [] });
-  else if (p.status === 'done') s.build.set({ status: 'done', metrics: (p.metrics as IComposeMetrics) ?? null, errors: [] });
-  else s.build.set({ status: 'error', metrics: null, errors: p.errors ?? ['build failed'] });
+  if (p.status === 'building') s.build.set({ status: 'building', metrics: null, verdict: null, errors: [] });
+  else if (p.status === 'done') s.build.set({ status: 'done', metrics: (p.metrics as IComposeMetrics) ?? null, verdict: p.verdict ?? null, errors: [] });
+  else s.build.set({ status: 'error', metrics: null, verdict: p.verdict ?? null, errors: p.errors ?? ['build failed'] });
 }
 
 export function handleDefinitionChanged(p: IDefinitionChangedEvent): void {

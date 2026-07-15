@@ -153,3 +153,31 @@ def test_metrics_wire_dumps_se_camel_case():
     d = m.model_dump(by_alias=True, mode="json")
     assert d["se"] == {"rtp": 0.025, "volatility": 0.0177, "bonusHitRates": [0.003],
                        "hitFrequency": None}
+
+
+def test_parse_result_line_reads_state_fields():
+    line = json.dumps({
+        "type": "result", "status": "pass", "rtp": 0.96, "volatility": 2.0,
+        "hitFrequency": 0.3, "baseRtp": 0.8, "featureRtp": 0.16,
+        "bonusHitRates": [], "maxWin": 120.0,
+        "stateRtp": {"base": 0.8, "fs1": 0.16},
+        "stateVisitFreq": {"base": 1.0, "fs1": 0.01},
+        "realizedRtp": 0.96, "poolSize": 100,
+    })
+    r = parse_result_line(line, ran_at="t")
+    assert r.metrics.max_win == 120.0
+    assert r.metrics.state_rtp == {"base": 0.8, "fs1": 0.16}
+    assert r.metrics.state_visit_freq == {"base": 1.0, "fs1": 0.01}
+
+
+def test_parse_result_line_without_state_fields_stays_none():
+    # legacy cassette lines predate SP-A
+    line = json.dumps({
+        "type": "result", "status": "pass", "rtp": 0.96, "volatility": 2.0,
+        "hitFrequency": 0.3, "baseRtp": 0.8, "featureRtp": 0.16,
+        "bonusHitRates": [], "realizedRtp": 0.96, "poolSize": 100,
+    })
+    r = parse_result_line(line, ran_at="t")
+    assert r.metrics.max_win is None
+    assert r.metrics.state_rtp is None
+    assert r.metrics.state_visit_freq is None

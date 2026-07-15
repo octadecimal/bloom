@@ -349,4 +349,53 @@ describe('ResultStrip', () => {
       expect(screen.queryByTestId('restart-diagnosis')).toBeNull();
     });
   });
+
+  describe('composed per-state metrics + dead-feature warning', () => {
+    const composedMetrics = (overrides: Partial<IMathRun['metrics']> = {}) => ({
+      ...baseRun().metrics!,
+      stateRtp: { base: 0.9, fs1: 0.06 },
+      stateVisitFreq: { base: 1.0, fs1: 0.01 },
+      ...overrides,
+    });
+
+    it('renders per-state rows and a dead-feature warning for a composed result', () => {
+      mathSlice().family.set('composed@1');
+      mathSlice().composedStateIds.set(['base', 'fs1', 'fs2']);
+      mathSlice().runs.set([baseRun({ metrics: composedMetrics() })]);
+      render(<ResultStrip />);
+      expect(screen.getByTestId('state-row-fs1').textContent).toContain('fs1');
+      expect(screen.getByTestId('dead-feature-warning').textContent).toContain('fs2');
+    });
+
+    it('shows no dead-feature warning when every state is visited', () => {
+      mathSlice().family.set('composed@1');
+      mathSlice().composedStateIds.set(['base', 'fs1']);
+      mathSlice().runs.set([baseRun({ metrics: composedMetrics() })]);
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('dead-feature-warning')).toBeNull();
+    });
+
+    it('omits state-metrics and dead-feature warning for a slots@1 result', () => {
+      // Real slots data from the Rust simulator (measure.rs) always populates
+      // stateRtp/stateVisitFreq too — a base/feature RTP split, not composed's
+      // per-state-machine-state breakdown. Field *presence* can't disambiguate
+      // the two shapes, so the block must gate on family, not just data shape.
+      mathSlice().family.set('slots@1');
+      mathSlice().composedStateIds.set([]);
+      mathSlice().runs.set([baseRun({ metrics: { ...baseRun().metrics!, stateRtp: { base: 0.9 }, stateVisitFreq: { base: 1.0 } } })]);
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('state-metrics')).toBeNull();
+      expect(screen.queryByTestId('dead-feature-warning')).toBeNull();
+    });
+
+    it('hides state-metrics and dead-feature warning while a run is in flight', () => {
+      mathSlice().family.set('composed@1');
+      mathSlice().composedStateIds.set(['base', 'fs1', 'fs2']);
+      mathSlice().runs.set([baseRun({ metrics: composedMetrics() })]);
+      mathSlice().genStatus.set('tuning');
+      render(<ResultStrip />);
+      expect(screen.queryByTestId('state-metrics')).toBeNull();
+      expect(screen.queryByTestId('dead-feature-warning')).toBeNull();
+    });
+  });
 });

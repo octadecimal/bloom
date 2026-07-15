@@ -54,3 +54,16 @@ def test_build_config_defaults_locks_unlocked():
 def test_build_config_carries_hit_frequency_weight():
     cfg = build_config(default_tuning_params(), derive_bounds({}))
     assert cfg["weights"]["hit_frequency"] == 1.0
+
+
+def test_derive_bounds_composed_reads_reels_paytable():
+    composed = {
+        "family": "composed@1",
+        "mechanics": [
+            {"id": "main_reels", "type": "reels@1", "config": {
+                "paytable": {"entries": [{"symbol": 0, "count": 3, "payout": 50}]}
+            }}
+        ]
+    }
+    b = derive_bounds(composed)
+    assert b["payout_max"] == 200  # max(20, 50*4)

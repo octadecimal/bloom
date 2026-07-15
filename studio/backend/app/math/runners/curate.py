@@ -34,6 +34,8 @@ def parse_result_line(line: str, *, ran_at: str) -> CurationResult:
         se=MetricSEWire(rtp=se_d["rtp"], volatility=se_d["volatility"],
                         bonus_hit_rates=se_d.get("bonusHitRates", []),
                         hit_frequency=se_d.get("hitFrequency")) if se_d else None,
+        max_win=d.get("maxWin"), state_rtp=d.get("stateRtp"),
+        state_visit_freq=d.get("stateVisitFreq"),
     )
     return CurationResult(
         status=d["status"], metrics=metrics,

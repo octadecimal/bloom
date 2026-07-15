@@ -15,10 +15,11 @@ def master_seed(game_id: str) -> int:
     return int.from_bytes(hashlib.sha256(game_id.encode()).digest()[:8], "big")
 
 
-def build_job(game_id: str, definition: dict, presentation: dict, settings) -> dict:
+def build_job(game_id: str, definition: dict, presentation: dict, settings,
+             target: dict | None = None) -> dict:
     out_dir = REPO_ROOT / settings.packages_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    return {
+    job = {
         "definition": definition,
         "presentation": presentation,
         "package_id": game_id,
@@ -27,3 +28,6 @@ def build_job(game_id: str, definition: dict, presentation: dict, settings) -> d
         "out_path": str(out_dir / f"{game_id}.pkg"),
         "validate_only": False,
     }
+    if target is not None:
+        job["target"] = target
+    return job

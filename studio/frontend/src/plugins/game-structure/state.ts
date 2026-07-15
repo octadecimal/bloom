@@ -2,7 +2,7 @@ import type { State } from '@hookstate/core';
 import { rootStore } from '../../state/rootStore';
 import { makePluginHooks } from '../../state/makePluginHooks';
 import type { IGameDefinition } from './model';
-import type { IComposeMetrics } from './restClient';
+import type { IComposeMetrics, IComposeVerdict } from './restClient';
 
 export const GAME_STRUCTURE_PLUGIN_ID = 'game-structure';
 
@@ -21,7 +21,7 @@ export interface IGameStructureState {
   watermark: string; // updatedAt of the last state we hydrated; older socket events are ignored
   loadStatus: 'idle' | 'loading' | 'error';
   validation: { status: 'idle' | 'checking' | 'ok' | 'errors'; errors: string[] };
-  build: { status: 'idle' | 'building' | 'done' | 'error'; metrics: IComposeMetrics | null; errors: string[] };
+  build: { status: 'idle' | 'building' | 'done' | 'error'; metrics: IComposeMetrics | null; verdict: IComposeVerdict | null; errors: string[] };
 }
 
 export function makeInitialState(): IGameStructureState {
@@ -37,7 +37,7 @@ export function makeInitialState(): IGameStructureState {
     watermark: '',
     loadStatus: 'idle',
     validation: { status: 'idle', errors: [] },
-    build: { status: 'idle', metrics: null, errors: [] },
+    build: { status: 'idle', metrics: null, verdict: null, errors: [] },
   };
 }
 

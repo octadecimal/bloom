@@ -74,16 +74,30 @@ export function GameStructurePane(_props: IDockviewPanelProps) {
           >
             {build.status === 'building' ? 'Building…' : 'Build'}
           </button>
-          {build.status === 'done' && build.metrics && (
-            <span data-testid="gs-metrics" className="flex items-center gap-2 text-[11px] text-text-2">
-              <span data-testid="gs-metric-rtp">rtp {build.metrics.rtp.toFixed(3)}</span>
-              <span data-testid="gs-metric-hit-rate">hit {(build.metrics.hitRate * 100).toFixed(1)}%</span>
-              <span data-testid="gs-metric-max-win">max {build.metrics.maxWinX}x</span>
-              <span data-testid="gs-metric-visits">
-                {Object.entries(build.metrics.stateVisits)
-                  .map(([k, v]) => `${k}:${v}`)
-                  .join(' ')}
-              </span>
+          {build.verdict && (build.status === 'done' || build.status === 'error') && (
+            <span className="flex items-center gap-2 text-[11px]">
+              <StatusPill data-testid="gs-verdict" tone={build.verdict.status === 'pass' ? 'success' : 'danger'}>
+                {build.verdict.status === 'pass' ? 'PASS' : 'FAIL'}
+              </StatusPill>
+              {build.verdict.realizedRtp != null && (
+                <span data-testid="gs-verdict-rtp" className="text-text-2">
+                  rtp {build.verdict.realizedRtp.toFixed(3)} (target {build.verdict.rtpTarget.toFixed(2)}±{build.verdict.rtpTolerance})
+                </span>
+              )}
+              {build.verdict.selfDerived && (
+                <span
+                  data-testid="gs-verdict-self-derived"
+                  className="text-text-3"
+                  title="No GDD intent — the target was centered on the game's own measured RTP."
+                >
+                  self-derived
+                </span>
+              )}
+              {build.verdict.failure && (
+                <span data-testid="gs-verdict-failure" className="text-danger">
+                  {build.verdict.failure}
+                </span>
+              )}
             </span>
           )}
           {build.status === 'error' && (

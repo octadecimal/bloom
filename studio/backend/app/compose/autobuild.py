@@ -6,10 +6,11 @@ from app.compose.jobs import GAME_ID_RE, build_job
 
 
 class AutoBuilder:
-    def __init__(self, runner, settings, sio, *, debounce_s: float = 1.5):
+    def __init__(self, runner, settings, sio, *, target_for=None, debounce_s: float = 1.5):
         self._runner = runner
         self._settings = settings
         self._sio = sio
+        self._target_for = target_for
         self._debounce_s = debounce_s
         self._tasks: dict[str, asyncio.Task] = {}
         self._pending: dict[str, tuple[dict, dict]] = {}
@@ -38,8 +39,9 @@ class AutoBuilder:
             await self._emit(game_id, {"status": "building"})
             self._in_flight.add(game_id)
             try:
+                target = await self._target_for(game_id) if self._target_for else None
                 res = await self._runner.run(
-                    build_job(game_id, definition, presentation, self._settings)
+                    build_job(game_id, definition, presentation, self._settings, target=target)
                 )
             except asyncio.CancelledError:
                 raise

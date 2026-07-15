@@ -20,10 +20,12 @@ vi.mock('socket.io-client', () => ({
 const getSlotModel = vi.fn();
 const getTarget = vi.fn();
 const getTuner = vi.fn();
+const getComposedMathDoc = vi.fn();
 vi.mock('./restClient', () => ({
   getSlotModel: (gameId: string) => getSlotModel(gameId),
   getTarget: (gameId: string) => getTarget(gameId),
   getTuner: (gameId: string) => getTuner(gameId),
+  getComposedMathDoc: (gameId: string) => getComposedMathDoc(gameId),
 }));
 
 import { createMathSocket } from './socketClient';
@@ -62,6 +64,7 @@ beforeEach(() => {
   getSlotModel.mockReset().mockRejectedValue(new Error('not stubbed'));
   getTarget.mockReset().mockRejectedValue(new Error('not stubbed'));
   getTuner.mockReset().mockRejectedValue(new Error('not stubbed'));
+  getComposedMathDoc.mockReset().mockRejectedValue(new Error('not stubbed'));
   mathSlice().activeGameId.set('g1');
 });
 
@@ -261,6 +264,41 @@ describe('curation_progress/complete/failed', () => {
     expect(mathSlice().verifyStatus.get()).toBe('idle');
   });
 
+  it('connect re-joins the analytics room for the active game (socket.io reconnect drops server-side rooms)', () => {
+    createMathSocket().connect();
+    handlers['connect'](undefined);
+    expect(emit).toHaveBeenCalledWith('join_analytics', { gameId: 'g1' });
+  });
+
+  it('connect with no active game joins nothing and fetches nothing', () => {
+    mathSlice().activeGameId.set(null);
+    createMathSocket().connect();
+    handlers['connect'](undefined);
+    expect(emit).not.toHaveBeenCalled();
+    expect(getSlotModel).not.toHaveBeenCalled();
+  });
+
+  it('connect reconciles a verify that completed while disconnected (curation_complete was missed)', async () => {
+    createMathSocket().connect();
+    mathSlice().verifyStatus.set('running');
+    mathSlice().verifyProgress.set({ phase: 'evaluating', done: 3, total: 10 });
+    const result = { status: 'pass' as const, metrics: {} as never, realizedRtp: 0.9, poolSize: 1000, failure: null, ranAt: 't' };
+    getSlotModel.mockResolvedValue({
+      id: 'sm1',
+      gameId: 'g1',
+      model: {},
+      params: { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 },
+      locks: { reels: false, paytable: false, bonus: false },
+      result,
+      updatedAt: 't',
+      verdictStale: false,
+    });
+    handlers['connect'](undefined);
+    await vi.waitFor(() => expect(mathSlice().verifyStatus.get()).toBe('pass'));
+    expect(mathSlice().verifyResult.get({ noproxy: true })).toEqual(result);
+    expect(mathSlice().verifyProgress.get()).toBeNull();
+  });
+
   it('curation_failed sets verifyStatus error and verifyFailure', () => {
     createMathSocket().connect();
     handlers['curation_failed']({ gameId: 'g1', failure: 'bad seed' });
@@ -314,5 +352,42 @@ describe('gdd_doc_updated', () => {
       doc: { aspect: 'math-model', data: { rtp: 0.5 }, updatedAt: '2026-01-02' },
     });
     expect(mathSlice().targetFields.get()).toBeNull();
+  });
+});
+
+describe('game_definition_changed', () => {
+  it('refreshes doc + target for the active composed@1 game', async () => {
+    mathSlice().family.set('composed@1');
+    createMathSocket().connect();
+    const locks = { reels: true, paytable: false, bonus: false };
+    const params = { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 };
+    getComposedMathDoc.mockResolvedValue({
+      id: 'x',
+      gameId: 'g1',
+      definition: { states: [{ id: 'base' }] },
+      params,
+      locks,
+      result: null,
+      verdictStale: false,
+      updatedAt: 't',
+    });
+    getTarget.mockResolvedValue({ target: { rtp_target: 0.9, rtp_tolerance: 0.02, volatility_min: 0, volatility_max: 3, bonus_hit_rate_bands: [] } });
+    handlers['game_definition_changed']({ gameId: 'g1', updatedAt: 't', source: 'agent' });
+    await vi.waitFor(() => expect(mathSlice().locks.get({ noproxy: true })).toEqual(locks));
+    expect(mathSlice().derivedTarget.get({ noproxy: true })).toMatchObject({ rtp_target: 0.9 });
+  });
+
+  it('ignores the event when the game is not composed@1', () => {
+    mathSlice().family.set('slots@1');
+    createMathSocket().connect();
+    handlers['game_definition_changed']({ gameId: 'g1', updatedAt: 't', source: 'agent' });
+    expect(getComposedMathDoc).not.toHaveBeenCalled();
+  });
+
+  it('ignores events for a non-active game', () => {
+    mathSlice().family.set('composed@1');
+    createMathSocket().connect();
+    handlers['game_definition_changed']({ gameId: 'other', updatedAt: 't', source: 'agent' });
+    expect(getComposedMathDoc).not.toHaveBeenCalled();
   });
 });

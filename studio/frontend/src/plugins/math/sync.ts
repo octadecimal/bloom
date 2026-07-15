@@ -1,5 +1,5 @@
 import { mathSlice, type ITargetFields } from './state';
-import { getSlotModel, getTarget, getTuner } from './restClient';
+import { getComposedMathDoc, getSlotModel, getTarget, getTuner } from './restClient';
 
 export function fieldsFromGddData(data: Record<string, unknown>): ITargetFields {
   return {
@@ -25,16 +25,28 @@ export async function refreshTarget(gameId: string): Promise<void> {
   }
 }
 
-/** Re-pull doc-derived state (locks, curation params, stored-model result). */
+/** Re-pull doc-derived state (locks, curation params, stored-model result) —
+ * family-aware since Task 7: composed@1 games read the folded game-definition
+ * doc instead of a slot-model. */
 export async function refreshDoc(gameId: string): Promise<void> {
+  const s = mathSlice();
   try {
-    const doc = await getSlotModel(gameId);
-    if (!isActive(gameId)) return;
-    const s = mathSlice();
-    s.locks.set(doc.locks);
-    s.curationParams.set(doc.params);
-    s.verifyResult.set(doc.result);
-    s.verdictStale.set(!!doc.verdictStale);
+    if (s.family.get() === 'composed@1') {
+      const doc = await getComposedMathDoc(gameId);
+      if (!isActive(gameId)) return;
+      s.locks.set(doc.locks);
+      s.curationParams.set(doc.params);
+      s.verifyResult.set(doc.result);
+      s.verdictStale.set(!!doc.verdictStale);
+      s.composedStateIds.set((doc.definition.states ?? []).map((st) => st.id));
+    } else {
+      const doc = await getSlotModel(gameId);
+      if (!isActive(gameId)) return;
+      s.locks.set(doc.locks);
+      s.curationParams.set(doc.params);
+      s.verifyResult.set(doc.result);
+      s.verdictStale.set(!!doc.verdictStale);
+    }
   } catch {
     // keep current state
   }

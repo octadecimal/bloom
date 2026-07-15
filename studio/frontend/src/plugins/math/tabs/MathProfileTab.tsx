@@ -25,7 +25,7 @@ export function MathProfileTab({ run }: IMathProfileTabProps) {
   const profile = run.profile;
 
   return (
-    <div data-testid="math-profile-tab" className="bloom-tab-fill grid grid-rows-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2 bg-surface p-2">
+    <div data-testid="math-profile-tab" className="bloom-tab-fill grid grid-rows-[minmax(0,1.35fr)_minmax(0,1fr)_auto] gap-2 bg-surface p-2">
       <Histogram bins={profile.distribution.bins} zeroCount={profile.distribution.zeroCount} />
       <div className="grid min-h-0 grid-cols-2 gap-2 lg:grid-cols-4">
         <StatTiles tail={profile.tail} />
@@ -33,6 +33,36 @@ export function MathProfileTab({ run }: IMathProfileTabProps) {
         <HitByBand profile={profile} />
         <RtpConvergenceChart profile={profile} metrics={run.metrics} />
       </div>
+      <StateShare metrics={run.metrics} />
+    </div>
+  );
+}
+
+/** Composed@1 per-state RTP share + visit frequency — a proportional bar per
+ * state (share of total RTP), plain divs (no chart lib needed for a small
+ * categorical breakdown). Rendered only when the metrics carry `stateRtp`
+ * (composed families); absent/no-op for slots@1. */
+function StateShare({ metrics }: { metrics: IMetrics | null }) {
+  if (!metrics?.stateRtp) return null;
+  const total = metrics.rtp > 0 ? metrics.rtp : Object.values(metrics.stateRtp).reduce((a, b) => a + b, 0) || 1;
+  return (
+    <div data-testid="profile-state-share" className="flex flex-col gap-1 overflow-hidden rounded-md border border-hairline bg-raised p-2.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-text-2">State share</span>
+      {Object.entries(metrics.stateRtp).map(([id, share]) => {
+        const width = Math.max(0, Math.min(100, (share / total) * 100));
+        const visits = metrics.stateVisitFreq?.[id] ?? 0;
+        return (
+          <div key={id} data-testid={`profile-state-row-${id}`} className="flex items-center gap-1.5 text-[10px] text-text-2">
+            <span className="w-12 flex-none truncate">{id}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-canvas">
+              <div className="h-full rounded-full" style={{ width: `${width}%`, background: 'var(--chart-series-1)' }} />
+            </div>
+            <span className="w-32 flex-none text-text-3">
+              {(share * 100).toFixed(1)}% RTP · visits {(visits * 100).toFixed(2)}%
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

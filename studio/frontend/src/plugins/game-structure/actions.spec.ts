@@ -49,6 +49,7 @@ beforeEach(() => {
     ok: true,
     errors: null,
     metrics: { rtp: 1, hitRate: 0.3, maxWinX: 9, stateVisits: { base: 10 } },
+    verdict: null,
     packageId: 'g1',
   });
 });
@@ -176,12 +177,30 @@ describe('buildPackage', () => {
   });
 
   it('stores kernel errors on a failed build', async () => {
-    restMock.buildGameDefinition.mockResolvedValue({ ok: false, errors: ['BadCaps'], metrics: null, packageId: 'g1' });
+    restMock.buildGameDefinition.mockResolvedValue({ ok: false, errors: ['BadCaps'], metrics: null, verdict: null, packageId: 'g1' });
     await openGameStructure('g1');
     await buildPackage();
     const b = gameStructureSlice().build.get({ noproxy: true });
     expect(b.status).toBe('error');
     expect(b.errors).toEqual(['BadCaps']);
+  });
+
+  it('a failed verify (ok:false with a verdict) preserves the verdict on the error branch', async () => {
+    const verdict = {
+      status: 'fail' as const,
+      failure: 'rtp 0.91 outside 0.96±0.01',
+      realizedRtp: 0.91,
+      poolSize: 10000,
+      rtpTarget: 0.96,
+      rtpTolerance: 0.01,
+      selfDerived: false,
+    };
+    restMock.buildGameDefinition.mockResolvedValue({ ok: false, errors: ['rtp out of band'], metrics: null, verdict, packageId: 'g1' });
+    await openGameStructure('g1');
+    await buildPackage();
+    const b = gameStructureSlice().build.get({ noproxy: true });
+    expect(b.status).toBe('error');
+    expect(b.verdict).toEqual(verdict);
   });
 
   it('guards against a second concurrent call while the first is still flushing/building', async () => {
@@ -210,5 +229,12 @@ describe('applyBuildStatus', () => {
     expect(gameStructureSlice().build.status.get()).toBe('done'); // inactive game ignored
     applyBuildStatus({ gameId: 'g1', status: 'error', errors: ['UnknownState'] });
     expect(gameStructureSlice().build.errors.get({ noproxy: true })).toEqual(['UnknownState']);
+  });
+
+  it('applyBuildStatus forwards the verdict from the auto-build event', () => {
+    gameStructureSlice().activeGameId.set('g1');
+    const verdict = { status: 'pass' as const, failure: null, realizedRtp: 0.9612, poolSize: 10000, rtpTarget: 0.96, rtpTolerance: 0.01, selfDerived: true };
+    applyBuildStatus({ gameId: 'g1', status: 'done', metrics: { rtp: 0.96 } as never, verdict, packageId: 'g1' });
+    expect(gameStructureSlice().build.verdict.get({ noproxy: true })).toEqual(verdict);
   });
 });

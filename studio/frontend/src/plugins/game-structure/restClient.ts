@@ -22,10 +22,21 @@ export interface IComposeMetrics {
   stateVisits: Record<string, number>;
 }
 
+export interface IComposeVerdict {
+  status: 'pass' | 'fail';
+  failure: string | null;
+  realizedRtp: number | null;
+  poolSize: number;
+  rtpTarget: number;
+  rtpTolerance: number;
+  selfDerived: boolean;
+}
+
 export interface IBuildResponse {
   ok: boolean;
   errors: string[];
   metrics: IComposeMetrics | null;
+  verdict: IComposeVerdict | null;
   packageId: string;
 }
 

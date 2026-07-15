@@ -65,8 +65,8 @@ test('build produces metrics and a package the runtime server plays', async ({ p
   const gameId = await setupGame(page);
   await openGameStructure(page);
   await page.getByTestId('gs-build').click();
-  await expect(page.getByTestId('gs-metrics')).toBeVisible({ timeout: 300_000 }); // 10k-seed build + possible compile
-  await expect(page.getByTestId('gs-metric-rtp')).toContainText('rtp');
+  await expect(page.getByTestId('gs-verdict')).toBeVisible({ timeout: 300_000 }); // 10k-seed build + possible compile
+  await expect(page.getByTestId('gs-verdict-rtp')).toContainText('rtp');
   // Play link points at the play surface with the package id.
   const href = await page.getByTestId('gs-play').getAttribute('href');
   expect(href).toContain(`?package=${gameId}`);

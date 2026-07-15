@@ -6,10 +6,12 @@ import type { ITuningParams, ITuneResult } from './state';
 const getSlotModel = vi.fn();
 const getTarget = vi.fn();
 const getTuner = vi.fn();
+const getComposedMathDoc = vi.fn();
 vi.mock('./restClient', () => ({
   getSlotModel: (gameId: string) => getSlotModel(gameId),
   getTarget: (gameId: string) => getTarget(gameId),
   getTuner: (gameId: string) => getTuner(gameId),
+  getComposedMathDoc: (gameId: string) => getComposedMathDoc(gameId),
 }));
 
 import { fieldsFromGddData, refreshTarget, refreshDoc, refreshTuneResult } from './sync';
@@ -47,6 +49,7 @@ beforeEach(() => {
   getSlotModel.mockReset();
   getTarget.mockReset();
   getTuner.mockReset();
+  getComposedMathDoc.mockReset();
 });
 
 describe('fieldsFromGddData', () => {
@@ -106,6 +109,29 @@ describe('refreshDoc', () => {
     mathSlice().activeGameId.set('g2');
     await refreshDoc('g1');
     expect(mathSlice().locks.get()).toBeNull();
+  });
+
+  it('reads the composed game-definition doc instead of the slot-model when family is composed@1', async () => {
+    mathSlice().activeGameId.set('g1');
+    mathSlice().family.set('composed@1');
+    const locks = { reels: false, paytable: true, bonus: false };
+    const params = { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 };
+    getComposedMathDoc.mockResolvedValue({
+      id: 'x',
+      gameId: 'g1',
+      definition: { states: [{ id: 'base' }, { id: 'fs1' }] },
+      params,
+      locks,
+      result: null,
+      verdictStale: true,
+      updatedAt: 't',
+    });
+    await refreshDoc('g1');
+    expect(mathSlice().locks.get({ noproxy: true })).toEqual(locks);
+    expect(mathSlice().curationParams.get({ noproxy: true })).toEqual(params);
+    expect(mathSlice().verdictStale.get()).toBe(true);
+    expect(mathSlice().composedStateIds.get()).toEqual(['base', 'fs1']);
+    expect(getSlotModel).not.toHaveBeenCalled();
   });
 });
 

@@ -15,6 +15,8 @@ const applyTuned = vi.fn();
 const getTarget = vi.fn();
 const getGddDocs = vi.fn();
 const putMathModelFields = vi.fn();
+const getMathDescriptor = vi.fn();
+const getComposedMathDoc = vi.fn();
 
 vi.mock('./restClient', () => ({
   fetchRuns: (gameId: string, limit?: number) => fetchRuns(gameId, limit),
@@ -30,6 +32,8 @@ vi.mock('./restClient', () => ({
   getTarget: (gameId: string) => getTarget(gameId),
   getGddDocs: (gameId: string) => getGddDocs(gameId),
   putMathModelFields: (gameId: string, fields: unknown) => putMathModelFields(gameId, fields),
+  getMathDescriptor: (gameId: string) => getMathDescriptor(gameId),
+  getComposedMathDoc: (gameId: string) => getComposedMathDoc(gameId),
 }));
 
 // Avoid pulling in the real socket.io client at module load (mirrors the tuner
@@ -107,6 +111,7 @@ const targetSpecObj: ITargetSpec = {
 };
 
 function mockOpenGameMathDeps() {
+  getMathDescriptor.mockResolvedValue({ family: 'slots@1' });
   getSlotModel.mockResolvedValue({ id: 'm1', gameId: 'g1', model: {}, params: curationParamsObj, locks: locksObj, result: verifyResultObj, updatedAt: 'u0' });
   getTuner.mockResolvedValue({ id: 't1', gameId: 'g1', params: tunerParamsObj, result: tuneResultObj, updatedAt: 'u0' });
   getGddDocs.mockResolvedValue([{ aspect: 'math-model', data: { rtp: '0.96', volatility: '3', bonus_hit_rate: '0.05' }, updatedAt: 'gdd1' }]);
@@ -128,6 +133,8 @@ beforeEach(() => {
   getTarget.mockReset();
   getGddDocs.mockReset();
   putMathModelFields.mockReset();
+  getMathDescriptor.mockReset();
+  getComposedMathDoc.mockReset();
   connect.mockReset();
   joinMath.mockReset();
   leaveMath.mockReset();
@@ -155,6 +162,8 @@ describe('openGameMath', () => {
     expect(mathSlice().loadStatus.get()).toBe('idle');
     expect(mathSlice().derivedTarget.get()).toEqual(targetSpecObj);
     expect(mathSlice().targetGap.get()).toBe('gap text');
+    expect(mathSlice().family.get()).toBe('slots@1');
+    expect(getComposedMathDoc).not.toHaveBeenCalled();
   });
 
   it('defaults targetFields to blank strings when no math-model GDD doc exists yet', async () => {
@@ -176,6 +185,51 @@ describe('openGameMath', () => {
     mockOpenGameMathDeps();
     await openGameMath('g1');
     expect(joinMath).toHaveBeenCalledWith('g1');
+  });
+});
+
+describe('openGameMath (composed@1 family)', () => {
+  beforeEach(() => {
+    getMathDescriptor.mockResolvedValue({ family: 'composed@1' });
+    getComposedMathDoc.mockResolvedValue({
+      id: 'x',
+      gameId: 'g1',
+      definition: { family: 'composed@1', states: [{ id: 'base' }, { id: 'fs1' }] },
+      params: curationParamsObj,
+      locks: locksObj,
+      result: verifyResultObj,
+      verdictStale: true,
+      updatedAt: 'u0',
+    });
+    getTuner.mockResolvedValue({ id: 't1', gameId: 'g1', params: tunerParamsObj, result: tuneResultObj, updatedAt: 'u0' });
+    getGddDocs.mockResolvedValue([{ aspect: 'math-model', data: { rtp: '0.96', volatility: '3' }, updatedAt: 'gdd1' }]);
+    fetchRuns.mockResolvedValue([run('r2'), run('r1')]);
+    getTarget.mockResolvedValue({ target: targetSpecObj, gap: 'gap text' });
+  });
+
+  it('sets family, composedStateIds (from definition.states[].id), locks, curationParams, verifyResult and skips getSlotModel', async () => {
+    await openGameMath('g1');
+    expect(mathSlice().family.get()).toBe('composed@1');
+    expect(mathSlice().composedStateIds.get()).toEqual(['base', 'fs1']);
+    expect(mathSlice().locks.get()).toEqual(locksObj);
+    expect(mathSlice().curationParams.get()).toEqual(curationParamsObj);
+    expect(mathSlice().verifyResult.get()).toEqual(verifyResultObj);
+    expect(mathSlice().verdictStale.get()).toBe(true);
+    expect(getSlotModel).not.toHaveBeenCalled();
+  });
+
+  it('still hydrates tunerParams/tuneResult, targetFields, runs and target bands (same tail as slots)', async () => {
+    await openGameMath('g1');
+    expect(mathSlice().tunerParams.get()).toEqual(tunerParamsObj);
+    expect(mathSlice().tuneResult.get()).toEqual(tuneResultObj);
+    expect(mathSlice().targetFields.get()).toEqual({ rtp: '0.96', volatility: '3', bonusHitRate: '' });
+    expect(
+      mathSlice()
+        .runs.get()
+        .map((r) => r.id),
+    ).toEqual(['r2', 'r1']);
+    expect(mathSlice().loadStatus.get()).toBe('idle');
+    expect(mathSlice().derivedTarget.get()).toEqual(targetSpecObj);
   });
 });
 

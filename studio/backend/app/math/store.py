@@ -15,6 +15,9 @@ from app.math.models import (
 )
 
 
+FAMILIES = ("slots@1", "composed@1")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -32,13 +35,15 @@ def _from_doc(raw: dict) -> SlotModelDoc:
 
 
 class MathStore:
-    def __init__(self, db, on_change=None):
+    def __init__(self, db, on_change=None, compose_store=None, gdd_store=None):
         # on_change: async (doc: SlotModelDoc, source: str) -> None; fired after
         # any model/presentation/locks write. Wired to a socket emit in main.py —
         # the store itself stays socket-free.
         self._docs = db["slot_models"]
         self._legacy_tuner_jobs = db["tuner_jobs"]  # migration source only
         self._on_change = on_change
+        self._compose = compose_store
+        self._gdd = gdd_store
         self._indexed = False
 
     async def _ensure_unique_index(self) -> None:
@@ -60,7 +65,55 @@ class MathStore:
         await self._docs.create_index("game_id", unique=True)
         self._indexed = True
 
+    async def family(self, game_id: str) -> str:
+        """The math descriptor (spec §1). GDD intent wins; else which artifact
+        doc exists (composed checked first — legacy panes may have auto-seeded
+        a stray slots doc for a composed game); else slots.
+
+        A compose doc merely *existing* is not enough: GET /games/{id}/game-
+        definition auto-seeds a default doc for EVERY room via get_or_seed
+        (RoomRoute's openGameStructure runs unconditionally on every room open),
+        so a bare, never-written seed must not silently flip an ordinary slots
+        game to composed@1 the moment its room is opened. `touched` (set on a
+        deliberate ComposeStore.put) is the same signal SlotModelDoc already
+        uses to distinguish "authored" from "untouched template"."""
+        # ponytail: 2-3 lookups per call, no cache — replay DBs are small and
+        # correctness beats staleness here.
+        if self._gdd is not None:
+            doc = await self._gdd.get_doc(game_id, "math-model")
+            fam = (getattr(doc, "data", None) or {}).get("game_family") if doc else None
+            if fam in FAMILIES:
+                return fam
+        if self._compose is not None:
+            cdoc = await self._compose.get(game_id)
+            if cdoc is not None and cdoc.touched:
+                return "composed@1"
+        return "slots@1"
+
+    async def get_composed(self, game_id: str) -> SlotModelDoc:
+        """The composed view unconditionally — for callers that KNOW the game
+        is composed (the .pkg build path), independent of the family()
+        heuristic (a seeded-but-untouched compose doc must still resolve
+        here, not silently fall back to the slots family)."""
+        return self._composed_view(await self._compose.get_or_seed(game_id))
+
+    def _composed_view(self, cdoc) -> SlotModelDoc:
+        """Present a GameDefinitionDoc as the SlotModelDoc-shaped view every math
+        consumer already speaks: model IS the artifact (the definition carries
+        family='composed@1', which the Rust binaries sniff)."""
+        return SlotModelDoc(
+            id=cdoc.id, game_id=cdoc.game_id, model=cdoc.definition,
+            params=cdoc.params, tuner_params=cdoc.tuner_params, locks=cdoc.locks,
+            presentation=cdoc.presentation, origin="template", touched=True,
+            verdict_stale=cdoc.verdict_stale, shape_stale=False,
+            result=cdoc.result, tune_result=cdoc.tune_result,
+            created_at=cdoc.created_at, updated_at=cdoc.updated_at,
+        )
+
     async def get(self, game_id: str) -> SlotModelDoc | None:
+        if await self.family(game_id) == "composed@1":
+            cdoc = await self._compose.get(game_id)
+            return self._composed_view(cdoc) if cdoc else None
         await self._ensure_unique_index()
         raw = await self._docs.find_one({"game_id": game_id})
         if raw is None:
@@ -99,6 +152,8 @@ class MathStore:
         return {**raw, **fields}
 
     async def get_or_seed(self, game_id: str) -> SlotModelDoc:
+        if await self.family(game_id) == "composed@1":
+            return self._composed_view(await self._compose.get_or_seed(game_id))
         existing = await self.get(game_id)
         if existing is not None:
             return existing
@@ -125,6 +180,25 @@ class MathStore:
                   locks: SectionLocks | None = None,
                   presentation: dict | None = None,
                   source: str = "api") -> SlotModelDoc:
+        if await self.family(game_id) == "composed@1":
+            await self._compose.get_or_seed(game_id)
+            fields: dict = {}
+            if params is not None:
+                fields["params"] = params.model_dump(mode="json")
+            if tuner_params is not None:
+                fields["tuner_params"] = tuner_params.model_dump(mode="json")
+            if locks is not None:
+                fields["locks"] = locks.model_dump(mode="json")
+            if fields:
+                # ponytail: folded math fields are $set here, definition writes go
+                # through ComposeStore.put — two writers, one collection, disjoint
+                # fields by construction.
+                fields["updated_at"] = _now()
+                await self._compose._docs.update_one({"game_id": game_id}, {"$set": fields})
+            if model is not None or presentation is not None:
+                await self._compose.put(game_id, definition=model,
+                                        presentation=presentation, source=source)
+            return await self.get(game_id)
         await self.get_or_seed(game_id)
         fields: dict = {"updated_at": _now()}
         if model is not None:
@@ -147,6 +221,10 @@ class MathStore:
         return doc
 
     async def save_realized(self, game_id: str, model: dict) -> SlotModelDoc:
+        if await self.family(game_id) == "composed@1":
+            # Belt-and-braces: nothing calls save_realized for composed games
+            # until the REST guard (SP-C Task 5) exists.
+            raise RuntimeError("composed realize arrives with SP-D")
         existing = await self.get_or_seed(game_id)
         fields = {
             "model": model, "origin": "realized", "shape_stale": False,
@@ -163,6 +241,15 @@ class MathStore:
     async def set_stale_flags(self, game_id: str, *,
                               verdict_stale: bool | None = None,
                               shape_stale: bool | None = None) -> SlotModelDoc:
+        if await self.family(game_id) == "composed@1":
+            await self._compose.get_or_seed(game_id)
+            fields: dict = {"updated_at": _now()}
+            if verdict_stale is not None:
+                fields["verdict_stale"] = verdict_stale
+            # shape_stale doesn't exist on GameDefinitionDoc — composed games
+            # have no shape drift concept (definition IS the shape).
+            await self._compose._docs.update_one({"game_id": game_id}, {"$set": fields})
+            return await self.get(game_id)
         await self.get_or_seed(game_id)
         fields: dict = {"updated_at": _now()}
         if verdict_stale is not None:
@@ -176,6 +263,13 @@ class MathStore:
         return doc
 
     async def save_result(self, game_id: str, result: CurationResult) -> SlotModelDoc:
+        if await self.family(game_id) == "composed@1":
+            await self._compose.get_or_seed(game_id)
+            await self._compose._docs.update_one(
+                {"game_id": game_id},
+                {"$set": {"result": result.model_dump(mode="json"), "verdict_stale": False, "updated_at": _now()}},
+            )
+            return await self.get(game_id)
         await self.get_or_seed(game_id)
         await self._docs.update_one(
             {"game_id": game_id},
@@ -184,6 +278,15 @@ class MathStore:
         return await self.get(game_id)
 
     async def save_tune_result(self, game_id: str, result: TuneResult) -> SlotModelDoc:
+        if await self.family(game_id) == "composed@1":
+            await self._compose.get_or_seed(game_id)
+            await self._compose._docs.update_one(
+                {"game_id": game_id},
+                {"$set": {"tune_result": result.model_dump(mode="json"),
+                          "verdict_stale": False,
+                          "updated_at": _now()}},
+            )
+            return await self.get(game_id)
         await self.get_or_seed(game_id)
         await self._docs.update_one(
             {"game_id": game_id},

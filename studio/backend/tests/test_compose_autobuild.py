@@ -44,6 +44,31 @@ async def test_debounced_build_emits_building_then_done():
 
 
 @pytest.mark.asyncio
+async def test_scheduled_build_forwards_the_derived_target():
+    runner = FakeComposeRunner({"ok": True})
+    calls = []
+
+    async def target_for(game_id):
+        calls.append(game_id)
+        return {"rtp_target": 0.95}
+
+    b = AutoBuilder(runner, Settings(), FakeSio(), target_for=target_for, debounce_s=0.01)
+    b.schedule("g1", {"family": "composed@1"}, {})
+    await asyncio.sleep(0.2)
+    assert calls == ["g1"]
+    assert runner.jobs[0]["target"] == {"rtp_target": 0.95}
+
+
+@pytest.mark.asyncio
+async def test_no_target_for_keeps_todays_job_shape():
+    runner = FakeComposeRunner({"ok": True})
+    b = AutoBuilder(runner, Settings(), FakeSio(), debounce_s=0.01)
+    b.schedule("g1", {"family": "composed@1"}, {})
+    await asyncio.sleep(0.2)
+    assert "target" not in runner.jobs[0]
+
+
+@pytest.mark.asyncio
 async def test_failed_build_emits_error_status():
     runner = FakeComposeRunner({"ok": False, "errors": ["UnknownState"]})
     sio = FakeSio()

@@ -145,4 +145,52 @@ describe('TargetStrip', () => {
     render(<TargetStrip />);
     expect(screen.queryByTestId('target-save-status')).toBeNull();
   });
+
+  it('hides the bonus-rate input for a composed@1 game but still renders RTP and volatility', () => {
+    mathSlice().targetFields.set({ rtp: '92%', volatility: 'medium', bonusHitRate: '1:150' });
+    mathSlice().family.set('composed@1');
+    render(<TargetStrip />);
+    expect(screen.queryByTestId('target-bonus-rate')).toBeNull();
+    expect(screen.getByTestId('target-rtp')).toBeTruthy();
+    expect(screen.getByTestId('target-volatility')).toBeTruthy();
+  });
+
+  it('renders the bonus-rate input for a slots@1 game', () => {
+    mathSlice().targetFields.set({ rtp: '92%', volatility: 'medium', bonusHitRate: '1:150' });
+    mathSlice().family.set('slots@1');
+    render(<TargetStrip />);
+    expect(screen.getByTestId('target-bonus-rate')).toBeTruthy();
+  });
+
+  it('renders max-win and pay-constraint chips from the derived target', () => {
+    mathSlice().targetFields.set({ rtp: '92%', volatility: 'medium', bonusHitRate: '1:150' });
+    mathSlice().derivedTarget.set({
+      rtp_target: 0.92,
+      rtp_tolerance: 0.005,
+      volatility_min: 2.0,
+      volatility_max: 4.5,
+      bonus_hit_rate_bands: [],
+      max_win_band: { min: 500, max: 1500 },
+      pay_constraints: [{ symbol: 3, relation: 'floor', count: 5, value: 2 }],
+    });
+    render(<TargetStrip />);
+    expect(screen.getByTestId('target-chip-max-win').textContent).toContain('500');
+    expect(screen.getByTestId('target-chip-max-win').textContent).toContain('1500');
+    expect(screen.getByTestId('target-chip-pay-0').textContent).toContain('floor');
+    expect(screen.getByTestId('target-chip-pay-0').textContent).toContain('s3');
+  });
+
+  it('omits max-win and pay-constraint chips when the derived target has none', () => {
+    mathSlice().targetFields.set({ rtp: '92%', volatility: 'medium', bonusHitRate: '1:150' });
+    mathSlice().derivedTarget.set({
+      rtp_target: 0.92,
+      rtp_tolerance: 0.005,
+      volatility_min: 2.0,
+      volatility_max: 4.5,
+      bonus_hit_rate_bands: [],
+    });
+    render(<TargetStrip />);
+    expect(screen.queryByTestId('target-chip-max-win')).toBeNull();
+    expect(screen.queryByTestId('target-chip-pay-0')).toBeNull();
+  });
 });

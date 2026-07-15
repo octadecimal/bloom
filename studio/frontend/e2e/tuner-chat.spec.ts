@@ -11,7 +11,7 @@
 // and tune are invoked via the /tune-math skill so the four tuner tools are BOUND:
 // the replay model filters a cassette's tool_calls to the active skill's tool set,
 // and plain (non-slash) chat in a game room routes to the design-router, which
-// binds only the GDD tools — apply_tuned_model would be filtered out there.
+// binds only the GDD tools — apply_tuned_math would be filtered out there.
 //
 // Stack (BLOOM_PORT_OFFSET=1): backend replay :8001, frontend :4201.
 // Run: BLOOM_PORT_OFFSET=1 npx playwright test --config=studio/frontend/playwright.config.ts e2e/tuner-chat.spec.ts
@@ -20,9 +20,9 @@
 // Flow:
 //   1. Seed a game with a DETUNED slot model + GDD math-model intent (90% RTP, low vol).
 //   2. Open the game room chat; invoke /tune-math tune the slot math.
-//   3. Agent calls read_tuner_setup + tune_slot_model (real GA run — offline+deterministic).
+//   3. Agent calls read_tuner_setup + tune_math (real GA run — offline+deterministic).
 //      The tool-result text "Tuned to PASS" appears in the chat feed.
-//   4. User sends "apply it"; agent calls apply_tuned_model → interrupt() approval gate.
+//   4. User sends "apply it"; agent calls apply_tuned_math → interrupt() approval gate.
 //      The approval-card appears. User approves.
 //   5. Write-back assertion: GET /games/:id/slot-model confirms the model changed from
 //      the detuned seed (some payout raised from the all-1s paytable).
@@ -133,8 +133,8 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
   // -------------------------------------------------------------------------
   // 1. Invoke the tune-math skill.
   //    Cassette key: "tune the slot math" (prose only; the slash prefix is stripped).
-  //    The replay model calls read_tuner_setup + tune_slot_model (bound to the
-  //    tune-math skill). tune_slot_model awaits the real GA — it is offline and
+  //    The replay model calls read_tuner_setup + tune_math (bound to the
+  //    tune-math skill). tune_math awaits the real GA — it is offline and
   //    deterministic, so no cassette is needed for it.
   // -------------------------------------------------------------------------
   await composerSend(page, '/tune-math tune the slot math');
@@ -143,7 +143,7 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
   // RunTurnBlock's ToolLine renders the name, not the tool-result body). Confirm the
   // tune tool ran, then wait for the run to settle by its streamed final summary.
   await expect(feed).toContainText('read_tuner_setup', { timeout: 30_000 });
-  await expect(feed).toContainText('tune_slot_model', { timeout: 30_000 });
+  await expect(feed).toContainText('tune_math', { timeout: 30_000 });
   await expect(feed).toContainText(/verdict is above/i, { timeout: 120_000 });
 
   // -------------------------------------------------------------------------
@@ -170,9 +170,9 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
   // -------------------------------------------------------------------------
   // 3. Tell the agent to apply the tuned model.
   //    Cassette key: "apply it" (prose only). Invoked via the /tune-math skill so
-  //    apply_tuned_model is BOUND — plain "apply it" would route to the design-router,
+  //    apply_tuned_math is BOUND — plain "apply it" would route to the design-router,
   //    whose tool set excludes the tuner tools, and the call would be filtered out.
-  //    apply_tuned_model triggers interrupt() → the approval-card surfaces.
+  //    apply_tuned_math triggers interrupt() → the approval-card surfaces.
   // -------------------------------------------------------------------------
   await composerSend(page, '/tune-math apply it');
 
@@ -183,14 +183,14 @@ test('chat tune-math: tune → PASS verdict → approve apply → slot model upd
   await expect(approval).toBeVisible({ timeout: 20_000 });
   await expect(approval).toContainText(/overwrites/i);
 
-  // Approve: the apply_tuned_model tool calls sim_store.put(game_id, model=tuned).
+  // Approve: the apply_tuned_math tool calls sim_store.put(game_id, model=tuned).
   await approval.getByRole('button', { name: /approve/i }).click();
 
   // The approval card resolves (shows "Approved").
   await expect(approval).toContainText(/approved/i, { timeout: 15_000 });
 
   // Wait for the run to FINISH before asserting the write-back. "Approved" renders
-  // when the approval step completes, but apply_tuned_model's sim_store.put runs
+  // when the approval step completes, but apply_tuned_math's sim_store.put runs
   // afterward, on graph resume — the tool's final summary ("Applied the tuned
   // model…") streams only once the put has committed, so it gates the GET below
   // and removes the read-before-write race.

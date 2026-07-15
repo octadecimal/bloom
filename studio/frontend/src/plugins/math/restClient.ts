@@ -45,6 +45,27 @@ export interface IGddDocWire {
   updatedAt: string;
 }
 
+export type MathFamily = 'slots@1' | 'composed@1';
+
+export interface IComposedMathDocWire {
+  id: string;
+  gameId: string;
+  definition: { states?: { id: string }[] } & Record<string, unknown>;
+  params: ICurationParams;
+  locks: ISectionLocks;
+  result: ICurationResult | null;
+  verdictStale?: boolean;
+  updatedAt: string;
+}
+
+export async function getMathDescriptor(gameId: string): Promise<{ family: MathFamily }> {
+  return okJson(await fetch(`${BACKEND_URL}/games/${gameId}/math/descriptor`));
+}
+
+export async function getComposedMathDoc(gameId: string): Promise<IComposedMathDocWire> {
+  return okJson(await fetch(`${BACKEND_URL}/games/${gameId}/game-definition`));
+}
+
 export async function getSlotModel(gameId: string): Promise<ISlotModelWire> {
   return okJson<ISlotModelWire>(await fetch(`${BACKEND_URL}/games/${gameId}/slot-model`));
 }

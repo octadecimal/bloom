@@ -1,6 +1,7 @@
 import type { State } from '@hookstate/core';
 import { rootStore } from '../../state/rootStore';
 import { makePluginHooks } from '../../state/makePluginHooks';
+import type { MathFamily } from './restClient';
 
 export const MATH_PLUGIN_ID = 'math';
 
@@ -46,6 +47,11 @@ export interface IMetrics {
   featureRtp: number;
   bonusHitRates: number[];
   se?: IMetricSE | null;
+  /** Composed-family additions (states fold in a shared max-win band + per-state
+   * RTP/visit-frequency breakdown); absent on slots@1 metrics. */
+  maxWin?: number | null;
+  stateRtp?: Record<string, number> | null;
+  stateVisitFreq?: Record<string, number> | null;
 }
 
 export interface IPopulationStats {
@@ -245,6 +251,12 @@ export interface IMathState {
   /** True when the stored verdict/result no longer describes the current model or
    * targets (spec 2026-07-09 §4/§5) — backend-owned, UI just renders the chip. */
   verdictStale: boolean;
+  /** Which math artifact backs this game — resolved once via `getMathDescriptor`
+   * in `openGameMath` (SP-C Task 7); null until the pane has opened a game. */
+  family: MathFamily | null;
+  /** Composed@1 only: state ids from `definition.states[]`, for the per-state UI
+   * (Task 8). Empty for slots@1. */
+  composedStateIds: string[];
 }
 
 export function makeInitialState(): IMathState {
@@ -275,6 +287,8 @@ export function makeInitialState(): IMathState {
     tunerParams: null,
     curationParams: null,
     verdictStale: false,
+    family: null,
+    composedStateIds: [],
   };
 }
 

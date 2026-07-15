@@ -12,5 +12,5 @@ def test_tune_math_skill_loads_with_four_tools():
     spec = reg.get("tune-math")
     assert spec is not None
     assert set(spec.tools) == {
-        "read_tuner_setup", "set_tuner_params", "tune_slot_model", "apply_tuned_model",
+        "read_tuner_setup", "set_tuner_params", "tune_math", "apply_tuned_math",
     }
