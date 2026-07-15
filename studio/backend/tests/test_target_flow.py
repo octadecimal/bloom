@@ -48,10 +48,9 @@ async def test_derive_target_for_survives_missing_aspects():
 
 
 @pytest.mark.asyncio
-async def test_composed_target_has_no_bonus_bands_or_pay_constraints():
-    # Composed targets ignore bonus_hit_rate + pay constraints (composed
-    # validate_constraints rejects them — #160 owns feature bands) and
-    # pay-constraint join keys arrive with SP-D.
+async def test_composed_target_has_no_bonus_bands_but_compiles_pay_constraints():
+    # Composed targets ignore bonus_hit_rate (bonus bands are slots-typed;
+    # #160 owns feature bands) but pay-constraint join keys compile via SP-D.
     COMPOSED_DEF = {
         "family": "composed@1",
         "mechanics": [{"id": "main_reels", "type": "reels@1", "config": {
@@ -66,6 +65,29 @@ async def test_composed_target_has_no_bonus_bands_or_pay_constraints():
     })
     doc = SimpleNamespace(model=COMPOSED_DEF, params=default_params())
     target = await derive_target_for(store, "g1", doc)
-    assert target["bonus_hit_rate_bands"] == []
-    assert "pay_constraints" not in target
+    assert target["bonus_hit_rate_bands"] == []  # no bonus bands (slots-typed)
+    assert target["pay_constraints"] == [{"symbol": 0, "relation": "floor", "value": 5}]
     assert target["rtp_target"] == 0.96
+
+
+@pytest.mark.asyncio
+async def test_composed_target_compiles_pay_constraints_from_join_keys():
+    data = {
+        "math-model": {"rtp": 0.96, "volatility": "low"},
+        "paytable": {"pay_constraints": [
+            {"symbol": "high1", "relation": "top-paying"}]},
+        "symbols-reels": {"symbols": [
+            {"slot": "high1", "kind": "high", "model_id": 0},
+            {"slot": "scat", "kind": "scatter", "model_id": 2}]},
+        "bonus-features": {"features": [{"name": "FS", "trigger": "t"}]},
+    }
+
+    class _Gdd:
+        async def get_doc(self, game_id, aspect):
+            return SimpleNamespace(data=data.get(aspect, {}))
+
+    doc = SimpleNamespace(model={"family": "composed@1"},
+                          params=default_params())
+    target = await derive_target_for(_Gdd(), "g", doc)
+    assert target["pay_constraints"] == [{"symbol": 0, "relation": "top-paying"}]
+    assert target["bonus_hit_rate_bands"] == []   # composed: no bonus bands
