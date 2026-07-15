@@ -186,14 +186,22 @@ async def test_apply_template_409s_on_a_composed_game(mongo_db):
 
 
 @pytest.mark.asyncio
-async def test_realize_409s_on_a_composed_game(mongo_db):
-    store = await _composed_math_store(mongo_db, "g1")
-    req = _req(math_store=store)
-
-    with pytest.raises(HTTPException) as exc_info:
-        await rest.realize_slot_model_rest("g1", req)
-    assert exc_info.value.status_code == 409
-    assert "composed@1" in exc_info.value.detail
+async def test_realize_endpoint_dispatches_composed(mongo_db):
+    from app.compose.store import ComposeStore
+    from app.gdd.store import GddStore
+    gdd = GddStore(mongo_db)
+    compose = ComposeStore(mongo_db)
+    store = MathStore(mongo_db, compose_store=compose, gdd_store=gdd)
+    await gdd.seed_taxonomy("rest-c1")
+    await gdd.set_fields("rest-c1", "math-model", {"game_family": "composed@1"})
+    await gdd.set_fields("rest-c1", "symbols-reels", {"symbols": [
+        {"slot": "a", "kind": "high"}, {"slot": "scat", "kind": "scatter"}]})
+    req = _req(math_store=store, gdd_store=gdd, gdd_hub=None)
+    out = await rest.realize_slot_model_rest("rest-c1", req)
+    assert out["realized"] is True
+    cdoc = await compose.get("rest-c1")
+    assert cdoc.definition["family"] == "composed@1"
+    assert any(s["id"] == "base" for s in cdoc.definition["states"])
 
 
 # ── tuner (was test_tuner_rest.py) ───────────────────────────────────────────

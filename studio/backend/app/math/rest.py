@@ -49,9 +49,6 @@ async def put_slot_model(game_id: str, body: PutSlotModelBody, request: Request)
 
 @router.post("/games/{game_id}/slot-model/realize")
 async def realize_slot_model_rest(game_id: str, request: Request) -> dict:
-    if await request.app.state.math_store.family(game_id) == "composed@1":
-        raise HTTPException(status_code=409,
-                            detail="this is a composed@1 game — the composed realizer arrives with SP-D")
     from app.math.realize_flow import realize_game
     res = await realize_game(request.app.state.math_store,
                              request.app.state.gdd_store, game_id,
