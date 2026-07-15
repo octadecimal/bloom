@@ -24,6 +24,12 @@ class GameDefinitionDoc(_WireModel):
     result: CurationResult | None = None
     tune_result: TuneResult | None = None
     verdict_stale: bool = False
+    # Mirrors SlotModelDoc.touched: False for a bare auto-seeded template (GET
+    # .../game-definition seeds a default doc for EVERY room via get_or_seed —
+    # see RoomRoute's unconditional openGameStructure — so doc *existence* alone
+    # is not a safe "this game is composed@1" signal). True once a definition is
+    # deliberately written (ComposeStore.put with a non-None definition).
+    touched: bool = False
     created_at: str
     updated_at: str
 

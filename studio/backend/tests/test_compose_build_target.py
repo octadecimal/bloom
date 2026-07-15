@@ -29,7 +29,9 @@ async def test_composed_build_target_derives_from_gdd(mongo_db):
     gdd = _FakeGddStore({"math-model": {"rtp": 0.96, "volatility": "low"}})
     compose = ComposeStore(mongo_db)
     math = MathStore(mongo_db, compose_store=compose, gdd_store=gdd)
-    await compose.get_or_seed("g1")
+    # A deliberate write — family() requires touched=True, not just doc
+    # existence (a bare get_or_seed auto-seed must not read as composed@1).
+    await compose.put("g1", definition={"family": "composed@1"})
     target = await composed_build_target(gdd, math, "g1")
     assert target["rtp_target"] == 0.96
     assert target["bonus_hit_rate_bands"] == []
@@ -41,7 +43,7 @@ async def test_composed_build_target_none_on_gap(mongo_db):
     gdd = _FakeGddStore({})  # no math-model intent at all
     compose = ComposeStore(mongo_db)
     math = MathStore(mongo_db, compose_store=compose, gdd_store=gdd)
-    await compose.get_or_seed("g1")
+    await compose.put("g1", definition={"family": "composed@1"})
     assert await composed_build_target(gdd, math, "g1") is None
 
 

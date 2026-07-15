@@ -376,9 +376,13 @@ describe('ResultStrip', () => {
     });
 
     it('omits state-metrics and dead-feature warning for a slots@1 result', () => {
+      // Real slots data from the Rust simulator (measure.rs) always populates
+      // stateRtp/stateVisitFreq too — a base/feature RTP split, not composed's
+      // per-state-machine-state breakdown. Field *presence* can't disambiguate
+      // the two shapes, so the block must gate on family, not just data shape.
       mathSlice().family.set('slots@1');
       mathSlice().composedStateIds.set([]);
-      mathSlice().runs.set([baseRun()]);
+      mathSlice().runs.set([baseRun({ metrics: { ...baseRun().metrics!, stateRtp: { base: 0.9 }, stateVisitFreq: { base: 1.0 } } })]);
       render(<ResultStrip />);
       expect(screen.queryByTestId('state-metrics')).toBeNull();
       expect(screen.queryByTestId('dead-feature-warning')).toBeNull();

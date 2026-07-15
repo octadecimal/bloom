@@ -68,7 +68,15 @@ class MathStore:
     async def family(self, game_id: str) -> str:
         """The math descriptor (spec §1). GDD intent wins; else which artifact
         doc exists (composed checked first — legacy panes may have auto-seeded
-        a stray slots doc for a composed game); else slots."""
+        a stray slots doc for a composed game); else slots.
+
+        A compose doc merely *existing* is not enough: GET /games/{id}/game-
+        definition auto-seeds a default doc for EVERY room via get_or_seed
+        (RoomRoute's openGameStructure runs unconditionally on every room open),
+        so a bare, never-written seed must not silently flip an ordinary slots
+        game to composed@1 the moment its room is opened. `touched` (set on a
+        deliberate ComposeStore.put) is the same signal SlotModelDoc already
+        uses to distinguish "authored" from "untouched template"."""
         # ponytail: 2-3 lookups per call, no cache — replay DBs are small and
         # correctness beats staleness here.
         if self._gdd is not None:
@@ -76,8 +84,10 @@ class MathStore:
             fam = (getattr(doc, "data", None) or {}).get("game_family") if doc else None
             if fam in FAMILIES:
                 return fam
-        if self._compose is not None and await self._compose.get(game_id) is not None:
-            return "composed@1"
+        if self._compose is not None:
+            cdoc = await self._compose.get(game_id)
+            if cdoc is not None and cdoc.touched:
+                return "composed@1"
         return "slots@1"
 
     def _composed_view(self, cdoc) -> SlotModelDoc:

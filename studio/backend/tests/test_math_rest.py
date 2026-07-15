@@ -167,7 +167,9 @@ async def test_apply_template_unknown_404(mongo_db):
 async def _composed_math_store(mongo_db, game_id: str):
     from app.compose.store import ComposeStore
     compose = ComposeStore(mongo_db)
-    await compose.get_or_seed(game_id)  # family() checks a doc actually exists
+    # A deliberate definition write — family() requires touched=True, not just
+    # doc existence (a bare get_or_seed auto-seed must not read as composed@1).
+    await compose.put(game_id, definition={"family": "composed@1"})
     return MathStore(mongo_db, compose_store=compose)
 
 

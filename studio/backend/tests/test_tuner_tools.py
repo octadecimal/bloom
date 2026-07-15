@@ -8,6 +8,7 @@ from app.agent_tools import (
     build_apply_tuned_math_tool,
     build_set_tuner_params_tool,
 )
+from app.compose import templates
 from app.compose.store import ComposeStore
 from app.math.store import MathStore, MathRunStore
 from app.math.models import MetricsWire
@@ -51,7 +52,9 @@ async def test_read_tuner_setup_reports_params_and_target(mongo_db):
 
 async def _composed_ctx(mongo_db, *, gdd_data):
     compose = ComposeStore(mongo_db)
-    await compose.get_or_seed("g1")   # composed game exists (Task 2 fixture pattern)
+    # A deliberate write — family() requires touched=True, not just doc
+    # existence (a bare get_or_seed auto-seed must not read as composed@1).
+    await compose.put("g1", definition=templates.default_definition())
     return ToolContext(
         "r1", "g1", None, None,
         gdd_store=_StubGddStore(gdd_data),
@@ -76,7 +79,9 @@ async def test_apply_tuned_math_composed_routes_through_compose_store(mongo_db, 
         events.append((doc.game_id, source))
 
     compose = ComposeStore(mongo_db, on_change=on_change)
-    await compose.get_or_seed("g1")   # composed game exists (Task 2 fixture pattern)
+    # A deliberate write — family() requires touched=True, not just doc
+    # existence (a bare get_or_seed auto-seed must not read as composed@1).
+    await compose.put("g1", definition=templates.default_definition())
     math_store = MathStore(mongo_db, compose_store=compose, gdd_store=None)
     ctx = ToolContext("r1", "g1", None, None, math_store=math_store)
     tuned = {"family": "composed@1", "mechanics": [], "states": [], "start": "base", "transitions": []}

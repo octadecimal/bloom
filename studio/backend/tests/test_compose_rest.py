@@ -136,5 +136,10 @@ async def test_build_carries_the_derived_target_into_the_job(mongo_db):
     math_store = MathStore(mongo_db, compose_store=store, gdd_store=_Gdd())
     req = _req(compose_store=store, compose_runner=fake, settings=_settings(),
                gdd_store=_Gdd(), math_store=math_store)
+    # A deliberate write — family() requires touched=True, not just doc
+    # existence (a bare get_or_seed auto-seed must not read as composed@1),
+    # so composed_build_target's own math_store.get_or_seed sees the composed
+    # doc rather than falling back to an unrelated auto-seeded slots template.
+    await store.put("g1", definition={"family": "composed@1"})
     await rest.build_game_definition("g1", req)
     assert fake.jobs[0]["target"]["rtp_target"] == 0.95

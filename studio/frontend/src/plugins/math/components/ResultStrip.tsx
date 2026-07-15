@@ -177,7 +177,7 @@ export function ResultStrip() {
           </tbody>
         </table>
       )}
-      {!running && metrics && (metrics.stateRtp || metrics.stateVisitFreq) && (
+      {!running && family === 'composed@1' && metrics && (metrics.stateRtp || metrics.stateVisitFreq) && (
         <div data-testid="state-metrics" className="mt-1 text-text-2">
           {Object.keys(metrics.stateRtp ?? metrics.stateVisitFreq ?? {}).map((id) => (
             <span key={id} data-testid={`state-row-${id}`} className="mr-3">
