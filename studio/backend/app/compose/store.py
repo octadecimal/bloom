@@ -41,6 +41,13 @@ class ComposeStore:
     async def get(self, game_id: str) -> GameDefinitionDoc | None:
         await self._ensure_unique_index()
         raw = await self._docs.find_one({"game_id": game_id})
+        if raw is not None and "touched" not in raw:
+            # Legacy doc predating the touched field: an authored definition
+            # differs from the seed template; a stray auto-seeded doc is
+            # byte-equal to it. Mirrors MathStore.get's legacy migration.
+            computed = raw.get("definition") != templates.default_definition()
+            await self._docs.update_one({"_id": raw["_id"]}, {"$set": {"touched": computed}})
+            raw = {**raw, "touched": computed}
         return _from_doc(raw) if raw else None
 
     async def get_or_seed(self, game_id: str) -> GameDefinitionDoc:

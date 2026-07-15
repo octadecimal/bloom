@@ -35,7 +35,7 @@ async def composed_build_target(gdd_store, math_store, game_id: str) -> dict | N
     the intent is complete, else None → the binary's self-centered default
     (verdict flags selfDerived)."""
     from app.math.targets import TargetGap
-    doc = await math_store.get_or_seed(game_id)
+    doc = await math_store.get_composed(game_id)
     try:
         return await derive_target_for(gdd_store, game_id, doc)
     except TargetGap:

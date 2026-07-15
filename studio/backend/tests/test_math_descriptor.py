@@ -1,7 +1,9 @@
 """MathStore.family — the one backend answer to 'what family is this game'."""
 import pytest
 
+from app.compose import templates
 from app.compose.models import GameDefinitionDoc
+from app.compose.store import ComposeStore
 from app.math.store import MathStore
 
 
@@ -83,3 +85,38 @@ async def test_untouched_compose_seed_does_not_flip_an_ordinary_slots_game(mongo
     # composed@1 the moment its room is opened in the Studio UI.
     store = _store(mongo_db, compose_has=True, compose_touched=False)
     assert await store.family("g1") == "slots@1"
+
+
+@pytest.mark.asyncio
+async def test_legacy_authored_doc_backfills_touched_true(mongo_db):
+    # A doc written before GameDefinitionDoc.touched existed: no `touched` key
+    # at all. It's genuinely authored (definition differs from the seed
+    # template) — the backfill must compute touched=True, not just default it.
+    definition = {"family": "composed@1", "mechanics": [], "states": [],
+                 "start": "base", "transitions": []}
+    await mongo_db["game_definitions"].insert_one({
+        "_id": "legacy-authored", "game_id": "g-legacy-authored",
+        "definition": definition, "presentation": {},
+        "created_at": "t0", "updated_at": "t0",
+    })
+    compose = ComposeStore(mongo_db)
+    math = MathStore(mongo_db, compose_store=compose, gdd_store=None)
+    assert await math.family("g-legacy-authored") == "composed@1"
+    # Persisted, not recomputed on every read.
+    raw = await mongo_db["game_definitions"].find_one({"game_id": "g-legacy-authored"})
+    assert raw["touched"] is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_stray_seed_doc_backfills_touched_false(mongo_db):
+    # A doc written before `touched` existed, byte-equal to the seed template:
+    # the old auto-seeding GET /game-definition stray, not an authored game.
+    # A blind touched=True backfill would wrongly flip this to composed@1.
+    await mongo_db["game_definitions"].insert_one({
+        "_id": "legacy-stray", "game_id": "g-legacy-stray",
+        "definition": templates.default_definition(), "presentation": {},
+        "created_at": "t0", "updated_at": "t0",
+    })
+    compose = ComposeStore(mongo_db)
+    math = MathStore(mongo_db, compose_store=compose, gdd_store=None)
+    assert await math.family("g-legacy-stray") == "slots@1"

@@ -90,6 +90,13 @@ class MathStore:
                 return "composed@1"
         return "slots@1"
 
+    async def get_composed(self, game_id: str) -> SlotModelDoc:
+        """The composed view unconditionally — for callers that KNOW the game
+        is composed (the .pkg build path), independent of the family()
+        heuristic (a seeded-but-untouched compose doc must still resolve
+        here, not silently fall back to the slots family)."""
+        return self._composed_view(await self._compose.get_or_seed(game_id))
+
     def _composed_view(self, cdoc) -> SlotModelDoc:
         """Present a GameDefinitionDoc as the SlotModelDoc-shaped view every math
         consumer already speaks: model IS the artifact (the definition carries
