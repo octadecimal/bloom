@@ -31,7 +31,7 @@ export function createMathSocket() {
     sock.on('connect', () => {
       // Fires on every (re)connection. A socket.io reconnect gets a new sid, so
       // server-side room membership is gone — without this re-join the pane
-      // silently stops receiving curation/tune events (flake-#207 signature).
+      // silently stops receiving curation/tune events (flake 207 signature).
       const active = mathSlice().activeGameId.get();
       if (!active) return;
       sock?.emit('join_analytics', { gameId: active });
