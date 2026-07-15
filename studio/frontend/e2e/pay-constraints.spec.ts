@@ -120,7 +120,7 @@ test('pay constraint: chat → GDD → tune honors top-paying', async ({ page, r
   // 3. Tune via /tune-math (existing cassette; real GA — offline + deterministic).
   await composer.fill('/tune-math tune the slot math');
   await composer.press('Enter');
-  await expect(feed).toContainText('tune_slot_model', { timeout: 30_000 });
+  await expect(feed).toContainText('tune_math', { timeout: 30_000 });
   await expect(feed).toContainText(/verdict is above/i, { timeout: 120_000 });
 
   // 4. PASS in the Math pane; the tuned paytable honors the constraint.
