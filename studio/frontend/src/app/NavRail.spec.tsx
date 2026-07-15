@@ -119,10 +119,13 @@ describe('NavRail expand/collapse', () => {
 
   it('shows pane labels and group headers only when expanded', () => {
     render(<NavRail />);
-    expect(screen.queryByText('Design')).toBeNull();
+    // collapsed: headers stay mounted (fixed-height slot keeps the layout
+    // vertically inert across hover-expand) but are visually hidden
+    expect(screen.getByText('Design')).toHaveClass('opacity-0');
+    expect(screen.getByText('Design')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('rail-open-math/viewer')).not.toHaveTextContent('Math');
     fireEvent.click(screen.getByTestId('rail-toggle'));
-    expect(screen.getByText('Design')).toBeInTheDocument();
+    expect(screen.getByText('Design')).not.toHaveClass('opacity-0');
     expect(screen.getByText('Art')).toBeInTheDocument();
     expect(screen.getByTestId('rail-open-math/viewer')).toHaveTextContent('Math');
     expect(screen.getByTestId('rail-open-llm-chat/room')).toHaveTextContent('Chat Room');
@@ -151,5 +154,62 @@ describe('NavRail expand/collapse', () => {
     fireEvent.click(screen.getByTestId('rail-toggle'));
     expect(screen.getByTestId('rail-open-mystery/pane')).toHaveTextContent('Zephyr');
     expect(screen.queryByText('Other')).toBeNull();
+  });
+});
+
+describe('NavRail hover expand', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('expands after the hover-intent delay and collapses immediately on leave', () => {
+    render(<NavRail />);
+    const nav = screen.getByTestId('nav-rail');
+    fireEvent.mouseOver(nav);
+    expect(nav.className).toContain('w-10'); // intent delay not elapsed yet
+    act(() => vi.advanceTimersByTime(150));
+    expect(nav.className).toContain('w-44');
+    expect(screen.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.mouseOut(nav);
+    expect(nav.className).toContain('w-10');
+  });
+
+  it('never expands when the cursor skates through within the delay', () => {
+    render(<NavRail />);
+    const nav = screen.getByTestId('nav-rail');
+    fireEvent.mouseOver(nav);
+    fireEvent.mouseOut(nav);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(nav.className).toContain('w-10');
+  });
+
+  it('hover never writes the pin key; pinning while hovered survives leave', () => {
+    render(<NavRail />);
+    const nav = screen.getByTestId('nav-rail');
+    fireEvent.mouseOver(nav);
+    act(() => vi.advanceTimersByTime(150));
+    expect(localStorage.getItem('bloom.navRailExpanded')).toBeNull();
+    fireEvent.click(screen.getByTestId('rail-toggle')); // pin while hover-expanded
+    expect(localStorage.getItem('bloom.navRailExpanded')).toBe('1');
+    fireEvent.mouseOut(nav); // pin wins
+    expect(nav.className).toContain('w-44');
+  });
+
+  it('expands on focus with no delay and collapses when focus leaves the rail', () => {
+    render(<NavRail />);
+    const nav = screen.getByTestId('nav-rail');
+    const btn = screen.getByTestId('rail-open-llm-chat/room');
+    fireEvent.focus(btn);
+    expect(nav.className).toContain('w-44');
+    fireEvent.blur(btn, { relatedTarget: document.body });
+    expect(nav.className).toContain('w-10');
+  });
+
+  it('stays expanded while focus moves between rail buttons', () => {
+    render(<NavRail />);
+    fireEvent.focus(screen.getByTestId('rail-open-llm-chat/room'));
+    fireEvent.blur(screen.getByTestId('rail-open-llm-chat/room'), {
+      relatedTarget: screen.getByTestId('rail-open-gdd/viewer'),
+    });
+    expect(screen.getByTestId('nav-rail').className).toContain('w-44');
   });
 });
