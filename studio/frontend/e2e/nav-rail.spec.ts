@@ -31,7 +31,8 @@ test('expanding the rail overlays the dock without resizing it', async ({ page }
   // The dock never moves or resizes — the rail expands as an overlay.
   expect(await dock.boundingBox()).toEqual(before);
 
-  await page.getByTestId('rail-toggle').click();
+  await page.getByTestId('rail-toggle').click(); // unpin; still hover-expanded until the pointer leaves
+  await page.mouse.move(640, 400); // leave the rail
   await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'false');
   expect(await dock.boundingBox()).toEqual(before);
 });
@@ -52,7 +53,30 @@ test('rail expands with labels, persists across reload, collapses back', async (
   await expect(page.getByTestId('workbench')).toBeVisible();
   await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'true');
 
-  await page.getByTestId('rail-toggle').click();
+  await page.getByTestId('rail-toggle').click(); // unpin; still hover-expanded
+  await page.mouse.move(640, 400); // leave the rail
   await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('rail-open-math/viewer')).not.toContainText('Math');
+});
+
+test('rail expands on hover and collapses when the pointer leaves', async ({ page }) => {
+  await gotoWorkbench(page);
+  await expect(page.getByTestId('rail-open-math/viewer')).not.toContainText('Math');
+
+  await page.getByTestId('nav-rail').hover();
+  await expect(page.getByTestId('rail-open-math/viewer')).toContainText('Math');
+  // transient peek — the pin key is never written by hover
+  expect(await page.evaluate(() => localStorage.getItem('bloom.navRailExpanded'))).toBeNull();
+
+  await page.mouse.move(640, 400);
+  await expect(page.getByTestId('rail-open-math/viewer')).not.toContainText('Math');
+});
+
+test('pinning while hover-expanded survives the pointer leaving', async ({ page }) => {
+  await gotoWorkbench(page);
+  await page.getByTestId('nav-rail').hover();
+  await page.getByTestId('rail-toggle').click();
+  await page.mouse.move(640, 400);
+  await expect(page.getByTestId('rail-open-math/viewer')).toContainText('Math');
+  await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'true');
 });
