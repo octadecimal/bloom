@@ -1,7 +1,7 @@
 from app.math.realize import (
-    RealizeResult, _realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
-    _realize_reels, _all_patterns, _first_n_patterns, _realize_paylines,
-    _realize_paytable, _realize_bonuses, realize_slot_model,
+    RealizeResult, realize_symbols, _to_int, _to_bool, _KIND_TO_ROLE,
+    realize_reels, _all_patterns, _first_n_patterns, realize_paylines,
+    realize_paytable, _realize_bonuses, realize_slot_model,
 )
 
 _GDD_MATH = {"rtp": "0.96", "volatility": "high", "reels": 5, "rows": 3,
@@ -77,7 +77,7 @@ def test_paytable_resolves_rows_to_oak_entries():
         {"symbol": "Dragon", "3oak": "5", "4oak": "20", "5oak": "100"},
         {"symbol": "Ten", "3oak": "2", "4oak": "8", "5oak": "40"},
     ]}
-    out, errors, warnings = _realize_paytable(pt, _NAME_TO_ID, _DEFS)
+    out, errors, warnings = realize_paytable(pt, _NAME_TO_ID, _DEFS)
     assert errors == []
     assert out == {"entries": [
         {"symbol": 0, "count": 3, "payout": 5},
@@ -91,13 +91,13 @@ def test_paytable_resolves_rows_to_oak_entries():
 
 def test_paytable_unresolved_symbol_warns_and_skips():
     pt = {"payouts": [{"symbol": "Ghost", "3oak": "5"}]}
-    out, errors, warnings = _realize_paytable(pt, _NAME_TO_ID, _DEFS)
+    out, errors, warnings = realize_paytable(pt, _NAME_TO_ID, _DEFS)
     # nothing resolved -> falls back to placeholder; the skip is warned
     assert any("Ghost" in w for w in warnings)
 
 
 def test_paytable_empty_seeds_placeholder_for_normal_symbols():
-    out, errors, warnings = _realize_paytable({}, _NAME_TO_ID, _DEFS)
+    out, errors, warnings = realize_paytable({}, _NAME_TO_ID, _DEFS)
     assert errors == []
     # only the two normal symbols (ids 0,1) get placeholder entries
     syms = {e["symbol"] for e in out["entries"]}
@@ -131,7 +131,7 @@ def test_realize_symbols_assigns_ids_roles_and_name_map():
         {"slot": "scatter", "name": "Coin", "kind": "scatter"},
         {"slot": "bonusx", "name": "Chest", "kind": "bonus"},
     ]}
-    defs, name_to_id, errors, warnings = _realize_symbols(sr)
+    defs, name_to_id, errors, warnings = realize_symbols(sr)
     assert errors == []
     assert defs == [
         {"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
@@ -143,7 +143,7 @@ def test_realize_symbols_assigns_ids_roles_and_name_map():
 
 
 def test_realize_symbols_unknown_kind_defaults_normal_with_warning():
-    defs, _, errors, warnings = _realize_symbols(
+    defs, _, errors, warnings = realize_symbols(
         {"symbols": [{"slot": "x", "name": "X", "kind": "sparkly"}]})
     assert errors == []
     assert defs == [{"id": 0, "role": "normal"}]
@@ -151,7 +151,7 @@ def test_realize_symbols_unknown_kind_defaults_normal_with_warning():
 
 
 def test_realize_symbols_empty_is_hard_error():
-    defs, _, errors, _ = _realize_symbols({"symbols": []})
+    defs, _, errors, _ = realize_symbols({"symbols": []})
     assert defs == []
     assert any("no symbols" in e.lower() for e in errors)
 
@@ -165,7 +165,7 @@ def test_realize_reels_seeds_midpoint_length_same_per_reel():
     # scatter is sprinkled SPARSELY, not woven into the round-robin.
     defs = [{"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
             {"id": 2, "role": "wild"}, {"id": 3, "role": "scatter"}]
-    reels, errors, warnings = _realize_reels(
+    reels, errors, warnings = realize_reels(
         {"strip_length": {"min": 30, "max": 40}}, defs, reel_count=5)
     assert errors == []
     assert len(reels) == 5
@@ -184,7 +184,7 @@ def test_realize_reels_scatter_is_sparse_not_round_robin_dense():
     # scatter on ~1/distinct of cells (dense), driving the free-spins trigger.
     defs = [{"id": 0, "role": "normal"}, {"id": 1, "role": "normal"},
             {"id": 2, "role": "scatter"}]
-    reels, errors, warnings = _realize_reels(
+    reels, errors, warnings = realize_reels(
         {"strip_length": {"min": 40, "max": 40}}, defs, reel_count=3)
     assert errors == []
     from collections import Counter
@@ -195,7 +195,7 @@ def test_realize_reels_scatter_is_sparse_not_round_robin_dense():
 
 
 def test_realize_reels_absent_strip_length_defaults_with_warning():
-    reels, errors, warnings = _realize_reels({}, _normals(4), reel_count=3)
+    reels, errors, warnings = realize_reels({}, _normals(4), reel_count=3)
     assert errors == []
     assert all(len(r) == 30 for r in reels)  # max(4, DEFAULT_STRIP_LEN=30)
     # all-normal: pure round-robin over ids [0, 1, 2, 3]
@@ -204,7 +204,7 @@ def test_realize_reels_absent_strip_length_defaults_with_warning():
 
 
 def test_realize_reels_midpoint_below_distinct_clamps_up_with_warning():
-    reels, errors, warnings = _realize_reels(
+    reels, errors, warnings = realize_reels(
         {"strip_length": {"min": 2, "max": 8}}, _normals(6), reel_count=2)
     assert errors == []
     assert all(len(r) == 6 for r in reels)  # midpoint 5 -> clamped up to 6
@@ -212,7 +212,7 @@ def test_realize_reels_midpoint_below_distinct_clamps_up_with_warning():
 
 
 def test_realize_reels_max_below_distinct_is_hard_error():
-    reels, errors, warnings = _realize_reels(
+    reels, errors, warnings = realize_reels(
         {"strip_length": {"min": 2, "max": 3}}, _normals(6), reel_count=2)
     assert reels == []
     assert any("distinct symbol count" in e for e in errors)
@@ -221,7 +221,7 @@ def test_realize_reels_max_below_distinct_is_hard_error():
 def test_realize_reels_only_scatters_falls_back_with_warning():
     # Degenerate: no paying symbols at all. Strip still composed; warned.
     defs = [{"id": 0, "role": "scatter"}, {"id": 1, "role": "scatter"}]
-    reels, errors, warnings = _realize_reels(
+    reels, errors, warnings = realize_reels(
         {"strip_length": {"min": 30, "max": 30}}, defs, reel_count=2)
     assert errors == []
     assert all(len(r) == 30 for r in reels)
@@ -239,7 +239,7 @@ def test_all_patterns_horizontals_first_then_lexicographic():
 
 
 def test_paylines_lines_mode_takes_first_n():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_mode": "lines", "payline_count": 5}, reel_count=5, rows=3)
     assert errors == []
     assert lines == [[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 2, 2, 2],
@@ -247,42 +247,42 @@ def test_paylines_lines_mode_takes_first_n():
 
 
 def test_paylines_ways_mode_takes_all():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_mode": "ways", "payline_count": 243}, reel_count=5, rows=3)
     assert errors == []
     assert len(lines) == 243
 
 
 def test_paylines_overrides_bypass_generator():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_overrides": ["0,1,2,1,0", "2,2,2,2,2"]}, reel_count=5, rows=3)
     assert errors == []
     assert lines == [[0, 1, 2, 1, 0], [2, 2, 2, 2, 2]]
 
 
 def test_paylines_override_wrong_length_is_hard_error():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_overrides": ["0,1,2,1"]}, reel_count=5, rows=3)
     assert lines == []
     assert any("positions but reel count" in e for e in errors)
 
 
 def test_paylines_override_row_out_of_range_is_hard_error():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_overrides": ["0,1,2,1,9"]}, reel_count=5, rows=3)
     assert lines == []
     assert any("outside" in e for e in errors)
 
 
 def test_paylines_lines_count_exceeds_possible_is_hard_error():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_mode": "lines", "payline_count": 999}, reel_count=2, rows=3)
     assert lines == []  # only 9 possible
     assert any("exceeds" in e for e in errors)
 
 
 def test_paylines_ways_over_cap_is_hard_error():
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_mode": "ways"}, reel_count=8, rows=4)  # 4**8 = 65536 > 4096
     assert lines == []
     assert any("MAX_PAYLINES" in e for e in errors)
@@ -325,7 +325,7 @@ def test_paylines_lines_mode_is_lazy_for_huge_geometry():
     # 12^12 ≈ 8.9e12 combos: a full materialization would OOM/hang. Lazy first-n
     # must return instantly with exactly n lines.
     t0 = time.perf_counter()
-    lines, errors, warnings = _realize_paylines(
+    lines, errors, warnings = realize_paylines(
         {"payline_mode": "lines", "payline_count": 3}, reel_count=12, rows=12)
     assert errors == []
     assert lines == [[0] * 12, [1] * 12, [2] * 12]
@@ -341,7 +341,7 @@ def test_realize_rejects_oversized_geometry_fast():
 
 
 def test_realize_reels_clamps_oversized_strip_length():
-    reels, errors, warnings = _realize_reels(
+    reels, errors, warnings = realize_reels(
         {"strip_length": {"min": 1_000_000, "max": 1_000_000}}, _normals(4), reel_count=3)
     assert errors == []
     assert all(len(r) == 1000 for r in reels)  # clamped to MAX_STRIP_LEN
