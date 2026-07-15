@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import {
   MessageSquare,
   FileText,
@@ -47,6 +47,7 @@ const GROUPS: Array<{ label: string; ids: string[] }> = [
 ];
 const UTILITY_IDS = ['llm-chat/settings', 'llm-chat/skill-editor'];
 const EXPAND_KEY = 'bloom.navRailExpanded';
+const HOVER_DELAY_MS = 150; // hover intent: skating across the rail must not flash the flyout
 
 // Re-render on Dockview layout/active-panel changes so open/active state stays
 // honest. Before the api attaches, everything renders in the closed tier.
@@ -108,12 +109,24 @@ export function NavRail() {
   const rest = [...panes.values()].filter((p) => !curated.has(p.id));
   if (rest.length > 0) groups.push({ label: '', panes: rest });
   const utility = UTILITY_IDS.filter((id) => panes.has(id)).map((id) => panes.get(id)!);
-  const [expanded, setExpanded] = useState(() => localStorage.getItem(EXPAND_KEY) === '1');
+  const [pinned, setPinned] = useState(() => localStorage.getItem(EXPAND_KEY) === '1');
+  const [hovered, setHovered] = useState(false);
+  const hoverTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
+  const expanded = pinned || hovered;
   const toggle = () => {
-    const next = !expanded;
+    const next = !pinned;
     if (next) localStorage.setItem(EXPAND_KEY, '1');
     else localStorage.removeItem(EXPAND_KEY);
-    setExpanded(next);
+    setPinned(next);
+  };
+  const hoverEnter = () => {
+    window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => setHovered(true), HOVER_DELAY_MS);
+  };
+  const hoverLeave = () => {
+    window.clearTimeout(hoverTimer.current);
+    setHovered(false);
   };
   return (
     // Fixed w-10 layout slot: the rail expands as an overlay above the dock so
@@ -121,6 +134,15 @@ export function NavRail() {
     <div data-testid="nav-rail-slot" className="relative w-10 flex-shrink-0">
       <nav
         data-testid="nav-rail"
+        onMouseEnter={hoverEnter}
+        onMouseLeave={hoverLeave}
+        onFocus={() => {
+          window.clearTimeout(hoverTimer.current);
+          setHovered(true);
+        }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hoverLeave();
+        }}
         className={`absolute inset-y-0 left-0 z-40 flex flex-col items-center gap-1 overflow-hidden border-r border-border bg-canvas py-2 transition-[width] duration-150 ${expanded ? 'w-44 shadow-md' : 'w-10'}`}
       >
         {groups.map((group, gi) => (
