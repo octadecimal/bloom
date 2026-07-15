@@ -100,6 +100,66 @@ async def test_existing_duplicate_docs_are_healed_keeping_the_first(mongo_db):
     assert n == 1
 
 
+# SP-D composed realize lifecycle tests
+from app.compose.store import ComposeStore
+
+
+def _composed_stores(mongo_db):
+    compose = ComposeStore(mongo_db)
+    class _Gdd:
+        async def get_doc(self, game_id, aspect):
+            from types import SimpleNamespace
+            return SimpleNamespace(data={"game_family": "composed@1"})
+    return MathStore(mongo_db, compose_store=compose, gdd_store=_Gdd()), compose
+
+
+@pytest.mark.asyncio
+async def test_composed_save_realized_writes_through_compose_without_touched(mongo_db):
+    store, compose = _composed_stores(mongo_db)
+    model = {"family": "composed@1", "mechanics": [], "states": [], "start": "base",
+             "transitions": [], "caps": {"max_steps": 1000}}
+    doc = await store.save_realized("cg1", model)
+    assert doc.model == model
+    assert doc.origin == "realized" and doc.shape_stale is False
+    cdoc = await compose.get("cg1")
+    assert cdoc.touched is False          # realize is not an authored write
+    assert cdoc.origin == "realized"
+
+
+@pytest.mark.asyncio
+async def test_composed_save_realized_marks_verdict_stale_when_results_exist(mongo_db):
+    store, compose = _composed_stores(mongo_db)
+    await store.get_or_seed("cg2")
+    await compose._docs.update_one(
+        {"game_id": "cg2"},
+        {"$set": {"result": {"status": "pass", "ranAt": "t",
+                             "metrics": {"rtp": 1.0, "volatility": 1.0,
+                                         "hitFrequency": 0.1, "baseRtp": 1.0,
+                                         "featureRtp": 0.0, "bonusHitRates": []}}}})
+    doc = await store.save_realized("cg2", {"family": "composed@1"})
+    assert doc.verdict_stale is True
+
+
+@pytest.mark.asyncio
+async def test_composed_set_stale_flags_persists_shape_stale(mongo_db):
+    store, _ = _composed_stores(mongo_db)
+    await store.get_or_seed("cg3")
+    doc = await store.set_stale_flags("cg3", shape_stale=True)
+    assert doc.shape_stale is True
+    doc = await store.set_stale_flags("cg3", shape_stale=False)
+    assert doc.shape_stale is False
+
+
+@pytest.mark.asyncio
+async def test_composed_view_maps_touched_from_compose_doc(mongo_db):
+    store, compose = _composed_stores(mongo_db)
+    doc = await store.get_or_seed("cg4")     # bare seed
+    assert doc.touched is False
+    await compose.put("cg4", definition={"family": "composed@1"}, source="api")
+    doc = await store.get("cg4")
+    assert doc.touched is True
+
+
 @pytest.mark.asyncio
 async def test_save_result_persists_curation(mongo_db):
     store = MathStore(mongo_db)

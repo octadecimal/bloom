@@ -96,7 +96,10 @@ class ComposeStore:
         fields: dict = {"updated_at": _now()}
         if definition is not None:
             fields["definition"] = definition
-            fields["touched"] = True  # a deliberate write — see GameDefinitionDoc.touched
+            if source != "realize":
+                # a deliberate authored write — see GameDefinitionDoc.touched;
+                # realize seeds/reshapes without claiming authorship (slots parity)
+                fields["touched"] = True
         if presentation is not None:
             fields["presentation"] = presentation
         await self._docs.update_one({"game_id": game_id}, {"$set": fields})
