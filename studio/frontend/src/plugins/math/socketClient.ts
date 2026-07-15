@@ -28,6 +28,25 @@ export function createMathSocket() {
   function connect(): void {
     if (sock) return;
     sock = io(BACKEND_URL, { auth: { displayName: 'math' } });
+    sock.on('connect', () => {
+      // Fires on every (re)connection. A socket.io reconnect gets a new sid, so
+      // server-side room membership is gone — without this re-join the pane
+      // silently stops receiving curation/tune events (flake-#207 signature).
+      const active = mathSlice().activeGameId.get();
+      if (!active) return;
+      sock?.emit('join_analytics', { gameId: active });
+      // A verify that finished during the disconnect gap emitted its
+      // curation_complete into the void — reconcile from the persisted doc.
+      void refreshDoc(active).then(() => {
+        const s = mathSlice();
+        if (s.verifyStatus.get() !== 'running') return;
+        const r = s.verifyResult.get({ noproxy: true });
+        s.verifyStatus.set(r ? r.status : 'idle');
+        s.verifyProgress.set(null);
+        // ponytail: if the run is in fact still live, the next curation_progress
+        // (we just re-joined the room) re-asserts 'running' — transient only.
+      });
+    });
     sock.on('analytics_progress', (p: IAnalyticsProgressWire) => {
       if (!isActive(p.gameId)) return;
       const frame: IGenFrame = {

@@ -264,6 +264,41 @@ describe('curation_progress/complete/failed', () => {
     expect(mathSlice().verifyStatus.get()).toBe('idle');
   });
 
+  it('connect re-joins the analytics room for the active game (socket.io reconnect drops server-side rooms)', () => {
+    createMathSocket().connect();
+    handlers['connect'](undefined);
+    expect(emit).toHaveBeenCalledWith('join_analytics', { gameId: 'g1' });
+  });
+
+  it('connect with no active game joins nothing and fetches nothing', () => {
+    mathSlice().activeGameId.set(null);
+    createMathSocket().connect();
+    handlers['connect'](undefined);
+    expect(emit).not.toHaveBeenCalled();
+    expect(getSlotModel).not.toHaveBeenCalled();
+  });
+
+  it('connect reconciles a verify that completed while disconnected (curation_complete was missed)', async () => {
+    createMathSocket().connect();
+    mathSlice().verifyStatus.set('running');
+    mathSlice().verifyProgress.set({ phase: 'evaluating', done: 3, total: 10 });
+    const result = { status: 'pass' as const, metrics: {} as never, realizedRtp: 0.9, poolSize: 1000, failure: null, ranAt: 't' };
+    getSlotModel.mockResolvedValue({
+      id: 'sm1',
+      gameId: 'g1',
+      model: {},
+      params: { poolSize: 100, candidateCount: 10, masterSeed: 42, rtpTolerance: 0.01, realizedCorrectionBand: 0.02, bonusRateTolerance: 0.05 },
+      locks: { reels: false, paytable: false, bonus: false },
+      result,
+      updatedAt: 't',
+      verdictStale: false,
+    });
+    handlers['connect'](undefined);
+    await vi.waitFor(() => expect(mathSlice().verifyStatus.get()).toBe('pass'));
+    expect(mathSlice().verifyResult.get({ noproxy: true })).toEqual(result);
+    expect(mathSlice().verifyProgress.get()).toBeNull();
+  });
+
   it('curation_failed sets verifyStatus error and verifyFailure', () => {
     createMathSocket().connect();
     handlers['curation_failed']({ gameId: 'g1', failure: 'bad seed' });
