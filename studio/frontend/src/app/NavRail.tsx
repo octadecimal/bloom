@@ -149,10 +149,17 @@ export function NavRail() {
           <div
             key={gi}
             className={`flex flex-col gap-1 ${expanded ? 'w-full px-1' : 'w-8 items-center'} ${
-              gi > 0 && (!expanded || !group.label) ? 'mt-1 border-t border-border pt-2' : ''
+              gi > 0 && !group.label ? 'mt-1 border-t border-border pt-2' : ''
             }`}
           >
-            {expanded && group.label && <div className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{group.label}</div>}
+            {group.label && (
+              <div
+                aria-hidden={!expanded}
+                className={`h-6 whitespace-nowrap px-2 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground ${expanded ? '' : 'opacity-0'}`}
+              >
+                {group.label}
+              </div>
+            )}
             {group.panes.map((p) => (
               <RailButton key={p.id} pane={p} expanded={expanded} />
             ))}
@@ -175,7 +182,11 @@ export function NavRail() {
             className={`flex h-8 items-center rounded-md text-muted-foreground transition-colors hover:bg-raised-hover hover:text-foreground ${expanded ? 'w-full' : 'w-8 justify-center'}`}
           >
             <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center">
-              {expanded ? <PanelLeftClose aria-hidden className="h-4 w-4" /> : <PanelLeftOpen aria-hidden className="h-4 w-4" />}
+              {/* Both icons stay mounted (CSS-swapped): unmounting the mousedown target
+                  mid-click (focus-expand fires between down and up) makes Chromium
+                  suppress the click event entirely — the toggle would never register. */}
+              <PanelLeftClose aria-hidden className={`h-4 w-4 ${expanded ? '' : 'hidden'}`} />
+              <PanelLeftOpen aria-hidden className={`h-4 w-4 ${expanded ? 'hidden' : ''}`} />
             </span>
             {expanded && <span className="whitespace-nowrap text-xs">Collapse</span>}
           </button>

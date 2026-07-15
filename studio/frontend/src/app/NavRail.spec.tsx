@@ -119,10 +119,13 @@ describe('NavRail expand/collapse', () => {
 
   it('shows pane labels and group headers only when expanded', () => {
     render(<NavRail />);
-    expect(screen.queryByText('Design')).toBeNull();
+    // collapsed: headers stay mounted (fixed-height slot keeps the layout
+    // vertically inert across hover-expand) but are visually hidden
+    expect(screen.getByText('Design')).toHaveClass('opacity-0');
+    expect(screen.getByText('Design')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('rail-open-math/viewer')).not.toHaveTextContent('Math');
     fireEvent.click(screen.getByTestId('rail-toggle'));
-    expect(screen.getByText('Design')).toBeInTheDocument();
+    expect(screen.getByText('Design')).not.toHaveClass('opacity-0');
     expect(screen.getByText('Art')).toBeInTheDocument();
     expect(screen.getByTestId('rail-open-math/viewer')).toHaveTextContent('Math');
     expect(screen.getByTestId('rail-open-llm-chat/room')).toHaveTextContent('Chat Room');
