@@ -236,8 +236,6 @@ async def test_family_flip_realizes_new_family_and_leaves_old_artifact_inert(
     # A touched slots game flips to composed@1: the hook realizes the NEW
     # family's artifact (fresh, untouched -> no consent needed); the slots doc
     # stays in its collection, inert (reversible by flipping back).
-    from types import SimpleNamespace
-    from app.math.realize_flow import apply_math_hooks
     await _seed_gdd(gdd_store, "cf4")                       # slots GDD (module fixture)
     await realize_game(math_store, gdd_store, "cf4")
     await math_store.put("cf4", model=(await math_store.get("cf4")).model,

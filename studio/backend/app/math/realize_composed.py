@@ -9,7 +9,7 @@ from app.math.realize import (
     realize_reels, realize_symbols, slot_id_map,
 )
 
-SCATTER_EVENT = "scatters:3"
+SCATTER_EVENT = f"scatters:{BONUS_MIN_COUNT}"
 DEFAULT_FS_SPINS = 8       # matches the demo definition's fs1 initial
 DEFAULT_METER_TARGET = 6   # matches the demo meter target
 METER_STATE_BUDGET = 5     # fixed-budget bonus state a full meter enters

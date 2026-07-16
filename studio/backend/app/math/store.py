@@ -223,6 +223,9 @@ class MathStore:
 
     async def save_realized(self, game_id: str, model: dict) -> SlotModelDoc:
         if await self.family(game_id) == "composed@1":
+            # ponytail: two writers — put() fires on_change for watchers, then a
+            # raw update stamps lifecycle fields without a second event; collapse
+            # into one eventful write if watchers ever need fresh origin/stale.
             existing = await self.get_or_seed(game_id)
             await self._compose.put(game_id, definition=model, source="realize")
             fields = {"origin": "realized", "shape_stale": False,
