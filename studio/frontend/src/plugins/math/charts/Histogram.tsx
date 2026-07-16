@@ -32,6 +32,7 @@ function roleColor(role: Role): string {
 }
 
 function formatMult(n: number): string {
+  if (n >= 1000) return `${n / 1000}k×`; // "1000×–2000×" overflows its bar slot; "1k×–2k×" fits
   return Number.isInteger(n) ? `${n}×` : `${n.toFixed(1)}×`;
 }
 
@@ -91,7 +92,14 @@ export function Histogram({ bins, zeroCount }: IHistogramProps) {
               <rect x={x} y={y} width={w} height={h} rx={2} style={{ fill: roleColor(col.role) }}>
                 <title>{`${col.label}: ${col.count}`}</title>
               </rect>
-              <text x={i * barSlot + barSlot / 2} y={HEIGHT - PAD_BOTTOM + 13} textAnchor="middle" fontSize={9} style={{ fill: 'var(--text-3)' }}>
+              {/* Staggered onto two baselines — 13 columns of "200×–500×" on one line collide. */}
+              <text
+                x={i * barSlot + barSlot / 2}
+                y={HEIGHT - PAD_BOTTOM + (i % 2 === 0 ? 11 : 21)}
+                textAnchor="middle"
+                fontSize={9}
+                style={{ fill: 'var(--text-3)' }}
+              >
                 {col.label}
               </text>
             </g>
