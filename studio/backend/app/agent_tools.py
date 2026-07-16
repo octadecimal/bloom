@@ -21,7 +21,7 @@ from app.scene.rebuild_summary import summarize_rebuild
 from app.scene.critic import CritiqueRequest, EditParams
 from app.scene.compositor import collect_scene_images, composite_scene, sprite_box
 from app.scene.asset_critic import AssetCritiqueRequest, AssetVerdict
-from app.math.target_flow import derive_target_for, _is_composed
+from app.math.target_flow import derive_target_for, is_composed
 from app.math.targets import derive_num_bonuses, TargetGap
 from app.math.models import TuningParams
 from app.math.realize_flow import realize_game
@@ -1328,7 +1328,7 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
         try:
             # Gate GDD reconciliation to slots only; composed games don't use num_bonuses in seed_line
             # and derive_target_for already handles composed targets without bonus bands
-            if not _is_composed(model):
+            if not is_composed(model):
                 num_bonuses = derive_num_bonuses(
                     features_doc.data if features_doc else {}, model)
             target = await derive_target_for(ctx.gdd_store, ctx.game_id, sim_doc)
@@ -1347,7 +1347,7 @@ def build_read_tuner_setup_tool(ctx: ToolContext) -> BaseTool:
             tuned = "a tuned model is pending Apply" if result.tuned_model else "no tuned model"
             result_line = f"last result: {result.status} ({tuned})"
 
-        if _is_composed(model):
+        if is_composed(model):
             states = model.get("states") or []
             reels = next((m for m in model.get("mechanics") or []
                           if m.get("type") == "reels@1"), {})

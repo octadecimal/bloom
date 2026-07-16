@@ -104,8 +104,9 @@ class MathStore:
         return SlotModelDoc(
             id=cdoc.id, game_id=cdoc.game_id, model=cdoc.definition,
             params=cdoc.params, tuner_params=cdoc.tuner_params, locks=cdoc.locks,
-            presentation=cdoc.presentation, origin="template", touched=True,
-            verdict_stale=cdoc.verdict_stale, shape_stale=False,
+            presentation=cdoc.presentation, origin=cdoc.origin,
+            touched=cdoc.touched,
+            verdict_stale=cdoc.verdict_stale, shape_stale=cdoc.shape_stale,
             result=cdoc.result, tune_result=cdoc.tune_result,
             created_at=cdoc.created_at, updated_at=cdoc.updated_at,
         )
@@ -222,9 +223,18 @@ class MathStore:
 
     async def save_realized(self, game_id: str, model: dict) -> SlotModelDoc:
         if await self.family(game_id) == "composed@1":
-            # Belt-and-braces: nothing calls save_realized for composed games
-            # until the REST guard (SP-C Task 5) exists.
-            raise RuntimeError("composed realize arrives with SP-D")
+            # ponytail: two writers — put() fires on_change for watchers, then a
+            # raw update stamps lifecycle fields without a second event; collapse
+            # into one eventful write if watchers ever need fresh origin/stale.
+            existing = await self.get_or_seed(game_id)
+            await self._compose.put(game_id, definition=model, source="realize")
+            fields = {"origin": "realized", "shape_stale": False,
+                      "updated_at": _now()}
+            if existing.result is not None or existing.tune_result is not None:
+                fields["verdict_stale"] = True
+            await self._compose._docs.update_one({"game_id": game_id},
+                                                 {"$set": fields})
+            return await self.get(game_id)
         existing = await self.get_or_seed(game_id)
         fields = {
             "model": model, "origin": "realized", "shape_stale": False,
@@ -246,8 +256,8 @@ class MathStore:
             fields: dict = {"updated_at": _now()}
             if verdict_stale is not None:
                 fields["verdict_stale"] = verdict_stale
-            # shape_stale doesn't exist on GameDefinitionDoc — composed games
-            # have no shape drift concept (definition IS the shape).
+            if shape_stale is not None:
+                fields["shape_stale"] = shape_stale
             await self._compose._docs.update_one({"game_id": game_id}, {"$set": fields})
             return await self.get(game_id)
         await self.get_or_seed(game_id)

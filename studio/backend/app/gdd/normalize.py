@@ -88,7 +88,9 @@ def _table(
             warns.append(f"{field.key} row {i} is not an object")
             continue
         rows.append({c: row.get(c, "") for c in col_keys})
-        missing = [c for c in col_keys if c not in row and c not in ignore_missing]
+        missing = [c.key for c in cols
+                   if c.key not in row and c.key not in ignore_missing
+                   and not c.optional]
         if missing:
             warns.append(f"{field.key} row {i} missing {missing}")
         for col in cols:

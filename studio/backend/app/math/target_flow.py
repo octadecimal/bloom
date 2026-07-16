@@ -4,7 +4,7 @@ Extracted from four duplicated call sites (hub, rest, two agent tools)."""
 from app.math.targets import derive_num_bonuses, derive_target
 
 
-def _is_composed(model: dict) -> bool:
+def is_composed(model: dict) -> bool:
     return (model or {}).get("family") == "composed@1"
 
 
@@ -19,11 +19,13 @@ async def derive_target_for(gdd_store, game_id: str, doc) -> dict:
         return getattr(d, "data", {}) if d is not None else {}
 
     math_model = await data("math-model")
-    if _is_composed(model):
-        # Composed targets are the family-agnostic bands only: bonus bands are
-        # slots-typed (composed validate_constraints rejects them — #160 owns
-        # feature bands) and pay-constraint join keys arrive with SP-D.
-        return derive_target(math_model, doc.params, 0)
+    if is_composed(model):
+        # Bonus bands stay slots-typed (#160 owns feature bands); pay
+        # constraints compile via the model_id join keys the composed
+        # realizer stamps (SP-D).
+        return derive_target(math_model, doc.params, 0,
+                             paytable_data=await data("paytable"),
+                             symbols_data=await data("symbols-reels"))
     num_bonuses = derive_num_bonuses(await data("bonus-features"), model)
     return derive_target(math_model, doc.params, num_bonuses,
                          paytable_data=await data("paytable"),

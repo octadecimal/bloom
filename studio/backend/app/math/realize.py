@@ -54,7 +54,7 @@ class RealizeResult:
     slot_ids: dict[str, int] | None = None
 
 
-def _realize_symbols(
+def realize_symbols(
     symbols_reels: dict, existing_ids: dict[str, int] | None = None,
 ) -> tuple[list[dict], dict[str, int], list[str], list[str]]:
     """Build SymbolDef rows + a {slot/name -> id} map. Ids of surviving slots
@@ -90,7 +90,7 @@ def _realize_symbols(
     return defs, name_to_id, errors, warnings
 
 
-def _realize_reels(
+def realize_reels(
     symbols_reels: dict, symbol_defs: list[dict], reel_count: int
 ) -> tuple[list[list[int]], list[str], list[str]]:
     """Seed one identical strip per reel. Paying symbols (normal/wild) fill the
@@ -177,7 +177,7 @@ def _first_n_patterns(rows: int, reel_count: int, n: int) -> list[list[int]]:
     return out
 
 
-def _realize_paylines(
+def realize_paylines(
     math_model: dict, reel_count: int, rows: int
 ) -> tuple[list[list[int]], list[str], list[str]]:
     errors: list[str] = []
@@ -236,7 +236,7 @@ def _realize_paylines(
 _OAK_COLUMNS = {"3oak": 3, "4oak": 4, "5oak": 5}
 
 
-def _realize_paytable(
+def realize_paytable(
     paytable: dict, name_to_id: dict[str, int], symbol_defs: list[dict]
 ) -> tuple[dict, list[str], list[str]]:
     errors: list[str] = []
@@ -302,6 +302,16 @@ def _realize_bonuses(
     return bonuses, errors, warnings
 
 
+def slot_id_map(symbols_reels: dict, name_to_id: dict[str, int]) -> dict[str, int]:
+    """{slot -> model symbol id} for the GDD model_id join-key write-back."""
+    return {
+        str(row.get("slot", "")).strip().lower():
+            name_to_id[str(row.get("slot", "")).strip().lower()]
+        for row in (symbols_reels.get("symbols") or [])
+        if str(row.get("slot", "")).strip()
+    }
+
+
 def realize_slot_model(
     math_model: dict,
     symbols_reels: dict,
@@ -314,7 +324,7 @@ def realize_slot_model(
     errors: list[str] = []
     warnings: list[str] = []
 
-    symbol_defs, name_to_id, e, w = _realize_symbols(symbols_reels, existing_ids)
+    symbol_defs, name_to_id, e, w = realize_symbols(symbols_reels, existing_ids)
     errors += e
     warnings += w
     if not symbol_defs:
@@ -334,13 +344,13 @@ def realize_slot_model(
     if errors:
         return RealizeResult(None, errors, warnings)
 
-    reels, e, w = _realize_reels(symbols_reels, symbol_defs, reel_count)
+    reels, e, w = realize_reels(symbols_reels, symbol_defs, reel_count)
     errors += e
     warnings += w
-    paylines, e, w = _realize_paylines(math_model, reel_count, rows)
+    paylines, e, w = realize_paylines(math_model, reel_count, rows)
     errors += e
     warnings += w
-    paytable_out, e, w = _realize_paytable(paytable, name_to_id, symbol_defs)
+    paytable_out, e, w = realize_paytable(paytable, name_to_id, symbol_defs)
     errors += e
     warnings += w
     bonuses, e, w = _realize_bonuses(bonus_features, symbol_defs)
@@ -358,9 +368,5 @@ def realize_slot_model(
         "paytable": paytable_out,
         "bonuses": bonuses,
     }
-    slot_ids = {
-        str(row.get("slot", "")).strip().lower(): name_to_id[str(row.get("slot", "")).strip().lower()]
-        for row in (symbols_reels.get("symbols") or [])
-        if str(row.get("slot", "")).strip()
-    }
-    return RealizeResult(model, errors, warnings, slot_ids)
+    return RealizeResult(model, errors, warnings,
+                         slot_id_map(symbols_reels, name_to_id))

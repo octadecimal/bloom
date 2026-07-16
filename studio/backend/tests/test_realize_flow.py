@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.compose.store import ComposeStore
 from app.gdd.store import GddStore
 from app.math.models import SectionLocks
 from app.math.store import MathStore
@@ -19,13 +20,18 @@ GDD = {
 
 
 @pytest.fixture
-def math_store(mongo_db):
-    return MathStore(mongo_db)
+def gdd_store(mongo_db):
+    return GddStore(mongo_db)
 
 
 @pytest.fixture
-def gdd_store(mongo_db):
-    return GddStore(mongo_db)
+def compose_store(mongo_db):
+    return ComposeStore(mongo_db)
+
+
+@pytest.fixture
+def math_store(mongo_db, gdd_store, compose_store):
+    return MathStore(mongo_db, compose_store=compose_store, gdd_store=gdd_store)
 
 
 async def _seed_gdd(gdd_store, game_id, data=GDD):
@@ -173,3 +179,95 @@ async def test_apply_math_hooks_escalates_to_full_realize_when_shape_stale(
     assert len(doc.model["bonuses"]) == 2   # the previously-drifted section too
     assert len(doc.model["reels"]) == 4     # this edit's section
     assert doc.shape_stale is False
+
+
+COMPOSED_GDD = {
+    "math-model": {"reels": 3, "rows": 3, "payline_count": 3,
+                   "game_family": "composed@1"},
+    "symbols-reels": {"symbols": [
+        {"slot": "a", "kind": "high"}, {"slot": "b", "kind": "low"},
+        {"slot": "scat", "kind": "scatter"},
+    ]},
+    "paytable": {},
+    "bonus-features": {"features": [
+        {"name": "FS", "trigger": "3 scat", "kind": "free-spins"}]},
+}
+
+
+async def test_composed_birth_realizes_definition_and_join_keys(
+    math_store, gdd_store, compose_store
+):
+    await _seed_gdd(gdd_store, "cf1", COMPOSED_GDD)
+    res = await realize_game(math_store, gdd_store, "cf1")
+    assert res.realized
+    doc = await math_store.get("cf1")
+    assert doc.origin == "realized"
+    assert doc.model["family"] == "composed@1"
+    assert [s["id"] for s in doc.model["states"]] == ["base", "fs_1"]
+    sym_doc = await gdd_store.get_doc("cf1", "symbols-reels")
+    assert [r["model_id"] for r in sym_doc.data["symbols"]] == [0, 1, 2]
+    cdoc = await compose_store.get("cf1")
+    assert cdoc.touched is False          # realize does not claim authorship
+
+
+async def test_composed_sectional_rerealize_preserves_tuned_paytable(
+    math_store, gdd_store
+):
+    await _seed_gdd(gdd_store, "cf2", COMPOSED_GDD)
+    await realize_game(math_store, gdd_store, "cf2")
+    before = await math_store.get("cf2")
+    tuned = dict(before.model)
+    tuned["mechanics"][0]["config"]["paytable"] = {
+        "entries": [{"symbol": 0, "count": 3, "payout": 777}]}
+    await math_store.put("cf2", model=tuned, source="tuner")
+    await gdd_store.set_fields("cf2", "math-model", {"reels": 4})
+    res = await realize_game(math_store, gdd_store, "cf2",
+                             aspect="math-model", fields={"reels": 4})
+    assert res.realized
+    doc = await math_store.get("cf2")
+    cfg = doc.model["mechanics"][0]["config"]
+    assert len(cfg["strips"]) == 4                                   # rebuilt
+    assert cfg["paytable"]["entries"][0]["payout"] == 777            # preserved
+
+
+async def test_family_flip_realizes_new_family_and_leaves_old_artifact_inert(
+    math_store, gdd_store, compose_store, mongo_db
+):
+    # A touched slots game flips to composed@1: the hook realizes the NEW
+    # family's artifact (fresh, untouched -> no consent needed); the slots doc
+    # stays in its collection, inert (reversible by flipping back).
+    await _seed_gdd(gdd_store, "cf4")                       # slots GDD (module fixture)
+    await realize_game(math_store, gdd_store, "cf4")
+    await math_store.put("cf4", model=(await math_store.get("cf4")).model,
+                         source="editor")                   # touched slots artifact
+    slots_before = (await mongo_db["slot_models"].find_one({"game_id": "cf4"}))["model"]
+
+    await gdd_store.set_fields("cf4", "math-model",
+                               {"game_family": "composed@1"})
+    app_state = SimpleNamespace(math_store=math_store, gdd_store=gdd_store,
+                                gdd_hub=None)
+    result = await apply_math_hooks(app_state, "cf4", "math-model",
+                                    {"game_family": "composed@1"})
+
+    assert result == "applied"
+    cdoc = await compose_store.get("cf4")
+    assert cdoc.definition["family"] == "composed@1"
+    assert cdoc.origin == "realized"
+    slots_after = (await mongo_db["slot_models"].find_one({"game_id": "cf4"}))["model"]
+    assert slots_after == slots_before                      # old artifact untouched
+
+
+async def test_composed_explicit_realize_honors_locks(math_store, gdd_store):
+    await _seed_gdd(gdd_store, "cf3", COMPOSED_GDD)
+    await realize_game(math_store, gdd_store, "cf3")
+    before = await math_store.get("cf3")
+    tuned = dict(before.model)
+    tuned["mechanics"][0]["config"]["paytable"] = {
+        "entries": [{"symbol": 0, "count": 3, "payout": 999}]}
+    await math_store.put("cf3", model=tuned,
+                         locks=SectionLocks(paytable=True), source="editor")
+    res = await realize_game(math_store, gdd_store, "cf3")
+    assert res.realized
+    doc = await math_store.get("cf3")
+    cfg = doc.model["mechanics"][0]["config"]
+    assert cfg["paytable"]["entries"][0]["payout"] == 999            # locked: kept

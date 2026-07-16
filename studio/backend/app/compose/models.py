@@ -1,3 +1,4 @@
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -30,6 +31,9 @@ class GameDefinitionDoc(_WireModel):
     # is not a safe "this game is composed@1" signal). True once a definition is
     # deliberately written (ComposeStore.put with a non-None definition).
     touched: bool = False
+    # SP-D realize lifecycle (mirrors SlotModelDoc)
+    origin: Literal["template", "realized"] = "template"
+    shape_stale: bool = False   # GDD shape != definition (gated re-realize denied)
     created_at: str
     updated_at: str
 
