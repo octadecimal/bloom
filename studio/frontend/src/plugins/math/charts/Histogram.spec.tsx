@@ -20,9 +20,9 @@ describe('Histogram', () => {
     expect(bars).toHaveLength(BINS.length + 1); // + the zero/loss column
   });
 
-  it('renders the open-ended top bin as "…×+"', () => {
+  it('renders the open-ended top bin compacted as "…k×+" (wide labels overlap otherwise)', () => {
     render(<Histogram bins={BINS} zeroCount={300} />);
-    expect(screen.getByText('2000×+')).toBeTruthy();
+    expect(screen.getByText('2k×+')).toBeTruthy();
   });
 
   it('renders a non-empty svg element (SVG/CSS mark, not the IChart seam)', () => {

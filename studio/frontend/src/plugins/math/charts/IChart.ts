@@ -33,6 +33,10 @@ export interface IChartData {
   playheadX?: number;
   /** Bare-line mode for stat tiles: no axes, grid, legend, or cursor. */
   sparkline?: boolean;
+  /** Override the legend default (shown when 2+ series and not a sparkline).
+   * Small cards set `false` and render their own HTML caption instead —
+   * uPlot's legend doesn't fit a quarter-width card. */
+  legend?: boolean;
 }
 
 export interface IChart {

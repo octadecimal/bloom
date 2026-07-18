@@ -150,20 +150,29 @@ function HitByBand({ profile }: { profile: IRunProfile }) {
 export function RtpConvergenceChart({ profile, metrics }: { profile: IRunProfile; metrics: IMetrics | null }) {
   const points = profile.rtpConvergence;
   const finalRtp = metrics?.rtp ?? points[points.length - 1]?.realizedRtp ?? 0;
+  // No axis labels and no uPlot legend: in a quarter-width card they overlap
+  // the plot itself. The card title + the caption row below carry the same
+  // information in HTML, where the design language can size it.
   const data: IChartData = {
     x: points.map((p) => p.n),
     series: [
       { label: 'Realized RTP', values: points.map((p) => p.realizedRtp), colorVar: '--chart-series-1' },
       { label: 'Final RTP', values: points.map(() => finalRtp), colorVar: '--chart-target-band', dash: true },
     ],
-    xLabel: 'Sample size (n)',
-    yLabel: 'Realized RTP',
     logX: true,
+    legend: false,
   };
   return (
     <div data-testid="rtp-convergence" className="flex min-h-0 flex-col overflow-hidden rounded-md border border-hairline bg-raised p-2">
       <span className="flex-none px-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-2">RTP convergence</span>
       <UPlotChart data={data} className="min-h-0 flex-1" />
+      <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-0.5 px-0.5 pt-1 text-[10px] text-text-2">
+        <span className="flex items-center gap-1 truncate">
+          <span className="inline-block h-0.5 w-3 flex-none rounded-full" style={{ background: 'var(--chart-series-1)' }} />
+          Realized RTP
+        </span>
+        <span className="flex-none text-text-3">final {pct(finalRtp)}</span>
+      </div>
     </div>
   );
 }

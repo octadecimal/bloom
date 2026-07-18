@@ -47,7 +47,17 @@ export function toOptions(data: IChartData, width: number, height: number, playh
   const axes: uPlot.Axis[] = data.sparkline
     ? [{ show: false }, { show: false }]
     : [
-        { label: data.xLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
+        {
+          label: data.xLabel,
+          stroke: cssVar('--text-2'),
+          grid: { stroke: cssVar('--hairline') },
+          // ponytail: log-x tick labels are blanked — uPlot draws every label a
+          // custom `values` returns (no space-based skipping), and in the small
+          // convergence card even decade labels smear into each other. The HTML
+          // caption names the axis. If a large view ever wants them back, wire
+          // uPlot's `filter` (space-aware) instead of `values`.
+          values: data.logX ? (_u, ticks) => ticks.map(() => '') : undefined,
+        },
         { label: data.yLabel, stroke: cssVar('--text-2'), grid: { stroke: cssVar('--hairline') } },
       ];
 
@@ -68,7 +78,7 @@ export function toOptions(data: IChartData, width: number, height: number, playh
       ...bandSeries,
     ],
     bands,
-    legend: { show: !data.sparkline && data.series.length > 1 },
+    legend: { show: data.legend ?? (!data.sparkline && data.series.length > 1) },
     cursor: data.sparkline ? { show: false } : undefined,
     hooks: playheadX
       ? {

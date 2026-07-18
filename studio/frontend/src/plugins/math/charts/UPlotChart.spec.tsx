@@ -401,3 +401,40 @@ describe('toOptions (sparkline mode)', () => {
     expect(opts.cursor).toBeUndefined();
   });
 });
+
+// Log-x tick labels are blanked wholesale — uPlot draws every label a custom
+// `values` returns (no space-aware skipping), so any text smears in the small
+// convergence card. The chart's HTML caption names the axis instead.
+describe('toOptions (log-x tick labels)', () => {
+  it('blanks all x tick labels on logX charts', () => {
+    const opts = toOptions({ ...DATA, logX: true }, 400, 200);
+    const values = (opts.axes as uPlot.Axis[])[0].values as (u: unknown, ticks: number[]) => string[];
+    expect(values(null, [100, 1000, 10000])).toEqual(['', '', '']);
+  });
+
+  it('keeps default x tick labels on linear charts', () => {
+    const opts = toOptions(DATA, 400, 200);
+    expect((opts.axes as uPlot.Axis[])[0].values).toBeUndefined();
+  });
+});
+
+// Small cards (RTP convergence is a quarter-width card) opt out of uPlot's
+// legend — it doesn't fit and overlaps the plot; an HTML caption replaces it.
+describe('toOptions (legend override)', () => {
+  it('hides the legend when data.legend is false, even with multiple series', () => {
+    const two: IChartData = {
+      ...DATA,
+      legend: false,
+      series: [...DATA.series, { label: 'Final RTP', values: [1, 1, 1], colorVar: '--chart-target-band' }],
+    };
+    expect(toOptions(two, 400, 200).legend).toEqual({ show: false });
+  });
+
+  it('still shows the legend for multi-series charts that do not opt out', () => {
+    const two: IChartData = {
+      ...DATA,
+      series: [...DATA.series, { label: 'Final RTP', values: [1, 1, 1], colorVar: '--chart-target-band' }],
+    };
+    expect(toOptions(two, 400, 200).legend).toEqual({ show: true });
+  });
+});
