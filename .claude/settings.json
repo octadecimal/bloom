@@ -1,12 +1,21 @@
 {
-  "extraKnownMarketplaces": {
-    "superpowers-marketplace": {
-      "source": { "source": "github", "repo": "obra/superpowers-marketplace" }
-    },
-    "bloom-local": { "source": { "source": "directory", "path": "./.claude/plugins" } }
-  },
   "enabledPlugins": {
     "superpowers@superpowers-marketplace": true,
-    "bloom@bloom-local": true
+    "bloom@bloom-local": true,
+    "ponytail@ponytail": true
+  },
+  "extraKnownMarketplaces": {
+    "superpowers-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers-marketplace"
+      }
+    },
+    "bloom-local": {
+      "source": {
+        "source": "directory",
+        "path": "./.claude/plugins"
+      }
+    }
   }
 }
