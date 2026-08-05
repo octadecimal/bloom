@@ -48,10 +48,15 @@ def test_bootstrap_does_not_render_anything(tmp_path, monkeypatch):
 
     from matte_bench import session as sess
 
-    subjects_path = tmp_path / "subjects.json"
-    subjects_path.write_text(json.dumps([
-        {"id": "s1", "bucket": "wispy", "prompt": "p", "seed": 1, "width": 8, "height": 8},
-    ]), encoding="utf-8")
+    templates_path = tmp_path / "templates.json"
+    templates_path.write_text(json.dumps({
+        "wispy": {"width": 8, "height": 8,
+                  "templates": [{"text": "a tuft"}], "pools": {}},
+    }), encoding="utf-8")
+    subject_log = tmp_path / "subjects-sampled.jsonl"
+    subject_log.write_text(json.dumps(
+        {"id": "wispy-1", "bucket": "wispy", "prompt": "p", "seed": 1,
+         "width": 8, "height": 8}) + "\n", encoding="utf-8")
 
     called = []
 
@@ -69,8 +74,9 @@ def test_bootstrap_does_not_render_anything(tmp_path, monkeypatch):
     if hasattr(sess, "ensure_render"):
         monkeypatch.setattr(sess, "ensure_render", boom_render)
 
-    subjects, techniques, warnings = asyncio.run(
-        sess.bootstrap(tmp_path, subjects_path, "http://x"))
-    assert [s.id for s in subjects] == ["s1"]
+    subjects, templates, techniques, warnings = asyncio.run(
+        sess.bootstrap(tmp_path, templates_path, subject_log, "http://x"))
+    assert [s.id for s in subjects] == ["wispy-1"]
+    assert "wispy" in templates
     assert len(techniques) == 1
     assert called == []

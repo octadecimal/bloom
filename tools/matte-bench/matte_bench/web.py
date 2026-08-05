@@ -14,10 +14,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from matte_bench.corpus import Subject, ensure_plate, plate_hash, plate_path
-from matte_bench.pairing import next_comparison
+from matte_bench.corpus import (
+    BUCKETS, Subject, append_subject, ensure_plate, plate_hash, plate_path,
+)
+from matte_bench.pairing import least_judged_bucket, next_sampled_comparison
 from matte_bench.ranking import separated, standings
 from matte_bench.render import RenderError, ensure_render
+from matte_bench.sampler import sample_subject
 from matte_bench.store import (
     Fault, Verdict, append_fault, append_verdict, fresh_verdicts, read_verdicts,
 )
@@ -43,6 +46,11 @@ class State:
     unavailable: dict[str, str] = field(default_factory=dict)
     verdict_log: Path = field(default_factory=lambda: _BENCH_DIR / "verdicts.jsonl")
     fault_log: Path = field(default_factory=lambda: _BENCH_DIR / "faults.jsonl")
+    subject_log: Path = field(
+        default_factory=lambda: _BENCH_DIR / "subjects-sampled.jsonl")
+    templates: dict = field(default_factory=dict)
+    active_subject_id: str | None = None
+    active_served: int = 0
     plate_hashes: dict[str, str] = field(default_factory=dict)
     rng: random.Random = field(default_factory=lambda: random.Random())
     job: "_NextJob | None" = None
@@ -136,12 +144,39 @@ async def _prepare(comparison, progress) -> None:
             on_progress=lambda f, text=text, stage=stage: progress(text, f, stage))
 
 
+# How many comparisons each sampled subject serves before a fresh one is
+# drawn. 1 would be maximally random but pays a full plate generation per
+# verdict; a small number amortizes the wait while the corpus stays sampled.
+PAIRS_PER_SUBJECT = 3
+
+
+def _pick_subject(verdicts) -> Subject:
+    """Reuse the active sampled subject for a few comparisons (its plate is
+    cached), then draw a fresh one from the thinnest bucket and register it."""
+    if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
+        active = next((s for s in state.subjects
+                       if s.id == state.active_subject_id), None)
+        if active is not None:
+            return active
+    buckets = [b for b in BUCKETS if b in state.templates]
+    bucket = least_judged_bucket(buckets, verdicts, state.rng)
+    subject = sample_subject(bucket, state.rng, state.templates)
+    append_subject(state.subject_log, subject)
+    state.subjects.append(subject)
+    state.active_subject_id = subject.id
+    state.active_served = 0
+    return subject
+
+
 async def _compute_next(progress):
-    have = {s.id for s in state.subjects if plate_path(state.root, s.id).exists()}
     for _ in range(8):
         progress("choosing comparison…")
-        c = next_comparison(state.subjects, state.techniques,
-                            _live_verdicts(), state.rng, prefer=have)
+        if len(state.techniques) < 2:
+            return None
+        verdicts = _live_verdicts()
+        subject = _pick_subject(verdicts)
+        c = next_sampled_comparison(subject, state.techniques, verdicts,
+                                    state.rng, known=state.subjects)
         if c is None:
             return None
         try:
@@ -158,6 +193,8 @@ async def _compute_next(progress):
         except Exception as exc:                  # noqa: BLE001 - reported, not swallowed
             state.unavailable[c.left] = str(exc)
             return None
+        if c.repeat_of is None and c.subject == state.active_subject_id:
+            state.active_served += 1
         return {"subject": c.subject, "bucket": c.bucket, "left": c.left,
                 "right": c.right, "repeat_of": c.repeat_of}
     return None

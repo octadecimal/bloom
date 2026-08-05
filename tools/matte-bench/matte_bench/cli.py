@@ -10,7 +10,8 @@ def main(argv: list[str]) -> int:
     settings = get_settings()
     repo = Path(__file__).resolve().parents[3]
     root = repo / "var" / "matte-bench"
-    subjects_path = repo / "tools" / "matte-bench" / "subjects.json"
+    templates_path = repo / "tools" / "matte-bench" / "templates.json"
+    subject_log = repo / "tools" / "matte-bench" / "subjects-sampled.jsonl"
 
     if argv and argv[0] == "probe":
         found = available_models(fetch_object_info(settings.comfyui_url))
@@ -28,10 +29,12 @@ def main(argv: list[str]) -> int:
     from matte_bench.session import bootstrap, install_state
     from matte_bench.web import app, state
 
-    subjects, techniques, warnings = asyncio.run(
-        bootstrap(root, subjects_path, settings.comfyui_url))
-    install_state(state, subjects, techniques, root, settings.comfyui_url)
-    print(f"{len(subjects)} subjects, {len(techniques)} techniques; rendering on demand")
+    subjects, templates, techniques, warnings = asyncio.run(
+        bootstrap(root, templates_path, subject_log, settings.comfyui_url))
+    install_state(state, subjects, techniques, root, settings.comfyui_url,
+                  templates=templates, subject_log=subject_log)
+    print(f"{len(subjects)} known subjects, {len(techniques)} techniques; "
+          "sampling fresh subjects on demand")
     for w in warnings:
         print(f"  WARNING {w}")
     port = 8400 + int(os.environ.get("BLOOM_PORT_OFFSET") or 0)

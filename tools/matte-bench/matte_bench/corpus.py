@@ -8,7 +8,7 @@ pre-matting pixels every technique then competes on.
 import hashlib
 import json
 import shutil
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from app.assets.comfy import ImageEvent, LiveComfyProvider, ProgressEvent
@@ -34,11 +34,26 @@ class Subject:
     height: int
 
 
-def load_subjects(path: Path) -> list[Subject]:
+def append_subject(path: Path, s: Subject) -> None:
+    """Sampled subjects are registered append-only, like verdicts: the log is
+    what keeps their verdicts attributable and their plates regenerable."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(asdict(s), sort_keys=True) + "\n")
+
+
+def load_subject_log(path: Path) -> list[Subject]:
+    """Entries from retired buckets are skipped, not fatal: their verdicts
+    simply go stale, and bootstrap must survive a corpus redesign."""
+    if not path.exists():
+        return []
     out = []
-    for d in json.loads(path.read_text(encoding="utf-8")):
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        d = json.loads(line)
         if d["bucket"] not in BUCKETS:
-            raise ValueError(f"unknown bucket: {d['bucket']}")
+            continue
         out.append(Subject(id=d["id"], bucket=d["bucket"], prompt=d["prompt"],
                            seed=int(d["seed"]), width=int(d["width"]),
                            height=int(d["height"])))

@@ -3,55 +3,46 @@ from pathlib import Path
 
 import pytest
 
-from matte_bench.corpus import (
-    BUCKETS, Subject, load_subjects, plate_hash, plate_hashes, plate_path,
-)
+from matte_bench.corpus import Subject, plate_hash, plate_hashes, plate_path
 
 REPO = Path(__file__).resolve().parents[3]
 
 
-def test_shipped_subjects_cover_every_bucket_twice():
-    subjects = load_subjects(REPO / "tools" / "matte-bench" / "subjects.json")
-    counts: dict[str, int] = {}
-    for s in subjects:
-        counts[s.bucket] = counts.get(s.bucket, 0) + 1
-    assert set(counts) == set(BUCKETS)
-    assert all(n >= 2 for n in counts.values()), counts
+def test_subject_log_round_trips(tmp_path: Path):
+    """Sampled subjects are appended to a registry so verdicts cast on them
+    stay attributable and their plates stay regenerable (prompt+seed)."""
+    from matte_bench.corpus import append_subject, load_subject_log
+
+    log = tmp_path / "subjects-sampled.jsonl"
+    a = Subject(id="wispy-5", bucket="wispy", prompt="p1", seed=5, width=8, height=8)
+    b = Subject(id="filigree-9", bucket="filigree", prompt="p2", seed=9,
+                width=16, height=16)
+    append_subject(log, a)
+    append_subject(log, b)
+    assert load_subject_log(log) == [a, b]
 
 
-def test_shipped_subject_ids_are_unique():
-    subjects = load_subjects(REPO / "tools" / "matte-bench" / "subjects.json")
-    ids = [s.id for s in subjects]
-    assert len(ids) == len(set(ids))
+def test_subject_log_missing_file_is_empty(tmp_path: Path):
+    from matte_bench.corpus import load_subject_log
+
+    assert load_subject_log(tmp_path / "nope.jsonl") == []
 
 
-def test_shipped_subject_prompts_mirror_production_boilerplate():
-    """The bench must measure the distribution production actually generates:
-    isolated, cutout-style subjects (recipes.py boilerplate) — never staged
-    scenes. Diffusion bleeds scene foregrounds over the subject, and occluded
-    pixels are unmattable by any technique."""
-    from app.assets.recipes import profile_for
+def test_subject_log_drops_retired_buckets(tmp_path: Path):
+    """Entries from buckets that no longer exist load-skip rather than
+    killing bootstrap; their verdicts simply go stale."""
+    import json as _json
 
-    boilerplates = (
-        profile_for("misc").positive,        # _STANDARD fallback
-        profile_for("logo").positive,
-        profile_for("reels").positive,
-    )
-    for s in load_subjects(REPO / "tools" / "matte-bench" / "subjects.json"):
-        assert s.prompt.endswith(boilerplates), (
-            f"{s.id}: prompt does not end with a production boilerplate: {s.prompt!r}")
-        # "plain background" (the logo boilerplate's own words) is the one
-        # allowed appearance; anything else backgroundy stages a scene.
-        scrubbed = s.prompt.replace("plain background", "")
-        for banned in ("background", "backdrop", "scene", "in front of"):
-            assert banned not in scrubbed, (
-                f"{s.id}: prompt stages a scene: {s.prompt!r}")
+    from matte_bench.corpus import load_subject_log
 
-
-def test_shipped_subjects_pin_a_seed():
-    """Plates must regenerate deterministically; a missing seed breaks that."""
-    for s in load_subjects(REPO / "tools" / "matte-bench" / "subjects.json"):
-        assert isinstance(s.seed, int) and s.seed > 0
+    log = tmp_path / "subjects-sampled.jsonl"
+    log.write_text(
+        _json.dumps({"id": "old-1", "bucket": "busy-background", "prompt": "p",
+                     "seed": 1, "width": 8, "height": 8}) + "\n" +
+        _json.dumps({"id": "wispy-2", "bucket": "wispy", "prompt": "p",
+                     "seed": 2, "width": 8, "height": 8}) + "\n",
+        encoding="utf-8")
+    assert [s.id for s in load_subject_log(log)] == ["wispy-2"]
 
 
 def test_plate_hash_is_content_addressed():
@@ -196,10 +187,3 @@ def test_ensure_plate_leaves_renders_alone_when_plate_is_cached(tmp_path, monkey
     assert plate_path(tmp_path, "s1").read_bytes() == b"the plate"
 
 
-def test_load_subjects_rejects_unknown_bucket(tmp_path: Path):
-    path = tmp_path / "subjects.json"
-    path.write_text(json.dumps([{"id": "a", "bucket": "nope", "prompt": "p",
-                                 "seed": 1, "width": 8, "height": 8}]),
-                    encoding="utf-8")
-    with pytest.raises(ValueError, match="nope"):
-        load_subjects(path)

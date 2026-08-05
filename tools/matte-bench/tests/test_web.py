@@ -15,8 +15,13 @@ async def _noop_prepare(c, progress):
 
 def _client(tmp_path, monkeypatch=None):
     state.root = tmp_path
-    state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
-                              width=8, height=8)]
+    state.subjects = []
+    state.templates = {"wispy": {"width": 8, "height": 8,
+                                 "templates": [{"text": "a test tuft"}],
+                                 "pools": {}}}
+    state.subject_log = tmp_path / "subjects-sampled.jsonl"
+    state.active_subject_id = None
+    state.active_served = 0
     state.techniques = ["a", "b"]
     state.technique_objs = {}
     state.comfy_url = "http://unused"
@@ -65,10 +70,31 @@ def test_api_responses_are_served_with_no_store(tmp_path):
         assert client.get(path).headers.get("cache-control") == "no-store", path
 
 
-def test_next_returns_a_blind_comparison(tmp_path, monkeypatch):
-    body = _await_next(_client(tmp_path, monkeypatch))
-    assert body["subject"] == "s1"
+def test_next_returns_a_blind_comparison_on_a_sampled_subject(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    body = _await_next(client)
+    assert body["subject"].startswith("wispy-")
     assert {body["left"], body["right"]} == {"a", "b"}
+    # The draw is registered so its verdicts stay attributable.
+    assert state.subject_log.exists()
+    assert body["subject"] in state.subject_log.read_text(encoding="utf-8")
+
+
+def test_subject_rotates_after_pairs_per_subject(tmp_path, monkeypatch):
+    """The generalized corpus in action: after PAIRS_PER_SUBJECT comparisons
+    a FRESH random subject is sampled instead of re-serving the same image."""
+    monkeypatch.setattr(web, "PAIRS_PER_SUBJECT", 1)
+    client = _client(tmp_path, monkeypatch)
+    first = _await_next(client)
+    second = _await_next(client)
+    assert first["subject"] != second["subject"]
+
+
+def test_subject_is_reused_within_the_rotation_window(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    first = _await_next(client)
+    second = _await_next(client)
+    assert first["subject"] == second["subject"]
 
 
 def test_next_reports_progress_while_a_render_is_in_flight(tmp_path, monkeypatch):
@@ -96,7 +122,7 @@ def test_next_reports_progress_while_a_render_is_in_flight(tmp_path, monkeypatch
             raise AssertionError("never saw render progress while job blocked")
     finally:
         gate.set()
-    assert _await_next(client)["subject"] == "s1"
+    assert _await_next(client)["subject"].startswith("wispy-")
 
 
 def test_pending_payload_reports_percent_and_stage(tmp_path, monkeypatch):
@@ -125,7 +151,7 @@ def test_pending_payload_reports_percent_and_stage(tmp_path, monkeypatch):
             raise AssertionError("never saw percent while job blocked")
     finally:
         gate.set()
-    assert _await_next(client)["subject"] == "s1"
+    assert _await_next(client)["subject"].startswith("wispy-")
 
 
 def test_prepare_maps_render_progress_to_sides(tmp_path, monkeypatch):
@@ -138,6 +164,8 @@ def test_prepare_maps_render_progress_to_sides(tmp_path, monkeypatch):
     from matte_bench.techniques import Technique
 
     _client(tmp_path)
+    state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
+                              width=8, height=8)]
     left = Technique(id="birefnet-hr", cls="A", node="BiRefNetRMBG",
                      model="BiRefNet-HR", params={}, post=())
     right = Technique(id="rmbg-2", cls="A", node="RMBG", model="RMBG-2.0",
@@ -182,6 +210,8 @@ def test_prepare_progress_never_names_a_technique(tmp_path, monkeypatch):
                      model="BiRefNet-HR", params={}, post=())
     right = Technique(id="rmbg-2", cls="A", node="RMBG", model="RMBG-2.0",
                       params={}, post=())
+    state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
+                              width=8, height=8)]
     state.techniques = ["hash-l", "hash-r"]
     state.technique_objs = {"hash-l": left, "hash-r": right}
 
@@ -248,15 +278,18 @@ def test_verdict_succeeds_for_a_subject_plated_mid_session(tmp_path, monkeypatch
 
 
 def test_posting_a_verdict_appends_and_advances(tmp_path, monkeypatch):
+    """Sampling never exhausts: after a verdict the bench serves the next
+    comparison instead of running dry."""
     client = _client(tmp_path, monkeypatch)
     first = _await_next(client)
+    state.plate_hashes[first["subject"]] = "h"
     resp = client.post("/api/verdict", json={
         "subject": first["subject"], "bucket": first["bucket"],
         "left": first["left"], "right": first["right"], "winner": "left",
     })
     assert resp.status_code == 200
     assert state.verdict_log.exists()
-    assert _await_next(client) is None
+    assert _await_next(client) is not None
 
 
 def test_both_bad_verdict_records_and_flags_both_techniques(tmp_path):
@@ -412,8 +445,7 @@ def test_next_drops_a_render_error_technique_and_does_not_offer_it_again(tmp_pat
     assert client.get("/api/unavailable").json() == {"birefnet-hr": "weights missing"}
 
     # The dropped technique must never be offered again.
-    for _ in range(10):
+    for _ in range(5):
         nxt = _await_next(client)
-        if nxt is None:
-            break
+        assert nxt is not None
         assert "hash-bad" not in (nxt["left"], nxt["right"])

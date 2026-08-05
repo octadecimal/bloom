@@ -98,7 +98,17 @@ never silently compared against pixels they were not cast on. See _Staleness_.
 
 ## Corpus
 
-Six buckets — 13 plates. Chosen because they fail differently.
+Six buckets, **sampled, not fixed**. A fixed corpus overfits: after a few
+sessions the judge has memorized every image and every technique's quirks on
+it. Instead each bucket carries a template bank (`templates.json` — prompt
+patterns with randomized fragment pools), and the bench composes a fresh
+prompt plus a fresh random seed per draw. A sampled subject serves
+`PAIRS_PER_SUBJECT` comparisons (amortizing its plate generation), then a new
+one is drawn from whichever bucket has the least evidence. Every draw is
+registered append-only in `subjects-sampled.jsonl` — the recipe (prompt,
+seed, size) that keeps its verdicts attributable and its plate regenerable.
+Both sides of a comparison always mat the single plate its draw produced, so
+left/right stay pixel-identical by construction.
 
 **Subjects are generated in isolation, exactly as production prompts them.**
 Every prompt composes like `build_asset_prompt`: subject description plus the
@@ -122,9 +132,9 @@ matting quality. Difficulty must come from the subject itself.
 frame itself — the pipeline's paramount transparent asset, prompted with the
 `reels` profile boilerplate verbatim.
 
-The corpus is **frozen but growable**: subjects never change once judged, and a
-real asset that fails in the studio can be promoted into the bench as a new
-subject without invalidating existing verdicts.
+The registry is **append-only**: a subject's recipe never changes once judged,
+and a real asset that fails in the studio can still be promoted into the bench
+as a hand-written registry entry without invalidating existing verdicts.
 
 ## Techniques
 

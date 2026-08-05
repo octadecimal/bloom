@@ -34,45 +34,65 @@ def judged_pairs(verdicts: list[Verdict]) -> dict[tuple[str, str, str], int]:
     return out
 
 
-def next_comparison(subjects: list[Subject], techniques: list[str],
-                    verdicts: list[Verdict], rng: random.Random,
-                    repeat_every: int = 20,
-                    prefer: set[str] | None = None) -> Comparison | None:
-    if len(techniques) < 2 or not subjects:
+def least_judged_bucket(buckets, verdicts: list[Verdict],
+                        rng: random.Random) -> str:
+    """Evidence balance across buckets: the next sampled subject comes from
+    wherever the standings are thinnest."""
+    counts = {b: 0 for b in buckets}
+    for v in verdicts:
+        if v.bucket in counts:
+            counts[v.bucket] += 1
+    thinnest = min(counts.values())
+    return rng.choice(sorted(b for b, n in counts.items() if n == thinnest))
+
+
+def next_sampled_comparison(subject: Subject, techniques: list[str],
+                            verdicts: list[Verdict], rng: random.Random,
+                            repeat_every: int = 20,
+                            known: list[Subject] | None = None,
+                            ) -> Comparison | None:
+    """Pick the technique pair to judge on a freshly sampled subject.
+
+    Pair choice balances evidence bucket-wide (pairs least judged in this
+    bucket first, across ALL its subjects), tie-broken adaptively toward the
+    closest current strengths. Sides are randomised so a technique cannot win
+    by always sitting on the left.
+    """
+    if len(techniques) < 2:
         return None
     seen = judged_pairs(verdicts)
+    known = known or []
 
     # Self-consistency probe: re-serve something already judged, unannounced.
-    if repeat_every and seen and rng.randrange(repeat_every) == 0:
-        subject, a, b = rng.choice(sorted(seen))
-        bucket = next(s.bucket for s in subjects if s.id == subject)
-        left, right = (a, b) if rng.random() < 0.5 else (b, a)
-        return Comparison(subject=subject, bucket=bucket, left=left,
-                          right=right, repeat_of=f"{subject}:{a}:{b}")
+    # Restricted to subjects still in the registry — an unknown subject's
+    # plate has no recipe to regenerate from.
+    if repeat_every and seen and known and rng.randrange(repeat_every) == 0:
+        ids = {s.id for s in known}
+        candidates = [k for k in sorted(seen) if k[0] in ids]
+        if candidates:
+            sid, a, b = rng.choice(candidates)
+            bucket = next(s.bucket for s in known if s.id == sid)
+            left, right = (a, b) if rng.random() < 0.5 else (b, a)
+            return Comparison(subject=sid, bucket=bucket, left=left,
+                              right=right, repeat_of=f"{sid}:{a}:{b}")
 
-    by_bucket: dict[str, dict[str, float]] = {}
-    for s in subjects:
-        if s.bucket not in by_bucket:
-            by_bucket[s.bucket] = fit([v for v in verdicts if v.bucket == s.bucket])
+    scoped = [v for v in verdicts if v.bucket == subject.bucket]
+    strengths = fit(scoped)
+    pair_counts: dict[tuple[str, str], int] = {}
+    for v in scoped:
+        lo, hi = (v.left, v.right) if v.left < v.right else (v.right, v.left)
+        pair_counts[(lo, hi)] = pair_counts.get((lo, hi), 0) + 1
 
     candidates = []
-    for s in subjects:
-        strengths = by_bucket[s.bucket]
-        for i, a in enumerate(techniques):
-            for b in techniques[i + 1:]:
-                k = _key(s.id, a, b)
-                if k in seen:
-                    continue
-                gap = abs(strengths.get(a, 0.0) - strengths.get(b, 0.0))
-                candidates.append((gap, s.id, s.bucket, a, b))
-    if not candidates:
-        return None
-    if prefer:
-        preferred = [c for c in candidates if c[1] in prefer]
-        if preferred:
-            candidates = preferred
-    best_gap = min(c[0] for c in candidates)
-    tied = [c for c in candidates if c[0] == best_gap]
-    _, subject, bucket, a, b = rng.choice(tied)
+    for i, a in enumerate(techniques):
+        for b in techniques[i + 1:]:
+            lo, hi = (a, b) if a < b else (b, a)
+            count = pair_counts.get((lo, hi), 0)
+            gap = abs(strengths.get(a, 0.0) - strengths.get(b, 0.0))
+            candidates.append((count, gap, a, b))
+    best = min(c[:2] for c in candidates)
+    tied = [c for c in candidates if c[:2] == best]
+    _, _, a, b = rng.choice(tied)
     left, right = (a, b) if rng.random() < 0.5 else (b, a)
-    return Comparison(subject=subject, bucket=bucket, left=left, right=right)
+    return Comparison(subject=subject.id, bucket=subject.bucket,
+                      left=left, right=right)
