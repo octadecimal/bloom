@@ -30,8 +30,8 @@ def main(argv: list[str]) -> int:
 
     subjects, techniques, warnings = asyncio.run(
         bootstrap(root, subjects_path, settings.comfyui_url))
-    install_state(state, subjects, techniques, root)
-    print(f"{len(subjects)} subjects, {len(techniques)} techniques usable")
+    install_state(state, subjects, techniques, root, settings.comfyui_url)
+    print(f"{len(subjects)} subjects, {len(techniques)} techniques; rendering on demand")
     for w in warnings:
         print(f"  WARNING {w}")
     port = 8400 + int(os.environ.get("BLOOM_PORT_OFFSET") or 0)

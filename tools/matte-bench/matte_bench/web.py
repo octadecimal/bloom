@@ -12,9 +12,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from matte_bench.corpus import Subject
+from matte_bench.corpus import Subject, ensure_plate
 from matte_bench.pairing import next_comparison
 from matte_bench.ranking import separated, standings
+from matte_bench.render import RenderError, ensure_render
 from matte_bench.store import (
     Fault, Verdict, append_fault, append_verdict, fresh_verdicts, read_verdicts,
 )
@@ -35,6 +36,9 @@ class State:
     subjects: list[Subject] = field(default_factory=list)
     techniques: list[str] = field(default_factory=list)
     technique_names: dict[str, str] = field(default_factory=dict)
+    technique_objs: dict = field(default_factory=dict)
+    comfy_url: str = ""
+    unavailable: dict[str, str] = field(default_factory=dict)
     verdict_log: Path = field(default_factory=lambda: _BENCH_DIR / "verdicts.jsonl")
     fault_log: Path = field(default_factory=lambda: _BENCH_DIR / "faults.jsonl")
     plate_hashes: dict[str, str] = field(default_factory=dict)
@@ -80,13 +84,52 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+async def _prepare(comparison) -> None:
+    """Render the two images this comparison needs, generating the subject's
+    plate first if this is its first appearance.
+
+    Rendering lazily is the point: pre-rendering the whole matrix meant a
+    30-60 minute wait before the operator could judge anything. Everything is
+    cached, so each image is produced at most once.
+    """
+    subject = next(s for s in state.subjects if s.id == comparison.subject)
+    await ensure_plate(subject, state.root, state.comfy_url)
+    for handle in (comparison.left, comparison.right):
+        technique = state.technique_objs.get(handle)
+        if technique is not None:
+            await ensure_render(subject, technique, state.root, state.comfy_url)
+
+
 @app.get("/api/next")
-def api_next():
-    c = next_comparison(state.subjects, state.techniques, _live_verdicts(), state.rng)
-    if c is None:
-        return None
-    return {"subject": c.subject, "bucket": c.bucket, "left": c.left,
-            "right": c.right, "repeat_of": c.repeat_of}
+async def api_next():
+    for _ in range(8):
+        c = next_comparison(state.subjects, state.techniques,
+                            _live_verdicts(), state.rng)
+        if c is None:
+            return None
+        try:
+            await _prepare(c)
+        except RenderError as exc:
+            # Discovered lazily rather than by a pre-flight sweep: drop it and
+            # move on, but never silently — the operator must be able to see
+            # that they are judging fewer techniques than they think.
+            state.unavailable[exc.technique_id] = exc.reason
+            state.techniques = [t for t in state.techniques
+                                if state.technique_objs.get(t) is None
+                                or state.technique_objs[t].id != exc.technique_id]
+            continue
+        except Exception as exc:                  # noqa: BLE001 - reported, not swallowed
+            state.unavailable[c.left] = str(exc)
+            return None
+        return {"subject": c.subject, "bucket": c.bucket, "left": c.left,
+                "right": c.right, "repeat_of": c.repeat_of}
+    return None
+
+
+@app.get("/api/unavailable")
+def api_unavailable() -> dict:
+    """Techniques that failed to render, discovered as they were encountered."""
+    return dict(state.unavailable)
 
 
 @app.post("/api/verdict")
