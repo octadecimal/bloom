@@ -29,6 +29,14 @@ class Technique:
     params: dict = field(default_factory=dict)
     post: tuple[tuple[str, float], ...] = ()
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Technique):
+            return NotImplemented
+        return config_hash(self) == config_hash(other)
+
+    def __hash__(self) -> int:
+        return hash(config_hash(self))
+
 
 def config_hash(t: Technique) -> str:
     """Stable over everything that changes the OUTPUT — deliberately not the id,
@@ -51,8 +59,12 @@ def load_techniques(path: Path) -> list[Technique]:
     ]
 
 
-def _slug(model: str) -> str:
-    return model.lower().replace("_", "-").replace(".", "-")
+def _slug(node: str, model: str) -> str:
+    text = f"{node}-{model}".lower()
+    text = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in text).strip("-")
+    while "--" in text:
+        text = text.replace("--", "-")
+    return text
 
 
 def stage1_models(available: dict[str, list[str]]) -> list[Technique]:
@@ -60,7 +72,7 @@ def stage1_models(available: dict[str, list[str]]) -> list[Technique]:
     out = []
     for node, models in available.items():
         for model in models:
-            out.append(Technique(id=_slug(model), cls="A", node=node,
+            out.append(Technique(id=_slug(node, model), cls="A", node=node,
                                  model=model, params={}, post=()))
     return out
 

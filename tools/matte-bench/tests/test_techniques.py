@@ -50,3 +50,16 @@ def test_load_techniques_round_trip(tmp_path):
     }]), encoding="utf-8")
     ts = load_techniques(path)
     assert ts[0].post == (("despeckle", 0.0005),)
+
+
+def test_stage1_ids_are_unique_across_nodes_and_separators():
+    ts = stage1_models({
+        "BiRefNetRMBG": ["BiRefNet-HR", "BiRefNet_HR"],
+        "RMBG": ["BiRefNet-HR"],
+    })
+    assert len({t.id for t in ts}) == 3
+
+
+def test_technique_is_hashable():
+    assert len({_t(), _t(id="renamed")}) == 1
+    assert len({_t(), _t(params={"mask_blur": 4})}) == 2
