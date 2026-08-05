@@ -143,6 +143,14 @@
   #status.error {
     color: #ff6b6b;
   }
+  #progress {
+    padding-top: 4px;
+    font-size: 12px;
+    color: #aaa;
+  }
+  #progress:empty {
+    display: none;
+  }
   #originalNotice {
     color: #7ec8ff;
   }
@@ -172,6 +180,7 @@
   <div id="status"></div>
   <span id="meta"></span> <span id="originalNotice"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp; <kbd>&uarr;</kbd> both bad &nbsp; <kbd>space</kbd> backdrop &nbsp;
   <kbd>a</kbd> alpha only &nbsp; <kbd>z</kbd> zoom &nbsp; <kbd>o</kbd> original
+  <div id="progress"></div>
 </div>
 <script>
   const BACKDROPS = ['checker', 'light', 'dark', 'busy'];
@@ -184,6 +193,29 @@
     const el = document.getElementById('status');
     el.textContent = text;
     el.classList.toggle('error', isError);
+  }
+
+  // "Node/BiRefNet_toonout" -> "toonout" for the one-line bar; standings
+  // keep full labels. Unrecognised label shapes pass through untrimmed.
+  function shortLabel(label) {
+    const tail = label.split('/').pop();
+    const trimmed = tail.replace(/^BiRefNet[_-]?/, '');
+    return trimmed || tail;
+  }
+
+  // Never blocks judging: on any failure the line simply goes empty.
+  async function refreshProgress() {
+    const el = document.getElementById('progress');
+    try {
+      const resp = await fetch('/api/progress');
+      if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+      const body = await resp.json();
+      const parts = body.buckets.map((b) => (b.separated && b.winner ? `${b.bucket} ${b.count} → ${shortLabel(b.winner)}` : `${b.bucket} ${b.count}`));
+      el.textContent = [`${body.total} verdicts`, ...parts].join(' · ');
+    } catch (err) {
+      console.error('progress fetch failed:', err);
+      el.textContent = '';
+    }
   }
 
   function setOverlay(id, mode, percent) {
@@ -345,6 +377,7 @@
   }
 
   async function load() {
+    refreshProgress();
     originalMode = false;
     // Nulled for the whole wait: a comparison can take minutes to prepare,
     // and a stray arrow key must not re-vote the one just judged.
