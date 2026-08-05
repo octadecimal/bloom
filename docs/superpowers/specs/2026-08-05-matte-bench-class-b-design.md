@@ -36,6 +36,9 @@ One coherent delivery, in dependency order inside a single branch:
 4. **Champion playoff.** Once a bucket's A and B standings have both
    separated, the bench serves best-A vs best-B head-to-heads so the final
    cross-class decision is answered by the verdict log, not by eyeball.
+5. **Prefetch.** The bench renders the predicted next comparison in the
+   background while the judge reviews the current one, so verdicts are not
+   separated by 30-second GPU waits.
 
 ## Non-goals
 
@@ -134,6 +137,35 @@ The pairing pool partitions by class:
 - A bucket's terminal state: playoff separated → one named production
   recommendation, straight from the log.
 
+### Prefetch: render the next comparison while the judge reviews
+
+Today every render happens on demand, so the judge waits ~30 seconds
+whenever a comparison needs GPU work (a fresh subject's plate, plus the two
+sides' renders). The fix is server-side speculation; the UI is unchanged.
+
+- **Predict.** The moment `/api/next` serves comparison N, the server runs
+  the same picker again to predict N+1 — against the current verdicts plus a
+  provisional count-increment on N's pair. The prediction is
+  winner-agnostic: a verdict bumps the judged pair's count whoever wins, and
+  the winner only nudges the strength tie-break, so the predicted pair is
+  almost always the pair the picker would choose for real.
+- **Warm.** A single background prefetch job renders everything N+1 needs:
+  the subject's plate if it doesn't exist, then both sides' renders. At most
+  one prefetch runs at a time, and a demanded render always takes priority
+  over starting a new prefetch.
+- **Serve.** When the verdict on N arrives and the client asks for the next
+  comparison, the picker runs for real. Hit (the common case): everything is
+  cached and the comparison serves instantly. Miss: behavior is exactly
+  today's — render on demand — and the mispredicted renders are not wasted,
+  because renders cache per `(subject, technique)` and stay valid for
+  whenever that pairing is served later.
+- **Subject lookahead.** The expensive stall is a fresh subject (LLM draw +
+  20-30 s plate render). When the active subject is one comparison away from
+  rotating out, the prefetch job pre-samples the next subject and pre-renders
+  its plate, so subject rotation costs the judge nothing.
+- Prefetch is an optimization layer with no schema or ranking impact:
+  verdicts, pairing choices, and standings are identical with it on or off.
+
 ### Ranking and progress scoping
 
 Every `standings`/`fit`/`progress` computation filters on `(bucket, cls)`.
@@ -185,6 +217,11 @@ TDD throughout, in the bench's existing style:
   flux checkpoint; techniques materialize accordingly.
 - **Playoff:** opens only when both classes separated; follows champion
   changes; stopping rule honors the evidence floor.
+- **Prefetch:** the predictor's provisional increment matches the real
+  picker's post-verdict choice for every winner outcome; single-flight (a
+  second prediction never starts a second job); a miss falls back to
+  on-demand rendering with identical served results; verdicts and standings
+  are byte-identical with prefetch on or off (mock renderer).
 - **Progress/standings:** per-class response shapes; blindness per class.
 - FastAPI `TestClient` for all route changes. No Playwright.
 
