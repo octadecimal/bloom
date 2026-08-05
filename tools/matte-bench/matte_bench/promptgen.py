@@ -12,9 +12,8 @@ bench never depends on the LLM being up.
 import os
 import random
 
-from app.assets.recipes import profile_for
-
 from matte_bench.corpus import Subject
+from matte_bench.sampler import compose_prompt
 
 PROMPT_MODEL = os.environ.get("MATTE_BENCH_PROMPT_MODEL",
                               "anthropic/claude-haiku-4.5")
@@ -53,6 +52,8 @@ def request_text(bucket: str, recent: list[str] | tuple = ()) -> str:
         "Rules:\n"
         "- Describe a single isolated subject only: no scene, no setting, "
         "nothing around it or obscuring it.\n"
+        "- Describe only the object itself: no lighting, atmosphere or "
+        "environment words (they make the image model paint a backdrop).\n"
         "- One line, roughly 6 to 18 words, no quotes, no trailing "
         f"punctuation.{avoid}\n"
         "Reply with the description only."
@@ -93,7 +94,7 @@ async def sample_subject_llm(bucket: str, rng: random.Random, templates: dict,
         return None
     spec = templates[bucket]
     role = "logo" if bucket == "crisp-text" else "misc"
-    prompt = f"{description}, {profile_for(role).positive}"
+    prompt = compose_prompt(description, role, bucket)
     seed = rng.randrange(1, 2**31)
     return Subject(id=f"{bucket}-{seed}", bucket=bucket, prompt=prompt,
                    seed=seed, width=spec["width"], height=spec["height"])

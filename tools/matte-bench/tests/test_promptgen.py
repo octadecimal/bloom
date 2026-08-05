@@ -41,11 +41,14 @@ def _sample(bucket, llm, seed=1):
 
 
 def test_llm_description_becomes_a_production_subject():
+    from matte_bench.sampler import DEFAULT_GROUND
+
     s = _sample("wispy", FakeLLM(["a spun-glass jellyfish ",
                                   "with trailing translucent filaments"]))
     assert s is not None
     assert s.prompt == ("a spun-glass jellyfish with trailing translucent "
-                        f"filaments, {profile_for('misc').positive}")
+                        f"filaments, {profile_for('misc').positive}, "
+                        f"{DEFAULT_GROUND}")
     assert s.bucket == "wispy"
     assert s.id.startswith("wispy-")
     assert s.width == 8 and s.height == 8
@@ -53,7 +56,7 @@ def test_llm_description_becomes_a_production_subject():
 
 def test_crisp_text_subjects_use_the_logo_boilerplate():
     s = _sample("crisp-text", FakeLLM(["a chrome wordmark reading NOVA"]))
-    assert s.prompt.endswith(profile_for("logo").positive)
+    assert profile_for("logo").positive in s.prompt
     assert s.width == 16
 
 

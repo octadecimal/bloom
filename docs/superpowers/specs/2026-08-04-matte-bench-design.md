@@ -130,6 +130,12 @@ keep scenery *behind* the subject — it bleeds foreground detail over it
 matting technique, so such plates measure generation failure instead of
 matting quality. Difficulty must come from the subject itself.
 
+Isolation is enforced, not implied: every composed prompt ends with an
+explicit **ground directive** — "isolated on a solid black background" by
+default (boilerplate alone named no ground, so FLUX painted atmosphere:
+bokeh, vignettes), tone-matched instead of black for `low-contrast`, whose
+premise requires the ground at the subject's own tone.
+
 | Bucket           | What makes it hard                                    | Seeded with                              |
 | ---------------- | ----------------------------------------------------- | ---------------------------------------- |
 | `wispy`          | Fine semi-transparent fringes                         | Ferns, trailing vines, fur-like edges    |

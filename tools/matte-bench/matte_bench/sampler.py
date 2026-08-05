@@ -23,7 +23,25 @@ from matte_bench.corpus import Subject
 # recipes.py profile keys for each boilerplate name a template may use.
 _BOILERPLATE_ROLES = {"std": "misc", "logo": "logo", "reels": "reels"}
 
+# The ground directive, appended AFTER the boilerplate. Boilerplate alone
+# never named a ground, so FLUX invented atmosphere (bokeh, vignettes) around
+# otherwise-isolated subjects — elaborate pixels the matte then had to fight.
+# Black is the default; low-contrast is the one bucket whose premise requires
+# the ground to sit at the subject's own tone instead.
+DEFAULT_GROUND = "isolated on a solid black background, nothing else in frame"
+GROUNDS = {
+    "low-contrast": ("on a single flat solid background of almost the same "
+                     "color as the subject, nothing else in frame"),
+}
+
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def compose_prompt(description: str, role: str, bucket: str) -> str:
+    """description + production boilerplate + ground directive — the one
+    composition path both the template sampler and the LLM path go through."""
+    ground = GROUNDS.get(bucket, DEFAULT_GROUND)
+    return f"{description}, {profile_for(role).positive}, {ground}"
 
 
 def load_templates(path: Path) -> dict:
@@ -40,7 +58,7 @@ def sample_subject(bucket: str, rng: random.Random, templates: dict) -> Subject:
     for name in sorted(set(_PLACEHOLDER.findall(text))):
         text = text.replace("{" + name + "}", rng.choice(pools[name]))
     role = _BOILERPLATE_ROLES[template.get("boilerplate", "std")]
-    prompt = f"{text}, {profile_for(role).positive}"
+    prompt = compose_prompt(text, role, bucket)
     seed = rng.randrange(1, 2**31)
     return Subject(id=f"{bucket}-{seed}", bucket=bucket, prompt=prompt,
                    seed=seed, width=spec["width"], height=spec["height"])

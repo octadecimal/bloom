@@ -22,23 +22,44 @@ def test_templates_cover_every_bucket():
     assert set(_templates()) == set(BUCKETS)
 
 
-def test_sampled_prompts_mirror_production_boilerplate():
+def test_sampled_prompts_mirror_production_boilerplate_and_pin_the_ground():
+    """Boilerplate alone never NAMED a ground, so FLUX invented atmosphere
+    (bokeh, vignettes) around otherwise-isolated subjects. Every sampled
+    prompt must now end with an explicit solid-ground directive — black by
+    default, tone-matched for low-contrast where black would kill the
+    bucket's premise."""
     from app.assets.recipes import profile_for
+
+    from matte_bench.sampler import DEFAULT_GROUND, GROUNDS
 
     boilerplates = tuple({profile_for("misc").positive,
                           profile_for("logo").positive,
                           profile_for("reels").positive})
+    allowed_ground_phrases = ("plain background", DEFAULT_GROUND,
+                              *GROUNDS.values())
     templates = _templates()
     rng = random.Random(7)
     for bucket in BUCKETS:
         for _ in range(10):
             s = sample_subject(bucket, rng, templates)
             assert s.bucket == bucket
-            assert s.prompt.endswith(boilerplates), s.prompt
+            assert any(b in s.prompt for b in boilerplates), s.prompt
+            assert s.prompt.endswith(GROUNDS.get(bucket, DEFAULT_GROUND)), s.prompt
             assert "{" not in s.prompt and "}" not in s.prompt
-            scrubbed = s.prompt.replace("plain background", "")
+            scrubbed = s.prompt
+            for phrase in allowed_ground_phrases:
+                scrubbed = scrubbed.replace(phrase, "")
             for banned in ("background", "backdrop", "scene", "in front of"):
                 assert banned not in scrubbed, s.prompt
+
+
+def test_black_is_the_default_ground_and_low_contrast_is_the_exception():
+    from matte_bench.sampler import DEFAULT_GROUND, GROUNDS
+
+    assert "solid black background" in DEFAULT_GROUND
+    assert set(GROUNDS) == {"low-contrast"}
+    assert "black" not in GROUNDS["low-contrast"]
+    assert "same" in GROUNDS["low-contrast"]
 
 
 def test_sampling_is_deterministic_given_the_rng():
