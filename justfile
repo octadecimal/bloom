@@ -81,7 +81,7 @@ backend-serve-replay:
 
 # Preflight: refuse to "serve to a human" if the backend is in replay mode.
 preflight:
-    powershell -NoProfile -Command "$off = [int]($env:BLOOM_PORT_OFFSET); $port = 8000 + $off; $h = Invoke-RestMethod ('http://localhost:{0}/health' -f $port); Write-Host ('Provider mode: ' + $h.providerMode.ToUpper() + ' (port ' + $port + ')'); if ($h.providerMode -ne 'live') { Write-Error 'Backend is in REPLAY mode — not safe to hand to a user. Start it with PROVIDER_MODE=live.'; exit 1 }"
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/preflight.ps1
 
 # Deterministic e2e against a replay backend (start `just backend-serve-replay` first).
 e2e:

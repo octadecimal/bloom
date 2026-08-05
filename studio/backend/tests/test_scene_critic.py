@@ -144,7 +144,10 @@ from app.scene.critic import (
 
 
 def test_critic_model_config_default():
-    assert Settings().critic_model == "anthropic/claude-sonnet-4-6"
+    # OpenRouter spells Anthropic point releases with a dot: the dashed
+    # "claude-sonnet-4-6" we shipped was not a real slug and 404d on every
+    # critic call. Sonnet 5 is the current model at that tier.
+    assert Settings().critic_model == "anthropic/claude-sonnet-5"
 
 
 def test_factory_selects_replay_critic():

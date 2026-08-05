@@ -144,14 +144,23 @@ Invoke-RestMethod http://localhost:8000/health
   `preflight` exits non-zero unless `/health` reports live — treat a non-zero exit
   as a failure and report it.
 
-**ComfyUI (:8188) — health-check only, never launch:**
+**ComfyUI — health-check only, never launch:**
+
+ComfyUI is **not necessarily local**. Read the configured URL first and probe
+_that_ — probing `localhost` unconditionally reports a false failure whenever the
+GPU lives on another box:
 
 ```
-Invoke-RestMethod http://localhost:8188/system_stats
+$u = (Select-String -Path studio/backend/.env -Pattern '^\s*COMFYUI_URL\s*=\s*(.+)$').Matches.Groups[1].Value
+if (-not $u) { $u = 'http://127.0.0.1:8188' }   # matches Settings.comfyui_url default
+Invoke-RestMethod "$u/system_stats"
 ```
 
-If it does not answer, WARN loudly that asset generation will fail and tell the
-user to start ComfyUI from `C:\ComfyUI`. Do NOT start the GPU process yourself.
+If it does not answer, WARN loudly that asset generation will fail. Where to
+point the user depends on the URL: a local one means starting ComfyUI from
+`C:\ComfyUI`; a LAN one means that machine is off, ComfyUI isn't running on it,
+or its firewall is blocking the port. Either way, do NOT start the GPU process
+yourself, and never assume a remote host is reachable just because the URL is set.
 
 **Lifecycle note to surface:** these background servers terminate when this Claude
 session ends — say so, so the user isn't surprised later.
