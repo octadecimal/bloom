@@ -37,3 +37,5 @@ runtime/server/var/
 
 # Repo-root var dir (e.g. built .pkg packages) — runtime output, not source
 var/
+
+var/matte-bench/
