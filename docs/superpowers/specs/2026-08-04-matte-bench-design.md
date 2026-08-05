@@ -125,7 +125,7 @@ rotation.
 Every prompt composes like `build_asset_prompt`: subject description plus the
 production cutout boilerplate from `recipes.py` (standard, logo, or reels
 profile). Composed scene backdrops are banned: diffusion cannot be trusted to
-keep scenery *behind* the subject — it bleeds foreground detail over it
+keep scenery _behind_ the subject — it bleeds foreground detail over it
 (foliage across a reel frame), and occluded pixels are unrecoverable by any
 matting technique, so such plates measure generation failure instead of
 matting quality. Difficulty must come from the subject itself.
@@ -136,14 +136,14 @@ default (boilerplate alone named no ground, so FLUX painted atmosphere:
 bokeh, vignettes), tone-matched instead of black for `low-contrast`, whose
 premise requires the ground at the subject's own tone.
 
-| Bucket           | What makes it hard                                    | Seeded with                              |
-| ---------------- | ----------------------------------------------------- | ---------------------------------------- |
-| `wispy`          | Fine semi-transparent fringes                         | Ferns, trailing vines, fur-like edges    |
-| `filigree`       | Thin rigid structures that break when eroded          | Metal scrollwork, lattice, ornate frames |
-| `enclosed-holes` | Interior negative space — must clear, or must not     | Rings, arcades, the production reel frame |
-| `glow-soft`      | Partial alpha is _correct_ here                       | Glass, bloom, smoke, translucency        |
-| `crisp-text`     | Hard edges; halo and erosion are glaring              | Lettering, wordmarks                     |
-| `low-contrast`   | Subject tone near the plain ground it is cut out on   | Green subject on plain green ground      |
+| Bucket           | What makes it hard                                  | Seeded with                               |
+| ---------------- | --------------------------------------------------- | ----------------------------------------- |
+| `wispy`          | Fine semi-transparent fringes                       | Ferns, trailing vines, fur-like edges     |
+| `filigree`       | Thin rigid structures that break when eroded        | Metal scrollwork, lattice, ornate frames  |
+| `enclosed-holes` | Interior negative space — must clear, or must not   | Rings, arcades, the production reel frame |
+| `glow-soft`      | Partial alpha is _correct_ here                     | Glass, bloom, smoke, translucency         |
+| `crisp-text`     | Hard edges; halo and erosion are glaring            | Lettering, wordmarks                      |
+| `low-contrast`   | Subject tone near the plain ground it is cut out on | Green subject on plain green ground       |
 
 `enclosed-holes` carries three subjects: the third is the production reel
 frame itself — the pipeline's paramount transparent asset, prompted with the

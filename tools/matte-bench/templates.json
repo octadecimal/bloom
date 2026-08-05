@@ -2,9 +2,7 @@
   "wispy": {
     "width": 768,
     "height": 768,
-    "templates": [
-      { "text": "a single {plant} with {detail}" }
-    ],
+    "templates": [{ "text": "a single {plant} with {detail}" }],
     "pools": {
       "plant": [
         "lush fern frond",
@@ -16,38 +14,17 @@
         "willow branch with tiny leaves",
         "stalk of wheat"
       ],
-      "detail": [
-        "fine feathery leaflets",
-        "fine translucent backlit filaments",
-        "delicate wispy fringes",
-        "hair-thin drooping strands",
-        "soft downy edges"
-      ]
+      "detail": ["fine feathery leaflets", "fine translucent backlit filaments", "delicate wispy fringes", "hair-thin drooping strands", "soft downy edges"]
     }
   },
   "filigree": {
     "width": 900,
     "height": 520,
-    "templates": [
-      { "text": "an ornate {material} {object} with {detail}" }
-    ],
+    "templates": [{ "text": "an ornate {material} {object} with {detail}" }],
     "pools": {
       "material": ["brass", "wrought iron", "aged gold", "polished silver", "bronze"],
-      "object": [
-        "scrollwork panel",
-        "lattice screen",
-        "filigree medallion",
-        "decorative grille",
-        "lace-like pendant",
-        "vine-pattern divider"
-      ],
-      "detail": [
-        "very thin curling metal tendrils",
-        "thin crossing bars",
-        "hairline pierced patterns",
-        "fine interlocking loops",
-        "delicate branching veins"
-      ]
+      "object": ["scrollwork panel", "lattice screen", "filigree medallion", "decorative grille", "lace-like pendant", "vine-pattern divider"],
+      "detail": ["very thin curling metal tendrils", "thin crossing bars", "hairline pierced patterns", "fine interlocking loops", "delicate branching veins"]
     }
   },
   "enclosed-holes": {
@@ -61,21 +38,13 @@
     ],
     "pools": {
       "material": ["aged gold", "weathered iron", "carved bronze", "polished brass"],
-      "style": [
-        "aged gold baroque ornament",
-        "carved dark wood and brass",
-        "polished chrome art deco",
-        "jade and gilt oriental",
-        "weathered stone and copper"
-      ]
+      "style": ["aged gold baroque ornament", "carved dark wood and brass", "polished chrome art deco", "jade and gilt oriental", "weathered stone and copper"]
     }
   },
   "glow-soft": {
     "width": 768,
     "height": 768,
-    "templates": [
-      { "text": "a {object} with {glow}" }
-    ],
+    "templates": [{ "text": "a {object} with {glow}" }],
     "pools": {
       "object": [
         "glowing glass lantern",
@@ -97,28 +66,16 @@
   "crisp-text": {
     "width": 900,
     "height": 520,
-    "templates": [
-      { "text": "a premium {style} game logo wordmark reading {word}, sharp edges", "boilerplate": "logo" }
-    ],
+    "templates": [{ "text": "a premium {style} game logo wordmark reading {word}, sharp edges", "boilerplate": "logo" }],
     "pools": {
-      "style": [
-        "metallic",
-        "ornate gold serif",
-        "jeweled ruby",
-        "brushed chrome",
-        "carved stone",
-        "neon glass",
-        "emerald inlaid"
-      ],
+      "style": ["metallic", "ornate gold serif", "jeweled ruby", "brushed chrome", "carved stone", "neon glass", "emerald inlaid"],
       "word": ["GARDEN", "BLOOM", "FORTUNE", "GOLDEN", "ROYAL", "LUCKY", "EMBER", "TIDE", "CROWN", "NOVA"]
     }
   },
   "low-contrast": {
     "width": 768,
     "height": 768,
-    "templates": [
-      { "text": "a {tone} {object}, clean cutout on a plain {tone} ground of nearly identical tone, minimal tonal separation" }
-    ],
+    "templates": [{ "text": "a {tone} {object}, clean cutout on a plain {tone} ground of nearly identical tone, minimal tonal separation" }],
     "pools": {
       "tone": ["jade green", "pale gold", "ivory", "slate grey", "dusty rose", "deep teal"],
       "object": ["leaf ornament", "filigree brooch", "carved rosette", "small emblem", "ribbon bow", "laurel sprig"]
