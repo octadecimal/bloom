@@ -147,7 +147,7 @@ Invoke-RestMethod http://localhost:8000/health
 **ComfyUI — health-check only, never launch:**
 
 ComfyUI is **not necessarily local**. Read the configured URL first and probe
-*that* — probing `localhost` unconditionally reports a false failure whenever the
+_that_ — probing `localhost` unconditionally reports a false failure whenever the
 GPU lives on another box:
 
 ```
