@@ -116,7 +116,12 @@ def test_prepare_progress_never_names_a_technique(tmp_path, monkeypatch):
     state.technique_objs = {"hash-l": left, "hash-r": right}
 
     async def fake_plate(subject, root, url):
-        return None
+        # The real ensure_plate guarantees the file exists on return.
+        from matte_bench.corpus import plate_path
+        p = plate_path(root, subject.id)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"plate")
+        return p
 
     async def fake_render(s, t, root, url):
         return None
@@ -133,6 +138,39 @@ def test_prepare_progress_never_names_a_technique(tmp_path, monkeypatch):
         for leak in ("hash-l", "hash-r", "birefnet-hr", "rmbg-2",
                      "BiRefNet-HR", "RMBG-2.0"):
             assert leak not in msg, f"{leak!r} leaked into progress: {msg!r}"
+
+
+def test_verdict_succeeds_for_a_subject_plated_mid_session(tmp_path, monkeypatch):
+    """plate_hashes is computed at bootstrap, when lazily-plated subjects have
+    no plate yet. A vote on one must still be recorded — this exact gap made
+    /api/verdict 404 and silently discarded every verdict of a session."""
+    from matte_bench.corpus import plate_hash, plate_path
+    from matte_bench.store import read_verdicts
+
+    client = _client(tmp_path)
+    state.plate_hashes = {}
+
+    async def fake_plate(subject, root, url):
+        p = plate_path(root, subject.id)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"fresh plate")
+        return p
+
+    async def fake_render(s, t, root, url):
+        return None
+
+    monkeypatch.setattr(web, "ensure_plate", fake_plate)
+    monkeypatch.setattr(web, "ensure_render", fake_render)
+
+    first = _await_next(client)
+    resp = client.post("/api/verdict", json={
+        "subject": first["subject"], "bucket": first["bucket"],
+        "left": first["left"], "right": first["right"], "winner": "left",
+    })
+    assert resp.status_code == 200
+    recorded = read_verdicts(state.verdict_log)
+    assert len(recorded) == 1
+    assert recorded[0].plate_hash == plate_hash(b"fresh plate")
 
 
 def test_posting_a_verdict_appends_and_advances(tmp_path, monkeypatch):

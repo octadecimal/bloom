@@ -305,13 +305,25 @@
     updateBadgeVisibility();
   }
 
+  // On failure the comparison stays on screen (current is kept) so the vote
+  // can be retried — a swallowed error here is a silently discarded verdict.
   async function vote(winner) {
     if (!current) return;
-    await fetch('/api/verdict', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...current, winner }),
-    });
+    let resp;
+    try {
+      resp = await fetch('/api/verdict', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...current, winner }),
+      });
+    } catch (err) {
+      setStatus(`Error: vote NOT recorded — ${err}`, true);
+      return;
+    }
+    if (!resp.ok) {
+      setStatus(`Error: vote NOT recorded — ${resp.status} ${resp.statusText}`, true);
+      return;
+    }
     load();
   }
 

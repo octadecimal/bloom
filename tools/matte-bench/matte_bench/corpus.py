@@ -7,6 +7,7 @@ pre-matting pixels every technique then competes on.
 """
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,5 +74,9 @@ async def ensure_plate(s: Subject, root: Path, comfy_url: str) -> Path:
             image = ev.data
     if not image:
         raise RuntimeError(f"no plate produced for subject {s.id}")
+    # A regenerated plate orphans every render cut from the old one; serving
+    # them would pair sides from two different source images. (Layout shared
+    # with render.render_path, which corpus cannot import without a cycle.)
+    shutil.rmtree(root / "renders" / s.id, ignore_errors=True)
     atomic_write_bytes(dest, image)
     return dest

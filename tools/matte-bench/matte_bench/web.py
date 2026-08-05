@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from matte_bench.corpus import Subject, ensure_plate, plate_path
+from matte_bench.corpus import Subject, ensure_plate, plate_hash, plate_path
 from matte_bench.pairing import next_comparison
 from matte_bench.ranking import separated, standings
 from matte_bench.render import RenderError, ensure_render
@@ -116,6 +116,11 @@ async def _prepare(comparison, progress) -> None:
         progress(f"generating source image for {subject.id}… "
                  "(first visit to a subject; can take a minute or two)")
     await ensure_plate(subject, state.root, state.comfy_url)
+    # plate_hashes was computed at bootstrap, before this plate existed; keep
+    # it current or /api/verdict 404s and the vote is lost. Recomputed rather
+    # than filled-if-missing so a mid-session regeneration also lands.
+    state.plate_hashes[subject.id] = plate_hash(
+        plate_path(state.root, subject.id).read_bytes())
     todo = [t for t in (state.technique_objs.get(comparison.left),
                         state.technique_objs.get(comparison.right))
             if t is not None]
