@@ -18,6 +18,7 @@ from matte_bench.corpus import (
     BUCKETS, Subject, append_subject, ensure_plate, plate_hash, plate_path,
 )
 from matte_bench.pairing import least_judged_bucket, next_sampled_comparison
+from matte_bench.promptgen import sample_subject_llm
 from matte_bench.ranking import separated, standings
 from matte_bench.render import RenderError, ensure_render
 from matte_bench.sampler import sample_subject
@@ -49,6 +50,8 @@ class State:
     subject_log: Path = field(
         default_factory=lambda: _BENCH_DIR / "subjects-sampled.jsonl")
     templates: dict = field(default_factory=dict)
+    llm: object | None = None      # LLMProvider; None disables LLM sampling
+    llm_model: str = ""
     active_subject_id: str | None = None
     active_served: int = 0
     plate_hashes: dict[str, str] = field(default_factory=dict)
@@ -150,9 +153,17 @@ async def _prepare(comparison, progress) -> None:
 PAIRS_PER_SUBJECT = 3
 
 
-def _pick_subject(verdicts) -> Subject:
+# Fraction of fresh draws that use the template sampler even when the LLM is
+# available: keeps the reels-frame template and the tested-known distribution
+# in rotation alongside open-ended LLM inventions.
+TEMPLATE_MIX = 0.25
+
+
+async def _pick_subject(verdicts, progress) -> Subject:
     """Reuse the active sampled subject for a few comparisons (its plate is
-    cached), then draw a fresh one from the thinnest bucket and register it."""
+    cached), then draw a fresh one from the thinnest bucket and register it.
+    Fresh draws are LLM-imagined when a provider is configured, template-
+    sampled otherwise or whenever the LLM output fails the isolation rules."""
     if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
         active = next((s for s in state.subjects
                        if s.id == state.active_subject_id), None)
@@ -160,7 +171,15 @@ def _pick_subject(verdicts) -> Subject:
             return active
     buckets = [b for b in BUCKETS if b in state.templates]
     bucket = least_judged_bucket(buckets, verdicts, state.rng)
-    subject = sample_subject(bucket, state.rng, state.templates)
+    subject = None
+    if state.llm is not None and state.rng.random() >= TEMPLATE_MIX:
+        progress("imagining a new subject…")
+        recent = [s.prompt.split(",")[0] for s in state.subjects
+                  if s.bucket == bucket][-6:]
+        subject = await sample_subject_llm(bucket, state.rng, state.templates,
+                                           state.llm, state.llm_model, recent)
+    if subject is None:
+        subject = sample_subject(bucket, state.rng, state.templates)
     append_subject(state.subject_log, subject)
     state.subjects.append(subject)
     state.active_subject_id = subject.id
@@ -174,7 +193,7 @@ async def _compute_next(progress):
         if len(state.techniques) < 2:
             return None
         verdicts = _live_verdicts()
-        subject = _pick_subject(verdicts)
+        subject = await _pick_subject(verdicts, progress)
         c = next_sampled_comparison(subject, state.techniques, verdicts,
                                     state.rng, known=state.subjects)
         if c is None:

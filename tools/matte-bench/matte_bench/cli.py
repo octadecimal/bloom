@@ -33,6 +33,22 @@ def main(argv: list[str]) -> int:
         bootstrap(root, templates_path, subject_log, settings.comfyui_url))
     install_state(state, subjects, techniques, root, settings.comfyui_url,
                   templates=templates, subject_log=subject_log)
+
+    # LLM-imagined subjects, when the live LLM stack is available; the bench
+    # falls back to template sampling per-draw otherwise (see web._pick_subject).
+    if settings.provider_mode == "live" and settings.openrouter_api_key:
+        from app.providers import LiveOpenRouterProvider
+
+        from matte_bench.promptgen import PROMPT_MODEL
+
+        state.llm = LiveOpenRouterProvider(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_base_url)
+        state.llm_model = PROMPT_MODEL
+        print(f"prompt LLM: {PROMPT_MODEL}")
+    else:
+        print("prompt LLM: off (template sampling only)")
+
     print(f"{len(subjects)} known subjects, {len(techniques)} techniques; "
           "sampling fresh subjects on demand")
     for w in warnings:

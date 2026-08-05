@@ -110,6 +110,17 @@ seed, size) that keeps its verdicts attributable and its plate regenerable.
 Both sides of a comparison always mat the single plate its draw produced, so
 left/right stay pixel-identical by construction.
 
+When the live LLM stack is available, most fresh draws are **LLM-imagined**:
+a Haiku-class model (via OpenRouter, `MATTE_BENCH_PROMPT_MODEL` to override)
+invents the subject description, steered by a per-bucket hint naming the
+exact transparency difficulty that bucket probes. The model writes only the
+description — composition, seed, size and registration stay with the bench —
+and its output must pass the same isolation rules the templates are tested
+against; invalid output or provider errors fall back to the template sampler
+per-draw. A fixed fraction of draws (`TEMPLATE_MIX`) always uses templates,
+keeping the production reel frame and the tested-known distribution in
+rotation.
+
 **Subjects are generated in isolation, exactly as production prompts them.**
 Every prompt composes like `build_asset_prompt`: subject description plus the
 production cutout boilerplate from `recipes.py` (standard, logo, or reels

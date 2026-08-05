@@ -29,6 +29,8 @@ def _client(tmp_path, monkeypatch=None):
     state.verdict_log = tmp_path / "verdicts.jsonl"
     state.fault_log = tmp_path / "faults.jsonl"
     state.plate_hashes = {"s1": "h"}
+    state.llm = None
+    state.llm_model = ""
     state.job = None
     # Fixed seed: /api/next's repeat-injection branch fires ~1/20 calls with an
     # unseeded rng, which made test_posting_a_verdict_appends_and_advances flaky
@@ -95,6 +97,35 @@ def test_subject_is_reused_within_the_rotation_window(tmp_path, monkeypatch):
     first = _await_next(client)
     second = _await_next(client)
     assert first["subject"] == second["subject"]
+
+
+class _FakeLLM:
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    async def stream(self, turns, model):
+        for c in self._chunks:
+            yield c
+
+
+def test_llm_imagined_subject_is_used_when_configured(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "TEMPLATE_MIX", 0.0)
+    client = _client(tmp_path, monkeypatch)
+    state.llm = _FakeLLM(["a soap bubble cluster with translucent film"])
+    state.llm_model = "test-model"
+    body = _await_next(client)
+    subject = next(s for s in state.subjects if s.id == body["subject"])
+    assert subject.prompt.startswith("a soap bubble cluster with translucent film, ")
+
+
+def test_llm_garbage_falls_back_to_the_template_sampler(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "TEMPLATE_MIX", 0.0)
+    client = _client(tmp_path, monkeypatch)
+    state.llm = _FakeLLM(["a ring floating in front of a busy scene"])
+    state.llm_model = "test-model"
+    body = _await_next(client)
+    subject = next(s for s in state.subjects if s.id == body["subject"])
+    assert subject.prompt.startswith("a test tuft, ")
 
 
 def test_next_reports_progress_while_a_render_is_in_flight(tmp_path, monkeypatch):
