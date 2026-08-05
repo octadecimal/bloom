@@ -56,3 +56,22 @@ def test_standings_endpoint_reports_the_leader(tmp_path):
         })
     rows = client.get("/api/standings/wispy").json()
     assert rows[0]["technique"] == "a"
+
+
+def test_render_serves_a_file_inside_the_renders_dir(tmp_path):
+    client = _client(tmp_path)
+    target = tmp_path / "renders" / "s1" / "abc.png"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"\x89PNG\r\n\x1a\n")
+    resp = client.get("/render/s1/abc.png")
+    assert resp.status_code == 200
+    assert resp.content == b"\x89PNG\r\n\x1a\n"
+
+
+def test_render_refuses_to_escape_the_renders_dir(tmp_path):
+    client = _client(tmp_path)
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(b"nope")
+    resp = client.get("/render/../secret.png")
+    assert resp.status_code == 404
+    assert b"nope" not in resp.content

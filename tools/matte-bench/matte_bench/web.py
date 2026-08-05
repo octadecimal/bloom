@@ -110,8 +110,16 @@ def api_standings(bucket: str) -> list[dict]:
 
 @app.get("/render/{subject}/{technique}.png")
 def api_render(subject: str, technique: str) -> FileResponse:
-    path = state.root / "renders" / subject / f"{technique}.png"
-    if not path.exists():
+    """Serve a cached render.
+
+    The two path parameters are attacker-controlled and are used to build a
+    filesystem path, so the resolved result must be confirmed to sit inside
+    the renders directory. A bare ".." segment escapes it otherwise, and the
+    service binds to 0.0.0.0.
+    """
+    root = (state.root / "renders").resolve()
+    path = (root / subject / f"{technique}.png").resolve()
+    if not path.is_relative_to(root) or not path.is_file():
         raise HTTPException(status_code=404, detail="render not found")
     return FileResponse(path, media_type="image/png")
 
