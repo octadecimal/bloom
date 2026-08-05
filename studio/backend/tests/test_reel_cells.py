@@ -70,13 +70,54 @@ def test_cut_reel_cells_noop_on_fully_transparent():
     assert cut_reel_cells(data) == data
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Needs a content-aware cut. The rail inset cannot be derived from "
-           "alpha: the enclosed interior is opaque too (the reason this module "
-           "exists), so every row is alpha-dense and the only signal separating "
-           "rail from glass is COLOUR. Tracked as a follow-up.",
-)
+def _arched(w=500, h=300, *, margin=20, side=25, top=90, bottom=30):
+    """A frame whose ornament reaches INSIDE the windows — an arcade arch.
+
+    Gold arcs sit over the glass, below the cornice: exactly the geometry a
+    rectangular cut cannot survive, because they are inside the rectangle that
+    bounds the glass they decorate.
+    """
+    img = _framed(w, h, top=top, bottom=bottom, side=side, margin=margin)
+    fx0, fy0, fx1 = margin, margin, w - margin
+    play_top = fy0 + top
+    span = (fx1 - side - (fx0 + side)) // 5
+    for c in range(5):
+        cx = fx0 + side + c * span + span // 2
+        for dx in range(-span // 2 + 4, span // 2 - 4):
+            # a shallow arc dipping into the window, drawn in frame gold
+            dy = int((dx * dx) / max(1, (span // 2)) * 0.5)
+            for t in range(6):
+                y = play_top + 18 - dy + t
+                if 0 <= y < h and 0 <= cx + dx < w:
+                    img.putpixel((cx + dx, y), GOLD)
+    return img
+
+
+def test_cut_preserves_ornament_inside_the_play_rectangle():
+    """Arch ornament reaching into a window must survive; the glass must not.
+
+    This is the regression for a real failure: an arcade reel frame came back
+    with all five arches deleted, because the rectangular cut cleared every
+    pixel inside the window bounds regardless of what it was.
+    """
+    img = _arched()
+    res = Image.open(BytesIO(cut_reel_cells(_to_png(img), columns=5))).convert("RGBA")
+    a = res.getchannel("A")
+    gold_kept = gold_lost = 0
+    for x in range(img.width):
+        for y in range(img.height):
+            if img.getpixel((x, y)) == GOLD:
+                if a.getpixel((x, y)) > 16:
+                    gold_kept += 1
+                else:
+                    gold_lost += 1
+    assert gold_lost / (gold_kept + gold_lost) < 0.02, (
+        f"cut erased {gold_lost} of {gold_kept + gold_lost} frame pixels"
+    )
+    # and the glass really is gone: sample well inside a window, below the arch
+    assert a.getpixel((250, 220)) == 0
+
+
 def test_cut_respects_a_thick_top_rail_instead_of_a_fixed_fraction():
     """The cut must start BELOW the frame's real top rail.
 
