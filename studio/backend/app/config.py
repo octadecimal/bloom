@@ -17,14 +17,21 @@ class Settings(BaseSettings):
     default_model: str = "openai/gpt-5.5"
     # Vision composition critic (Plan 2). Direct structured+image call via the
     # SceneCritic seam — an OpenRouter slug, tunable without code changes. See
-    # docs/.../vision-in-the-loop-scene-composition-design.md (decided: sonnet-4-6).
-    critic_model: str = "anthropic/claude-sonnet-4-6"
+    # docs/.../vision-in-the-loop-scene-composition-design.md (decided: sonnet tier).
+    # NB: OpenRouter spells Anthropic point releases with a DOT. The dashed
+    # "claude-sonnet-4-6" we shipped previously is not a real slug and 404d on
+    # every critic call; sonnet-5 is the current model at that tier. Making this
+    # user-selectable (sonnet-5 vs opus-4.5) is tracked as a follow-up.
+    critic_model: str = "anthropic/claude-sonnet-5"
     # Short timeout for the real-frame capture used by the art/effects grade
     # (sub-project B). A live browser client answers in well under a second; the
     # short bound lets a HEADLESS rebuild (no client) fail fast and skip the art
     # stage instead of blocking on the broker's 10s default.
     art_capture_timeout: float = 3.0
-    available_models: str = "openai/gpt-5.5,openai/gpt-4o-mini,meta-llama/llama-3.2-3b-instruct:free"
+    # OpenRouter retired the llama-3.2-3b ":free" variant; gpt-oss-20b:free is the
+    # current cheap dev default. Keep this list to slugs that resolve -- the
+    # Settings pane offers them verbatim, so a dead entry only fails at use time.
+    available_models: str = "openai/gpt-5.5,openai/gpt-4o-mini,openai/gpt-oss-20b:free"
     provider_mode: Literal["live", "replay"] = "live"
     replay_token_delay: float = 0.0
     comfyui_url: str = "http://127.0.0.1:8188"
