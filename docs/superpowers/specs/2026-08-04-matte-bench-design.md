@@ -98,24 +98,60 @@ never silently compared against pixels they were not cast on. See _Staleness_.
 
 ## Corpus
 
-Seven buckets, two subjects each — 14 plates. Chosen because they fail
-differently.
+Six buckets, **sampled, not fixed**. A fixed corpus overfits: after a few
+sessions the judge has memorized every image and every technique's quirks on
+it. Instead each bucket carries a template bank (`templates.json` — prompt
+patterns with randomized fragment pools), and the bench composes a fresh
+prompt plus a fresh random seed per draw. A sampled subject serves
+`PAIRS_PER_SUBJECT` comparisons (amortizing its plate generation), then a new
+one is drawn from whichever bucket has the least evidence. Every draw is
+registered append-only in `subjects-sampled.jsonl` — the recipe (prompt,
+seed, size) that keeps its verdicts attributable and its plate regenerable.
+Both sides of a comparison always mat the single plate its draw produced, so
+left/right stay pixel-identical by construction.
 
-| Bucket            | What makes it hard                                    | Seeded with                              |
-| ----------------- | ----------------------------------------------------- | ---------------------------------------- |
-| `wispy`           | Fine semi-transparent fringes                         | Ferns, trailing vines, fur-like edges    |
-| `filigree`        | Thin rigid structures that break when eroded          | Metal scrollwork, lattice, ornate frames |
-| `enclosed-holes`  | Interior negative space — must clear, or must not     | Rings, framed cells, arcades             |
-| `glow-soft`       | Partial alpha is _correct_ here                       | Glass, bloom, smoke, translucency        |
-| `crisp-text`      | Hard edges; halo and erosion are glaring              | Lettering, wordmarks                     |
-| `low-contrast`    | Subject tone near the backdrop, so under-segmentation | Green subject on green ground            |
-| `busy-background` | Detailed scene behind, so leftover fragments          | Subject against dense foliage            |
+When the live LLM stack is available, most fresh draws are **LLM-imagined**:
+a Haiku-class model (via OpenRouter, `MATTE_BENCH_PROMPT_MODEL` to override)
+invents the subject description, steered by a per-bucket hint naming the
+exact transparency difficulty that bucket probes. The model writes only the
+description — composition, seed, size and registration stay with the bench —
+and its output must pass the same isolation rules the templates are tested
+against; invalid output or provider errors fall back to the template sampler
+per-draw. A fixed fraction of draws (`TEMPLATE_MIX`) always uses templates,
+keeping the production reel frame and the tested-known distribution in
+rotation.
 
-The last two are precisely where the observed frame failed.
+**Subjects are generated in isolation, exactly as production prompts them.**
+Every prompt composes like `build_asset_prompt`: subject description plus the
+production cutout boilerplate from `recipes.py` (standard, logo, or reels
+profile). Composed scene backdrops are banned: diffusion cannot be trusted to
+keep scenery _behind_ the subject — it bleeds foreground detail over it
+(foliage across a reel frame), and occluded pixels are unrecoverable by any
+matting technique, so such plates measure generation failure instead of
+matting quality. Difficulty must come from the subject itself.
 
-The corpus is **frozen but growable**: subjects never change once judged, and a
-real asset that fails in the studio can be promoted into the bench as a new
-subject without invalidating existing verdicts.
+Isolation is enforced, not implied: every composed prompt ends with an
+explicit **ground directive** — "isolated on a solid black background" by
+default (boilerplate alone named no ground, so FLUX painted atmosphere:
+bokeh, vignettes), tone-matched instead of black for `low-contrast`, whose
+premise requires the ground at the subject's own tone.
+
+| Bucket           | What makes it hard                                  | Seeded with                               |
+| ---------------- | --------------------------------------------------- | ----------------------------------------- |
+| `wispy`          | Fine semi-transparent fringes                       | Ferns, trailing vines, fur-like edges     |
+| `filigree`       | Thin rigid structures that break when eroded        | Metal scrollwork, lattice, ornate frames  |
+| `enclosed-holes` | Interior negative space — must clear, or must not   | Rings, arcades, the production reel frame |
+| `glow-soft`      | Partial alpha is _correct_ here                     | Glass, bloom, smoke, translucency         |
+| `crisp-text`     | Hard edges; halo and erosion are glaring            | Lettering, wordmarks                      |
+| `low-contrast`   | Subject tone near the plain ground it is cut out on | Green subject on plain green ground       |
+
+`enclosed-holes` carries three subjects: the third is the production reel
+frame itself — the pipeline's paramount transparent asset, prompted with the
+`reels` profile boilerplate verbatim.
+
+The registry is **append-only**: a subject's recipe never changes once judged,
+and a real asset that fails in the studio can still be promoted into the bench
+as a hand-written registry entry without invalidating existing verdicts.
 
 ## Techniques
 

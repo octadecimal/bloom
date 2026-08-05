@@ -162,3 +162,8 @@ runtime-serve-packages:
 # then open the printed URL from any LAN browser.
 runtime-playmode:
     @off="${BLOOM_PORT_OFFSET:-0}"; echo "Open: http://<dev-host>:$((4300 + off))/?server=http://<dev-host>:$((9000 + off))"
+
+# Matte bench: A/B harness for transparency masking (docs/superpowers/specs/2026-08-04-matte-bench-design.md).
+# `just matte-bench probe` lists which matting models are installed on the GPU box.
+matte-bench *args:
+    cd studio/backend && uv run python ../../tools/matte-bench/run.py {{args}}

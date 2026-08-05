@@ -1,0 +1,511 @@
+<meta charset="utf-8" />
+<title>Matte Bench</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #eee;
+    font: 14px system-ui;
+  }
+  #pair {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+  }
+  .side {
+    flex: 1;
+    text-align: center;
+  }
+  .stage {
+    display: inline-block;
+    position: relative;
+    min-width: 240px;
+    min-height: 150px;
+  }
+  .stage img {
+    max-width: 100%;
+    display: block;
+  }
+  /* While the next comparison renders, the previous pair must not linger on
+     screen looking current — hide it but keep its box so the layout holds. */
+  .stage.loading img {
+    visibility: hidden;
+  }
+  .overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(17, 17, 17, 0.65);
+  }
+  .stage.loading .overlay {
+    display: flex;
+  }
+  .spin {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #444;
+    border-top-color: #ffcf5c;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .overlay .track {
+    display: none;
+    width: 60%;
+    max-width: 220px;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .overlay.has-percent .track {
+    display: block;
+  }
+  .overlay .fill {
+    height: 100%;
+    width: 0%;
+    background: #ffcf5c;
+  }
+  .overlay.waiting .spin {
+    opacity: 0.25;
+    animation-duration: 1.6s;
+  }
+  .overlay.done .spin,
+  .overlay.done .track {
+    display: none;
+  }
+  .overlay.done::after {
+    content: '✓';
+    color: #7ec8ff;
+    font-size: 22px;
+  }
+  .light {
+    background: #fff;
+  }
+  .dark {
+    background: #000;
+  }
+  .checker {
+    background-image:
+      linear-gradient(45deg, #888 25%, transparent 25%), linear-gradient(-45deg, #888 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #888 75%),
+      linear-gradient(-45deg, transparent 75%, #888 75%);
+    background-size: 16px 16px;
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
+    background-color: #ccc;
+  }
+  /* Busy backdrop: halo and partial-alpha haze hide on flat colours and only
+     show against detail. Stands in for a real game background. */
+  .busy {
+    background-image:
+      repeating-linear-gradient(30deg, #2c5c3a 0 12px, #4a8a5c 12px 24px),
+      repeating-linear-gradient(-20deg, rgba(255, 220, 120, 0.35) 0 9px, transparent 9px 21px);
+  }
+  .stage img.zoom {
+    transform: scale(4);
+    image-rendering: pixelated;
+  }
+  .badge {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #aaa;
+    min-height: 1.2em;
+  }
+  .badge.warn {
+    color: #ff6b6b;
+    font-weight: bold;
+  }
+  .badge.dim {
+    opacity: 0.3;
+  }
+  #bar {
+    padding: 8px;
+    border-top: 1px solid #333;
+  }
+  #status {
+    padding-bottom: 4px;
+    color: #ffcf5c;
+  }
+  #status:empty {
+    display: none;
+  }
+  #status.error {
+    color: #ff6b6b;
+  }
+  #progress {
+    padding-top: 4px;
+    font-size: 12px;
+    color: #aaa;
+  }
+  #progress:empty {
+    display: none;
+  }
+  #originalNotice {
+    color: #7ec8ff;
+  }
+  kbd {
+    background: #333;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+</style>
+<div id="pair">
+  <div class="side">
+    <div class="stage checker" id="stageL">
+      <img id="imgL" />
+      <div class="overlay" id="ovL">
+        <div class="spin"></div>
+        <div class="track"><div class="fill"></div></div>
+      </div>
+    </div>
+    <div class="badge" id="badgeL"></div>
+  </div>
+  <div class="side">
+    <div class="stage checker" id="stageR">
+      <img id="imgR" />
+      <div class="overlay" id="ovR">
+        <div class="spin"></div>
+        <div class="track"><div class="fill"></div></div>
+      </div>
+    </div>
+    <div class="badge" id="badgeR"></div>
+  </div>
+</div>
+<div id="bar">
+  <div id="status"></div>
+  <span id="meta"></span> <span id="originalNotice"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp;
+  <kbd>&uarr;</kbd> both bad &nbsp; <kbd>space</kbd> backdrop &nbsp; <kbd>a</kbd> alpha only &nbsp; <kbd>z</kbd> zoom &nbsp; <kbd>o</kbd> original
+  <div id="progress"></div>
+</div>
+<script>
+  const BACKDROPS = ['checker', 'light', 'dark', 'busy'];
+  let backdrop = 0,
+    alphaOnly = false,
+    originalMode = false,
+    current = null;
+
+  function setStatus(text, isError = false) {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.classList.toggle('error', isError);
+  }
+
+  // "Node/BiRefNet_toonout" -> "toonout" for the one-line bar; standings
+  // keep full labels. Unrecognised label shapes pass through untrimmed.
+  function shortLabel(label) {
+    const tail = label.split('/').pop();
+    const trimmed = tail.replace(/^BiRefNet[_-]?/, '');
+    return trimmed || tail;
+  }
+
+  // Never blocks judging: on any failure the line simply goes empty.
+  async function refreshProgress() {
+    const el = document.getElementById('progress');
+    try {
+      const resp = await fetch('/api/progress');
+      if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+      const body = await resp.json();
+      const parts = body.buckets.map((b) => (b.separated && b.winner ? `${b.bucket} ${b.count} → ${shortLabel(b.winner)}` : `${b.bucket} ${b.count}`));
+      el.textContent = [`${body.total} verdicts`, ...parts].join(' · ');
+    } catch (err) {
+      console.error('progress fetch failed:', err);
+      el.textContent = '';
+    }
+  }
+
+  function setOverlay(id, mode, percent) {
+    const ov = document.getElementById(id);
+    ov.classList.toggle('waiting', mode === 'waiting');
+    ov.classList.toggle('done', mode === 'done');
+    const hasPercent = mode === 'active' && typeof percent === 'number';
+    ov.classList.toggle('has-percent', hasPercent);
+    if (hasPercent) ov.querySelector('.fill').style.width = `${Math.round(percent * 100)}%`;
+  }
+
+  // stage render-1 is always the LEFT side, render-2 the RIGHT (server
+  // contract), so the bar sits over the panel actually being computed.
+  function showLoading(stage, percent) {
+    for (const id of ['stageL', 'stageR']) document.getElementById(id).classList.add('loading');
+    if (stage === 'render-1') {
+      setOverlay('ovL', 'active', percent);
+      setOverlay('ovR', 'waiting');
+    } else if (stage === 'render-2') {
+      setOverlay('ovL', 'done');
+      setOverlay('ovR', 'active', percent);
+    } else {
+      setOverlay('ovL', 'active', percent);
+      setOverlay('ovR', 'active', percent);
+    }
+  }
+
+  function hideLoading() {
+    for (const id of ['stageL', 'stageR']) document.getElementById(id).classList.remove('loading');
+  }
+
+  function clearBadges() {
+    for (const id of ['badgeL', 'badgeR']) {
+      const el = document.getElementById(id);
+      el.textContent = '';
+      el.classList.remove('warn', 'dim');
+    }
+  }
+
+  function updateBadgeVisibility() {
+    for (const id of ['badgeL', 'badgeR']) document.getElementById(id).classList.toggle('dim', originalMode);
+  }
+
+  // Alpha rendered as greyscale. Halo and haze are far easier to see as
+  // luminance than as a fringe against art.
+  function toAlpha(img, el) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const a = d.data[i + 3];
+      d.data[i] = d.data[i + 1] = d.data[i + 2] = a;
+      d.data[i + 3] = 255;
+    }
+    g.putImageData(d, 0, 0);
+    el.src = c.toDataURL();
+  }
+
+  // Paints a technique render into `el`, resolving once it has actually
+  // loaded (in alpha mode that means after the greyscale conversion has been
+  // written back into `el`). Callers await this to know when the "loading
+  // images…" phase is over.
+  function paint(el, subject, technique) {
+    return new Promise((resolve) => {
+      el.onload = () => resolve();
+      el.onerror = () => resolve();
+      const src = `/render/${subject}/${technique}.png`;
+      if (!alphaOnly) {
+        el.src = src;
+        return;
+      }
+      const probe = new Image();
+      probe.onload = () => toAlpha(probe, el);
+      probe.onerror = () => resolve();
+      probe.src = src;
+    });
+  }
+
+  function paintPlate(el, subject) {
+    return new Promise((resolve) => {
+      el.onload = () => resolve();
+      el.onerror = () => resolve();
+      el.src = `/plate/${subject}.png`;
+    });
+  }
+
+  // Per-side coverage badge, sampled client-side from the loaded render.
+  // A near-empty or ghost matte is a legitimate finding some models produce
+  // — this turns a blank-looking panel into information instead of letting
+  // it read as broken.
+  function computeCoverage(subject, technique) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+        let data;
+        try {
+          data = g.getImageData(0, 0, c.width, c.height).data;
+        } catch (err) {
+          resolve(null);
+          return;
+        }
+        let solid = 0,
+          soft = 0,
+          clear = 0,
+          n = 0;
+        // Every 4th pixel (16 bytes = 4 pixels * 4 channels) for speed.
+        for (let i = 0; i < data.length; i += 16) {
+          const a = data[i + 3];
+          if (a >= 250) solid++;
+          else if (a <= 5) clear++;
+          else soft++;
+          n++;
+        }
+        resolve(n ? { solid: (100 * solid) / n, soft: (100 * soft) / n, clear: (100 * clear) / n } : null);
+      };
+      img.onerror = () => resolve(null);
+      img.src = `/render/${subject}/${technique}.png`;
+    });
+  }
+
+  function renderBadge(el, coverage) {
+    if (!coverage) {
+      el.textContent = '';
+      el.classList.remove('warn');
+      return;
+    }
+    if (coverage.solid < 1) {
+      el.textContent = `EMPTY MATTE — ${coverage.soft.toFixed(0)}% soft ghost`;
+      el.classList.add('warn');
+    } else {
+      el.textContent = `${coverage.solid.toFixed(0)}% solid · ${coverage.soft.toFixed(0)}% soft · ${coverage.clear.toFixed(0)}% clear`;
+      el.classList.remove('warn');
+    }
+  }
+
+  // Repaints the CURRENT comparison under the original/rendered toggle,
+  // without asking the server for a new one.
+  async function repaint() {
+    if (!current) return;
+    const imgL = document.getElementById('imgL');
+    const imgR = document.getElementById('imgR');
+    document.getElementById('originalNotice').textContent = originalMode ? 'showing ORIGINAL — same source for both sides' : '';
+    if (originalMode) {
+      await Promise.all([paintPlate(imgL, current.subject), paintPlate(imgR, current.subject)]);
+    } else {
+      await Promise.all([paint(imgL, current.subject, current.left), paint(imgR, current.subject, current.right)]);
+    }
+    updateBadgeVisibility();
+  }
+
+  async function load() {
+    refreshProgress();
+    originalMode = false;
+    // Nulled for the whole wait: a comparison can take minutes to prepare,
+    // and a stray arrow key must not re-vote the one just judged.
+    current = null;
+    document.getElementById('originalNotice').textContent = '';
+    clearBadges();
+    setStatus('requesting next comparison…');
+    showLoading(null);
+    document.getElementById('meta').textContent = '';
+
+    // /api/next is a job: it answers immediately with pending+progress while
+    // the server renders, so poll until it resolves instead of hanging on
+    // one long request.
+    let body;
+    while (true) {
+      let resp;
+      try {
+        resp = await fetch('/api/next');
+      } catch (err) {
+        hideLoading();
+        setStatus(`Error: ${err}`, true);
+        return;
+      }
+      if (!resp.ok) {
+        hideLoading();
+        setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
+        return;
+      }
+      try {
+        body = await resp.json();
+      } catch (err) {
+        hideLoading();
+        setStatus(`Error: ${err}`, true);
+        return;
+      }
+      if (body.status !== 'pending') break;
+      setStatus(body.progress || 'working…');
+      showLoading(body.stage, body.percent);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (body.status === 'done') {
+      hideLoading();
+      setStatus('');
+      document.getElementById('meta').textContent = 'No comparisons left.';
+      document.getElementById('imgL').src = document.getElementById('imgR').src = '';
+      return;
+    }
+    current = body.comparison;
+
+    setStatus('loading images…');
+    await repaint();
+    hideLoading();
+    setStatus('');
+    document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}`;
+
+    const [covL, covR] = await Promise.all([computeCoverage(current.subject, current.left), computeCoverage(current.subject, current.right)]);
+    renderBadge(document.getElementById('badgeL'), covL);
+    renderBadge(document.getElementById('badgeR'), covR);
+    updateBadgeVisibility();
+  }
+
+  // On failure the comparison stays on screen (current is kept) so the vote
+  // can be retried — a swallowed error here is a silently discarded verdict.
+  async function vote(winner) {
+    if (!current) return;
+    let resp;
+    try {
+      resp = await fetch('/api/verdict', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...current, winner }),
+      });
+    } catch (err) {
+      setStatus(`Error: vote NOT recorded — ${err}`, true);
+      return;
+    }
+    if (!resp.ok) {
+      setStatus(`Error: vote NOT recorded — ${resp.status} ${resp.statusText}`, true);
+      return;
+    }
+    load();
+  }
+
+  // classList surgery, not className assignment — the latter would wipe the
+  // 'loading' state if the backdrop is cycled while a comparison renders.
+  function cycle() {
+    const prev = BACKDROPS[backdrop];
+    backdrop = (backdrop + 1) % BACKDROPS.length;
+    for (const id of ['stageL', 'stageR']) {
+      const el = document.getElementById(id);
+      el.classList.remove(prev);
+      el.classList.add(BACKDROPS[backdrop]);
+    }
+  }
+
+  // Magnifier: fringe quality is a pixel-level judgment, so the origin tracks
+  // the cursor and both sides zoom together for a like-for-like look.
+  for (const id of ['stageL', 'stageR']) {
+    document.getElementById(id).addEventListener('mousemove', (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const ox = ((e.clientX - r.left) / r.width) * 100;
+      const oy = ((e.clientY - r.top) / r.height) * 100;
+      for (const im of ['imgL', 'imgR']) document.getElementById(im).style.transformOrigin = `${ox}% ${oy}%`;
+    });
+  }
+
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') vote('left');
+    else if (e.key === 'ArrowRight') vote('right');
+    else if (e.key === 'ArrowDown') vote('tie');
+    else if (e.key === 'ArrowUp') vote('both_bad');
+    else if (e.key === ' ') {
+      e.preventDefault();
+      cycle();
+    } else if (e.key === 'a') {
+      alphaOnly = !alphaOnly;
+      repaint();
+    } else if (e.key === 'z') {
+      for (const im of ['imgL', 'imgR']) document.getElementById(im).classList.toggle('zoom');
+    } else if (e.key === 'o') {
+      originalMode = !originalMode;
+      repaint();
+    }
+  });
+  load();
+</script>
