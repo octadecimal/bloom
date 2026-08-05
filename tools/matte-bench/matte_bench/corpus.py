@@ -18,7 +18,7 @@ from matte_bench.store import atomic_write_bytes
 
 BUCKETS = (
     "wispy", "filigree", "enclosed-holes", "glow-soft",
-    "crisp-text", "low-contrast", "busy-background",
+    "crisp-text", "low-contrast",
 )
 
 PLATE_WORKFLOW = "dev-opaque"

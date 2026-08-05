@@ -27,15 +27,25 @@ def test_shipped_subject_ids_are_unique():
 
 def test_shipped_subject_prompts_mirror_production_boilerplate():
     """The bench must measure the distribution production actually generates:
-    isolated, cutout-style subjects (recipes.py boilerplate) — not staged
-    scenes whose foregrounds occlude the subject and make it unmattable."""
+    isolated, cutout-style subjects (recipes.py boilerplate) — never staged
+    scenes. Diffusion bleeds scene foregrounds over the subject, and occluded
+    pixels are unmattable by any technique."""
     from app.assets.recipes import profile_for
 
-    std = profile_for("misc").positive       # _STANDARD fallback
-    logo = profile_for("logo").positive
+    boilerplates = (
+        profile_for("misc").positive,        # _STANDARD fallback
+        profile_for("logo").positive,
+        profile_for("reels").positive,
+    )
     for s in load_subjects(REPO / "tools" / "matte-bench" / "subjects.json"):
-        assert s.prompt.endswith(std) or s.prompt.endswith(logo), (
+        assert s.prompt.endswith(boilerplates), (
             f"{s.id}: prompt does not end with a production boilerplate: {s.prompt!r}")
+        # "plain background" (the logo boilerplate's own words) is the one
+        # allowed appearance; anything else backgroundy stages a scene.
+        scrubbed = s.prompt.replace("plain background", "")
+        for banned in ("background", "backdrop", "scene", "in front of"):
+            assert banned not in scrubbed, (
+                f"{s.id}: prompt stages a scene: {s.prompt!r}")
 
 
 def test_shipped_subjects_pin_a_seed():

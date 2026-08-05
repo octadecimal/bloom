@@ -34,7 +34,7 @@
   {
     "id": "holes-arcade",
     "bucket": "enclosed-holes",
-    "prompt": "an ornate five bay arcade frame of aged gold, each bay an empty opening, nothing in front of the frame, crisp, clean, centered, high detail, premium slot game art",
+    "prompt": "an ornate five bay arcade frame of aged gold, each bay an empty opening, crisp, clean, centered, high detail, premium slot game art",
     "seed": 105,
     "width": 900,
     "height": 520
@@ -42,10 +42,18 @@
   {
     "id": "holes-ring",
     "bucket": "enclosed-holes",
-    "prompt": "a thick decorative metal ring with a large empty centre and pierced holes, fully visible with nothing in front of it, crisp, clean, centered, high detail, premium slot game art",
+    "prompt": "a thick decorative metal ring with a large empty centre and pierced holes, crisp, clean, centered, high detail, premium slot game art",
     "seed": 106,
     "width": 768,
     "height": 768
+  },
+  {
+    "id": "holes-reelframe",
+    "bucket": "enclosed-holes",
+    "prompt": "aged gold baroque ornament style, complete ornate slot machine reel frame, a full rectangular frame enclosing a 5 column by 3 row grid, clear vertical column dividers and cell borders forming 15 empty symbol cells, solid decorative side posts with top and bottom rails, transparent empty cells, sharp crisp edges, premium game UI, centered",
+    "seed": 115,
+    "width": 900,
+    "height": 520
   },
   {
     "id": "glow-lantern",
@@ -82,7 +90,7 @@
   {
     "id": "lowcon-green",
     "bucket": "low-contrast",
-    "prompt": "a jade green leaf ornament against a plain jade green backdrop of nearly identical tone, minimal tonal separation, subject fully visible, crisp, clean, centered, high detail, premium slot game art",
+    "prompt": "a jade green leaf ornament, clean cutout on a plain jade green ground of nearly identical tone, minimal tonal separation, crisp, clean, centered, high detail, premium slot game art",
     "seed": 111,
     "width": 768,
     "height": 768
@@ -90,25 +98,9 @@
   {
     "id": "lowcon-gold",
     "bucket": "low-contrast",
-    "prompt": "a pale gold filigree brooch against a plain pale cream backdrop very close in tone, subject fully visible, crisp, clean, centered, high detail, premium slot game art",
+    "prompt": "a pale gold filigree brooch, clean cutout on a plain pale cream ground very close in tone, crisp, clean, centered, high detail, premium slot game art",
     "seed": 112,
     "width": 768,
     "height": 768
-  },
-  {
-    "id": "busy-glasshouse",
-    "bucket": "busy-background",
-    "prompt": "an ornate gold reel frame in front of a busy backdrop of dense foliage and vines, the frame in the foreground fully visible and unobstructed, nothing in front of the frame, crisp, clean, centered, high detail, premium slot game art",
-    "seed": 113,
-    "width": 900,
-    "height": 520
-  },
-  {
-    "id": "busy-market",
-    "bucket": "busy-background",
-    "prompt": "a decorative carved emblem in front of a busy cluttered market stall backdrop, the emblem in the foreground fully visible and unobstructed, nothing in front of it, crisp, clean, centered, high detail, premium slot game art",
-    "seed": 114,
-    "width": 900,
-    "height": 520
   }
 ]
