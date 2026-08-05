@@ -1,0 +1,166 @@
+<meta charset="utf-8" />
+<title>Matte Bench</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #eee;
+    font: 14px system-ui;
+  }
+  #pair {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+  }
+  .side {
+    flex: 1;
+    text-align: center;
+  }
+  .stage {
+    display: inline-block;
+    position: relative;
+  }
+  .stage img {
+    max-width: 100%;
+    display: block;
+  }
+  .light {
+    background: #fff;
+  }
+  .dark {
+    background: #000;
+  }
+  .checker {
+    background-image:
+      linear-gradient(45deg, #888 25%, transparent 25%), linear-gradient(-45deg, #888 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #888 75%),
+      linear-gradient(-45deg, transparent 75%, #888 75%);
+    background-size: 16px 16px;
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
+    background-color: #ccc;
+  }
+  /* Busy backdrop: halo and partial-alpha haze hide on flat colours and only
+     show against detail. Stands in for a real game background. */
+  .busy {
+    background-image:
+      repeating-linear-gradient(30deg, #2c5c3a 0 12px, #4a8a5c 12px 24px),
+      repeating-linear-gradient(-20deg, rgba(255, 220, 120, 0.35) 0 9px, transparent 9px 21px);
+  }
+  .stage img.zoom {
+    transform: scale(4);
+    image-rendering: pixelated;
+  }
+  #bar {
+    padding: 8px;
+    border-top: 1px solid #333;
+  }
+  kbd {
+    background: #333;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+</style>
+<div id="pair">
+  <div class="side">
+    <div class="stage checker" id="stageL"><img id="imgL" /></div>
+  </div>
+  <div class="side">
+    <div class="stage checker" id="stageR"><img id="imgR" /></div>
+  </div>
+</div>
+<div id="bar">
+  <span id="meta"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp; <kbd>space</kbd> backdrop &nbsp;
+  <kbd>a</kbd> alpha only &nbsp; <kbd>z</kbd> zoom
+</div>
+<script>
+  const BACKDROPS = ['checker', 'light', 'dark', 'busy'];
+  let backdrop = 0,
+    alphaOnly = false,
+    current = null;
+
+  // Alpha rendered as greyscale. Halo and haze are far easier to see as
+  // luminance than as a fringe against art.
+  function toAlpha(img, el) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const a = d.data[i + 3];
+      d.data[i] = d.data[i + 1] = d.data[i + 2] = a;
+      d.data[i + 3] = 255;
+    }
+    g.putImageData(d, 0, 0);
+    el.src = c.toDataURL();
+  }
+
+  function paint(el, subject, technique) {
+    const src = `/render/${subject}/${technique}.png`;
+    if (!alphaOnly) {
+      el.src = src;
+      return;
+    }
+    const probe = new Image();
+    probe.onload = () => toAlpha(probe, el);
+    probe.src = src;
+  }
+
+  async function load() {
+    current = await (await fetch('/api/next')).json();
+    if (!current) {
+      document.getElementById('meta').textContent = 'No comparisons left.';
+      document.getElementById('imgL').src = document.getElementById('imgR').src = '';
+      return;
+    }
+    paint(document.getElementById('imgL'), current.subject, current.left);
+    paint(document.getElementById('imgR'), current.subject, current.right);
+    document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}`;
+  }
+
+  async function vote(winner) {
+    if (!current) return;
+    await fetch('/api/verdict', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...current, winner }),
+    });
+    load();
+  }
+
+  function cycle() {
+    backdrop = (backdrop + 1) % BACKDROPS.length;
+    for (const id of ['stageL', 'stageR']) document.getElementById(id).className = 'stage ' + BACKDROPS[backdrop];
+  }
+
+  // Magnifier: fringe quality is a pixel-level judgment, so the origin tracks
+  // the cursor and both sides zoom together for a like-for-like look.
+  for (const id of ['stageL', 'stageR']) {
+    document.getElementById(id).addEventListener('mousemove', (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const ox = ((e.clientX - r.left) / r.width) * 100;
+      const oy = ((e.clientY - r.top) / r.height) * 100;
+      for (const im of ['imgL', 'imgR']) document.getElementById(im).style.transformOrigin = `${ox}% ${oy}%`;
+    });
+  }
+
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') vote('left');
+    else if (e.key === 'ArrowRight') vote('right');
+    else if (e.key === 'ArrowDown') vote('tie');
+    else if (e.key === ' ') {
+      e.preventDefault();
+      cycle();
+    } else if (e.key === 'a') {
+      alphaOnly = !alphaOnly;
+      if (current) load();
+    } else if (e.key === 'z') {
+      for (const im of ['imgL', 'imgR']) document.getElementById(im).classList.toggle('zoom');
+    }
+  });
+  load();
+</script>
