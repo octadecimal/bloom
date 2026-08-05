@@ -21,12 +21,21 @@ def install_state(state, subjects: list[Subject], techniques: list[Technique],
 
 
 async def bootstrap(root: Path, subjects_path: Path, comfy_url: str):
-    subjects = load_subjects(subjects_path)
+    declared = load_subjects(subjects_path)
     techniques = stage1_models(available_models(fetch_object_info(comfy_url)))
     warnings: list[str] = []
 
-    for s in subjects:
-        await ensure_plate(s, root, comfy_url)
+    # A subject whose plate cannot be produced is dropped from the session and
+    # reported. Aborting the whole run for one bad plate would hide the other
+    # thirteen, and the operator would have no idea what coverage they had.
+    subjects: list[Subject] = []
+    for s in declared:
+        try:
+            await ensure_plate(s, root, comfy_url)
+        except Exception as exc:                      # noqa: BLE001 - reported, not swallowed
+            warnings.append(f"subject {s.id} unavailable: {exc}")
+            continue
+        subjects.append(s)
 
     usable: list[Technique] = []
     for t in techniques:

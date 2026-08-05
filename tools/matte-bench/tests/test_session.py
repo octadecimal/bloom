@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from matte_bench.corpus import Subject
@@ -28,3 +29,65 @@ def test_install_state_records_plate_hashes(tmp_path: Path):
     plate.write_bytes(b"pixels")
     install_state(st, [s], [_t()], tmp_path)
     assert set(st.plate_hashes) == {"s1"}
+
+
+def test_bootstrap_reports_a_failed_plate_and_keeps_going(tmp_path, monkeypatch):
+    """One unusable subject must not abort the session."""
+    import asyncio
+
+    from matte_bench import session as sess
+
+    subjects_path = tmp_path / "subjects.json"
+    subjects_path.write_text(json.dumps([
+        {"id": "good", "bucket": "wispy", "prompt": "p", "seed": 1, "width": 8, "height": 8},
+        {"id": "bad", "bucket": "wispy", "prompt": "p", "seed": 2, "width": 8, "height": 8},
+    ]), encoding="utf-8")
+
+    async def fake_plate(s, root, comfy_url):
+        if s.id == "bad":
+            raise RuntimeError("no plate produced")
+
+    async def fake_render(s, t, root, comfy_url):
+        return tmp_path / "x.png"
+
+    monkeypatch.setattr(sess, "fetch_object_info", lambda url: {})
+    monkeypatch.setattr(sess, "available_models",
+                        lambda info: {"BiRefNetRMBG": ["BiRefNet-HR"]})
+    monkeypatch.setattr(sess, "ensure_plate", fake_plate)
+    monkeypatch.setattr(sess, "ensure_render", fake_render)
+
+    subjects, usable, warnings = asyncio.run(
+        sess.bootstrap(tmp_path, subjects_path, "http://x"))
+    assert [s.id for s in subjects] == ["good"]
+    assert len(usable) == 1
+    assert any("bad" in w for w in warnings)
+
+
+def test_bootstrap_reports_an_unavailable_technique(tmp_path, monkeypatch):
+    """A technique that cannot render is excluded AND named in warnings."""
+    import asyncio
+
+    from matte_bench import session as sess
+    from matte_bench.render import RenderError
+
+    subjects_path = tmp_path / "subjects.json"
+    subjects_path.write_text(json.dumps([
+        {"id": "s1", "bucket": "wispy", "prompt": "p", "seed": 1, "width": 8, "height": 8},
+    ]), encoding="utf-8")
+
+    async def fake_plate(s, root, comfy_url):
+        return tmp_path / "p.png"
+
+    async def fake_render(s, t, root, comfy_url):
+        raise RenderError(t.id, "weights missing")
+
+    monkeypatch.setattr(sess, "fetch_object_info", lambda url: {})
+    monkeypatch.setattr(sess, "available_models",
+                        lambda info: {"BiRefNetRMBG": ["BiRefNet-HR"]})
+    monkeypatch.setattr(sess, "ensure_plate", fake_plate)
+    monkeypatch.setattr(sess, "ensure_render", fake_render)
+
+    subjects, usable, warnings = asyncio.run(
+        sess.bootstrap(tmp_path, subjects_path, "http://x"))
+    assert usable == []
+    assert any("weights missing" in w for w in warnings)

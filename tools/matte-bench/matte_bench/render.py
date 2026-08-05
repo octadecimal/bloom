@@ -47,14 +47,14 @@ async def ensure_render(s: Subject, t: Technique, root: Path, comfy_url: str) ->
     plate = plate_path(root, s.id)
     if not plate.exists():
         raise RenderError(t.id, f"no plate for subject {s.id}")
-    name = upload_plate(comfy_url, plate)
     image = None
     try:
+        name = upload_plate(comfy_url, plate)
         async for ev in LiveComfyProvider(base_url=comfy_url).generate(
                 matting_graph(t, name)):
             if isinstance(ev, ImageEvent):
                 image = ev.data
-    except Exception as exc:                      # noqa: BLE001 - reported, not swallowed
+    except Exception as exc:                          # noqa: BLE001 - reported, not swallowed
         raise RenderError(t.id, str(exc)) from exc
     if not image:
         raise RenderError(t.id, "matting produced no image")
