@@ -1,0 +1,77 @@
+"""Test subjects, organised by image CHARACTERISTIC rather than product role.
+
+Foliage and lettering fail differently whatever the asset is called, so roles
+do not predict matting difficulty. Plates are rendered with `dev-opaque` —
+which is `dev-transparent` minus the matting node — giving the exact
+pre-matting pixels every technique then competes on.
+"""
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+from app.assets.comfy import ImageEvent, LiveComfyProvider
+from app.assets.graph import build_graph
+
+from matte_bench.store import atomic_write_bytes
+
+BUCKETS = (
+    "wispy", "filigree", "enclosed-holes", "glow-soft",
+    "crisp-text", "low-contrast", "busy-background",
+)
+
+PLATE_WORKFLOW = "dev-opaque"
+
+
+@dataclass(frozen=True)
+class Subject:
+    id: str
+    bucket: str
+    prompt: str
+    seed: int
+    width: int
+    height: int
+
+
+def load_subjects(path: Path) -> list[Subject]:
+    out = []
+    for d in json.loads(path.read_text(encoding="utf-8")):
+        if d["bucket"] not in BUCKETS:
+            raise ValueError(f"unknown bucket: {d['bucket']}")
+        out.append(Subject(id=d["id"], bucket=d["bucket"], prompt=d["prompt"],
+                           seed=int(d["seed"]), width=int(d["width"]),
+                           height=int(d["height"])))
+    return out
+
+
+def plate_path(root: Path, subject_id: str) -> Path:
+    return root / "plates" / f"{subject_id}.png"
+
+
+def plate_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def plate_hashes(subjects: list[Subject], root: Path) -> dict[str, str]:
+    out = {}
+    for s in subjects:
+        p = plate_path(root, s.id)
+        if p.exists():
+            out[s.id] = plate_hash(p.read_bytes())
+    return out
+
+
+async def ensure_plate(s: Subject, root: Path, comfy_url: str) -> Path:
+    """Render the raw pre-matting plate once; reuse it forever after."""
+    dest = plate_path(root, s.id)
+    if dest.exists():
+        return dest
+    graph = build_graph(PLATE_WORKFLOW, s.prompt, s.width, s.height, s.seed)
+    image = None
+    async for ev in LiveComfyProvider(base_url=comfy_url).generate(graph):
+        if isinstance(ev, ImageEvent):
+            image = ev.data
+    if not image:
+        raise RuntimeError(f"no plate produced for subject {s.id}")
+    atomic_write_bytes(dest, image)
+    return dest

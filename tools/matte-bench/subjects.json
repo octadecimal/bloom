@@ -1,0 +1,114 @@
+[
+  {
+    "id": "wispy-fern",
+    "bucket": "wispy",
+    "prompt": "a single lush fern frond with fine feathery leaflets, photographed against a cluttered green garden background, natural light",
+    "seed": 101,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "wispy-dandelion",
+    "bucket": "wispy",
+    "prompt": "a dandelion seed head with fine translucent filaments, backlit, soft outdoor background",
+    "seed": 102,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "filigree-scrollwork",
+    "bucket": "filigree",
+    "prompt": "an ornate brass scrollwork panel with very thin curling metal tendrils, on a busy workshop background",
+    "seed": 103,
+    "width": 900,
+    "height": 520
+  },
+  {
+    "id": "filigree-lattice",
+    "bucket": "filigree",
+    "prompt": "a delicate wrought iron lattice screen with thin crossing bars, against a garden scene",
+    "seed": 104,
+    "width": 900,
+    "height": 520
+  },
+  {
+    "id": "holes-arcade",
+    "bucket": "enclosed-holes",
+    "prompt": "an ornate five bay arcade frame of aged gold, each bay an empty opening, against a glasshouse interior",
+    "seed": 105,
+    "width": 900,
+    "height": 520
+  },
+  {
+    "id": "holes-ring",
+    "bucket": "enclosed-holes",
+    "prompt": "a thick decorative metal ring with a large empty centre and pierced holes, on a stone background",
+    "seed": 106,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "glow-lantern",
+    "bucket": "glow-soft",
+    "prompt": "a glowing glass lantern with soft light bloom and translucent panes, dim background",
+    "seed": 107,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "glow-smoke",
+    "bucket": "glow-soft",
+    "prompt": "a wisp of pale smoke curling upward, semi transparent, against a dark cluttered background",
+    "seed": 108,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "text-wordmark",
+    "bucket": "crisp-text",
+    "prompt": "a premium metallic game logo wordmark reading GARDEN, bold clean lettering, sharp edges, studio background",
+    "seed": 109,
+    "width": 900,
+    "height": 520
+  },
+  {
+    "id": "text-serif",
+    "bucket": "crisp-text",
+    "prompt": "an ornate gold serif wordmark reading BLOOM with fine spurs and thin strokes, on a marble background",
+    "seed": 110,
+    "width": 900,
+    "height": 520
+  },
+  {
+    "id": "lowcon-green",
+    "bucket": "low-contrast",
+    "prompt": "a jade green leaf ornament resting on a jade green painted wall, minimal tonal separation",
+    "seed": 111,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "lowcon-gold",
+    "bucket": "low-contrast",
+    "prompt": "a pale gold filigree brooch on a pale cream silk background, very close in tone",
+    "seed": 112,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "busy-glasshouse",
+    "bucket": "busy-background",
+    "prompt": "an ornate gold reel frame standing inside an overgrown Victorian glasshouse dense with foliage and vines",
+    "seed": 113,
+    "width": 900,
+    "height": 520
+  },
+  {
+    "id": "busy-market",
+    "bucket": "busy-background",
+    "prompt": "a decorative carved emblem in front of a crowded cluttered market stall full of detail",
+    "seed": 114,
+    "width": 900,
+    "height": 520
+  }
+]
