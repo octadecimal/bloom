@@ -480,3 +480,49 @@ def test_next_drops_a_render_error_technique_and_does_not_offer_it_again(tmp_pat
         nxt = _await_next(client)
         assert nxt is not None
         assert "hash-bad" not in (nxt["left"], nxt["right"])
+
+
+def test_progress_reports_totals_and_unseparated_bucket_without_winner(tmp_path):
+    client = _client(tmp_path)
+    for _ in range(2):
+        client.post("/api/verdict", json={
+            "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
+            "winner": "left",
+        })
+    body = client.get("/api/progress").json()
+    assert body["total"] == 2
+    assert body["buckets"] == [
+        {"bucket": "wispy", "count": 2, "separated": False, "winner": None}]
+
+
+def test_progress_names_the_winner_once_a_bucket_separates(tmp_path):
+    client = _client(tmp_path)
+    state.technique_names = {"a": "Node/BiRefNet_alpha"}
+    for _ in range(10):
+        client.post("/api/verdict", json={
+            "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
+            "winner": "left",
+        })
+    body = client.get("/api/progress").json()
+    assert body["buckets"][0]["separated"] is True
+    assert body["buckets"][0]["winner"] == "Node/BiRefNet_alpha"
+
+
+def test_progress_counts_only_fresh_verdicts(tmp_path):
+    """Stale verdicts (cast on an outdated plate) feed neither the rankings
+    nor the displayed counts — the number watched is the number that decides."""
+    client = _client(tmp_path)
+    for _ in range(2):
+        client.post("/api/verdict", json={
+            "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
+            "winner": "left",
+        })
+    state.plate_hashes["s1"] = "regenerated"  # invalidates both verdicts
+    body = client.get("/api/progress").json()
+    assert body["total"] == 0
+    assert body["buckets"] == []
+
+
+def test_progress_is_served_with_no_store(tmp_path):
+    assert (_client(tmp_path).get("/api/progress").headers.get("cache-control")
+            == "no-store")

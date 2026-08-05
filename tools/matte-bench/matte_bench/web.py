@@ -19,6 +19,7 @@ from matte_bench.corpus import (
 )
 from matte_bench.pairing import least_judged_bucket, next_sampled_comparison
 from matte_bench.promptgen import sample_subject_llm
+from matte_bench.progress import progress
 from matte_bench.ranking import separated, standings
 from matte_bench.render import RenderError, ensure_render
 from matte_bench.sampler import sample_subject
@@ -333,6 +334,22 @@ def api_standings(bucket: str) -> dict:
              "score": r.score, "low": r.low, "high": r.high,
              "comparisons": r.comparisons}
             for r in rows
+        ],
+    }
+
+
+@app.get("/api/progress")
+def api_progress() -> dict:
+    """One line of session progress: how much has been judged and which
+    buckets are settled. Winner names only for separated buckets — the
+    judge stays blind to the standings of buckets still in play."""
+    report = progress(_live_verdicts(), state.technique_names)
+    return {
+        "total": report.total,
+        "buckets": [
+            {"bucket": b.bucket, "count": b.count,
+             "separated": b.separated, "winner": b.winner}
+            for b in report.buckets
         ],
     }
 
