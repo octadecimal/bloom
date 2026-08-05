@@ -24,6 +24,7 @@ def _client(tmp_path, monkeypatch=None):
     state.active_served = 0
     state.techniques = ["a", "b"]
     state.technique_objs = {}
+    state.technique_names = {}
     state.comfy_url = "http://unused"
     state.unavailable = {}
     state.verdict_log = tmp_path / "verdicts.jsonl"
