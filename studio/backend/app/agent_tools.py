@@ -69,7 +69,7 @@ async def _recipe_generation(ctx, *, description, style, role, transparent):
     the game's art direction. Shared by both generate verbs."""
     art = await _art_direction(ctx)
     base_desc = description if not style else f"{description}, {style} style"
-    prompt = build_asset_prompt(role, art, base_desc)
+    prompt = build_asset_prompt(role, art, base_desc, transparent=transparent)
     prof = profile_for(role)
     params = GenParams(negative=prof.negative, steps=prof.steps,
                        guidance=prof.guidance, cfg=prof.cfg, upscale=prof.upscale,

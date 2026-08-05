@@ -69,11 +69,24 @@ def profile_for(role: str) -> Profile:
     return _PROFILES.get(key, _STANDARD) if key else _STANDARD
 
 
-def build_asset_prompt(role: str, art_direction: str, description: str) -> str:
+# Appended to every TRANSPARENT generation, and appended LAST so the shared
+# art direction cannot reintroduce a backdrop after it. With no ground named,
+# FLUX fills the frame with atmosphere — bokeh, vignettes, scenery — that the
+# matting step then has to fight; a solid black ground leaves the matte only
+# the subject's own edges. Measured on the matte bench (see
+# docs/superpowers/specs/2026-08-04-matte-bench-design.md, Corpus).
+GROUND_DIRECTIVE = "isolated on a solid black background, nothing else in frame"
+
+
+def build_asset_prompt(role: str, art_direction: str, description: str,
+                       transparent: bool = False) -> str:
     """Compose the positive prompt: the element's description, the role's
     boilerplate, then the shared art-direction prose. Empty parts dropped;
-    exact duplicates removed preserving order."""
+    exact duplicates removed preserving order. Transparent generations end
+    with the ground directive."""
     parts = [description.strip(), profile_for(role).positive, art_direction.strip()]
+    if transparent:
+        parts.append(GROUND_DIRECTIVE)
     seen: set[str] = set()
     out: list[str] = []
     for p in parts:

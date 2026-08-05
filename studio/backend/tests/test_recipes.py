@@ -55,6 +55,47 @@ def test_build_asset_prompt_dedupes_and_skips_empty_parts():
     assert ", ," not in out and not out.endswith(", ")
 
 
+def test_transparent_generations_end_with_the_ground_directive():
+    """Matte-bench finding: with no ground named, FLUX paints atmosphere
+    (bokeh, vignettes) that the matting step then has to fight. Transparent
+    generations must pin the ground explicitly — and last, so art direction
+    cannot reintroduce a backdrop after it."""
+    from app.assets.recipes import GROUND_DIRECTIVE
+
+    out = build_asset_prompt(
+        "spin", art_direction="neon jungle, mist", description="a spin button",
+        transparent=True)
+    assert out.endswith(GROUND_DIRECTIVE)
+    assert "solid black background" in GROUND_DIRECTIVE
+
+
+def test_opaque_generations_get_no_ground_directive():
+    out = build_asset_prompt(
+        "background", art_direction="neon jungle", description="a graveyard")
+    assert "black background" not in out
+
+
+def test_recipe_generation_passes_transparency_through():
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.agent_tools import _recipe_generation
+    from app.assets.recipes import GROUND_DIRECTIVE
+
+    ctx = SimpleNamespace(gdd_store=None)
+    prompt, workflow, _ = asyncio.run(_recipe_generation(
+        ctx, description="a gold coin", style="", role="symbol_wild",
+        transparent=True))
+    assert prompt.endswith(GROUND_DIRECTIVE)
+    assert workflow == "dev-transparent"
+
+    prompt, workflow, _ = asyncio.run(_recipe_generation(
+        ctx, description="a graveyard", style="", role="background",
+        transparent=False))
+    assert GROUND_DIRECTIVE not in prompt
+    assert workflow == "dev-opaque"
+
+
 def test_reels_profile_cuts_cells_and_other_roles_do_not():
     assert profile_for("reels").cut_cells is True
     assert profile_for("reel_frame").cut_cells is True  # alias
