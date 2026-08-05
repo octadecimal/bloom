@@ -170,7 +170,7 @@
 </div>
 <div id="bar">
   <div id="status"></div>
-  <span id="meta"></span> <span id="originalNotice"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp; <kbd>space</kbd> backdrop &nbsp;
+  <span id="meta"></span> <span id="originalNotice"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp; <kbd>&uarr;</kbd> both bad &nbsp; <kbd>space</kbd> backdrop &nbsp;
   <kbd>a</kbd> alpha only &nbsp; <kbd>z</kbd> zoom &nbsp; <kbd>o</kbd> original
 </div>
 <script>
@@ -459,6 +459,7 @@
     if (e.key === 'ArrowLeft') vote('left');
     else if (e.key === 'ArrowRight') vote('right');
     else if (e.key === 'ArrowDown') vote('tie');
+    else if (e.key === 'ArrowUp') vote('both_bad');
     else if (e.key === ' ') {
       e.preventDefault();
       cycle();

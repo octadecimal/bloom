@@ -259,6 +259,30 @@ def test_posting_a_verdict_appends_and_advances(tmp_path, monkeypatch):
     assert _await_next(client) is None
 
 
+def test_both_bad_verdict_records_and_flags_both_techniques(tmp_path):
+    """"Both are bad" carries two facts: no relative preference (a tie for
+    ranking) and an absolute quality failure for EACH side — the latter goes
+    to the fault log, which a plain tie must not touch."""
+    from matte_bench.store import read_verdicts
+
+    client = _client(tmp_path)
+    resp = client.post("/api/verdict", json={
+        "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
+        "winner": "both_bad",
+    })
+    assert resp.status_code == 200
+    assert read_verdicts(state.verdict_log)[0].winner == "both_bad"
+    fault_lines = state.fault_log.read_text(encoding="utf-8").strip().splitlines()
+    assert len(fault_lines) == 2
+    assert "both-bad" in fault_lines[0]
+
+    client.post("/api/verdict", json={
+        "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
+        "winner": "tie",
+    })
+    assert len(state.fault_log.read_text(encoding="utf-8").strip().splitlines()) == 2
+
+
 def test_verdict_rejects_unknown_winner(tmp_path):
     client = _client(tmp_path)
     resp = client.post("/api/verdict", json={

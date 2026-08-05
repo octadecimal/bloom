@@ -33,6 +33,14 @@ def test_ties_do_not_crown_a_winner():
     assert abs(s["a"] - s["b"]) < 1e-6
 
 
+def test_both_bad_expresses_no_relative_preference():
+    """"Both are bad" is an absolute judgment; for the pairwise ranking it
+    must weigh exactly like a tie."""
+    v = [_v("a", "b", "both_bad") for _ in range(8)]
+    s = fit(v)
+    assert abs(s["a"] - s["b"]) < 1e-6
+
+
 def test_standings_filter_by_bucket():
     v = [_v("a", "b", "left", bucket="wispy"),
          _v("c", "d", "left", bucket="crisp-text")]

@@ -76,8 +76,8 @@ class VerdictIn(BaseModel):
     @field_validator("winner")
     @classmethod
     def _known(cls, v: str) -> str:
-        if v not in ("left", "right", "tie"):
-            raise ValueError("winner must be left, right or tie")
+        if v not in ("left", "right", "tie", "both_bad"):
+            raise ValueError("winner must be left, right, tie or both_bad")
         return v
 
 
@@ -247,6 +247,14 @@ def api_verdict(body: VerdictIn) -> dict:
         subject=body.subject, bucket=body.bucket, left=body.left,
         right=body.right, winner=body.winner, plate_hash=plate_hash,
         ts=_now(), repeat_of=body.repeat_of))
+    if body.winner == "both_bad":
+        # Two facts in one keypress: no relative preference (the ranking
+        # already weighs it as a tie) and an absolute failure of EACH side,
+        # which belongs in the fault log.
+        for technique in (body.left, body.right):
+            append_fault(state.fault_log, Fault(
+                subject=body.subject, technique=technique,
+                tags=("both-bad",), ts=_now()))
     return {"ok": True}
 
 
