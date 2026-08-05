@@ -108,25 +108,32 @@ async def _prepare(comparison, progress) -> None:
     30-60 minute wait before the operator could judge anything. Everything is
     cached, so each image is produced at most once.
 
-    `progress` messages are shown to the judge mid-comparison, so they must
-    stay blind: name the subject if useful, never a technique.
+    `progress(text, percent, stage)` messages are shown to the judge
+    mid-comparison, so the text must stay blind: name the subject if useful,
+    never a technique. stage "render-1" always means the LEFT side and
+    "render-2" the RIGHT, so the page can put the bar over the right panel.
     """
     subject = next(s for s in state.subjects if s.id == comparison.subject)
+    plate_text = (f"generating source image for {subject.id}… "
+                  "(first visit to a subject; can take a minute or two)")
     if not plate_path(state.root, subject.id).exists():
-        progress(f"generating source image for {subject.id}… "
-                 "(first visit to a subject; can take a minute or two)")
-    await ensure_plate(subject, state.root, state.comfy_url)
+        progress(plate_text, None, "plate")
+    await ensure_plate(subject, state.root, state.comfy_url,
+                       on_progress=lambda f: progress(plate_text, f, "plate"))
     # plate_hashes was computed at bootstrap, before this plate existed; keep
     # it current or /api/verdict 404s and the vote is lost. Recomputed rather
     # than filled-if-missing so a mid-session regeneration also lands.
     state.plate_hashes[subject.id] = plate_hash(
         plate_path(state.root, subject.id).read_bytes())
-    todo = [t for t in (state.technique_objs.get(comparison.left),
-                        state.technique_objs.get(comparison.right))
-            if t is not None]
-    for i, technique in enumerate(todo, start=1):
-        progress(f"rendering candidate {i} of {len(todo)}…")
-        await ensure_render(subject, technique, state.root, state.comfy_url)
+    sides = [("render-1", state.technique_objs.get(comparison.left)),
+             ("render-2", state.technique_objs.get(comparison.right))]
+    todo = [(stage, t) for stage, t in sides if t is not None]
+    for i, (stage, technique) in enumerate(todo, start=1):
+        text = f"rendering candidate {i} of {len(todo)}…"
+        progress(text, None, stage)
+        await ensure_render(
+            subject, technique, state.root, state.comfy_url,
+            on_progress=lambda f, text=text, stage=stage: progress(text, f, stage))
 
 
 async def _compute_next(progress):
@@ -167,6 +174,8 @@ class _NextJob:
 
     def __init__(self):
         self.progress = "choosing comparison…"
+        self.percent: float | None = None
+        self.stage: str | None = None
         self.result = None
         self.error: str | None = None
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -187,8 +196,11 @@ class _NextJob:
         except Exception as exc:                  # noqa: BLE001 - reported, not swallowed
             self.error = str(exc)
 
-    def _set_progress(self, text: str) -> None:
+    def _set_progress(self, text: str, percent: float | None = None,
+                      stage: str | None = None) -> None:
         self.progress = text
+        self.percent = percent
+        self.stage = stage
 
 
 # A fully cached comparison resolves in milliseconds; waiting this long before
@@ -208,7 +220,8 @@ def api_next() -> dict:
         job = state.job
     job.join(_NEXT_GRACE_SECONDS)
     if not job.finished:
-        return {"status": "pending", "progress": job.progress}
+        return {"status": "pending", "progress": job.progress,
+                "percent": job.percent, "stage": job.stage}
     with state.job_lock:
         if state.job is job:
             state.job = None

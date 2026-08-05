@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 from PIL import Image
 
-from app.assets.comfy import ImageEvent, LiveComfyProvider
+from app.assets.comfy import ImageEvent, LiveComfyProvider, ProgressEvent
 
 from matte_bench.corpus import Subject, plate_path
 from matte_bench.postops import apply_postops
@@ -40,7 +40,9 @@ def upload_plate(base_url: str, plate: Path) -> str:
     return f"{sub}/{body['name']}" if sub else body["name"]
 
 
-async def ensure_render(s: Subject, t: Technique, root: Path, comfy_url: str) -> Path:
+async def ensure_render(s: Subject, t: Technique, root: Path, comfy_url: str,
+                        on_progress=None) -> Path:
+    """`on_progress` receives ComfyUI's progress as a 0..1 fraction."""
     dest = render_path(root, s.id, t)
     if dest.exists():
         return dest
@@ -52,6 +54,8 @@ async def ensure_render(s: Subject, t: Technique, root: Path, comfy_url: str) ->
         name = upload_plate(comfy_url, plate)
         async for ev in LiveComfyProvider(base_url=comfy_url).generate(
                 matting_graph(t, name)):
+            if isinstance(ev, ProgressEvent) and on_progress is not None and ev.max > 0:
+                on_progress(ev.value / ev.max)
             if isinstance(ev, ImageEvent):
                 image = ev.data
     except Exception as exc:                          # noqa: BLE001 - reported, not swallowed

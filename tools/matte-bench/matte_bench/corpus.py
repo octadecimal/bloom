@@ -11,7 +11,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.assets.comfy import ImageEvent, LiveComfyProvider
+from app.assets.comfy import ImageEvent, LiveComfyProvider, ProgressEvent
 from app.assets.graph import build_graph
 
 from matte_bench.store import atomic_write_bytes
@@ -62,14 +62,19 @@ def plate_hashes(subjects: list[Subject], root: Path) -> dict[str, str]:
     return out
 
 
-async def ensure_plate(s: Subject, root: Path, comfy_url: str) -> Path:
-    """Render the raw pre-matting plate once; reuse it forever after."""
+async def ensure_plate(s: Subject, root: Path, comfy_url: str,
+                       on_progress=None) -> Path:
+    """Render the raw pre-matting plate once; reuse it forever after.
+
+    `on_progress` receives ComfyUI's diffusion progress as a 0..1 fraction."""
     dest = plate_path(root, s.id)
     if dest.exists():
         return dest
     graph = build_graph(PLATE_WORKFLOW, s.prompt, s.width, s.height, s.seed)
     image = None
     async for ev in LiveComfyProvider(base_url=comfy_url).generate(graph):
+        if isinstance(ev, ProgressEvent) and on_progress is not None and ev.max > 0:
+            on_progress(ev.value / ev.max)
         if isinstance(ev, ImageEvent):
             image = ev.data
     if not image:

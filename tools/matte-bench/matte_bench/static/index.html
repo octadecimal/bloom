@@ -19,10 +19,73 @@
   .stage {
     display: inline-block;
     position: relative;
+    min-width: 240px;
+    min-height: 150px;
   }
   .stage img {
     max-width: 100%;
     display: block;
+  }
+  /* While the next comparison renders, the previous pair must not linger on
+     screen looking current — hide it but keep its box so the layout holds. */
+  .stage.loading img {
+    visibility: hidden;
+  }
+  .overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(17, 17, 17, 0.65);
+  }
+  .stage.loading .overlay {
+    display: flex;
+  }
+  .spin {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #444;
+    border-top-color: #ffcf5c;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .overlay .track {
+    display: none;
+    width: 60%;
+    max-width: 220px;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .overlay.has-percent .track {
+    display: block;
+  }
+  .overlay .fill {
+    height: 100%;
+    width: 0%;
+    background: #ffcf5c;
+  }
+  .overlay.waiting .spin {
+    opacity: 0.25;
+    animation-duration: 1.6s;
+  }
+  .overlay.done .spin,
+  .overlay.done .track {
+    display: none;
+  }
+  .overlay.done::after {
+    content: '✓';
+    color: #7ec8ff;
+    font-size: 22px;
   }
   .light {
     background: #fff;
@@ -91,11 +154,17 @@
 </style>
 <div id="pair">
   <div class="side">
-    <div class="stage checker" id="stageL"><img id="imgL" /></div>
+    <div class="stage checker" id="stageL">
+      <img id="imgL" />
+      <div class="overlay" id="ovL"><div class="spin"></div><div class="track"><div class="fill"></div></div></div>
+    </div>
     <div class="badge" id="badgeL"></div>
   </div>
   <div class="side">
-    <div class="stage checker" id="stageR"><img id="imgR" /></div>
+    <div class="stage checker" id="stageR">
+      <img id="imgR" />
+      <div class="overlay" id="ovR"><div class="spin"></div><div class="track"><div class="fill"></div></div></div>
+    </div>
     <div class="badge" id="badgeR"></div>
   </div>
 </div>
@@ -115,6 +184,35 @@
     const el = document.getElementById('status');
     el.textContent = text;
     el.classList.toggle('error', isError);
+  }
+
+  function setOverlay(id, mode, percent) {
+    const ov = document.getElementById(id);
+    ov.classList.toggle('waiting', mode === 'waiting');
+    ov.classList.toggle('done', mode === 'done');
+    const hasPercent = mode === 'active' && typeof percent === 'number';
+    ov.classList.toggle('has-percent', hasPercent);
+    if (hasPercent) ov.querySelector('.fill').style.width = `${Math.round(percent * 100)}%`;
+  }
+
+  // stage render-1 is always the LEFT side, render-2 the RIGHT (server
+  // contract), so the bar sits over the panel actually being computed.
+  function showLoading(stage, percent) {
+    for (const id of ['stageL', 'stageR']) document.getElementById(id).classList.add('loading');
+    if (stage === 'render-1') {
+      setOverlay('ovL', 'active', percent);
+      setOverlay('ovR', 'waiting');
+    } else if (stage === 'render-2') {
+      setOverlay('ovL', 'done');
+      setOverlay('ovR', 'active', percent);
+    } else {
+      setOverlay('ovL', 'active', percent);
+      setOverlay('ovR', 'active', percent);
+    }
+  }
+
+  function hideLoading() {
+    for (const id of ['stageL', 'stageR']) document.getElementById(id).classList.remove('loading');
   }
 
   function clearBadges() {
@@ -254,6 +352,7 @@
     document.getElementById('originalNotice').textContent = '';
     clearBadges();
     setStatus('requesting next comparison…');
+    showLoading(null);
     document.getElementById('meta').textContent = '';
 
     // /api/next is a job: it answers immediately with pending+progress while
@@ -265,25 +364,30 @@
       try {
         resp = await fetch('/api/next');
       } catch (err) {
+        hideLoading();
         setStatus(`Error: ${err}`, true);
         return;
       }
       if (!resp.ok) {
+        hideLoading();
         setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
         return;
       }
       try {
         body = await resp.json();
       } catch (err) {
+        hideLoading();
         setStatus(`Error: ${err}`, true);
         return;
       }
       if (body.status !== 'pending') break;
       setStatus(body.progress || 'working…');
+      showLoading(body.stage, body.percent);
       await new Promise((r) => setTimeout(r, 1000));
     }
 
     if (body.status === 'done') {
+      hideLoading();
       setStatus('');
       document.getElementById('meta').textContent = 'No comparisons left.';
       document.getElementById('imgL').src = document.getElementById('imgR').src = '';
@@ -293,6 +397,7 @@
 
     setStatus('loading images…');
     await repaint();
+    hideLoading();
     setStatus('');
     document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}`;
 
@@ -327,9 +432,16 @@
     load();
   }
 
+  // classList surgery, not className assignment — the latter would wipe the
+  // 'loading' state if the backdrop is cycled while a comparison renders.
   function cycle() {
+    const prev = BACKDROPS[backdrop];
     backdrop = (backdrop + 1) % BACKDROPS.length;
-    for (const id of ['stageL', 'stageR']) document.getElementById(id).className = 'stage ' + BACKDROPS[backdrop];
+    for (const id of ['stageL', 'stageR']) {
+      const el = document.getElementById(id);
+      el.classList.remove(prev);
+      el.classList.add(BACKDROPS[backdrop]);
+    }
   }
 
   // Magnifier: fringe quality is a pixel-level judgment, so the origin tracks

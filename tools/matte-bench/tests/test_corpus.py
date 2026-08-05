@@ -77,6 +77,28 @@ def test_ensure_plate_invalidates_stale_renders_on_generation(tmp_path, monkeypa
     assert plate_path(tmp_path, "s1").read_bytes() == b"new plate"
 
 
+def test_ensure_plate_forwards_comfy_progress_as_fractions(tmp_path, monkeypatch):
+    import asyncio
+
+    from matte_bench import corpus
+
+    class FakeProvider:
+        def __init__(self, base_url):
+            pass
+
+        async def generate(self, graph):
+            yield corpus.ProgressEvent(value=1, max=4)
+            yield corpus.ImageEvent(data=b"plate")
+
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=8, height=8)
+    monkeypatch.setattr(corpus, "LiveComfyProvider", FakeProvider)
+
+    fractions = []
+    asyncio.run(corpus.ensure_plate(s, tmp_path, "http://unused",
+                                    on_progress=fractions.append))
+    assert fractions == [0.25]
+
+
 def test_ensure_plate_leaves_renders_alone_when_plate_is_cached(tmp_path, monkeypatch):
     import asyncio
 

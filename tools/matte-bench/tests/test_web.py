@@ -99,6 +99,72 @@ def test_next_reports_progress_while_a_render_is_in_flight(tmp_path, monkeypatch
     assert _await_next(client)["subject"] == "s1"
 
 
+def test_pending_payload_reports_percent_and_stage(tmp_path, monkeypatch):
+    """percent and stage ride along with the progress text so the page can
+    draw a real progress bar over the side being rendered."""
+    import threading
+
+    gate = threading.Event()
+
+    async def slow_prepare(c, progress):
+        progress("rendering candidate 1 of 2…", 0.4, "render-1")
+        gate.wait(10)
+
+    client = _client(tmp_path)
+    monkeypatch.setattr(web, "_prepare", slow_prepare)
+    try:
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            body = client.get("/api/next").json()
+            if body["status"] == "pending" and body.get("percent") == 0.4:
+                assert body["stage"] == "render-1"
+                break
+            assert body["status"] == "pending", body
+            time.sleep(0.01)
+        else:
+            raise AssertionError("never saw percent while job blocked")
+    finally:
+        gate.set()
+    assert _await_next(client)["subject"] == "s1"
+
+
+def test_prepare_maps_render_progress_to_sides(tmp_path, monkeypatch):
+    """render-1 must always mean the LEFT side and render-2 the RIGHT, so the
+    page can put the progress bar over the panel actually being computed."""
+    import asyncio
+
+    from matte_bench.pairing import Comparison
+    from matte_bench.corpus import plate_path
+    from matte_bench.techniques import Technique
+
+    _client(tmp_path)
+    left = Technique(id="birefnet-hr", cls="A", node="BiRefNetRMBG",
+                     model="BiRefNet-HR", params={}, post=())
+    right = Technique(id="rmbg-2", cls="A", node="RMBG", model="RMBG-2.0",
+                      params={}, post=())
+    state.techniques = ["hash-l", "hash-r"]
+    state.technique_objs = {"hash-l": left, "hash-r": right}
+    plate_path(tmp_path, "s1").parent.mkdir(parents=True, exist_ok=True)
+    plate_path(tmp_path, "s1").write_bytes(b"plate")
+
+    async def fake_render(s, t, root, url, on_progress=None):
+        if on_progress is not None:
+            on_progress(0.5)
+
+    monkeypatch.setattr(web, "ensure_render", fake_render)
+
+    seen = []
+
+    def collect(text, percent=None, stage=None):
+        seen.append((percent, stage))
+
+    asyncio.run(web._prepare(
+        Comparison(subject="s1", bucket="wispy", left="hash-l", right="hash-r"),
+        collect))
+    assert (0.5, "render-1") in seen
+    assert (0.5, "render-2") in seen
+
+
 def test_prepare_progress_never_names_a_technique(tmp_path, monkeypatch):
     """Progress text is shown to the judge mid-comparison, so it must not
     leak which technique is on which side — the comparison is blind."""
@@ -115,7 +181,7 @@ def test_prepare_progress_never_names_a_technique(tmp_path, monkeypatch):
     state.techniques = ["hash-l", "hash-r"]
     state.technique_objs = {"hash-l": left, "hash-r": right}
 
-    async def fake_plate(subject, root, url):
+    async def fake_plate(subject, root, url, on_progress=None):
         # The real ensure_plate guarantees the file exists on return.
         from matte_bench.corpus import plate_path
         p = plate_path(root, subject.id)
@@ -123,16 +189,20 @@ def test_prepare_progress_never_names_a_technique(tmp_path, monkeypatch):
         p.write_bytes(b"plate")
         return p
 
-    async def fake_render(s, t, root, url):
+    async def fake_render(s, t, root, url, on_progress=None):
         return None
 
     monkeypatch.setattr(web, "ensure_plate", fake_plate)
     monkeypatch.setattr(web, "ensure_render", fake_render)
 
     seen = []
+
+    def collect(text, percent=None, stage=None):
+        seen.append(text)
+
     asyncio.run(web._prepare(
         Comparison(subject="s1", bucket="wispy", left="hash-l", right="hash-r"),
-        seen.append))
+        collect))
     assert seen, "prepare reported no progress at all"
     for msg in seen:
         for leak in ("hash-l", "hash-r", "birefnet-hr", "rmbg-2",
@@ -150,13 +220,13 @@ def test_verdict_succeeds_for_a_subject_plated_mid_session(tmp_path, monkeypatch
     client = _client(tmp_path)
     state.plate_hashes = {}
 
-    async def fake_plate(subject, root, url):
+    async def fake_plate(subject, root, url, on_progress=None):
         p = plate_path(root, subject.id)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"fresh plate")
         return p
 
-    async def fake_render(s, t, root, url):
+    async def fake_render(s, t, root, url, on_progress=None):
         return None
 
     monkeypatch.setattr(web, "ensure_plate", fake_plate)
