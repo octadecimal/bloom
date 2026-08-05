@@ -248,35 +248,48 @@
 
   async function load() {
     originalMode = false;
+    // Nulled for the whole wait: a comparison can take minutes to prepare,
+    // and a stray arrow key must not re-vote the one just judged.
+    current = null;
     document.getElementById('originalNotice').textContent = '';
     clearBadges();
-    setStatus('rendering next comparison… (first visit to a subject generates its source image; can take a minute or two)');
+    setStatus('requesting next comparison…');
     document.getElementById('meta').textContent = '';
 
-    let resp;
-    try {
-      resp = await fetch('/api/next');
-    } catch (err) {
-      setStatus(`Error: ${err}`, true);
-      return;
-    }
-    if (!resp.ok) {
-      setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
-      return;
-    }
-    try {
-      current = await resp.json();
-    } catch (err) {
-      setStatus(`Error: ${err}`, true);
-      return;
+    // /api/next is a job: it answers immediately with pending+progress while
+    // the server renders, so poll until it resolves instead of hanging on
+    // one long request.
+    let body;
+    while (true) {
+      let resp;
+      try {
+        resp = await fetch('/api/next');
+      } catch (err) {
+        setStatus(`Error: ${err}`, true);
+        return;
+      }
+      if (!resp.ok) {
+        setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
+        return;
+      }
+      try {
+        body = await resp.json();
+      } catch (err) {
+        setStatus(`Error: ${err}`, true);
+        return;
+      }
+      if (body.status !== 'pending') break;
+      setStatus(body.progress || 'working…');
+      await new Promise((r) => setTimeout(r, 1000));
     }
 
-    if (!current) {
+    if (body.status === 'done') {
       setStatus('');
       document.getElementById('meta').textContent = 'No comparisons left.';
       document.getElementById('imgL').src = document.getElementById('imgR').src = '';
       return;
     }
+    current = body.comparison;
 
     setStatus('loading images…');
     await repaint();

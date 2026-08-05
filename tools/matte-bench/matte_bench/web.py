@@ -3,12 +3,14 @@
 Thin by design: the logic lives in pairing/ranking/postops, which are pure and
 unit-tested. This module wires them to HTTP and serves one static page.
 """
+import asyncio
 import random
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
@@ -43,10 +45,24 @@ class State:
     fault_log: Path = field(default_factory=lambda: _BENCH_DIR / "faults.jsonl")
     plate_hashes: dict[str, str] = field(default_factory=dict)
     rng: random.Random = field(default_factory=lambda: random.Random())
+    job: "_NextJob | None" = None
+    job_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 state = State()
 app = FastAPI(title="matte-bench")
+
+
+@app.middleware("http")
+async def _no_store(request: Request, call_next):
+    """A stale index.html means the operator runs last session's JS without
+    knowing it, and every /api payload is live state — neither may be cached.
+    Renders and plates stay cacheable; they are immutable once written."""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 class VerdictIn(BaseModel):
@@ -84,32 +100,40 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-async def _prepare(comparison) -> None:
+async def _prepare(comparison, progress) -> None:
     """Render the two images this comparison needs, generating the subject's
     plate first if this is its first appearance.
 
     Rendering lazily is the point: pre-rendering the whole matrix meant a
     30-60 minute wait before the operator could judge anything. Everything is
     cached, so each image is produced at most once.
+
+    `progress` messages are shown to the judge mid-comparison, so they must
+    stay blind: name the subject if useful, never a technique.
     """
     subject = next(s for s in state.subjects if s.id == comparison.subject)
+    if not plate_path(state.root, subject.id).exists():
+        progress(f"generating source image for {subject.id}… "
+                 "(first visit to a subject; can take a minute or two)")
     await ensure_plate(subject, state.root, state.comfy_url)
-    for handle in (comparison.left, comparison.right):
-        technique = state.technique_objs.get(handle)
-        if technique is not None:
-            await ensure_render(subject, technique, state.root, state.comfy_url)
+    todo = [t for t in (state.technique_objs.get(comparison.left),
+                        state.technique_objs.get(comparison.right))
+            if t is not None]
+    for i, technique in enumerate(todo, start=1):
+        progress(f"rendering candidate {i} of {len(todo)}…")
+        await ensure_render(subject, technique, state.root, state.comfy_url)
 
 
-@app.get("/api/next")
-async def api_next():
+async def _compute_next(progress):
     have = {s.id for s in state.subjects if plate_path(state.root, s.id).exists()}
     for _ in range(8):
+        progress("choosing comparison…")
         c = next_comparison(state.subjects, state.techniques,
                             _live_verdicts(), state.rng, prefer=have)
         if c is None:
             return None
         try:
-            await _prepare(c)
+            await _prepare(c, progress)
         except RenderError as exc:
             # Discovered lazily rather than by a pre-flight sweep: drop it and
             # move on, but never silently — the operator must be able to see
@@ -125,6 +149,69 @@ async def api_next():
         return {"subject": c.subject, "bucket": c.bucket, "left": c.left,
                 "right": c.right, "repeat_of": c.repeat_of}
     return None
+
+
+class _NextJob:
+    """Runs _compute_next in a worker thread with its own event loop.
+
+    Preparing a comparison takes 30s-2min against ComfyUI, and parts of the
+    path (plate upload) block outright — on the server's own event loop that
+    froze every other route, and a blocking /api/next left the page with no
+    way to show what was happening. Off-loop, /api/next answers instantly.
+    """
+
+    def __init__(self):
+        self.progress = "choosing comparison…"
+        self.result = None
+        self.error: str | None = None
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self, timeout: float) -> None:
+        self._thread.join(timeout)
+
+    @property
+    def finished(self) -> bool:
+        return not self._thread.is_alive()
+
+    def _run(self) -> None:
+        try:
+            self.result = asyncio.run(_compute_next(self._set_progress))
+        except Exception as exc:                  # noqa: BLE001 - reported, not swallowed
+            self.error = str(exc)
+
+    def _set_progress(self, text: str) -> None:
+        self.progress = text
+
+
+# A fully cached comparison resolves in milliseconds; waiting this long before
+# answering saves the client a poll round-trip without a perceptible stall.
+_NEXT_GRACE_SECONDS = 0.25
+
+
+@app.get("/api/next")
+def api_next() -> dict:
+    """Job-style poll endpoint: {"status": "pending", "progress": …} while a
+    comparison is being prepared, {"status": "ready", "comparison": …} once it
+    is, {"status": "done"} when the session is exhausted. The client polls."""
+    with state.job_lock:
+        if state.job is None:
+            state.job = _NextJob()
+            state.job.start()
+        job = state.job
+    job.join(_NEXT_GRACE_SECONDS)
+    if not job.finished:
+        return {"status": "pending", "progress": job.progress}
+    with state.job_lock:
+        if state.job is job:
+            state.job = None
+    if job.error is not None:
+        raise HTTPException(status_code=500, detail=job.error)
+    if job.result is None:
+        return {"status": "done"}
+    return {"status": "ready", "comparison": job.result}
 
 
 @app.get("/api/unavailable")
