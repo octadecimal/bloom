@@ -54,6 +54,27 @@ def test_repeat_injection_reserves_a_judged_pair():
     assert {c.left, c.right} == {"a", "b"}
 
 
+def test_prefer_restricts_candidates_to_the_preferred_subject():
+    """Plate affinity: with candidates available on both subjects, a prefer
+    set steers selection to the subject whose plate already exists."""
+    rng = random.Random(1)
+    subjects = [_s("s1"), _s("s2")]
+    c = next_comparison(subjects, ["a", "b"], [], rng, repeat_every=0, prefer={"s1"})
+    assert c.subject == "s1"
+
+
+def test_prefer_falls_through_when_preferred_subject_is_exhausted():
+    """If the preferred subject has no unjudged pairs left, prefer must not
+    starve the draw — it should fall back to the unpreferred subject rather
+    than returning None."""
+    rng = random.Random(1)
+    subjects = [_s("s1"), _s("s2")]
+    verdicts = [_v("s1", "a", "b")]
+    c = next_comparison(subjects, ["a", "b"], verdicts, rng, repeat_every=0, prefer={"s1"})
+    assert c is not None
+    assert c.subject == "s2"
+
+
 def test_sides_are_randomised_across_draws():
     """Blinding: a technique must not always appear on the same side."""
     seen = set()

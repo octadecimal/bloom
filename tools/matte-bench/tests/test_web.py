@@ -125,6 +125,32 @@ def test_api_render_guard_rejects_traversal_directly(tmp_path):
     assert excinfo.value.status_code == 404
 
 
+def test_plate_serves_a_file_inside_the_plates_dir(tmp_path):
+    client = _client(tmp_path)
+    target = tmp_path / "plates" / "s1.png"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"\x89PNG\r\n\x1a\n")
+    resp = client.get("/plate/s1.png")
+    assert resp.status_code == 200
+    assert resp.content == b"\x89PNG\r\n\x1a\n"
+
+
+def test_api_plate_guard_rejects_traversal_directly(tmp_path):
+    """Exercises the containment guard itself, mirroring the api_render guard
+    test above."""
+    import pytest
+    from fastapi import HTTPException
+
+    from matte_bench.web import api_plate
+
+    _client(tmp_path)  # installs state.root = tmp_path
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(b"nope")
+    with pytest.raises(HTTPException) as excinfo:
+        api_plate("..")
+    assert excinfo.value.status_code == 404
+
+
 def test_next_drops_a_render_error_technique_and_does_not_offer_it_again(tmp_path, monkeypatch):
     """Discovered lazily: a RenderError must remove that technique from
     rotation and record it in /api/unavailable, never silently."""

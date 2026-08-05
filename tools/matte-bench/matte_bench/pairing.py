@@ -36,7 +36,8 @@ def judged_pairs(verdicts: list[Verdict]) -> dict[tuple[str, str, str], int]:
 
 def next_comparison(subjects: list[Subject], techniques: list[str],
                     verdicts: list[Verdict], rng: random.Random,
-                    repeat_every: int = 20) -> Comparison | None:
+                    repeat_every: int = 20,
+                    prefer: set[str] | None = None) -> Comparison | None:
     if len(techniques) < 2 or not subjects:
         return None
     seen = judged_pairs(verdicts)
@@ -66,6 +67,10 @@ def next_comparison(subjects: list[Subject], techniques: list[str],
                 candidates.append((gap, s.id, s.bucket, a, b))
     if not candidates:
         return None
+    if prefer:
+        preferred = [c for c in candidates if c[1] in prefer]
+        if preferred:
+            candidates = preferred
     best_gap = min(c[0] for c in candidates)
     tied = [c for c in candidates if c[0] == best_gap]
     _, subject, bucket, a, b = rng.choice(tied)

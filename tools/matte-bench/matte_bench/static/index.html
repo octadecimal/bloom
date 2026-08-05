@@ -53,9 +53,35 @@
     transform: scale(4);
     image-rendering: pixelated;
   }
+  .badge {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #aaa;
+    min-height: 1.2em;
+  }
+  .badge.warn {
+    color: #ff6b6b;
+    font-weight: bold;
+  }
+  .badge.dim {
+    opacity: 0.3;
+  }
   #bar {
     padding: 8px;
     border-top: 1px solid #333;
+  }
+  #status {
+    padding-bottom: 4px;
+    color: #ffcf5c;
+  }
+  #status:empty {
+    display: none;
+  }
+  #status.error {
+    color: #ff6b6b;
+  }
+  #originalNotice {
+    color: #7ec8ff;
   }
   kbd {
     background: #333;
@@ -66,20 +92,42 @@
 <div id="pair">
   <div class="side">
     <div class="stage checker" id="stageL"><img id="imgL" /></div>
+    <div class="badge" id="badgeL"></div>
   </div>
   <div class="side">
     <div class="stage checker" id="stageR"><img id="imgR" /></div>
+    <div class="badge" id="badgeR"></div>
   </div>
 </div>
 <div id="bar">
-  <span id="meta"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp; <kbd>space</kbd> backdrop &nbsp;
-  <kbd>a</kbd> alpha only &nbsp; <kbd>z</kbd> zoom
+  <div id="status"></div>
+  <span id="meta"></span> <span id="originalNotice"></span> &nbsp; <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> pick &nbsp; <kbd>&darr;</kbd> no difference &nbsp; <kbd>space</kbd> backdrop &nbsp;
+  <kbd>a</kbd> alpha only &nbsp; <kbd>z</kbd> zoom &nbsp; <kbd>o</kbd> original
 </div>
 <script>
   const BACKDROPS = ['checker', 'light', 'dark', 'busy'];
   let backdrop = 0,
     alphaOnly = false,
+    originalMode = false,
     current = null;
+
+  function setStatus(text, isError = false) {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.classList.toggle('error', isError);
+  }
+
+  function clearBadges() {
+    for (const id of ['badgeL', 'badgeR']) {
+      const el = document.getElementById(id);
+      el.textContent = '';
+      el.classList.remove('warn', 'dim');
+    }
+  }
+
+  function updateBadgeVisibility() {
+    for (const id of ['badgeL', 'badgeR']) document.getElementById(id).classList.toggle('dim', originalMode);
+  }
 
   // Alpha rendered as greyscale. Halo and haze are far easier to see as
   // luminance than as a fringe against art.
@@ -99,27 +147,151 @@
     el.src = c.toDataURL();
   }
 
+  // Paints a technique render into `el`, resolving once it has actually
+  // loaded (in alpha mode that means after the greyscale conversion has been
+  // written back into `el`). Callers await this to know when the "loading
+  // images…" phase is over.
   function paint(el, subject, technique) {
-    const src = `/render/${subject}/${technique}.png`;
-    if (!alphaOnly) {
-      el.src = src;
+    return new Promise((resolve) => {
+      el.onload = () => resolve();
+      el.onerror = () => resolve();
+      const src = `/render/${subject}/${technique}.png`;
+      if (!alphaOnly) {
+        el.src = src;
+        return;
+      }
+      const probe = new Image();
+      probe.onload = () => toAlpha(probe, el);
+      probe.onerror = () => resolve();
+      probe.src = src;
+    });
+  }
+
+  function paintPlate(el, subject) {
+    return new Promise((resolve) => {
+      el.onload = () => resolve();
+      el.onerror = () => resolve();
+      el.src = `/plate/${subject}.png`;
+    });
+  }
+
+  // Per-side coverage badge, sampled client-side from the loaded render.
+  // A near-empty or ghost matte is a legitimate finding some models produce
+  // — this turns a blank-looking panel into information instead of letting
+  // it read as broken.
+  function computeCoverage(subject, technique) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+        let data;
+        try {
+          data = g.getImageData(0, 0, c.width, c.height).data;
+        } catch (err) {
+          resolve(null);
+          return;
+        }
+        let solid = 0,
+          soft = 0,
+          clear = 0,
+          n = 0;
+        // Every 4th pixel (16 bytes = 4 pixels * 4 channels) for speed.
+        for (let i = 0; i < data.length; i += 16) {
+          const a = data[i + 3];
+          if (a >= 250) solid++;
+          else if (a <= 5) clear++;
+          else soft++;
+          n++;
+        }
+        resolve(n ? { solid: (100 * solid) / n, soft: (100 * soft) / n, clear: (100 * clear) / n } : null);
+      };
+      img.onerror = () => resolve(null);
+      img.src = `/render/${subject}/${technique}.png`;
+    });
+  }
+
+  function renderBadge(el, coverage) {
+    if (!coverage) {
+      el.textContent = '';
+      el.classList.remove('warn');
       return;
     }
-    const probe = new Image();
-    probe.onload = () => toAlpha(probe, el);
-    probe.src = src;
+    if (coverage.solid < 1) {
+      el.textContent = `EMPTY MATTE — ${coverage.soft.toFixed(0)}% soft ghost`;
+      el.classList.add('warn');
+    } else {
+      el.textContent = `${coverage.solid.toFixed(0)}% solid · ${coverage.soft.toFixed(0)}% soft · ${coverage.clear.toFixed(0)}% clear`;
+      el.classList.remove('warn');
+    }
+  }
+
+  // Repaints the CURRENT comparison under the original/rendered toggle,
+  // without asking the server for a new one.
+  async function repaint() {
+    if (!current) return;
+    const imgL = document.getElementById('imgL');
+    const imgR = document.getElementById('imgR');
+    document.getElementById('originalNotice').textContent = originalMode
+      ? 'showing ORIGINAL — same source for both sides'
+      : '';
+    if (originalMode) {
+      await Promise.all([paintPlate(imgL, current.subject), paintPlate(imgR, current.subject)]);
+    } else {
+      await Promise.all([paint(imgL, current.subject, current.left), paint(imgR, current.subject, current.right)]);
+    }
+    updateBadgeVisibility();
   }
 
   async function load() {
-    current = await (await fetch('/api/next')).json();
+    originalMode = false;
+    document.getElementById('originalNotice').textContent = '';
+    clearBadges();
+    setStatus('rendering next comparison… (first visit to a subject generates its source image; can take a minute or two)');
+    document.getElementById('meta').textContent = '';
+
+    let resp;
+    try {
+      resp = await fetch('/api/next');
+    } catch (err) {
+      setStatus(`Error: ${err}`, true);
+      return;
+    }
+    if (!resp.ok) {
+      setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
+      return;
+    }
+    try {
+      current = await resp.json();
+    } catch (err) {
+      setStatus(`Error: ${err}`, true);
+      return;
+    }
+
     if (!current) {
+      setStatus('');
       document.getElementById('meta').textContent = 'No comparisons left.';
       document.getElementById('imgL').src = document.getElementById('imgR').src = '';
       return;
     }
-    paint(document.getElementById('imgL'), current.subject, current.left);
-    paint(document.getElementById('imgR'), current.subject, current.right);
+
+    setStatus('loading images…');
+    const imgL = document.getElementById('imgL');
+    const imgR = document.getElementById('imgR');
+    await Promise.all([paint(imgL, current.subject, current.left), paint(imgR, current.subject, current.right)]);
+    setStatus('');
     document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}`;
+
+    const [covL, covR] = await Promise.all([
+      computeCoverage(current.subject, current.left),
+      computeCoverage(current.subject, current.right),
+    ]);
+    renderBadge(document.getElementById('badgeL'), covL);
+    renderBadge(document.getElementById('badgeR'), covR);
+    updateBadgeVisibility();
   }
 
   async function vote(winner) {
@@ -160,6 +332,9 @@
       if (current) load();
     } else if (e.key === 'z') {
       for (const im of ['imgL', 'imgR']) document.getElementById(im).classList.toggle('zoom');
+    } else if (e.key === 'o') {
+      originalMode = !originalMode;
+      repaint();
     }
   });
   load();

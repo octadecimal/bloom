@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from matte_bench.corpus import Subject, ensure_plate
+from matte_bench.corpus import Subject, ensure_plate, plate_path
 from matte_bench.pairing import next_comparison
 from matte_bench.ranking import separated, standings
 from matte_bench.render import RenderError, ensure_render
@@ -102,9 +102,10 @@ async def _prepare(comparison) -> None:
 
 @app.get("/api/next")
 async def api_next():
+    have = {s.id for s in state.subjects if plate_path(state.root, s.id).exists()}
     for _ in range(8):
         c = next_comparison(state.subjects, state.techniques,
-                            _live_verdicts(), state.rng)
+                            _live_verdicts(), state.rng, prefer=have)
         if c is None:
             return None
         try:
@@ -187,6 +188,16 @@ def api_render(subject: str, technique: str) -> FileResponse:
     path = (root / subject / f"{technique}.png").resolve()
     if not path.is_relative_to(root) or not path.is_file():
         raise HTTPException(status_code=404, detail="render not found")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.get("/plate/{subject}.png")
+def api_plate(subject: str) -> FileResponse:
+    """The shared source image both sides of a comparison were cut from."""
+    root = (state.root / "plates").resolve()
+    path = (root / f"{subject}.png").resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise HTTPException(status_code=404, detail="plate not found")
     return FileResponse(path, media_type="image/png")
 
 
