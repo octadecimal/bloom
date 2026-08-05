@@ -11,11 +11,32 @@ async def test_get_returns_none_then_seed_creates_from_template(mongo_db):
     doc = await store.get_or_seed("g1")
     assert doc.game_id == "g1"
     assert doc.definition["family"] == "composed@1"
-    assert doc.definition == templates.default_definition()
-    assert doc.presentation == templates.default_presentation()
+    assert doc.definition == templates.empty_definition()
+    assert doc.presentation == {}
     # idempotent
     again = await store.get_or_seed("g1")
     assert again.id == doc.id
+
+
+@pytest.mark.asyncio
+async def test_seed_carries_no_mechanics(mongo_db):
+    """A brand-new game must NOT inherit the demo's reels/meter mechanics.
+
+    The seed exists only so the pane has a doc to read (RoomRoute GETs the
+    definition unconditionally); it must be an empty composed@1 shell, so a
+    mechanic appears only once it is explicitly added.
+    """
+    store = ComposeStore(mongo_db)
+    doc = await store.get_or_seed("g1")
+    assert doc.definition["mechanics"] == []
+    # nothing else is pre-populated either — a seeded state would be the same
+    # bug as a seeded mechanic. Matches the frontend's emptyDefinition().
+    assert doc.definition["states"] == []
+    assert doc.definition["start"] == ""
+    assert doc.definition["transitions"] == []
+    assert doc.presentation == {}
+    # an untouched seed must not read as a deliberately-composed game
+    assert doc.touched is False
 
 
 @pytest.mark.asyncio

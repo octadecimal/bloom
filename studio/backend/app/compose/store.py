@@ -45,6 +45,10 @@ class ComposeStore:
             # Legacy doc predating the touched field: an authored definition
             # differs from the seed template; a stray auto-seeded doc is
             # byte-equal to it. Mirrors MathStore.get's legacy migration.
+            # NB: compares against the DEMO fixture deliberately — docs old
+            # enough to lack `touched` were seeded from it, back when the demo
+            # was the seed. New docs always carry `touched`, so they never
+            # reach this branch and the empty seed is irrelevant here.
             computed = raw.get("definition") != templates.default_definition()
             await self._docs.update_one({"_id": raw["_id"]}, {"$set": {"touched": computed}})
             raw = {**raw, "touched": computed}
@@ -71,8 +75,11 @@ class ComposeStore:
         doc = GameDefinitionDoc(
             id=str(uuid.uuid4()),
             game_id=game_id,
-            definition=templates.default_definition(),  # never {}
-            presentation=templates.default_presentation(),
+            # An EMPTY composed@1 shell — never the demo fixture. Seeding the
+            # demo gave every new game the demo's reels + bonus meter before
+            # the user added anything. Well-formed but empty; never {}.
+            definition=templates.empty_definition(),
+            presentation={},
             created_at=now,
             updated_at=now,
         )
