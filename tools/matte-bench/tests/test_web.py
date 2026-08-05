@@ -68,10 +68,28 @@ def test_render_serves_a_file_inside_the_renders_dir(tmp_path):
     assert resp.content == b"\x89PNG\r\n\x1a\n"
 
 
-def test_render_refuses_to_escape_the_renders_dir(tmp_path):
+def test_render_refuses_percent_encoded_escape(tmp_path):
+    """httpx collapses a literal '..' segment before dispatch, so the escape
+    must be percent-encoded to actually reach the handler."""
     client = _client(tmp_path)
     outside = tmp_path / "secret.png"
     outside.write_bytes(b"nope")
-    resp = client.get("/render/../secret.png")
+    resp = client.get("/render/%2e%2e/secret.png")
     assert resp.status_code == 404
     assert b"nope" not in resp.content
+
+
+def test_api_render_guard_rejects_traversal_directly(tmp_path):
+    """Exercises the containment guard itself, independent of how any client
+    or router normalises the URL."""
+    import pytest
+    from fastapi import HTTPException
+
+    from matte_bench.web import api_render
+
+    _client(tmp_path)  # installs state.root = tmp_path
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(b"nope")
+    with pytest.raises(HTTPException) as excinfo:
+        api_render("..", "secret")
+    assert excinfo.value.status_code == 404
