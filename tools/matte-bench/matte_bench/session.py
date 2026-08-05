@@ -37,6 +37,10 @@ async def bootstrap(root: Path, subjects_path: Path, comfy_url: str):
             continue
         subjects.append(s)
 
+    if not subjects:
+        warnings.append("no usable subjects; no technique can be ranked")
+        return subjects, [], warnings
+
     usable: list[Technique] = []
     for t in techniques:
         ok = True

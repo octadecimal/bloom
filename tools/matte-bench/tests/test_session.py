@@ -91,3 +91,29 @@ def test_bootstrap_reports_an_unavailable_technique(tmp_path, monkeypatch):
         sess.bootstrap(tmp_path, subjects_path, "http://x"))
     assert usable == []
     assert any("weights missing" in w for w in warnings)
+
+
+def test_bootstrap_marks_nothing_usable_when_every_plate_fails(tmp_path, monkeypatch):
+    """Zero subjects must mean zero usable techniques, not vacuously all of them."""
+    import asyncio
+
+    from matte_bench import session as sess
+
+    subjects_path = tmp_path / "subjects.json"
+    subjects_path.write_text(json.dumps([
+        {"id": "s1", "bucket": "wispy", "prompt": "p", "seed": 1, "width": 8, "height": 8},
+    ]), encoding="utf-8")
+
+    async def always_fails(s, root, comfy_url):
+        raise RuntimeError("no plate produced")
+
+    monkeypatch.setattr(sess, "fetch_object_info", lambda url: {})
+    monkeypatch.setattr(sess, "available_models",
+                        lambda info: {"BiRefNetRMBG": ["BiRefNet-HR"]})
+    monkeypatch.setattr(sess, "ensure_plate", always_fails)
+
+    subjects, usable, warnings = asyncio.run(
+        sess.bootstrap(tmp_path, subjects_path, "http://x"))
+    assert subjects == []
+    assert usable == []
+    assert any("no usable subjects" in w for w in warnings)
