@@ -49,9 +49,14 @@ def next_comparison(subjects: list[Subject], techniques: list[str],
         return Comparison(subject=subject, bucket=bucket, left=left,
                           right=right, repeat_of=f"{subject}:{a}:{b}")
 
-    strengths = fit(verdicts)
+    by_bucket: dict[str, dict[str, float]] = {}
+    for s in subjects:
+        if s.bucket not in by_bucket:
+            by_bucket[s.bucket] = fit([v for v in verdicts if v.bucket == s.bucket])
+
     candidates = []
     for s in subjects:
+        strengths = by_bucket[s.bucket]
         for i, a in enumerate(techniques):
             for b in techniques[i + 1:]:
                 k = _key(s.id, a, b)

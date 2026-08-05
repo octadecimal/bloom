@@ -17,6 +17,7 @@ def install_state(state, subjects: list[Subject], techniques: list[Technique],
     state.root = root
     state.subjects = subjects
     state.techniques = [config_hash(t) for t in techniques]
+    state.technique_names = {config_hash(t): f"{t.node}/{t.model}" for t in techniques}
     state.plate_hashes = plate_hashes(subjects, root)
 
 
@@ -49,6 +50,10 @@ async def bootstrap(root: Path, subjects_path: Path, comfy_url: str):
                 await ensure_render(s, t, root, comfy_url)
             except RenderError as exc:
                 warnings.append(f"{t.id} unavailable: {exc.reason}")
+                ok = False
+                break
+            except Exception as exc:                  # noqa: BLE001 - reported, not swallowed
+                warnings.append(f"{t.id} unavailable: {exc}")
                 ok = False
                 break
         if ok:

@@ -14,21 +14,29 @@ from pydantic import BaseModel, field_validator
 
 from matte_bench.corpus import Subject
 from matte_bench.pairing import next_comparison
-from matte_bench.ranking import standings
+from matte_bench.ranking import separated, standings
 from matte_bench.store import (
     Fault, Verdict, append_fault, append_verdict, fresh_verdicts, read_verdicts,
 )
 
 STATIC = Path(__file__).parent / "static"
 
+# Anchored to the module's own location, not cwd: the justfile recipe runs
+# this app with cwd studio/backend, so a cwd-relative default would strand
+# every verdict under studio/backend/tools/matte-bench instead of the
+# committed path the rest of the data model depends on.
+_BENCH_DIR = Path(__file__).resolve().parents[1]   # tools/matte-bench
+_REPO_ROOT = _BENCH_DIR.parents[1]                 # repo root
+
 
 @dataclass
 class State:
-    root: Path = Path("var/matte-bench")
+    root: Path = field(default_factory=lambda: _REPO_ROOT / "var" / "matte-bench")
     subjects: list[Subject] = field(default_factory=list)
     techniques: list[str] = field(default_factory=list)
-    verdict_log: Path = Path("tools/matte-bench/verdicts.jsonl")
-    fault_log: Path = Path("tools/matte-bench/faults.jsonl")
+    technique_names: dict[str, str] = field(default_factory=dict)
+    verdict_log: Path = field(default_factory=lambda: _BENCH_DIR / "verdicts.jsonl")
+    fault_log: Path = field(default_factory=lambda: _BENCH_DIR / "faults.jsonl")
     plate_hashes: dict[str, str] = field(default_factory=dict)
     rng: random.Random = field(default_factory=lambda: random.Random())
 
@@ -102,10 +110,25 @@ def api_fault(body: FaultIn) -> dict:
 
 
 @app.get("/api/standings/{bucket}")
-def api_standings(bucket: str) -> list[dict]:
+def api_standings(bucket: str) -> dict:
     rows = standings(_live_verdicts(), bucket)
-    return [{"technique": r.technique, "score": r.score, "low": r.low,
-             "high": r.high, "comparisons": r.comparisons} for r in rows]
+    return {
+        "separated": separated(rows),
+        "rows": [
+            {"technique": r.technique,
+             "label": state.technique_names.get(r.technique, r.technique),
+             "score": r.score, "low": r.low, "high": r.high,
+             "comparisons": r.comparisons}
+            for r in rows
+        ],
+    }
+
+
+@app.get("/api/techniques")
+def api_techniques() -> dict:
+    """Hash -> human name. Standings are keyed by config hash; without this the
+    leaderboard is unreadable."""
+    return dict(state.technique_names)
 
 
 @app.get("/render/{subject}/{technique}.png")

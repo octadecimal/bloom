@@ -1,3 +1,5 @@
+import random
+
 from fastapi.testclient import TestClient
 
 from matte_bench.web import app, state
@@ -13,6 +15,11 @@ def _client(tmp_path):
     state.verdict_log = tmp_path / "verdicts.jsonl"
     state.fault_log = tmp_path / "faults.jsonl"
     state.plate_hashes = {"s1": "h"}
+    # Fixed seed: /api/next's repeat-injection branch fires ~1/20 calls with an
+    # unseeded rng, which made test_posting_a_verdict_appends_and_advances flaky
+    # (~4.5% of runs). Seed 1234 verified to not hit that branch for the calls
+    # these tests make.
+    state.rng = random.Random(1234)
     return TestClient(app)
 
 
@@ -54,8 +61,21 @@ def test_standings_endpoint_reports_the_leader(tmp_path):
             "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
             "winner": "left",
         })
-    rows = client.get("/api/standings/wispy").json()
-    assert rows[0]["technique"] == "a"
+    body = client.get("/api/standings/wispy").json()
+    assert body["rows"][0]["technique"] == "a"
+
+
+def test_standings_endpoint_reports_not_separated_on_thin_evidence(tmp_path):
+    """The endpoint must surface separated(), not just the raw rows: a couple
+    of verdicts is not enough evidence for a real lead."""
+    client = _client(tmp_path)
+    for _ in range(2):
+        client.post("/api/verdict", json={
+            "subject": "s1", "bucket": "wispy", "left": "a", "right": "b",
+            "winner": "left",
+        })
+    body = client.get("/api/standings/wispy").json()
+    assert body["separated"] is False
 
 
 def test_render_serves_a_file_inside_the_renders_dir(tmp_path):
