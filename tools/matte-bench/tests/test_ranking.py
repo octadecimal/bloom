@@ -57,3 +57,11 @@ def test_separated_is_false_when_evidence_is_thin():
 def test_separated_is_true_with_overwhelming_evidence():
     rows = standings([_v("a", "b", "left") for _ in range(40)], "wispy")
     assert separated(rows) is True
+
+
+def test_separated_respects_the_evidence_floor_boundary():
+    """One vote below the floor is not a real lead; at the floor it can be."""
+    below = standings([_v("a", "b", "left") for _ in range(7)], "wispy")
+    at_floor = standings([_v("a", "b", "left") for _ in range(8)], "wispy")
+    assert separated(below) is False
+    assert separated(at_floor) is True

@@ -12,6 +12,7 @@ from matte_bench.store import Verdict
 
 _ITERATIONS = 200
 _TIE_WEIGHT = 0.5
+_MIN_EVIDENCE = 8  # comparisons per contender before a lead can be called real
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,18 @@ def standings(verdicts: list[Verdict], bucket: str, rounds: int = 200,
     return sorted(rows, key=lambda r: r.score, reverse=True)
 
 
-def separated(rows: list[Standing]) -> bool:
-    """True only when the leader's interval clears the runner-up's."""
-    return len(rows) >= 2 and rows[0].low > rows[1].high
+def separated(rows: list[Standing], min_comparisons: int = _MIN_EVIDENCE) -> bool:
+    """True only when the leader's interval clears the runner-up's AND both
+    contenders have enough comparisons for that interval to mean anything.
+
+    The evidence floor is not decoration. Bootstrap resampling cannot express
+    uncertainty it has no data for: with a single verdict every resample is
+    that same verdict, so the intervals collapse to points and a one-vote lead
+    would be reported as decisive. The floor is what keeps the tool honest
+    about thin evidence.
+    """
+    if len(rows) < 2:
+        return False
+    if min(rows[0].comparisons, rows[1].comparisons) < min_comparisons:
+        return False
+    return rows[0].low > rows[1].high
