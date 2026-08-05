@@ -279,9 +279,7 @@
     }
 
     setStatus('loading images…');
-    const imgL = document.getElementById('imgL');
-    const imgR = document.getElementById('imgR');
-    await Promise.all([paint(imgL, current.subject, current.left), paint(imgR, current.subject, current.right)]);
+    await repaint();
     setStatus('');
     document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}`;
 
@@ -329,7 +327,7 @@
       cycle();
     } else if (e.key === 'a') {
       alphaOnly = !alphaOnly;
-      if (current) load();
+      repaint();
     } else if (e.key === 'z') {
       for (const im of ['imgL', 'imgR']) document.getElementById(im).classList.toggle('zoom');
     } else if (e.key === 'o') {
