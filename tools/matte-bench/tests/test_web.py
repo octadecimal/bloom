@@ -147,10 +147,14 @@ def test_prepare_maps_render_progress_to_sides(tmp_path, monkeypatch):
     plate_path(tmp_path, "s1").parent.mkdir(parents=True, exist_ok=True)
     plate_path(tmp_path, "s1").write_bytes(b"plate")
 
+    async def fake_plate(subject, root, url, on_progress=None):
+        return plate_path(root, subject.id)
+
     async def fake_render(s, t, root, url, on_progress=None):
         if on_progress is not None:
             on_progress(0.5)
 
+    monkeypatch.setattr(web, "ensure_plate", fake_plate)
     monkeypatch.setattr(web, "ensure_render", fake_render)
 
     seen = []

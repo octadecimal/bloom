@@ -62,13 +62,36 @@ def plate_hashes(subjects: list[Subject], root: Path) -> dict[str, str]:
     return out
 
 
+def plate_params(s: Subject) -> dict:
+    """Everything that determines a plate's pixels. Stored beside the plate;
+    a mismatch (edited prompt, changed seed) invalidates the cache."""
+    return {"prompt": s.prompt, "seed": s.seed, "width": s.width,
+            "height": s.height, "workflow": PLATE_WORKFLOW}
+
+
+def _plate_meta_path(root: Path, subject_id: str) -> Path:
+    return root / "plates" / f"{subject_id}.json"
+
+
+def _plate_is_current(s: Subject, root: Path) -> bool:
+    meta = _plate_meta_path(root, s.id)
+    if not plate_path(root, s.id).exists() or not meta.exists():
+        return False
+    try:
+        return json.loads(meta.read_text(encoding="utf-8")) == plate_params(s)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 async def ensure_plate(s: Subject, root: Path, comfy_url: str,
                        on_progress=None) -> Path:
-    """Render the raw pre-matting plate once; reuse it forever after.
+    """Render the plate once per (prompt, seed, size, workflow); reuse until
+    the subject definition changes. A plate with no sidecar predates
+    provenance tracking and is regenerated rather than trusted.
 
     `on_progress` receives ComfyUI's diffusion progress as a 0..1 fraction."""
     dest = plate_path(root, s.id)
-    if dest.exists():
+    if _plate_is_current(s, root):
         return dest
     graph = build_graph(PLATE_WORKFLOW, s.prompt, s.width, s.height, s.seed)
     image = None
@@ -84,4 +107,8 @@ async def ensure_plate(s: Subject, root: Path, comfy_url: str,
     # with render.render_path, which corpus cannot import without a cycle.)
     shutil.rmtree(root / "renders" / s.id, ignore_errors=True)
     atomic_write_bytes(dest, image)
+    # Sidecar written last: a crash in between leaves a plate without
+    # provenance, which is treated as stale and regenerated.
+    atomic_write_bytes(_plate_meta_path(root, s.id),
+                       json.dumps(plate_params(s), sort_keys=True).encode("utf-8"))
     return dest

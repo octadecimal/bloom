@@ -2,7 +2,7 @@
   {
     "id": "wispy-fern",
     "bucket": "wispy",
-    "prompt": "a single lush fern frond with fine feathery leaflets, photographed against a cluttered green garden background, natural light",
+    "prompt": "a single lush fern frond with fine feathery leaflets, crisp, clean, centered, high detail, premium slot game art",
     "seed": 101,
     "width": 768,
     "height": 768
@@ -10,7 +10,7 @@
   {
     "id": "wispy-dandelion",
     "bucket": "wispy",
-    "prompt": "a dandelion seed head with fine translucent filaments, backlit, soft outdoor background",
+    "prompt": "a dandelion seed head with fine translucent backlit filaments, crisp, clean, centered, high detail, premium slot game art",
     "seed": 102,
     "width": 768,
     "height": 768
@@ -18,7 +18,7 @@
   {
     "id": "filigree-scrollwork",
     "bucket": "filigree",
-    "prompt": "an ornate brass scrollwork panel with very thin curling metal tendrils, on a busy workshop background",
+    "prompt": "an ornate brass scrollwork panel with very thin curling metal tendrils, crisp, clean, centered, high detail, premium slot game art",
     "seed": 103,
     "width": 900,
     "height": 520
@@ -26,7 +26,7 @@
   {
     "id": "filigree-lattice",
     "bucket": "filigree",
-    "prompt": "a delicate wrought iron lattice screen with thin crossing bars, against a garden scene",
+    "prompt": "a delicate wrought iron lattice screen with thin crossing bars, crisp, clean, centered, high detail, premium slot game art",
     "seed": 104,
     "width": 900,
     "height": 520
@@ -34,7 +34,7 @@
   {
     "id": "holes-arcade",
     "bucket": "enclosed-holes",
-    "prompt": "an ornate five bay arcade frame of aged gold, each bay an empty opening, against a glasshouse interior",
+    "prompt": "an ornate five bay arcade frame of aged gold, each bay an empty opening, nothing in front of the frame, crisp, clean, centered, high detail, premium slot game art",
     "seed": 105,
     "width": 900,
     "height": 520
@@ -42,7 +42,7 @@
   {
     "id": "holes-ring",
     "bucket": "enclosed-holes",
-    "prompt": "a thick decorative metal ring with a large empty centre and pierced holes, on a stone background",
+    "prompt": "a thick decorative metal ring with a large empty centre and pierced holes, fully visible with nothing in front of it, crisp, clean, centered, high detail, premium slot game art",
     "seed": 106,
     "width": 768,
     "height": 768
@@ -50,7 +50,7 @@
   {
     "id": "glow-lantern",
     "bucket": "glow-soft",
-    "prompt": "a glowing glass lantern with soft light bloom and translucent panes, dim background",
+    "prompt": "a glowing glass lantern with soft light bloom and translucent panes, crisp, clean, centered, high detail, premium slot game art",
     "seed": 107,
     "width": 768,
     "height": 768
@@ -58,7 +58,7 @@
   {
     "id": "glow-smoke",
     "bucket": "glow-soft",
-    "prompt": "a wisp of pale smoke curling upward, semi transparent, against a dark cluttered background",
+    "prompt": "a wisp of pale smoke curling upward, semi transparent, crisp, clean, centered, high detail, premium slot game art",
     "seed": 108,
     "width": 768,
     "height": 768
@@ -66,7 +66,7 @@
   {
     "id": "text-wordmark",
     "bucket": "crisp-text",
-    "prompt": "a premium metallic game logo wordmark reading GARDEN, bold clean lettering, sharp edges, studio background",
+    "prompt": "a premium metallic game logo wordmark reading GARDEN, sharp edges, bold premium logo wordmark, large clean legible lettering, glossy 3D, clean cutout on plain background, studio render",
     "seed": 109,
     "width": 900,
     "height": 520
@@ -74,7 +74,7 @@
   {
     "id": "text-serif",
     "bucket": "crisp-text",
-    "prompt": "an ornate gold serif wordmark reading BLOOM with fine spurs and thin strokes, on a marble background",
+    "prompt": "an ornate gold serif wordmark reading BLOOM with fine spurs and thin strokes, bold premium logo wordmark, large clean legible lettering, glossy 3D, clean cutout on plain background, studio render",
     "seed": 110,
     "width": 900,
     "height": 520
@@ -82,7 +82,7 @@
   {
     "id": "lowcon-green",
     "bucket": "low-contrast",
-    "prompt": "a jade green leaf ornament resting on a jade green painted wall, minimal tonal separation",
+    "prompt": "a jade green leaf ornament against a plain jade green backdrop of nearly identical tone, minimal tonal separation, subject fully visible, crisp, clean, centered, high detail, premium slot game art",
     "seed": 111,
     "width": 768,
     "height": 768
@@ -90,7 +90,7 @@
   {
     "id": "lowcon-gold",
     "bucket": "low-contrast",
-    "prompt": "a pale gold filigree brooch on a pale cream silk background, very close in tone",
+    "prompt": "a pale gold filigree brooch against a plain pale cream backdrop very close in tone, subject fully visible, crisp, clean, centered, high detail, premium slot game art",
     "seed": 112,
     "width": 768,
     "height": 768
@@ -98,7 +98,7 @@
   {
     "id": "busy-glasshouse",
     "bucket": "busy-background",
-    "prompt": "an ornate gold reel frame standing inside an overgrown Victorian glasshouse dense with foliage and vines",
+    "prompt": "an ornate gold reel frame in front of a busy backdrop of dense foliage and vines, the frame in the foreground fully visible and unobstructed, nothing in front of the frame, crisp, clean, centered, high detail, premium slot game art",
     "seed": 113,
     "width": 900,
     "height": 520
@@ -106,7 +106,7 @@
   {
     "id": "busy-market",
     "bucket": "busy-background",
-    "prompt": "a decorative carved emblem in front of a crowded cluttered market stall full of detail",
+    "prompt": "a decorative carved emblem in front of a busy cluttered market stall backdrop, the emblem in the foreground fully visible and unobstructed, nothing in front of it, crisp, clean, centered, high detail, premium slot game art",
     "seed": 114,
     "width": 900,
     "height": 520
