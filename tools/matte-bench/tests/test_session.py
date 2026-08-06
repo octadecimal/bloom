@@ -1,9 +1,10 @@
+import asyncio
 import json
 from pathlib import Path
 
 from matte_bench.corpus import Subject
-from matte_bench.session import install_state
-from matte_bench.techniques import Technique, config_hash
+from matte_bench.session import bootstrap, install_state
+from matte_bench.techniques import Technique, backdrop_techniques, config_hash, stage1_models
 from matte_bench.web import State
 
 
@@ -80,3 +81,45 @@ def test_bootstrap_does_not_render_anything(tmp_path, monkeypatch):
     assert "wispy" in templates
     assert len(techniques) == 1
     assert called == []
+
+
+def _info_with_flux_and_matting():
+    return {
+        "CheckpointLoaderSimple": {"input": {"required": {
+            "ckpt_name": [["flux1-dev-fp8.safetensors"]]}}},
+        "BiRefNetRMBG": {"input": {"required": {
+            "model": [["BiRefNet-HR", "BiRefNet-general"]]}}},
+    }
+
+
+def test_bootstrap_adds_backdrop_when_checkpoint_present(tmp_path, monkeypatch):
+    monkeypatch.setattr("matte_bench.session.fetch_object_info",
+                        lambda url: _info_with_flux_and_matting())
+    (tmp_path / "templates.json").write_text("{}", encoding="utf-8")
+    subjects, templates, techniques, warnings = asyncio.run(bootstrap(
+        tmp_path, tmp_path / "templates.json", tmp_path / "subjects.jsonl",
+        "http://gpu:8188"))
+    assert any(t.cls == "B" and t.node == "backdrop-key" for t in techniques)
+    assert any(t.cls == "A" for t in techniques)
+    assert any("qwen-layered disabled" in w for w in warnings)
+
+
+def test_bootstrap_gates_backdrop_without_checkpoint(tmp_path, monkeypatch):
+    info = _info_with_flux_and_matting()
+    info["CheckpointLoaderSimple"]["input"]["required"]["ckpt_name"] = [[]]
+    monkeypatch.setattr("matte_bench.session.fetch_object_info", lambda url: info)
+    (tmp_path / "templates.json").write_text("{}", encoding="utf-8")
+    _, _, techniques, warnings = asyncio.run(bootstrap(
+        tmp_path, tmp_path / "templates.json", tmp_path / "subjects.jsonl",
+        "http://gpu:8188"))
+    assert not any(t.node == "backdrop-key" for t in techniques)
+    assert any("backdrop-key disabled" in w for w in warnings)
+
+
+def test_install_state_maps_hash_to_cls(tmp_path):
+    from matte_bench.web import State
+    s = State()
+    techniques = stage1_models({"RMBG": ["m1", "m2"]}) + backdrop_techniques()
+    install_state(s, [], techniques, tmp_path, "http://gpu:8188")
+    assert set(s.technique_cls.values()) == {"A", "B"}
+    assert len(s.technique_cls) == len(techniques)

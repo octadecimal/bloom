@@ -44,6 +44,7 @@ class State:
     techniques: list[str] = field(default_factory=list)
     technique_names: dict[str, str] = field(default_factory=dict)
     technique_objs: dict = field(default_factory=dict)
+    technique_cls: dict[str, str] = field(default_factory=dict)
     comfy_url: str = ""
     unavailable: dict[str, str] = field(default_factory=dict)
     verdict_log: Path = field(default_factory=lambda: _BENCH_DIR / "verdicts.jsonl")
