@@ -194,6 +194,7 @@
     alphaOnly = false,
     originalMode = false,
     current = null;
+  let techniqueCls = {};
 
   function setStatus(text, isError = false) {
     const el = document.getElementById('status');
@@ -315,6 +316,25 @@
     });
   }
 
+  // Class B sides were not cut from the plate — each shows its OWN pre-key
+  // generation. Falls back to the keyed render if no original exists
+  // (legacy cache, native-RGBA techniques).
+  function paintSideOriginal(el, subject, technique) {
+    if (techniqueCls[technique] !== 'B') return paintPlate(el, subject);
+    return new Promise((resolve) => {
+      el.onload = () => resolve();
+      el.onerror = () => { paint(el, subject, technique).then(resolve); };
+      el.src = `/original/${subject}/${technique}.png`;
+    });
+  }
+
+  function originalNotice() {
+    if (!current) return '';
+    if (current.cls === 'B') return "showing each side's OWN generation (pre-key) — sides differ by design";
+    if (current.cls === 'X') return "showing each side's own source";
+    return 'showing ORIGINAL — same source for both sides';
+  }
+
   // Per-side coverage badge, sampled client-side from the loaded render.
   // A near-empty or ghost matte is a legitimate finding some models produce
   // — this turns a blank-looking panel into information instead of letting
@@ -375,9 +395,9 @@
     if (!current) return;
     const imgL = document.getElementById('imgL');
     const imgR = document.getElementById('imgR');
-    document.getElementById('originalNotice').textContent = originalMode ? 'showing ORIGINAL — same source for both sides' : '';
+    document.getElementById('originalNotice').textContent = originalMode ? originalNotice() : '';
     if (originalMode) {
-      await Promise.all([paintPlate(imgL, current.subject), paintPlate(imgR, current.subject)]);
+      await Promise.all([paintSideOriginal(imgL, current.subject, current.left), paintSideOriginal(imgR, current.subject, current.right)]);
     } else {
       await Promise.all([paint(imgL, current.subject, current.left), paint(imgR, current.subject, current.right)]);
     }
@@ -512,5 +532,9 @@
       repaint();
     }
   });
+  fetch('/api/techniques')
+    .then((r) => r.json())
+    .then((m) => { for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls; })
+    .catch(() => {});
   load();
 </script>
