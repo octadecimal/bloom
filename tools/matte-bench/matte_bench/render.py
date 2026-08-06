@@ -19,8 +19,9 @@ from app.assets.comfy import ImageEvent, LiveComfyProvider, ProgressEvent
 from app.assets.graph import build_graph
 
 from matte_bench.corpus import PLATE_WORKFLOW, Subject, plate_path
-from matte_bench.keying import chroma_key
+from matte_bench.keying import chroma_key, sample_key_color
 from matte_bench.postops import apply_postops
+from matte_bench.sampler import DEFAULT_GROUND, GROUNDS
 from matte_bench.store import atomic_write_bytes
 from matte_bench.techniques import Technique, config_hash, matting_graph, qwen_graph
 
@@ -47,8 +48,19 @@ def upload_plate(base_url: str, plate: Path) -> str:
     return f"{sub}/{body['name']}" if sub else body["name"]
 
 
+# Every sampled subject prompt ends with a ground directive (sampler
+# .compose_prompt). The chroma clause must REPLACE it, not follow it: given
+# both, flux obeys the sampled ground and renders a black (or tone-matched)
+# backdrop the keyer can't touch.
+_GROUND_CLAUSES = (DEFAULT_GROUND, *GROUNDS.values())
+
+
 def backdrop_prompt(subject_prompt: str, clause: str) -> str:
-    return f"{subject_prompt}, {clause}"
+    base = subject_prompt
+    for ground in _GROUND_CLAUSES:
+        base = base.replace(ground, "")
+    base = ", ".join(p for p in (s.strip() for s in base.split(",")) if p)
+    return f"{base}, {clause}"
 
 
 async def _generate(graph: dict, comfy_url: str, on_progress) -> bytes | None:
@@ -78,8 +90,11 @@ async def _produce_class_b(s: Subject, t: Technique, comfy_url: str,
         image = await _generate(graph, comfy_url, on_progress)
         if not image:
             return image
-        keyed = chroma_key(Image.open(BytesIO(image)).convert("RGB"),
-                           tuple(t.params["key_color"]),
+        rendered = Image.open(BytesIO(image)).convert("RGB")
+        key = (sample_key_color(rendered)
+               if t.params.get("key_source") == "border-median"
+               else tuple(t.params["key_color"]))
+        keyed = chroma_key(rendered, key,
                            t.params["tolerance"], t.params["softness"],
                            bool(t.params.get("despill", 1)))
         buf = BytesIO()

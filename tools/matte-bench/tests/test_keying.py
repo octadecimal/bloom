@@ -1,12 +1,34 @@
 from PIL import Image
 
-from matte_bench.keying import chroma_key
+from matte_bench.keying import chroma_key, sample_key_color
 
 GREEN = (0, 177, 64)
 
 
 def _flat(color, size=(8, 8)):
     return Image.new("RGB", size, color)
+
+
+def _bordered(border_color, center_color, size=(32, 32)):
+    img = Image.new("RGB", size, border_color)
+    for x in range(8, 24):
+        for y in range(8, 24):
+            img.putpixel((x, y), center_color)
+    return img
+
+
+def test_sample_key_color_reads_border_not_subject():
+    """Flux never paints the literal hex we ask for (a chroma-green clause
+    comes back as a dark desaturated wall), so the key must be measured from
+    the render's own border, where only backdrop pixels live."""
+    img = _bordered((15, 38, 38), (200, 160, 40))
+    assert sample_key_color(img) == (15, 38, 38)
+
+
+def test_sample_key_color_is_median_robust_to_border_speck():
+    img = _bordered((15, 38, 38), (200, 160, 40))
+    img.putpixel((0, 0), (255, 255, 255))   # one stray highlight on the border
+    assert sample_key_color(img) == (15, 38, 38)
 
 
 def test_key_color_becomes_fully_transparent():
