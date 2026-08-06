@@ -23,6 +23,7 @@ def _client(tmp_path, monkeypatch=None):
         state.prefetch.join(timeout=5)
     state.prefetch = None
     state.staged_subject = None
+    state.staged_rng_state = None
     state.root = tmp_path
     state.subjects = []
     state.templates = {"wispy": {"width": 8, "height": 8,
@@ -651,7 +652,12 @@ def test_start_prefetch_is_single_flight(bench_state, monkeypatch):
 
 def test_prefetch_never_consumes_the_shared_rng(bench_state, monkeypatch):
     """The spec's on/off equivalence guarantee at its mechanism: prediction
-    clones the rng stream, so real picks are identical with prefetch on."""
+    clones the rng stream, so real picks are identical with prefetch on.
+
+    Reuse-the-active-subject path: subjects must actually contain "s1" (a
+    vacuous version of this test let the else-branch subject lookup return
+    None and short-circuit before the rng clone ever ran) so _choose_comparison
+    and _prepare genuinely execute against the shared rng."""
     import asyncio
     from matte_bench import web
 
@@ -659,6 +665,8 @@ def test_prefetch_never_consumes_the_shared_rng(bench_state, monkeypatch):
         pass
 
     monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
+                                  width=64, height=64)]
     web.state.active_subject_id = "s1"
     web.state.active_served = 0
     before = web.state.rng.getstate()
@@ -666,6 +674,118 @@ def test_prefetch_never_consumes_the_shared_rng(bench_state, monkeypatch):
                                      "left": "a1x", "right": "a2x",
                                      "cls": "A", "repeat_of": None}))
     assert web.state.rng.getstate() == before
+
+
+def test_prefetch_staging_never_touches_rng_then_advances_it_on_consumption(
+        bench_state, monkeypatch):
+    """Staging branch (the one vacuous-test #1 above never exercised):
+    _sample_fresh draws a bucket/template/LLM roll, all of which must come
+    from a clone, not state.rng. The shared stream only advances later, when
+    _pick_subject consumes the staged (subject, rng-state) pair — and it must
+    land exactly where the clone did, so a real draw at that point is
+    identical to what the prefetcher predicted."""
+    import asyncio
+    from matte_bench import web
+
+    async def no_prepare(c, progress):
+        pass
+
+    monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.active_subject_id = None      # forces the staging branch
+    web.state.staged_subject = None
+    web.state.staged_rng_state = None
+    before = web.state.rng.getstate()
+
+    asyncio.run(web._prefetch_async({"subject": "s1", "bucket": "wispy",
+                                     "left": "a1x", "right": "a2x",
+                                     "cls": "A", "repeat_of": None}))
+
+    # Staging happened, but the shared rng was not touched by it.
+    assert web.state.rng.getstate() == before
+    assert web.state.staged_subject is not None
+    staged = web.state.staged_subject
+    staged_rng_state = web.state.staged_rng_state
+    assert staged_rng_state is not None
+    assert staged_rng_state != before   # the clone actually advanced
+
+    # Consuming the staged subject is where the shared stream catches up.
+    got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert got is staged
+    assert web.state.rng.getstate() == staged_rng_state
+    assert web.state.staged_rng_state is None
+
+
+def test_prefetch_stages_only_at_the_rotation_boundary(bench_state, monkeypatch):
+    """active_served was already incremented by _compute_next for the served
+    comparison, so the NEXT demand pick rotates once active_served reaches
+    PAIRS_PER_SUBJECT, not PAIRS_PER_SUBJECT - 1. One shy of the boundary the
+    prefetcher must reuse the active subject (no staging); at the boundary it
+    must predict rotation and stage a fresh one."""
+    import asyncio
+    from matte_bench import web
+
+    async def no_prepare(c, progress):
+        pass
+
+    monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
+                                  width=64, height=64)]
+    served = {"subject": "s1", "bucket": "wispy", "left": "a1x",
+              "right": "a2x", "cls": "A", "repeat_of": None}
+
+    web.state.active_subject_id = "s1"
+    web.state.active_served = web.PAIRS_PER_SUBJECT - 1
+    web.state.staged_subject = None
+    asyncio.run(web._prefetch_async(served))
+    assert web.state.staged_subject is None
+
+    web.state.active_subject_id = "s1"
+    web.state.active_served = web.PAIRS_PER_SUBJECT
+    web.state.staged_subject = None
+    asyncio.run(web._prefetch_async(served))
+    assert web.state.staged_subject is not None
+
+
+def test_compute_next_joins_a_live_prefetch_before_preparing(tmp_path, monkeypatch):
+    """The deterministic failure this guards against: comparison N is served,
+    the prefetcher starts writing plate/render files for the staged subject
+    in the background, and the operator votes before it finishes. Without
+    synchronization the demand path's own ensure_plate/ensure_render would
+    see stale dest.exists()/_plate_is_current checks, kick off a SECOND
+    generation, and the plate write would rmtree the renders the prefetch
+    just produced. Pinned at the guard's mechanism (a blocking join on a
+    live prefetch thread before _prepare runs) rather than through the real
+    filesystem race, which isn't reproducible deterministically in a unit
+    test: real threads, not asyncio, drive both sides so the join provably
+    blocks the demand path rather than the two coroutines merely interleaving
+    within one event loop."""
+    import asyncio
+    import threading
+
+    order = []
+    release = threading.Event()
+
+    def fake_prefetch_body():
+        release.wait(timeout=5)
+        order.append("prefetch-done")
+
+    async def tracking_prepare(c, progress):
+        order.append("prepare")
+
+    _client(tmp_path, monkeypatch)
+    monkeypatch.setattr(web, "_prepare", tracking_prepare)
+
+    t = threading.Thread(target=fake_prefetch_body, daemon=True)
+    web.state.prefetch = t
+    t.start()
+
+    # A separate real thread (not asyncio) releases the fake prefetch shortly
+    # after _compute_next starts, proving _compute_next actually blocked on
+    # the join instead of racing ahead into _prepare.
+    threading.Timer(0.05, release.set).start()
+
+    asyncio.run(web._compute_next(lambda *a, **k: None))
+    assert order == ["prefetch-done", "prepare"]
 
 
 def test_pick_subject_consumes_staged_subject(bench_state):

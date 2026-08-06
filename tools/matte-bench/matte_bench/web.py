@@ -64,6 +64,11 @@ class State:
     job: "_NextJob | None" = None
     job_lock: threading.Lock = field(default_factory=threading.Lock)
     staged_subject: Subject | None = None
+    # The shared rng state right after the clone that sampled staged_subject
+    # finished drawing it — applied to state.rng only when _pick_subject
+    # consumes the staged subject, so the shared stream advances exactly as
+    # far as a real draw would have, never further (see _prefetch_async).
+    staged_rng_state: tuple | None = None
     prefetch: threading.Thread | None = None
     prefetch_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -167,20 +172,26 @@ PAIRS_PER_SUBJECT = 3
 TEMPLATE_MIX = 0.25
 
 
-async def _sample_fresh(verdicts, progress) -> Subject:
+async def _sample_fresh(verdicts, progress, rng: random.Random | None = None) -> Subject:
     """Draw and register a fresh subject from the thinnest bucket. LLM-imagined
-    when a provider is configured, template-sampled otherwise."""
+    when a provider is configured, template-sampled otherwise.
+
+    `rng` defaults to the shared state.rng for the demand path. The
+    prefetcher passes a clone instead, so its staging draw never advances the
+    shared stream directly (see _prefetch_async)."""
+    if rng is None:
+        rng = state.rng
     buckets = [b for b in BUCKETS if b in state.templates]
-    bucket = least_judged_bucket(buckets, verdicts, state.rng)
+    bucket = least_judged_bucket(buckets, verdicts, rng)
     subject = None
-    if state.llm is not None and state.rng.random() >= TEMPLATE_MIX:
+    if state.llm is not None and rng.random() >= TEMPLATE_MIX:
         progress("imagining a new subject…")
         recent = [s.prompt.split(",")[0] for s in state.subjects
                   if s.bucket == bucket][-6:]
-        subject = await sample_subject_llm(bucket, state.rng, state.templates,
+        subject = await sample_subject_llm(bucket, rng, state.templates,
                                            state.llm, state.llm_model, recent)
     if subject is None:
-        subject = sample_subject(bucket, state.rng, state.templates)
+        subject = sample_subject(bucket, rng, state.templates)
     append_subject(state.subject_log, subject)
     state.subjects.append(subject)
     return subject
@@ -198,6 +209,12 @@ async def _pick_subject(verdicts, progress) -> Subject:
     if state.staged_subject is not None:
         subject = state.staged_subject
         state.staged_subject = None
+        if state.staged_rng_state is not None:
+            # Catch the shared stream up to exactly where the prefetcher's
+            # clone landed after sampling this subject — as far as a real
+            # draw would have advanced it, no further.
+            state.rng.setstate(state.staged_rng_state)
+            state.staged_rng_state = None
     else:
         subject = await _sample_fresh(verdicts, progress)
     state.active_subject_id = subject.id
@@ -238,6 +255,15 @@ async def _compute_next(progress):
         c, cls = _choose_comparison(subject, verdicts, state.rng)
         if c is None:
             return None
+        if state.prefetch is not None and state.prefetch.is_alive():
+            # An in-flight prefetch may be writing the very plate/renders
+            # this comparison needs. Without waiting, ensure_plate/
+            # ensure_render's start-time exists()/is-current checks race it:
+            # we'd queue a second generation, and the plate write's rmtree
+            # would delete the renders the prefetch just produced. Joining
+            # lets the speculative work land first, so the checks below hit
+            # cache instead.
+            state.prefetch.join()
         try:
             await _prepare(c, progress)
         except RenderError as exc:
@@ -312,6 +338,16 @@ def _predicted_verdicts(verdicts: list[Verdict], served: dict) -> list[Verdict]:
 async def _prefetch_async(served: dict) -> None:
     verdicts = _predicted_verdicts(_live_verdicts(), served)
     noop = lambda *a, **k: None                       # noqa: E731
+    # One clone for the whole call: the demand path's future draws — first
+    # (maybe) a fresh-subject sample, then a comparison choice — happen back
+    # to back on the SAME shared stream, so the prediction must chain them on
+    # the same clone rather than re-cloning state.rng per step (that would
+    # replay the same prefix twice instead of continuing it). state.rng
+    # itself is never read again after this line and never written to below;
+    # _pick_subject applies staged_rng_state on consumption instead (see
+    # State.staged_rng_state and _pick_subject).
+    pred_rng = random.Random()
+    pred_rng.setstate(state.rng.getstate())
     # _compute_next already incremented active_served for `served` (it runs
     # to completion before api_next hands off to us), so "the NEXT pick
     # rotates" is active_served >= PAIRS_PER_SUBJECT, not +1.
@@ -320,15 +356,14 @@ async def _prefetch_async(served: dict) -> None:
     if state.active_subject_id is None or (
             rotation_next and served["repeat_of"] is None):
         if state.staged_subject is None:
-            state.staged_subject = await _sample_fresh(verdicts, noop)
+            state.staged_subject = await _sample_fresh(verdicts, noop, rng=pred_rng)
+            state.staged_rng_state = pred_rng.getstate()
         subject = state.staged_subject
     else:
         subject = next((s for s in state.subjects
                         if s.id == state.active_subject_id), None)
         if subject is None:
             return
-    pred_rng = random.Random()
-    pred_rng.setstate(state.rng.getstate())
     c, _cls = _choose_comparison(subject, verdicts, pred_rng)
     if c is not None:
         await _prepare(c, noop)
