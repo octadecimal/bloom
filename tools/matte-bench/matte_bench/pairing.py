@@ -50,6 +50,7 @@ def next_sampled_comparison(subject: Subject, techniques: list[str],
                             verdicts: list[Verdict], rng: random.Random,
                             repeat_every: int = 20,
                             known: list[Subject] | None = None,
+                            cls: str = "A",
                             ) -> Comparison | None:
     """Pick the technique pair to judge on a freshly sampled subject.
 
@@ -60,6 +61,7 @@ def next_sampled_comparison(subject: Subject, techniques: list[str],
     """
     if len(techniques) < 2:
         return None
+    verdicts = [v for v in verdicts if v.cls == cls]
     seen = judged_pairs(verdicts)
     known = known or []
 
@@ -96,3 +98,20 @@ def next_sampled_comparison(subject: Subject, techniques: list[str],
     left, right = (a, b) if rng.random() < 0.5 else (b, a)
     return Comparison(subject=subject.id, bucket=subject.bucket,
                       left=left, right=right)
+
+
+def pick_class(bucket: str, verdicts: list[Verdict],
+               pools: dict[str, list[str]], playoff_open: bool) -> str | None:
+    """Which class to serve next in this bucket: fewest verdicts first, ties
+    alphabetical (A before B before X). A class needs two techniques to
+    compare; the playoff competes only once it is open."""
+    counts = {cls: 0 for cls, pool in pools.items() if len(pool) >= 2}
+    if playoff_open:
+        counts["X"] = 0
+    if not counts:
+        return None
+    for v in verdicts:
+        if v.bucket == bucket and v.cls in counts:
+            counts[v.cls] += 1
+    thinnest = min(counts.values())
+    return sorted(c for c, n in counts.items() if n == thinnest)[0]
