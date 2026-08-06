@@ -63,3 +63,25 @@ def test_stage1_ids_are_unique_across_nodes_and_separators():
 def test_technique_is_hashable():
     assert len({_t(), _t(id="renamed")}) == 1
     assert len({_t(), _t(params={"mask_blur": 4})}) == 2
+
+
+def test_backdrop_techniques_are_class_b_with_key_params():
+    from matte_bench.techniques import backdrop_techniques
+    got = backdrop_techniques()
+    assert len(got) == 2
+    assert all(t.cls == "B" and t.node == "backdrop-key" for t in got)
+    for t in got:
+        assert {"clause", "key_color", "tolerance", "softness", "despill"} <= set(t.params)
+    assert len({config_hash(t) for t in got}) == 2   # variants hash apart
+
+
+def test_qwen_techniques_gated_on_weights():
+    from matte_bench.techniques import qwen_techniques
+    assert qwen_techniques(None) == []
+    weights = {"unet": "qwen_image_fp8_e4m3fn.safetensors",
+               "clip": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+               "vae": "qwen_image_vae.safetensors"}
+    [t] = qwen_techniques(weights)
+    assert t.cls == "B" and t.node == "qwen-layered"
+    assert t.model == weights["unet"]
+    assert t.params == {"clip": weights["clip"], "vae": weights["vae"]}

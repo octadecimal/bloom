@@ -77,6 +77,41 @@ def stage1_models(available: dict[str, list[str]]) -> list[Technique]:
     return out
 
 
+# Class B, family 1: generate the subject on a flat key-colored backdrop and
+# key the color out afterwards (see matte_bench.keying). The clause is part of
+# the technique config, so editing it re-renders (config_hash covers params).
+BACKDROP_VARIANTS = (
+    ("chroma-green", (0, 177, 64),
+     "isolated on a solid flat chroma green (#00B140) studio backdrop, "
+     "even lighting, no shadows on the backdrop"),
+    ("chroma-magenta", (255, 0, 144),
+     "isolated on a solid flat chroma magenta (#FF0090) studio backdrop, "
+     "even lighting, no shadows on the backdrop"),
+)
+
+
+def backdrop_techniques() -> list[Technique]:
+    out = []
+    for name, key_color, clause in BACKDROP_VARIANTS:
+        out.append(Technique(
+            id=f"backdrop-{name}", cls="B", node="backdrop-key", model=name,
+            params={"clause": clause, "key_color": list(key_color),
+                    "tolerance": 60, "softness": 60, "despill": 1},
+            post=()))
+    return out
+
+
+def qwen_techniques(weights: dict | None) -> list[Technique]:
+    """Class B, family 2: native-RGBA generation. Materializes only when the
+    probe found the full weight trio (see README-qwen.md for the install)."""
+    if not weights:
+        return []
+    return [Technique(id="qwen-layered", cls="B", node="qwen-layered",
+                      model=weights["unet"],
+                      params={"clip": weights["clip"], "vae": weights["vae"]},
+                      post=())]
+
+
 def matting_graph(t: Technique, image_name: str) -> dict:
     inputs = {"image": ["load", 0], "model": t.model}
     for key in _NODE_PARAMS.get(t.node, ()):
