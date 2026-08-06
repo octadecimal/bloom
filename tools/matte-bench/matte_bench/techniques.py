@@ -80,16 +80,19 @@ def stage1_models(available: dict[str, list[str]]) -> list[Technique]:
 # Class B, family 1: generate the subject on a flat key-colored backdrop and
 # key the color out afterwards (see matte_bench.keying). The clause is part of
 # the technique config, so editing it re-renders (config_hash covers params) —
-# which is also why this wording must not revert to the pre-fix text: the old
-# hashes carry both_bad verdicts cast against renders whose sampled ground
-# directive was never stripped (see render.backdrop_prompt).
+# which is also why this wording must not revert: retired hashes carry
+# verdicts cast against worse renders (see tests: retired identities).
 BACKDROP_VARIANTS = (
     ("chroma-green", (0, 177, 64),
      "isolated on a solid flat chroma green (#00B140) studio backdrop "
-     "filling the entire frame, even lighting, no shadows on the backdrop"),
+     "filling the entire frame, perfectly uniform color, no vignetting, "
+     "no glow, no gradient, no light bloom, even lighting, no shadows on "
+     "the backdrop"),
     ("chroma-magenta", (255, 0, 144),
      "isolated on a solid flat chroma magenta (#FF0090) studio backdrop "
-     "filling the entire frame, even lighting, no shadows on the backdrop"),
+     "filling the entire frame, perfectly uniform color, no vignetting, "
+     "no glow, no gradient, no light bloom, even lighting, no shadows on "
+     "the backdrop"),
 )
 
 
@@ -100,7 +103,8 @@ def backdrop_techniques() -> list[Technique]:
             id=f"backdrop-{name}", cls="B", node="backdrop-key", model=name,
             params={"clause": clause, "key_color": list(key_color),
                     "key_source": "border-median",
-                    "tolerance": 60, "softness": 60, "despill": 1},
+                    "seed_tolerance": 60, "step_tolerance": 12,
+                    "hole_tolerance": 25, "softness": 30, "despill": 1},
             post=()))
     return out
 

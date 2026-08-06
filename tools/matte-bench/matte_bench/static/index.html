@@ -31,6 +31,12 @@
   .stage.loading img {
     visibility: hidden;
   }
+  /* No pre-key original exists for this side (legacy cache, qwen) — it's
+     showing its keyed render instead. Dimmed so that isn't mistaken for a
+     real original, per the "original truthfulness" spec. */
+  .stage img.dim {
+    opacity: 0.45;
+  }
   .overlay {
     display: none;
     position: absolute;
@@ -194,6 +200,7 @@
     alphaOnly = false,
     originalMode = false,
     current = null;
+  let techniqueCls = {};
 
   function setStatus(text, isError = false) {
     const el = document.getElementById('status');
@@ -292,6 +299,10 @@
   // written back into `el`). Callers await this to know when the "loading
   // images…" phase is over.
   function paint(el, subject, technique) {
+    // Any prior "no original — showing keyed render" dimming (see
+    // paintSideOriginal) only applies to that fallback state; every other
+    // paint path is a normal render and must not inherit it.
+    el.classList.remove('dim');
     return new Promise((resolve) => {
       el.onload = () => resolve();
       el.onerror = () => resolve();
@@ -313,6 +324,33 @@
       el.onerror = () => resolve();
       el.src = `/plate/${subject}.png`;
     });
+  }
+
+  // Class B sides were not cut from the plate — each shows its OWN pre-key
+  // generation. Falls back to the keyed render if no original exists
+  // (legacy cache, native-RGBA techniques).
+  function paintSideOriginal(el, subject, technique) {
+    if (techniqueCls[technique] !== 'B') return paintPlate(el, subject);
+    return new Promise((resolve) => {
+      el.onload = () => resolve();
+      // No original for this side — keep showing its keyed render, but dim
+      // it so that doesn't read as a real original (spec: "Original
+      // truthfulness"). paint() clears 'dim' on entry, so re-add it after.
+      el.onerror = () => {
+        paint(el, subject, technique).then(() => {
+          el.classList.add('dim');
+          resolve();
+        });
+      };
+      el.src = `/original/${subject}/${technique}.png`;
+    });
+  }
+
+  function originalNotice() {
+    if (!current) return '';
+    if (current.cls === 'B') return "showing each side's OWN generation (pre-key) — sides differ by design";
+    if (current.cls === 'X') return "showing each side's own source";
+    return 'showing ORIGINAL — same source for both sides';
   }
 
   // Per-side coverage badge, sampled client-side from the loaded render.
@@ -375,9 +413,9 @@
     if (!current) return;
     const imgL = document.getElementById('imgL');
     const imgR = document.getElementById('imgR');
-    document.getElementById('originalNotice').textContent = originalMode ? 'showing ORIGINAL — same source for both sides' : '';
+    document.getElementById('originalNotice').textContent = originalMode ? originalNotice() : '';
     if (originalMode) {
-      await Promise.all([paintPlate(imgL, current.subject), paintPlate(imgR, current.subject)]);
+      await Promise.all([paintSideOriginal(imgL, current.subject, current.left), paintSideOriginal(imgR, current.subject, current.right)]);
     } else {
       await Promise.all([paint(imgL, current.subject, current.left), paint(imgR, current.subject, current.right)]);
     }
@@ -512,5 +550,11 @@
       repaint();
     }
   });
+  fetch('/api/techniques')
+    .then((r) => r.json())
+    .then((m) => {
+      for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls;
+    })
+    .catch(() => {});
   load();
 </script>

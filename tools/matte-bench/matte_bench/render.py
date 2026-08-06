@@ -19,7 +19,7 @@ from app.assets.comfy import ImageEvent, LiveComfyProvider, ProgressEvent
 from app.assets.graph import build_graph
 
 from matte_bench.corpus import PLATE_WORKFLOW, Subject, plate_path
-from matte_bench.keying import chroma_key, sample_key_color
+from matte_bench.keying import region_key, sample_key_color
 from matte_bench.postops import apply_postops
 from matte_bench.sampler import DEFAULT_GROUND, GROUNDS
 from matte_bench.store import atomic_write_bytes
@@ -35,6 +35,12 @@ class RenderError(Exception):
 
 def render_path(root: Path, subject_id: str, t: Technique) -> Path:
     return root / "renders" / subject_id / f"{config_hash(t)}.png"
+
+
+def orig_path(root: Path, subject_id: str, t: Technique) -> Path:
+    """The pre-key generation a backdrop render was keyed from — cached so
+    the judging UI can show each Class B side's own original."""
+    return root / "renders" / subject_id / f"{config_hash(t)}.orig.png"
 
 
 def upload_plate(base_url: str, plate: Path) -> str:
@@ -82,21 +88,25 @@ async def _produce_class_a(s: Subject, t: Technique, root: Path,
     return await _generate(matting_graph(t, name), comfy_url, on_progress)
 
 
-async def _produce_class_b(s: Subject, t: Technique, comfy_url: str,
-                           on_progress) -> bytes | None:
+async def _produce_class_b(s: Subject, t: Technique, root: Path,
+                           comfy_url: str, on_progress) -> bytes | None:
     if t.node == "backdrop-key":
         prompt = backdrop_prompt(s.prompt, t.params["clause"])
         graph = build_graph(PLATE_WORKFLOW, prompt, s.width, s.height, s.seed)
         image = await _generate(graph, comfy_url, on_progress)
         if not image:
             return image
+        atomic_write_bytes(orig_path(root, s.id, t), image)
         rendered = Image.open(BytesIO(image)).convert("RGB")
         key = (sample_key_color(rendered)
                if t.params.get("key_source") == "border-median"
                else tuple(t.params["key_color"]))
-        keyed = chroma_key(rendered, key,
-                           t.params["tolerance"], t.params["softness"],
-                           bool(t.params.get("despill", 1)))
+        keyed = region_key(rendered, key,
+                           seed_tolerance=t.params["seed_tolerance"],
+                           step_tolerance=t.params["step_tolerance"],
+                           hole_tolerance=t.params["hole_tolerance"],
+                           softness=t.params["softness"],
+                           despill=bool(t.params.get("despill", 1)))
         buf = BytesIO()
         keyed.save(buf, "PNG")
         return buf.getvalue()
@@ -114,7 +124,7 @@ async def ensure_render(s: Subject, t: Technique, root: Path, comfy_url: str,
         return dest
     try:
         if t.cls == "B":
-            image = await _produce_class_b(s, t, comfy_url, on_progress)
+            image = await _produce_class_b(s, t, root, comfy_url, on_progress)
         else:
             image = await _produce_class_a(s, t, root, comfy_url, on_progress)
     except RenderError:
