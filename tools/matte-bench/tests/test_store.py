@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from matte_bench.store import (
@@ -39,3 +40,25 @@ def test_atomic_write_leaves_no_partial_file(tmp_path: Path):
     atomic_write_bytes(target, b"abc")
     assert target.read_bytes() == b"abc"
     assert list(tmp_path.iterdir()) == [target]  # no temp left behind
+
+
+def test_old_verdict_lines_parse_as_class_a(tmp_path):
+    """Lines written before the cls field must read back as Class A."""
+    log = tmp_path / "verdicts.jsonl"
+    log.write_text(json.dumps({
+        "subject": "s1", "bucket": "wispy", "left": "aaa", "right": "bbb",
+        "winner": "left", "plate_hash": "h1", "ts": "t", "repeat_of": None,
+    }) + "\n", encoding="utf-8")
+    [v] = read_verdicts(log)
+    assert v.cls == "A"
+
+
+def test_append_verdict_writes_cls(tmp_path):
+    log = tmp_path / "verdicts.jsonl"
+    append_verdict(log, Verdict(subject="s1", bucket="wispy", left="aaa",
+                                right="bbb", winner="tie", plate_hash="h1",
+                                ts="t", cls="X"))
+    line = json.loads(log.read_text(encoding="utf-8").strip())
+    assert line["cls"] == "X"
+    [v] = read_verdicts(log)
+    assert v.cls == "X"

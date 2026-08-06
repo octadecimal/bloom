@@ -19,6 +19,7 @@ class Verdict:
     plate_hash: str
     ts: str
     repeat_of: str | None = None
+    cls: str = "A"       # "A" (same pixels) | "B" (different pixels) | "X" (playoff)
 
 
 @dataclass(frozen=True)
