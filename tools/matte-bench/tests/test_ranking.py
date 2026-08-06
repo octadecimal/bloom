@@ -2,9 +2,9 @@ from matte_bench.ranking import fit, separated, standings
 from matte_bench.store import Verdict
 
 
-def _v(left, right, winner, bucket="wispy", subject="s1"):
-    return Verdict(subject=subject, bucket=bucket, left=left, right=right,
-                   winner=winner, plate_hash="h", ts="2026-08-04T00:00:00Z")
+def _v(left, right, winner, bucket="wispy", cls="A"):
+    return Verdict(subject="s1", bucket=bucket, left=left, right=right,
+                   winner=winner, plate_hash="h", ts="t", cls=cls)
 
 
 def test_fit_ranks_a_dominant_winner_highest():
@@ -73,3 +73,18 @@ def test_separated_respects_the_evidence_floor_boundary():
     at_floor = standings([_v("a", "b", "left") for _ in range(8)], "wispy")
     assert separated(below) is False
     assert separated(at_floor) is True
+
+
+def test_standings_never_mix_classes():
+    """A and B verdicts in the same bucket must fit separately."""
+    verdicts = [_v("a1", "a2", "left") for _ in range(10)]
+    verdicts += [_v("b1", "b2", "left", cls="B") for _ in range(10)]
+    a_rows = standings(verdicts, "wispy")            # default cls="A"
+    b_rows = standings(verdicts, "wispy", cls="B")
+    assert {r.technique for r in a_rows} == {"a1", "a2"}
+    assert {r.technique for r in b_rows} == {"b1", "b2"}
+
+
+def test_standings_empty_for_class_with_no_verdicts():
+    verdicts = [_v("a1", "a2", "left")]
+    assert standings(verdicts, "wispy", cls="X") == []
