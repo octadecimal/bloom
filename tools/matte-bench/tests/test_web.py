@@ -24,6 +24,8 @@ def _client(tmp_path, monkeypatch=None):
     state.prefetch = None
     state.staged_subject = None
     state.staged_rng_state = None
+    state.generation = 0
+    state.staged_generation = None
     state.root = tmp_path
     state.subjects = []
     state.templates = {"wispy": {"width": 8, "height": 8,
@@ -794,8 +796,62 @@ def test_pick_subject_consumes_staged_subject(bench_state):
     staged = Subject(id="staged-1", bucket="wispy", prompt="p", seed=9,
                      width=64, height=64)
     web.state.staged_subject = staged
+    # A freshly staged pair is stamped with the generation the prefetcher
+    # observed when it staged; matching state.generation here is what marks
+    # it fresh (see test_pick_subject_drops_a_stale_staged_subject for the
+    # mismatch case).
+    web.state.staged_generation = web.state.generation
     web.state.active_subject_id = None   # forces rotation
     got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
     assert got.id == "staged-1"
     assert web.state.staged_subject is None
+    assert web.state.staged_generation is None
     assert web.state.active_subject_id == "staged-1"
+
+
+def test_pick_subject_drops_a_stale_staged_subject(bench_state):
+    """Task-13 review Finding 2 residual: a staged pair can go stale before
+    it's consumed. Concrete race: the prefetch thread hasn't finished writing
+    staged_subject when the next rotation happens, so _pick_subject takes the
+    _sample_fresh fallback and rotates on its own (bumping state.generation);
+    when the prefetch's staged_subject/staged_rng_state/staged_generation
+    eventually land, they're predictions for a rotation that already
+    happened. Consuming them on some LATER rotation would setstate() the
+    shared rng backward past every draw the intervening round(s) already
+    made — replaying already-used randomness. The generation stamp must
+    catch this: a staged pair whose staged_generation no longer matches
+    state.generation is dropped, not consumed, and state.rng is left alone."""
+    import asyncio
+    from matte_bench import web
+
+    web.state.active_subject_id = None
+    web.state.staged_subject = None
+
+    # Round 1: nothing staged yet -> fallback rotation. Bumps state.generation
+    # 0 -> 1 and advances state.rng for real.
+    first = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert web.state.generation == 1
+    rng_after_first_rotation = web.state.rng.getstate()
+
+    # The prefetch thread now (late) finishes writing its prediction — staged
+    # while generation was still 0, before the fallback rotation above ran.
+    stale = Subject(id="stale-staged", bucket="wispy", prompt="p", seed=9,
+                    width=64, height=64)
+    stale_rng_state = random.Random(999).getstate()   # any state != current
+    web.state.staged_subject = stale
+    web.state.staged_rng_state = stale_rng_state
+    web.state.staged_generation = 0   # stamped for the generation that ended
+
+    # Force a second rotation (simulating PAIRS_PER_SUBJECT exhausted on the
+    # subject the fallback picked) and confirm the stale pair is dropped, not
+    # consumed: a fresh subject is drawn instead (advancing state.rng further
+    # forward from where the first rotation left it), and state.rng is never
+    # rewound to stale_rng_state.
+    web.state.active_served = web.PAIRS_PER_SUBJECT
+    second = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert second.id != "stale-staged"
+    assert second.id != first.id
+    assert web.state.rng.getstate() != stale_rng_state
+    assert web.state.rng.getstate() != rng_after_first_rotation
+    assert web.state.staged_subject is None
+    assert web.state.staged_generation is None

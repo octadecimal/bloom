@@ -69,6 +69,16 @@ class State:
     # consumes the staged subject, so the shared stream advances exactly as
     # far as a real draw would have, never further (see _prefetch_async).
     staged_rng_state: tuple | None = None
+    # Bumped by _pick_subject every time it rotates to a new active subject
+    # (whether from a staged pair or the fresh-draw fallback). staged_generation
+    # records the value the prefetcher observed when it staged its prediction;
+    # a mismatch at consumption time means a rotation already happened via the
+    # fallback (the prefetch hadn't finished writing staged_subject in time),
+    # so the staged pair is stale and must be dropped, not consumed — applying
+    # its staged_rng_state would setstate() state.rng backward past draws that
+    # already happened in the intervening round(s).
+    generation: int = 0
+    staged_generation: int | None = None
     prefetch: threading.Thread | None = None
     prefetch_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -200,25 +210,39 @@ async def _sample_fresh(verdicts, progress, rng: random.Random | None = None) ->
 async def _pick_subject(verdicts, progress) -> Subject:
     """Reuse the active sampled subject for a few comparisons (its plate is
     cached), then rotate: to the prefetcher's staged subject when one is
-    ready, else to a fresh draw."""
+    ready AND still fresh, else to a fresh draw.
+
+    "Still fresh" matters because the prefetch thread can still be writing
+    staged_subject when THIS rotation happens (the join in _compute_next only
+    guards _prepare, not this call): if so, we fall back to a real draw here,
+    and by the time the prefetch finally finishes staging, its prediction was
+    for a rotation that already happened — stale. state.generation (bumped on
+    every rotation, whichever path produced it) versus staged_generation (the
+    generation the prefetcher staged against) is exactly that check: on a
+    mismatch we drop the stale pair instead of consuming it, since applying
+    its staged_rng_state would setstate() state.rng backward past draws that
+    already happened in the intervening round(s)."""
     if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
         active = next((s for s in state.subjects
                        if s.id == state.active_subject_id), None)
         if active is not None:
             return active
-    if state.staged_subject is not None:
+    if (state.staged_subject is not None
+            and state.staged_generation == state.generation):
         subject = state.staged_subject
-        state.staged_subject = None
         if state.staged_rng_state is not None:
             # Catch the shared stream up to exactly where the prefetcher's
             # clone landed after sampling this subject — as far as a real
             # draw would have advanced it, no further.
             state.rng.setstate(state.staged_rng_state)
-            state.staged_rng_state = None
     else:
         subject = await _sample_fresh(verdicts, progress)
+    state.staged_subject = None
+    state.staged_rng_state = None
+    state.staged_generation = None
     state.active_subject_id = subject.id
     state.active_served = 0
+    state.generation += 1
     return subject
 
 
@@ -348,6 +372,13 @@ async def _prefetch_async(served: dict) -> None:
     # State.staged_rng_state and _pick_subject).
     pred_rng = random.Random()
     pred_rng.setstate(state.rng.getstate())
+    # Snapshot state.generation at the SAME moment as the rng clone above,
+    # not after the (possibly slow, LLM-backed) sampling await below: if a
+    # real rotation happens while we're mid-sample, state.generation moves on
+    # without us, and stamping the post-await value would tag our now-stale
+    # prediction as fresh again — exactly the bug this generation check
+    # exists to prevent.
+    predicted_generation = state.generation
     # _compute_next already incremented active_served for `served` (it runs
     # to completion before api_next hands off to us), so "the NEXT pick
     # rotates" is active_served >= PAIRS_PER_SUBJECT, not +1.
@@ -355,9 +386,15 @@ async def _prefetch_async(served: dict) -> None:
                      or state.active_served >= PAIRS_PER_SUBJECT)
     if state.active_subject_id is None or (
             rotation_next and served["repeat_of"] is None):
-        if state.staged_subject is None:
+        if (state.staged_subject is None
+                or state.staged_generation != predicted_generation):
+            # Nothing staged yet, or what's staged is itself already stale
+            # (predicted for a rotation the fallback path already performed
+            # before this call started) — draw a fresh prediction rather than
+            # reuse or extend a stale one.
             state.staged_subject = await _sample_fresh(verdicts, noop, rng=pred_rng)
             state.staged_rng_state = pred_rng.getstate()
+            state.staged_generation = predicted_generation
         subject = state.staged_subject
     else:
         subject = next((s for s in state.subjects
