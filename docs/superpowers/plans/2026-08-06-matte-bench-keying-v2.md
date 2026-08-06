@@ -25,10 +25,12 @@
 ### Task 1: `region_key` — border-connected, gradient-tolerant keyer
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/keying.py` (add `region_key`, delete `chroma_key`; keep `sample_key_color` unchanged)
 - Modify: `tools/matte-bench/tests/test_keying.py` (replace `chroma_key` tests with the `region_key` contract)
 
 **Interfaces:**
+
 - Consumes: `sample_key_color(img) -> tuple[int, int, int]` (existing, unchanged).
 - Produces: `region_key(img: Image.Image, key_color: tuple[int, int, int], *, seed_tolerance: float, step_tolerance: float, hole_tolerance: float, softness: float, despill: bool = True) -> Image.Image` — RGBA output; Task 3 calls it from `render.py`.
 
@@ -300,10 +302,12 @@ git commit -m "feat(matte-bench): region-grow keying, gradient-tolerant and conn
 ### Task 2: Techniques — new params, hardened clause, retired hashes pinned
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/techniques.py` (`BACKDROP_VARIANTS`, `backdrop_techniques`)
 - Modify: `tools/matte-bench/tests/test_techniques.py`
 
 **Interfaces:**
+
 - Produces: `backdrop_techniques() -> list[Technique]` where each `t.params` now carries keys `clause, key_color, key_source, seed_tolerance, step_tolerance, hole_tolerance, softness, despill`. Task 3's render path reads exactly these names.
 
 - [ ] **Step 1: Update the failing tests first**
@@ -404,10 +408,12 @@ git commit -m "feat(matte-bench): retire keying-v1 hashes; region params + anti-
 ### Task 3: Render — wire `region_key`, cache the pre-key original
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/render.py`
 - Modify: `tools/matte-bench/tests/test_render.py`
 
 **Interfaces:**
+
 - Consumes: `region_key(...)` from Task 1, params names from Task 2.
 - Produces: `orig_path(root: Path, subject_id: str, t: Technique) -> Path` returning `root / "renders" / subject_id / f"{config_hash(t)}.orig.png"`. Task 4's route reads the same `<hash>.orig.png` naming.
 
@@ -573,10 +579,12 @@ git commit -m "feat(matte-bench): cache pre-key original beside each backdrop re
 ### Task 4: Web — serve the original
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/web.py` (new route, next to `api_render`)
 - Modify: `tools/matte-bench/tests/test_web.py`
 
 **Interfaces:**
+
 - Consumes: the `<hash>.orig.png` naming from Task 3.
 - Produces: `GET /original/{subject}/{technique}.png` → the pre-key image, 404 when absent. Task 5's UI fetches exactly this URL.
 
@@ -651,6 +659,7 @@ git commit -m "feat(matte-bench): serve pre-key originals for Class B sides"
 ### Task 5: UI — truthful per-class original toggle
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/static/index.html`
 
 No automated tests (repo ruling: no browser harness for the bench). Verified manually in Task 6's live walkthrough. Keep the changes minimal and surgical.
@@ -668,7 +677,9 @@ In the startup sequence (the code that runs `load()` on page open — find `load
 ```js
 fetch('/api/techniques')
   .then((r) => r.json())
-  .then((m) => { for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls; })
+  .then((m) => {
+    for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls;
+  })
   .catch(() => {});
 ```
 
@@ -684,7 +695,9 @@ function paintSideOriginal(el, subject, technique) {
   if (techniqueCls[technique] !== 'B') return paintPlate(el, subject);
   return new Promise((resolve) => {
     el.onload = () => resolve();
-    el.onerror = () => { paint(el, subject, technique).then(resolve); };
+    el.onerror = () => {
+      paint(el, subject, technique).then(resolve);
+    };
     el.src = `/original/${subject}/${technique}.png`;
   });
 }

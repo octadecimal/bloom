@@ -336,7 +336,12 @@
       // No original for this side — keep showing its keyed render, but dim
       // it so that doesn't read as a real original (spec: "Original
       // truthfulness"). paint() clears 'dim' on entry, so re-add it after.
-      el.onerror = () => { paint(el, subject, technique).then(() => { el.classList.add('dim'); resolve(); }); };
+      el.onerror = () => {
+        paint(el, subject, technique).then(() => {
+          el.classList.add('dim');
+          resolve();
+        });
+      };
       el.src = `/original/${subject}/${technique}.png`;
     });
   }
@@ -547,7 +552,9 @@
   });
   fetch('/api/techniques')
     .then((r) => r.json())
-    .then((m) => { for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls; })
+    .then((m) => {
+      for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls;
+    })
     .catch(() => {});
   load();
 </script>

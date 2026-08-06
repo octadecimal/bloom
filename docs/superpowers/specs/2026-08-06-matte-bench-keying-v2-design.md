@@ -20,7 +20,7 @@ low-contrast) surfaced three follow-ups:
    side).
 
 2. **Keying through the subject.** The same global rule has no notion of
-   *where* the backdrop is, so subject pixels whose color happens to sit
+   _where_ the backdrop is, so subject pixels whose color happens to sit
    near the border median are keyed out of the subject's own body. Observed
    live, and worse than the halo in practice: the glow-soft glass orb
    half-erased, the crisp-text letter faces punched through, the
@@ -28,17 +28,17 @@ low-contrast) surfaced three follow-ups:
    smudging on green in low-contrast.
 
 3. **The "original" toggle lies in Class B.** Pressing `o` shows the
-   subject's *plate* on both panels with the notice "showing ORIGINAL — same
+   subject's _plate_ on both panels with the notice "showing ORIGINAL — same
    source for both sides". For Class B that is false twice over: neither
-   side was cut from the plate, and the two sides are *different
-   generations* (same seed, different prompt — the clause is part of the
+   side was cut from the plate, and the two sides are _different
+   generations_ (same seed, different prompt — the clause is part of the
    technique). This is the confusion the operator reported: the two
    "originals" they saw were not the images either side was actually keyed
    from.
 
 Per-side differing art in Class B is **by design** (the class exists to
 compare how the image is made; the prior spec explicitly accepts that B/X
-sides "visibly differ in art"). The defect is only that the UI *presents* a
+sides "visibly differ in art"). The defect is only that the UI _presents_ a
 shared original that does not exist.
 
 ## Goal
@@ -79,7 +79,7 @@ connectivity-aware keyer with this behavioral contract:
   color is within `step_tolerance` of the neighbor it grew from. Smooth
   gradients (halo, vignette, soft shadow) pass step by step; sharp
   subject edges block the walk. This is what makes the keyer
-  gradient-tolerant *and* unable to eat border-alike subject interiors:
+  gradient-tolerant _and_ unable to eat border-alike subject interiors:
   connectivity, not color alone, decides.
 - **Enclosed holes.** After the grow, a not-yet-keyed pixel is also keyed
   when it sits within `hole_tolerance` (strict) of the color of the
@@ -139,7 +139,7 @@ repo-wide ruling):
 
 - **Keying:** synthetic-image unit tests — flat backdrop fully keyed
   (regression); linear-gradient backdrop fully keyed (halo case); a
-  border-colored patch *inside* the subject, disconnected from the border,
+  border-colored patch _inside_ the subject, disconnected from the border,
   survives (erosion case); an enclosed hole matching adjacent backdrop is
   keyed (enclosed-holes case); sharp-edge subject untouched; soft-edge ramp
   present; despill behavior unchanged; determinism (same input → same
