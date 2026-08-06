@@ -17,7 +17,9 @@ from pydantic import BaseModel, field_validator
 from matte_bench.corpus import (
     BUCKETS, Subject, append_subject, ensure_plate, plate_hash, plate_path,
 )
-from matte_bench.pairing import least_judged_bucket, next_sampled_comparison
+from matte_bench.pairing import (
+    Comparison, least_judged_bucket, next_sampled_comparison, pick_class,
+)
 from matte_bench.playoff import derive_cls, playoff_pair
 from matte_bench.promptgen import sample_subject_llm
 from matte_bench.progress import progress
@@ -190,15 +192,37 @@ async def _pick_subject(verdicts, progress) -> Subject:
     return subject
 
 
+def _pools() -> dict[str, list[str]]:
+    pools: dict[str, list[str]] = {"A": [], "B": []}
+    for h in state.techniques:
+        pools.setdefault(state.technique_cls.get(h, "A"), []).append(h)
+    return pools
+
+
+def _choose_comparison(subject, verdicts, rng):
+    """The comparison to serve on this subject, and its class. The playoff
+    pair bypasses the sampled picker: its two contenders are fixed."""
+    pools = _pools()
+    pair = playoff_pair(verdicts, subject.bucket)
+    cls = pick_class(subject.bucket, verdicts, pools, pair is not None)
+    if cls is None:
+        return None, None
+    if cls == "X":
+        a, b = pair
+        left, right = (a, b) if rng.random() < 0.5 else (b, a)
+        return Comparison(subject=subject.id, bucket=subject.bucket,
+                          left=left, right=right), "X"
+    c = next_sampled_comparison(subject, pools[cls], verdicts, rng,
+                                cls=cls, known=state.subjects)
+    return c, cls
+
+
 async def _compute_next(progress):
     for _ in range(8):
         progress("choosing comparison…")
-        if len(state.techniques) < 2:
-            return None
         verdicts = _live_verdicts()
         subject = await _pick_subject(verdicts, progress)
-        c = next_sampled_comparison(subject, state.techniques, verdicts,
-                                    state.rng, known=state.subjects)
+        c, cls = _choose_comparison(subject, verdicts, state.rng)
         if c is None:
             return None
         try:
@@ -218,7 +242,7 @@ async def _compute_next(progress):
         if c.repeat_of is None and c.subject == state.active_subject_id:
             state.active_served += 1
         return {"subject": c.subject, "bucket": c.bucket, "left": c.left,
-                "right": c.right, "repeat_of": c.repeat_of}
+                "right": c.right, "repeat_of": c.repeat_of, "cls": cls}
     return None
 
 

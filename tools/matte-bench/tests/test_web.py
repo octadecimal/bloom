@@ -74,6 +74,14 @@ def client_with_state(tmp_path):
     return client, state
 
 
+@pytest.fixture
+def bench_state(client_with_state):
+    """Alias for client_with_state: state.techniques holds the four hashes
+    {a1x, a2x, b1x, b2x} and state.technique_cls maps them to pools A/B, which
+    is exactly what the class-aware serving helpers below need."""
+    return client_with_state
+
+
 def test_health(tmp_path):
     assert _client(tmp_path).get("/health").json()["status"] == "ok"
 
@@ -571,6 +579,28 @@ def test_standings_route_takes_cls(client_with_state):
     client, _ = client_with_state
     assert client.get("/api/standings/wispy?cls=B").status_code == 200
     assert client.get("/api/standings/wispy?cls=Z").status_code == 422
+
+
+def test_choose_comparison_serves_thinner_class(bench_state):
+    """With A well-fed and B starved, the next comparison is class B."""
+    from matte_bench.web import _choose_comparison, state
+    # bench_state installs pools A: [a1x, a2x], B: [b1x, b2x]
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = [Verdict(subject="s1", bucket="wispy", left="a1x", right="a2x",
+                        winner="left", plate_hash="h", ts="t")] * 4
+    c, cls = _choose_comparison(s, verdicts, random.Random(7))
+    assert cls == "B" and {c.left, c.right} == {"b1x", "b2x"}
+
+
+def test_choose_comparison_serves_playoff_when_open(bench_state):
+    from matte_bench.web import _choose_comparison
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = ([Verdict(subject="s1", bucket="wispy", left="a1x", right="a2x",
+                         winner="left", plate_hash="h", ts="t")] * 12
+                + [Verdict(subject="s1", bucket="wispy", left="b1x", right="b2x",
+                           winner="left", plate_hash="h", ts="t", cls="B")] * 12)
+    c, cls = _choose_comparison(s, verdicts, random.Random(7))
+    assert cls == "X" and {c.left, c.right} == {"a1x", "b1x"}
 
 
 def test_techniques_route_includes_cls(client_with_state):
