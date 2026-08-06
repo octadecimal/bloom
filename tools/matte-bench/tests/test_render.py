@@ -45,8 +45,10 @@ def _b(**over):
     base = dict(id="backdrop-chroma-green", cls="B", node="backdrop-key",
                 model="chroma-green",
                 params={"clause": "isolated on a solid flat chroma green backdrop",
-                        "key_color": [0, 177, 64], "tolerance": 60,
-                        "softness": 60, "despill": 1},
+                        "key_color": [0, 177, 64],
+                        "key_source": "border-median",
+                        "seed_tolerance": 60, "step_tolerance": 12,
+                        "hole_tolerance": 25, "softness": 30, "despill": 1},
                 post=())
     return Technique(**{**base, **over})
 
@@ -132,8 +134,7 @@ def test_backdrop_render_keys_on_sampled_border_color(tmp_path, monkeypatch):
     monkeypatch.setattr("matte_bench.render.LiveComfyProvider", FakeProvider)
     s = Subject(id="s1", bucket="wispy", prompt="a fern", seed=3,
                 width=32, height=32)
-    t = _b(params={**_b().params, "key_source": "border-median"})
-    dest = asyncio.run(ensure_render(s, t, tmp_path, "http://gpu:8188"))
+    dest = asyncio.run(ensure_render(s, _b(), tmp_path, "http://gpu:8188"))
     out = Image.open(dest).convert("RGBA")
     assert out.getpixel((0, 0))[3] == 0          # wall keyed out
     assert out.getpixel((16, 16))[3] == 255      # subject kept
@@ -169,3 +170,53 @@ def test_backdrop_render_generates_and_keys(tmp_path, monkeypatch):
     prompts = [n["inputs"].get("text") for n in captured["graph"].values()
                if isinstance(n.get("inputs"), dict) and "text" in n.get("inputs", {})]
     assert any(p and "a fern" in p and "chroma green" in p for p in prompts)
+
+
+from matte_bench.render import orig_path
+
+
+def test_orig_path_is_sibling_of_render(tmp_path: Path):
+    t = _b()
+    assert orig_path(tmp_path, "s1", t).name == f"{config_hash(t)}.orig.png"
+    assert orig_path(tmp_path, "s1", t).parent == render_path(tmp_path, "s1", t).parent
+
+
+def test_backdrop_render_writes_pre_key_original(tmp_path, monkeypatch):
+    """The judging UI's 'original' toggle must show what each Class B side
+    was keyed FROM — that image exists only if the render path saves it."""
+    class FakeProvider:
+        def __init__(self, base_url):
+            pass
+
+        async def generate(self, graph):
+            from matte_bench.render import ImageEvent
+            yield ImageEvent(data=_flat_png((0, 177, 64)))
+
+    monkeypatch.setattr("matte_bench.render.LiveComfyProvider", FakeProvider)
+    s = Subject(id="s1", bucket="wispy", prompt="a fern", seed=3,
+                width=16, height=16)
+    asyncio.run(ensure_render(s, _b(), tmp_path, "http://gpu:8188"))
+    orig = orig_path(tmp_path, "s1", _b())
+    assert orig.exists()
+    assert Image.open(orig).getpixel((0, 0)) == (0, 177, 64)   # pre-key pixels
+
+
+def test_class_a_render_writes_no_original(tmp_path, monkeypatch):
+    class FakeProvider:
+        def __init__(self, base_url):
+            pass
+
+        async def generate(self, graph):
+            from matte_bench.render import ImageEvent
+            yield ImageEvent(data=_flat_png((1, 2, 3)))
+
+    monkeypatch.setattr("matte_bench.render.LiveComfyProvider", FakeProvider)
+    monkeypatch.setattr("matte_bench.render.upload_plate",
+                        lambda base_url, plate: "plate.png")
+    plate = plate_path(tmp_path, "s1")
+    plate.parent.mkdir(parents=True, exist_ok=True)
+    plate.write_bytes(_flat_png((1, 2, 3)))
+    s = Subject(id="s1", bucket="wispy", prompt="a fern", seed=3,
+                width=16, height=16)
+    asyncio.run(ensure_render(s, _t(), tmp_path, "http://gpu:8188"))
+    assert not orig_path(tmp_path, "s1", _t()).exists()
