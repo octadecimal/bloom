@@ -65,14 +65,16 @@ def test_technique_is_hashable():
     assert len({_t(), _t(params={"mask_blur": 4})}) == 2
 
 
-def test_backdrop_hashes_left_poisoned_identities_behind():
-    """26ebdc9a25576982 / 8d9d35012cc502c2 accumulated both_bad verdicts and
-    cached opaque renders while backdrop_prompt still appended the chroma
-    clause after the ground directive. The verdict log is append-only, so the
-    fixed techniques must carry new identities or they inherit that history."""
+def test_backdrop_hashes_left_retired_identities_behind():
+    """26ebdc9a25576982 / 8d9d35012cc502c2 are poisoned (both_bad verdicts
+    against never-keyed renders, PR #229). 552a60c75a287bb0 /
+    4bc8eba4d3cfc3d5 are keying v1 (global key: halo retention + subject
+    erosion, measured live 2026-08-06). The log is append-only, so keying v2
+    must carry fresh identities."""
     from matte_bench.techniques import backdrop_techniques
-    poisoned = {"26ebdc9a25576982", "8d9d35012cc502c2"}
-    assert {config_hash(t) for t in backdrop_techniques()}.isdisjoint(poisoned)
+    retired = {"26ebdc9a25576982", "8d9d35012cc502c2",
+               "552a60c75a287bb0", "4bc8eba4d3cfc3d5"}
+    assert {config_hash(t) for t in backdrop_techniques()}.isdisjoint(retired)
 
 
 def test_backdrop_techniques_are_class_b_with_key_params():
@@ -81,8 +83,20 @@ def test_backdrop_techniques_are_class_b_with_key_params():
     assert len(got) == 2
     assert all(t.cls == "B" and t.node == "backdrop-key" for t in got)
     for t in got:
-        assert {"clause", "key_color", "tolerance", "softness", "despill"} <= set(t.params)
+        assert {"clause", "key_color", "key_source", "seed_tolerance",
+                "step_tolerance", "hole_tolerance", "softness",
+                "despill"} <= set(t.params)
+        assert t.params["key_source"] == "border-median"
     assert len({config_hash(t) for t in got}) == 2   # variants hash apart
+
+
+def test_backdrop_clause_fights_the_vignette():
+    """Layered halo defense: the clause asks flux for a uniform backdrop so
+    the keyer has less gradient to chase."""
+    from matte_bench.techniques import BACKDROP_VARIANTS
+    for _, _, clause in BACKDROP_VARIANTS:
+        assert "no vignetting" in clause
+        assert "no gradient" in clause
 
 
 def test_qwen_techniques_gated_on_weights():
