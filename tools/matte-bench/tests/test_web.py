@@ -492,8 +492,9 @@ def test_progress_reports_totals_and_unseparated_bucket_without_winner(tmp_path)
         })
     body = client.get("/api/progress").json()
     assert body["total"] == 2
-    assert body["buckets"] == [
-        {"bucket": "wispy", "count": 2, "separated": False, "winner": None}]
+    assert body["classes"] == [
+        {"cls": "A", "total": 2, "buckets": [
+            {"bucket": "wispy", "count": 2, "separated": False, "winner": None}]}]
 
 
 def test_progress_names_the_winner_once_a_bucket_separates(tmp_path):
@@ -505,8 +506,8 @@ def test_progress_names_the_winner_once_a_bucket_separates(tmp_path):
             "winner": "left",
         })
     body = client.get("/api/progress").json()
-    assert body["buckets"][0]["separated"] is True
-    assert body["buckets"][0]["winner"] == "Node/BiRefNet_alpha"
+    assert body["classes"][0]["buckets"][0]["separated"] is True
+    assert body["classes"][0]["buckets"][0]["winner"] == "Node/BiRefNet_alpha"
 
 
 def test_progress_counts_only_fresh_verdicts(tmp_path):
@@ -521,7 +522,7 @@ def test_progress_counts_only_fresh_verdicts(tmp_path):
     state.plate_hashes["s1"] = "regenerated"  # invalidates both verdicts
     body = client.get("/api/progress").json()
     assert body["total"] == 0
-    assert body["buckets"] == []
+    assert body["classes"] == []
 
 
 def test_progress_is_served_with_no_store(tmp_path):

@@ -1,40 +1,46 @@
-from matte_bench.progress import BucketProgress, ProgressReport, progress
+from matte_bench.progress import progress
 from matte_bench.store import Verdict
 
 
-def _v(bucket, left="a", right="b", winner="left"):
+def _v(left, right, winner="left", bucket="wispy", cls="A"):
     return Verdict(subject="s1", bucket=bucket, left=left, right=right,
-                   winner=winner, plate_hash="h", ts="2026-08-05T00:00:00Z")
+                   winner=winner, plate_hash="h", ts="t", cls=cls)
 
 
-def test_empty_log_reports_zero_and_no_buckets():
-    assert progress([], {}) == ProgressReport(total=0, buckets=())
+def test_empty_log():
+    report = progress([], {})
+    assert report.total == 0 and report.classes == ()
 
 
-def test_thin_bucket_is_counted_but_not_separated_and_names_no_winner():
-    report = progress([_v("wispy")], {"a": "Node/BiRefNet_alpha"})
-    assert report.total == 1
-    assert report.buckets == (
-        BucketProgress(bucket="wispy", count=1, separated=False, winner=None),)
-
-
-def test_separated_bucket_carries_the_winners_human_label():
-    verdicts = [_v("wispy") for _ in range(10)]  # 10 unanimous wins for "a"
-    report = progress(verdicts, {"a": "Node/BiRefNet_alpha"})
-    assert report.buckets[0].separated is True
-    assert report.buckets[0].winner == "Node/BiRefNet_alpha"
-
-
-def test_winner_falls_back_to_the_hash_when_no_label_is_known():
-    verdicts = [_v("wispy") for _ in range(10)]
+def test_single_class_counts_and_blindness():
+    verdicts = [_v("t1", "t2"), _v("t1", "t2", bucket="filigree"),
+                _v("t1", "t2", bucket="filigree")]
     report = progress(verdicts, {})
-    assert report.buckets[0].winner == "a"
+    assert report.total == 3
+    [a] = report.classes
+    assert a.cls == "A" and a.total == 3
+    assert [b.bucket for b in a.buckets] == ["filigree", "wispy"]  # count desc
+    assert all(b.winner is None for b in a.buckets)  # unseparated: blind
 
 
-def test_buckets_sort_by_count_descending_then_name():
-    verdicts = ([_v("wispy")] * 2 + [_v("filigree")] * 3
-                + [_v("crisp-text")] * 2)
+def test_separated_bucket_names_winner():
+    verdicts = [_v("t1", "t2") for _ in range(12)]
+    report = progress(verdicts, {"t1": "RMBG/BiRefNet-HR"})
+    [a] = report.classes
+    assert a.buckets[0].separated and a.buckets[0].winner == "RMBG/BiRefNet-HR"
+
+
+def test_classes_partition_and_sort():
+    verdicts = [_v("a1", "a2")] * 2 + [_v("b1", "b2", cls="B")] * 3
     report = progress(verdicts, {})
-    assert [b.bucket for b in report.buckets] == [
-        "filigree", "crisp-text", "wispy"]
-    assert report.total == 7
+    assert report.total == 5
+    assert [c.cls for c in report.classes] == ["A", "B"]
+    assert report.classes[0].total == 2 and report.classes[1].total == 3
+
+
+def test_class_b_winner_from_b_standings_only():
+    verdicts = [_v("a1", "a2")] * 12 + [_v("b1", "b2", cls="B")] * 12
+    report = progress(verdicts, {"a1": "A-champ", "b1": "B-champ"})
+    a, b = report.classes
+    assert a.buckets[0].winner == "A-champ"
+    assert b.buckets[0].winner == "B-champ"

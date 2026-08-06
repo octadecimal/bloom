@@ -340,16 +340,20 @@ def api_standings(bucket: str) -> dict:
 
 @app.get("/api/progress")
 def api_progress() -> dict:
-    """One line of session progress: how much has been judged and which
-    buckets are settled. Winner names only for separated buckets — the
+    """Session progress per comparison class: how much has been judged and
+    which buckets are settled. Winner names only for separated buckets — the
     judge stays blind to the standings of buckets still in play."""
     report = progress(_live_verdicts(), state.technique_names)
     return {
         "total": report.total,
-        "buckets": [
-            {"bucket": b.bucket, "count": b.count,
-             "separated": b.separated, "winner": b.winner}
-            for b in report.buckets
+        "classes": [
+            {"cls": c.cls, "total": c.total,
+             "buckets": [
+                 {"bucket": b.bucket, "count": b.count,
+                  "separated": b.separated, "winner": b.winner}
+                 for b in c.buckets
+             ]}
+            for c in report.classes
         ],
     }
 
