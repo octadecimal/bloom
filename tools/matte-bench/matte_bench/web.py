@@ -578,6 +578,20 @@ def api_render(subject: str, technique: str) -> FileResponse:
     return FileResponse(path, media_type="image/png")
 
 
+@app.get("/original/{subject}/{technique}.png")
+def api_original(subject: str, technique: str) -> FileResponse:
+    """The pre-key generation a Class B backdrop render was keyed from.
+
+    Same traversal rule as /render: both path parameters are
+    attacker-controlled and the service binds to 0.0.0.0, so the resolved
+    path must stay inside the renders directory."""
+    root = (state.root / "renders").resolve()
+    path = (root / subject / f"{technique}.orig.png").resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise HTTPException(status_code=404, detail="original not found")
+    return FileResponse(path, media_type="image/png")
+
+
 @app.get("/plate/{subject}.png")
 def api_plate(subject: str) -> FileResponse:
     """The shared source image both sides of a comparison were cut from."""

@@ -906,3 +906,28 @@ def test_pick_subject_drops_a_stale_staged_subject(bench_state):
     assert web.state.rng.getstate() != rng_after_first_rotation
     assert web.state.staged_subject is None
     assert web.state.staged_generation is None
+
+
+def test_original_route_serves_pre_key_image(tmp_path):
+    client = _client(tmp_path)
+    d = tmp_path / "renders" / "s1"
+    d.mkdir(parents=True)
+    (d / "abc123.orig.png").write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    resp = client.get("/original/s1/abc123.png")
+    assert resp.status_code == 200
+    assert resp.content.startswith(b"\x89PNG")
+
+
+def test_original_route_404_when_absent(tmp_path):
+    client = _client(tmp_path)
+    (tmp_path / "renders" / "s1").mkdir(parents=True)
+    assert client.get("/original/s1/abc123.png").status_code == 404
+
+
+def test_original_route_rejects_traversal(tmp_path):
+    client = _client(tmp_path)
+    (tmp_path / "renders").mkdir(parents=True)
+    secret = tmp_path / "secret.orig.png"
+    secret.write_bytes(b"\x89PNG top secret")
+    resp = client.get("/original/%2e%2e/secret.png")
+    assert resp.status_code == 404
