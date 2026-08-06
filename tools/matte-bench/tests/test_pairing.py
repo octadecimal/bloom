@@ -112,6 +112,19 @@ def test_repeat_probe_stays_intra_class():
     assert c.repeat_of is None    # the only logged pair is class B
 
 
+def test_repeat_probe_skips_techniques_dropped_from_the_pool():
+    """A technique can be removed from rotation (RenderError) after verdicts
+    naming it were already logged. Re-serving that pair is unservable — the
+    caller would render a technique no longer in the pool — so the probe must
+    skip it even when forced to fire, falling back to the normal picker."""
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = [_cv("a1", "a2")]
+    rng = random.Random(7)
+    c = next_sampled_comparison(s, ["a1", "a3"], verdicts, rng,
+                                repeat_every=1, known=[s], cls="A")
+    assert c.repeat_of is None
+
+
 def test_pick_class_fewest_verdicts_first():
     pools = {"A": ["a1", "a2"], "B": ["b1", "b2"]}
     verdicts = [_cv("a1", "a2")] * 3 + [_cv("b1", "b2", cls="B")]

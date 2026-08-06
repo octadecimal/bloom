@@ -70,7 +70,13 @@ def next_sampled_comparison(subject: Subject, techniques: list[str],
     # plate has no recipe to regenerate from.
     if repeat_every and seen and known and rng.randrange(repeat_every) == 0:
         ids = {s.id for s in known}
-        candidates = [k for k in sorted(seen) if k[0] in ids]
+        pool = set(techniques)
+        # Both techniques of a re-served pair must still be in the live pool
+        # for this class: a technique dropped after a RenderError leaves its
+        # past verdicts in the log, but replaying them would serve a
+        # technique the caller can no longer render.
+        candidates = [k for k in sorted(seen)
+                     if k[0] in ids and k[1] in pool and k[2] in pool]
         if candidates:
             sid, a, b = rng.choice(candidates)
             bucket = next(s.bucket for s in known if s.id == sid)

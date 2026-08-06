@@ -6,7 +6,7 @@ unit-tested. This module wires them to HTTP and serves one static page.
 import asyncio
 import random
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -202,6 +202,18 @@ async def _sample_fresh(verdicts, progress, rng: random.Random | None = None) ->
                                            state.llm, state.llm_model, recent)
     if subject is None:
         subject = sample_subject(bucket, rng, state.templates)
+    existing_ids = {s.id for s in state.subjects}
+    while subject.id in existing_ids:
+        # Collision: the demand path's fallback draw and the prefetcher's
+        # rng clone can independently mint the same bucket-seed id for two
+        # DIFFERENT subjects (their prompts diverge on the LLM path even
+        # when the seed matches). Two log entries sharing an id makes
+        # _plate_is_current flap between the two recipes on later
+        # bootstraps, silently invalidating whichever subject's verdicts
+        # lose the race — so redraw the seed (bucket/prompt stay put) until
+        # the id is unique, rather than let it collide.
+        seed = rng.randrange(1, 2**31)
+        subject = replace(subject, id=f"{bucket}-{seed}", seed=seed)
     append_subject(state.subject_log, subject)
     state.subjects.append(subject)
     return subject
@@ -258,7 +270,16 @@ def _choose_comparison(subject, verdicts, rng):
     pair bypasses the sampled picker: its two contenders are fixed."""
     pools = _pools()
     pair = playoff_pair(verdicts, subject.bucket)
-    cls = pick_class(subject.bucket, verdicts, pools, pair is not None)
+    # playoff_pair derives champions from the verdict LOG alone, which can
+    # name a technique that has since been dropped from the live registry
+    # (the RenderError path removes a hash from state.techniques but leaves
+    # its past verdicts logged). Trust the pair only when both champions are
+    # still servable — otherwise api_verdict's derive_cls would 422 every
+    # vote on it forever, and since X never accumulates it stays the
+    # thinnest class, wedging this bucket on a comparison that can never be
+    # judged.
+    playoff_open = pair is not None and all(h in state.techniques for h in pair)
+    cls = pick_class(subject.bucket, verdicts, pools, playoff_open)
     if cls is None:
         return None, None
     if cls == "X":

@@ -614,10 +614,61 @@ def test_choose_comparison_serves_playoff_when_open(bench_state):
     assert cls == "X" and {c.left, c.right} == {"a1x", "b1x"}
 
 
+def test_choose_comparison_ignores_playoff_when_a_champion_is_gone(bench_state):
+    """playoff_pair derives champions from the verdict LOG alone; if one has
+    since been dropped from the live registry (RenderError path removes it
+    from state.techniques, but its past verdicts stay logged), serving the
+    playoff would 422 forever at /api/verdict — losing votes and wedging the
+    bucket, since X never accumulates and stays the thinnest class."""
+    from matte_bench.web import _choose_comparison, state
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = ([Verdict(subject="s1", bucket="wispy", left="a1x", right="a2x",
+                         winner="left", plate_hash="h", ts="t")] * 12
+                + [Verdict(subject="s1", bucket="wispy", left="b1x", right="b2x",
+                           winner="left", plate_hash="h", ts="t", cls="B")] * 12)
+    # b1x is a champion per the verdict log, but no longer in the live
+    # registry (as if a RenderError had just dropped it).
+    state.techniques = ["a1x", "a2x", "a3x", "b2x"]
+    state.technique_cls = {"a1x": "A", "a2x": "A", "a3x": "A", "b2x": "B"}
+    c, cls = _choose_comparison(s, verdicts, random.Random(7))
+    assert cls != "X"
+    assert c is not None
+
+
+def test_sample_fresh_redraws_on_id_collision(tmp_path, monkeypatch):
+    """Simulates the race the RNG-clone prefetcher can create: the demand
+    fallback and the prefetch's rng clone independently mint the same
+    bucket-seed id for two genuinely different subjects (different prompts).
+    Colliding ids must never both land in state.subjects — a later bootstrap
+    would flap _plate_is_current between the two recipes and silently
+    invalidate whichever subject's verdicts lost the coin flip."""
+    import asyncio
+    from matte_bench import web
+
+    _client(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def fake_sample_subject(bucket, rng, templates):
+        calls["n"] += 1
+        prompt = "first prompt" if calls["n"] == 1 else "second prompt"
+        return Subject(id="wispy-999", bucket=bucket, prompt=prompt,
+                      seed=999, width=8, height=8)
+
+    monkeypatch.setattr(web, "sample_subject", fake_sample_subject)
+    first = asyncio.run(web._sample_fresh([], lambda *a, **k: None,
+                                          rng=random.Random(1)))
+    second = asyncio.run(web._sample_fresh([], lambda *a, **k: None,
+                                           rng=random.Random(2)))
+    assert first.id != second.id
+    assert {s.id for s in web.state.subjects} == {first.id, second.id}
+
+
 def test_techniques_route_includes_cls(client_with_state):
     client, _ = client_with_state
     body = client.get("/api/techniques").json()
     assert all(set(v) == {"label", "cls"} for v in body.values())
+    assert body["a1x"]["cls"] == "A"
+    assert body["b1x"]["cls"] == "B"
 
 
 def test_predicted_verdicts_adds_winner_agnostic_tie():
