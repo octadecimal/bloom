@@ -18,6 +18,7 @@ from matte_bench.corpus import (
     BUCKETS, Subject, append_subject, ensure_plate, plate_hash, plate_path,
 )
 from matte_bench.pairing import least_judged_bucket, next_sampled_comparison
+from matte_bench.playoff import derive_cls, playoff_pair
 from matte_bench.promptgen import sample_subject_llm
 from matte_bench.progress import progress
 from matte_bench.ranking import separated, standings
@@ -301,10 +302,16 @@ def api_verdict(body: VerdictIn) -> dict:
     plate_hash = state.plate_hashes.get(body.subject)
     if plate_hash is None:
         raise HTTPException(status_code=404, detail="unknown subject")
+    verdicts = _live_verdicts()
+    cls = derive_cls(body.left, body.right, state.technique_cls, verdicts,
+                     body.bucket)
+    if cls is None:
+        raise HTTPException(status_code=422,
+                            detail="pair is not a legal comparison")
     append_verdict(state.verdict_log, Verdict(
         subject=body.subject, bucket=body.bucket, left=body.left,
         right=body.right, winner=body.winner, plate_hash=plate_hash,
-        ts=_now(), repeat_of=body.repeat_of))
+        ts=_now(), repeat_of=body.repeat_of, cls=cls))
     if body.winner == "both_bad":
         # Two facts in one keypress: no relative preference (the ranking
         # already weighs it as a tie) and an absolute failure of EACH side,
@@ -325,8 +332,10 @@ def api_fault(body: FaultIn) -> dict:
 
 
 @app.get("/api/standings/{bucket}")
-def api_standings(bucket: str) -> dict:
-    rows = standings(_live_verdicts(), bucket)
+def api_standings(bucket: str, cls: str = "A") -> dict:
+    if cls not in ("A", "B", "X"):
+        raise HTTPException(status_code=422, detail="cls must be A, B or X")
+    rows = standings(_live_verdicts(), bucket, cls=cls)
     return {
         "separated": separated(rows),
         "rows": [
@@ -361,9 +370,12 @@ def api_progress() -> dict:
 
 @app.get("/api/techniques")
 def api_techniques() -> dict:
-    """Hash -> human name. Standings are keyed by config hash; without this the
-    leaderboard is unreadable."""
-    return dict(state.technique_names)
+    """Hash -> {label, cls}. Standings are keyed by config hash; without this
+    the leaderboard is unreadable, and cls tells the page which class table a
+    technique belongs on."""
+    return {h: {"label": state.technique_names.get(h, h),
+                "cls": state.technique_cls.get(h, "A")}
+            for h in state.techniques}
 
 
 @app.get("/render/{subject}/{technique}.png")

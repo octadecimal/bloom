@@ -1,6 +1,7 @@
 import random
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from matte_bench import web
@@ -25,6 +26,9 @@ def _client(tmp_path, monkeypatch=None):
     state.techniques = ["a", "b"]
     state.technique_objs = {}
     state.technique_names = {}
+    # Both same-class so derive_cls resolves them like plain same-pixel
+    # comparisons, matching every pre-existing test's implicit cls="A".
+    state.technique_cls = {"a": "A", "b": "A"}
     state.comfy_url = "http://unused"
     state.unavailable = {}
     state.verdict_log = tmp_path / "verdicts.jsonl"
@@ -56,6 +60,18 @@ def _await_next(client, timeout=5.0):
         assert body["status"] == "pending", body
         time.sleep(0.01)
     raise AssertionError("job never resolved")
+
+
+@pytest.fixture
+def client_with_state(tmp_path):
+    """A client with a mix of A- and B-class techniques and a plated subject,
+    for the verdict-class / standings / techniques routes below. The verdict
+    log lives under tmp_path (via _client), so each test starts empty."""
+    client = _client(tmp_path)
+    state.techniques = ["a1x", "a2x", "b1x", "b2x"]
+    state.technique_cls = {"a1x": "A", "a2x": "A", "b1x": "B", "b2x": "B"}
+    state.plate_hashes = {"s1": "h"}
+    return client, state
 
 
 def test_health(tmp_path):
@@ -528,3 +544,36 @@ def test_progress_counts_only_fresh_verdicts(tmp_path):
 def test_progress_is_served_with_no_store(tmp_path):
     assert (_client(tmp_path).get("/api/progress").headers.get("cache-control")
             == "no-store")
+
+
+def test_verdict_records_derived_class(client_with_state):
+    client, state = client_with_state
+    resp = client.post("/api/verdict", json={
+        "subject": "s1", "bucket": "wispy", "left": "b1x", "right": "b2x",
+        "winner": "left"})
+    assert resp.status_code == 200
+    from matte_bench.store import read_verdicts
+    [v] = read_verdicts(state.verdict_log)
+    assert v.cls == "B"
+
+
+def test_verdict_rejects_cross_class_non_champions(client_with_state):
+    client, state = client_with_state
+    resp = client.post("/api/verdict", json={
+        "subject": "s1", "bucket": "wispy", "left": "a1x", "right": "b1x",
+        "winner": "left"})
+    assert resp.status_code == 422
+    from matte_bench.store import read_verdicts
+    assert read_verdicts(state.verdict_log) == []
+
+
+def test_standings_route_takes_cls(client_with_state):
+    client, _ = client_with_state
+    assert client.get("/api/standings/wispy?cls=B").status_code == 200
+    assert client.get("/api/standings/wispy?cls=Z").status_code == 422
+
+
+def test_techniques_route_includes_cls(client_with_state):
+    client, _ = client_with_state
+    body = client.get("/api/techniques").json()
+    assert all(set(v) == {"label", "cls"} for v in body.values())
