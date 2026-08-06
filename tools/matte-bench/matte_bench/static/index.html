@@ -210,14 +210,18 @@
   }
 
   // Never blocks judging: on any failure the line simply goes empty.
+  const CLASS_LABELS = { A: 'A', B: 'B', X: 'playoff' };
   async function refreshProgress() {
     const el = document.getElementById('progress');
     try {
       const resp = await fetch('/api/progress');
       if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
       const body = await resp.json();
-      const parts = body.buckets.map((b) => (b.separated && b.winner ? `${b.bucket} ${b.count} → ${shortLabel(b.winner)}` : `${b.bucket} ${b.count}`));
-      el.textContent = [`${body.total} verdicts`, ...parts].join(' · ');
+      const sections = body.classes.map((c) => {
+        const parts = c.buckets.map((b) => (b.separated && b.winner ? `${b.bucket} ${b.count} → ${shortLabel(b.winner)}` : `${b.bucket} ${b.count}`));
+        return [`${CLASS_LABELS[c.cls] || c.cls} ${c.total}`, ...parts].join(' · ');
+      });
+      el.textContent = sections.length ? sections.join('  |  ') : '';
     } catch (err) {
       console.error('progress fetch failed:', err);
       el.textContent = '';
@@ -436,7 +440,8 @@
     await repaint();
     hideLoading();
     setStatus('');
-    document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}`;
+    const clsTag = current.cls === 'B' ? ' · Class B' : current.cls === 'X' ? ' · playoff' : '';
+    document.getElementById('meta').textContent = `${current.subject} · ${current.bucket}${clsTag}`;
 
     const [covL, covR] = await Promise.all([computeCoverage(current.subject, current.left), computeCoverage(current.subject, current.right)]);
     renderBadge(document.getElementById('badgeL'), covL);
