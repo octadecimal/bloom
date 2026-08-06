@@ -3,9 +3,10 @@ from PIL import Image
 from matte_bench.keying import region_key, sample_key_color
 
 BACKDROP = (15, 38, 38)          # what flux actually paints for "chroma green"
+BRIGHT = (84, 210, 98)           # what flux paints when the clause DOES win
 SUBJECT = (200, 160, 40)
-KW = dict(seed_tolerance=60, step_tolerance=12, hole_tolerance=25,
-          softness=30, despill=True)
+KW = dict(seed_tolerance=60, step_tolerance=12, envelope=180,
+          hole_tolerance=25, softness=30, despill=True)
 
 
 def _flat(color, size=(8, 8)):
@@ -42,15 +43,38 @@ def test_flat_backdrop_fully_keyed():
 
 def test_gradient_backdrop_fully_keyed():
     """The halo case: the backdrop drifts far from the border median, but it
-    drifts SMOOTHLY — the region grow must follow it. A global key at any
-    sane tolerance keeps the far end of this ramp."""
+    drifts SMOOTHLY — the region grow must follow it (up to the envelope; this
+    ramp tops out at drift ~156 < 180). A global key at any sane tolerance
+    keeps the far end of this ramp."""
     img = Image.new("RGB", (64, 8))
     for x in range(64):
-        v = round(x * 120 / 63)              # 0 → 120, ~2 per column
+        v = round(x * 90 / 63)               # 0 → 90 per channel, drift ≤ ~156
         for y in range(8):
             img.putpixel((x, y), (15 + v, 38 + v, 38 + v))
     out = region_key(img, sample_key_color(img), **KW)
     assert all(a == 0 for a in out.getchannel("A").getdata())
+
+
+def test_shadow_bridge_cannot_erase_subject():
+    """Root cause of the 2026-08-06 crisp-text erasure: a soft drop shadow is
+    a SMOOTH ramp from bright backdrop to near-black, so unbounded
+    step-chaining walked the grow across it and erased solid black letters
+    (measured drift 246 from the key). The envelope caps the walk: nothing
+    farther than `envelope` from the key color is ever grow-keyed, and the
+    anchor ramp must not finish the job either."""
+    img = Image.new("RGB", (80, 8), BRIGHT)
+    for i, x in enumerate(range(20, 60)):        # 40-column smooth ramp to black
+        f = (i + 1) / 40
+        c = (round(84 * (1 - f)), round(210 * (1 - f)), round(98 * (1 - f)))
+        for y in range(2, 6):
+            img.putpixel((x, y), c)
+    for x in range(60, 72):                      # the 'letter': solid black
+        for y in range(2, 6):
+            img.putpixel((x, y), (0, 0, 0))
+    out = region_key(img, sample_key_color(img), **KW)
+    for x in range(60, 72):
+        for y in range(2, 6):
+            assert out.getpixel((x, y))[3] == 255, (x, y)
 
 
 def test_sharp_subject_stays_opaque():

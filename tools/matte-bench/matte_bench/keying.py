@@ -34,7 +34,7 @@ def sample_key_color(img: Image.Image, step: int = 7) -> tuple[int, int, int]:
 
 def region_key(img: Image.Image, key_color: tuple[int, int, int], *,
                seed_tolerance: float, step_tolerance: float,
-               hole_tolerance: float, softness: float,
+               envelope: float, hole_tolerance: float, softness: float,
                despill: bool = True) -> Image.Image:
     """Border-connected region key.
 
@@ -46,6 +46,13 @@ def region_key(img: Image.Image, key_color: tuple[int, int, int], *,
     everything else ramps on distance to the nearest grown pixel's color,
     which both clears enclosed holes (they match their surrounding backdrop)
     and keeps the soft-edge ramp.
+
+    `envelope` bounds the walk's total drift: a soft drop shadow is a smooth
+    ramp from backdrop to near-black, and without a cap the chain crosses it
+    into the subject and erases solid dark art (measured live: crisp-text
+    letters at drift 246 grow-keyed through their own shadows). Nothing
+    farther than `envelope` from the key color is ever grow-keyed, whatever
+    the chain says.
     """
     src = img.convert("RGB")
     w, h = src.size
@@ -76,7 +83,8 @@ def region_key(img: Image.Image, key_color: tuple[int, int, int], *,
         c = px[x, y]
         for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
             if 0 <= nx < w and 0 <= ny < h and not keyed[ny * w + nx]:
-                if dist(px[nx, ny], c) <= step_tolerance:
+                if (dist(px[nx, ny], c) <= step_tolerance
+                        and dist(px[nx, ny], key_color) <= envelope):
                     keyed[ny * w + nx] = 1
                     queue.append((nx, ny))
 

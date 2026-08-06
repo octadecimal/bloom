@@ -104,6 +104,7 @@ async def _produce_class_b(s: Subject, t: Technique, root: Path,
         keyed = region_key(rendered, key,
                            seed_tolerance=t.params["seed_tolerance"],
                            step_tolerance=t.params["step_tolerance"],
+                           envelope=t.params["envelope"],
                            hole_tolerance=t.params["hole_tolerance"],
                            softness=t.params["softness"],
                            despill=bool(t.params.get("despill", 1)))
