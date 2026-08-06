@@ -31,6 +31,12 @@
   .stage.loading img {
     visibility: hidden;
   }
+  /* No pre-key original exists for this side (legacy cache, qwen) — it's
+     showing its keyed render instead. Dimmed so that isn't mistaken for a
+     real original, per the "original truthfulness" spec. */
+  .stage img.dim {
+    opacity: 0.45;
+  }
   .overlay {
     display: none;
     position: absolute;
@@ -293,6 +299,10 @@
   // written back into `el`). Callers await this to know when the "loading
   // images…" phase is over.
   function paint(el, subject, technique) {
+    // Any prior "no original — showing keyed render" dimming (see
+    // paintSideOriginal) only applies to that fallback state; every other
+    // paint path is a normal render and must not inherit it.
+    el.classList.remove('dim');
     return new Promise((resolve) => {
       el.onload = () => resolve();
       el.onerror = () => resolve();
@@ -323,7 +333,10 @@
     if (techniqueCls[technique] !== 'B') return paintPlate(el, subject);
     return new Promise((resolve) => {
       el.onload = () => resolve();
-      el.onerror = () => { paint(el, subject, technique).then(resolve); };
+      // No original for this side — keep showing its keyed render, but dim
+      // it so that doesn't read as a real original (spec: "Original
+      // truthfulness"). paint() clears 'dim' on entry, so re-add it after.
+      el.onerror = () => { paint(el, subject, technique).then(() => { el.classList.add('dim'); resolve(); }); };
       el.src = `/original/${subject}/${technique}.png`;
     });
   }
