@@ -104,6 +104,7 @@ def backdrop_techniques() -> list[Technique]:
             params={"clause": clause, "key_color": list(key_color),
                     "key_source": "border-median",
                     "seed_tolerance": 60, "step_tolerance": 12,
+                    "envelope": 180,
                     "hole_tolerance": 25, "softness": 30, "despill": 1},
             post=()))
     return out

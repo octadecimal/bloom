@@ -48,6 +48,7 @@ def _b(**over):
                         "key_color": [0, 177, 64],
                         "key_source": "border-median",
                         "seed_tolerance": 60, "step_tolerance": 12,
+                        "envelope": 180,
                         "hole_tolerance": 25, "softness": 30, "despill": 1},
                 post=())
     return Technique(**{**base, **over})

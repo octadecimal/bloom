@@ -69,11 +69,15 @@ def test_backdrop_hashes_left_retired_identities_behind():
     """26ebdc9a25576982 / 8d9d35012cc502c2 are poisoned (both_bad verdicts
     against never-keyed renders, PR #229). 552a60c75a287bb0 /
     4bc8eba4d3cfc3d5 are keying v1 (global key: halo retention + subject
-    erosion, measured live 2026-08-06). The log is append-only, so keying v2
-    must carry fresh identities."""
+    erosion, measured live 2026-08-06). 736227dbf40b9b44 / bc6bfa23c5a3d03f
+    are keying v2 without the envelope cap (unbounded step-chaining walked
+    soft shadows into solid subjects — crisp-text letters erased, measured
+    live 2026-08-06). The log is append-only, so each keyer generation must
+    carry fresh identities."""
     from matte_bench.techniques import backdrop_techniques
     retired = {"26ebdc9a25576982", "8d9d35012cc502c2",
-               "552a60c75a287bb0", "4bc8eba4d3cfc3d5"}
+               "552a60c75a287bb0", "4bc8eba4d3cfc3d5",
+               "736227dbf40b9b44", "bc6bfa23c5a3d03f"}
     assert {config_hash(t) for t in backdrop_techniques()}.isdisjoint(retired)
 
 
@@ -84,7 +88,7 @@ def test_backdrop_techniques_are_class_b_with_key_params():
     assert all(t.cls == "B" and t.node == "backdrop-key" for t in got)
     for t in got:
         assert {"clause", "key_color", "key_source", "seed_tolerance",
-                "step_tolerance", "hole_tolerance", "softness",
+                "step_tolerance", "envelope", "hole_tolerance", "softness",
                 "despill"} <= set(t.params)
         assert t.params["key_source"] == "border-median"
     assert len({config_hash(t) for t in got}) == 2   # variants hash apart

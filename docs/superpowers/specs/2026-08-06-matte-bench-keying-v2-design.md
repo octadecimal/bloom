@@ -98,7 +98,18 @@ connectivity-aware keyer with this behavioral contract:
 Parameter set (recorded in `params`, so the change retires the current
 hashes `552a60c75a287bb0`/`4bc8eba4d3cfc3d5` and forces re-render):
 `key_source: "border-median"`, `seed_tolerance`, `step_tolerance`,
-`hole_tolerance`, `softness`, `despill`. Exact values are calibrated during
+`envelope`, `hole_tolerance`, `softness`, `despill`.
+
+**Amendment (2026-08-06, post-merge live verification):** the grow needs an
+`envelope` cap — the maximum color distance from the key a grow-keyed pixel
+may have. Without it, a soft drop shadow (a smooth backdrop→near-black ramp)
+lets the step-chain walk into solid dark subjects and erase them: measured
+live on crisp-text, letters at drift 246 from the key were grow-keyed
+through their own shadows on an otherwise perfect chroma plate. Envelope 180
+chosen from measured drift distributions: genuine halo/gradient backdrop
+stays below ~180 in the verified buckets, while the erased subjects sat at
+246+ (letters) and 254+ (glow-soft crystals). This retires the uncapped v2
+hashes `736227dbf40b9b44`/`bc6bfa23c5a3d03f`. Exact values are calibrated during
 implementation against the cached live corpus
 (`var/matte-bench/renders/{wispy-1578148740,glow-soft-1750666863,filigree-931261850,crisp-text-938842772,low-contrast-25047655}` —
 the raw generations are regenerated same-seed for calibration). Their
