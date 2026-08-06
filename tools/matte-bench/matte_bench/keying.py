@@ -8,6 +8,27 @@ on the order of a second, paid once per render because renders are cached.
 from PIL import Image
 
 
+def sample_key_color(img: Image.Image, step: int = 7) -> tuple[int, int, int]:
+    """Per-channel median of the border pixels — the color the backdrop
+    ACTUALLY rendered as. Diffusion never paints the literal hex the clause
+    asks for (chroma green comes back as a dark desaturated wall), so keying
+    on the nominal color removes nothing; the border is the one region
+    guaranteed to be backdrop. Median, not mean: a stray highlight or a
+    subject tip crossing the border must not drag the key."""
+    rgb = img.convert("RGB")
+    px = rgb.load()
+    w, h = rgb.size
+    border = []
+    for x in range(0, w, step):
+        border.append(px[x, 0])
+        border.append(px[x, h - 1])
+    for y in range(0, h, step):
+        border.append(px[0, y])
+        border.append(px[w - 1, y])
+    mid = len(border) // 2
+    return tuple(sorted(p[i] for p in border)[mid] for i in range(3))
+
+
 def chroma_key(img: Image.Image, key_color: tuple[int, int, int],
                tolerance: float, softness: float,
                despill: bool = True) -> Image.Image:

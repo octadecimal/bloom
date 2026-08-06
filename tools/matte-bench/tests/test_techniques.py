@@ -65,6 +65,16 @@ def test_technique_is_hashable():
     assert len({_t(), _t(params={"mask_blur": 4})}) == 2
 
 
+def test_backdrop_hashes_left_poisoned_identities_behind():
+    """26ebdc9a25576982 / 8d9d35012cc502c2 accumulated both_bad verdicts and
+    cached opaque renders while backdrop_prompt still appended the chroma
+    clause after the ground directive. The verdict log is append-only, so the
+    fixed techniques must carry new identities or they inherit that history."""
+    from matte_bench.techniques import backdrop_techniques
+    poisoned = {"26ebdc9a25576982", "8d9d35012cc502c2"}
+    assert {config_hash(t) for t in backdrop_techniques()}.isdisjoint(poisoned)
+
+
 def test_backdrop_techniques_are_class_b_with_key_params():
     from matte_bench.techniques import backdrop_techniques
     got = backdrop_techniques()
