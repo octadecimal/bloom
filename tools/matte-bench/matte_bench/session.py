@@ -9,9 +9,16 @@ discovered and dropped at that moment rather than in a pre-flight sweep.
 import json
 from pathlib import Path
 
-from matte_bench.corpus import Subject, load_subject_log, plate_hashes
-from matte_bench.probe import available_models, fetch_object_info
-from matte_bench.techniques import Technique, config_hash, stage1_models
+from app.assets.graph import build_graph
+
+from matte_bench.corpus import PLATE_WORKFLOW, Subject, load_subject_log, plate_hashes
+from matte_bench.probe import (
+    available_models, checkpoint_installed, fetch_object_info, plate_checkpoint,
+    qwen_weights,
+)
+from matte_bench.techniques import (
+    Technique, backdrop_techniques, config_hash, qwen_techniques, stage1_models,
+)
 
 
 def install_state(state, subjects: list[Subject], techniques: list[Technique],
@@ -22,6 +29,7 @@ def install_state(state, subjects: list[Subject], techniques: list[Technique],
     state.techniques = [config_hash(t) for t in techniques]
     state.technique_names = {config_hash(t): f"{t.node}/{t.model}" for t in techniques}
     state.technique_objs = {config_hash(t): t for t in techniques}
+    state.technique_cls = {config_hash(t): t.cls for t in techniques}
     state.plate_hashes = plate_hashes(subjects, root)
     state.comfy_url = comfy_url
     state.templates = templates or {}
@@ -39,8 +47,19 @@ async def bootstrap(root: Path, templates_path: Path, subject_log: Path,
     subjects = load_subject_log(subject_log)
     warnings: list[str] = []
     try:
-        techniques = stage1_models(available_models(fetch_object_info(comfy_url)))
+        info = fetch_object_info(comfy_url)
     except Exception as exc:                          # noqa: BLE001 - reported, not swallowed
         warnings.append(f"probe failed: {exc}")
-        techniques = []
+        return subjects, templates, [], warnings
+    techniques = stage1_models(available_models(info))
+    ckpt = plate_checkpoint(build_graph(PLATE_WORKFLOW, "probe", 64, 64, 0))
+    if ckpt is not None and checkpoint_installed(info, ckpt):
+        techniques += backdrop_techniques()
+    else:
+        warnings.append("backdrop-key disabled: plate checkpoint not installed")
+    weights = qwen_weights(info)
+    if weights is not None:
+        techniques += qwen_techniques(weights)
+    else:
+        warnings.append("qwen-layered disabled: Qwen weights not installed")
     return subjects, templates, techniques, warnings

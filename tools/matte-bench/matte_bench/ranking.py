@@ -64,8 +64,8 @@ def fit(verdicts: list[Verdict]) -> dict[str, float]:
 
 
 def standings(verdicts: list[Verdict], bucket: str, rounds: int = 200,
-              rng_seed: int = 7) -> list[Standing]:
-    scoped = [v for v in verdicts if v.bucket == bucket]
+              rng_seed: int = 7, cls: str = "A") -> list[Standing]:
+    scoped = [v for v in verdicts if v.bucket == bucket and v.cls == cls]
     base = fit(scoped)
     if not base:
         return []

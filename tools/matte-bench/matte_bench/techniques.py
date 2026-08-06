@@ -77,6 +77,41 @@ def stage1_models(available: dict[str, list[str]]) -> list[Technique]:
     return out
 
 
+# Class B, family 1: generate the subject on a flat key-colored backdrop and
+# key the color out afterwards (see matte_bench.keying). The clause is part of
+# the technique config, so editing it re-renders (config_hash covers params).
+BACKDROP_VARIANTS = (
+    ("chroma-green", (0, 177, 64),
+     "isolated on a solid flat chroma green (#00B140) studio backdrop, "
+     "even lighting, no shadows on the backdrop"),
+    ("chroma-magenta", (255, 0, 144),
+     "isolated on a solid flat chroma magenta (#FF0090) studio backdrop, "
+     "even lighting, no shadows on the backdrop"),
+)
+
+
+def backdrop_techniques() -> list[Technique]:
+    out = []
+    for name, key_color, clause in BACKDROP_VARIANTS:
+        out.append(Technique(
+            id=f"backdrop-{name}", cls="B", node="backdrop-key", model=name,
+            params={"clause": clause, "key_color": list(key_color),
+                    "tolerance": 60, "softness": 60, "despill": 1},
+            post=()))
+    return out
+
+
+def qwen_techniques(weights: dict | None) -> list[Technique]:
+    """Class B, family 2: native-RGBA generation. Materializes only when the
+    probe found the full weight trio (see README-qwen.md for the install)."""
+    if not weights:
+        return []
+    return [Technique(id="qwen-layered", cls="B", node="qwen-layered",
+                      model=weights["unet"],
+                      params={"clip": weights["clip"], "vae": weights["vae"]},
+                      post=())]
+
+
 def matting_graph(t: Technique, image_name: str) -> dict:
     inputs = {"image": ["load", 0], "model": t.model}
     for key in _NODE_PARAMS.get(t.node, ()):
@@ -86,4 +121,37 @@ def matting_graph(t: Technique, image_name: str) -> dict:
         "matte": {"class_type": t.node, "inputs": inputs},
         "save": {"class_type": "SaveImage",
                  "inputs": {"images": ["matte", 0], "filename_prefix": "mattebench"}},
+    }
+
+
+def qwen_graph(t: Technique, prompt: str, width: int, height: int,
+               seed: int) -> dict:
+    """Native-RGBA generation graph. Input names validated against the box's
+    live object_info before first use (see Task 15 verification step) — a
+    mismatch fails loudly at render time and the technique is dropped, so a
+    wrong guess cannot corrupt verdicts."""
+    return {
+        "unet": {"class_type": "UNETLoader",
+                 "inputs": {"unet_name": t.model, "weight_dtype": "default"}},
+        "clip": {"class_type": "CLIPLoader",
+                 "inputs": {"clip_name": t.params["clip"], "type": "qwen_image"}},
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": t.params["vae"]}},
+        "pos": {"class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["clip", 0], "text": prompt}},
+        "neg": {"class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["clip", 0], "text": ""}},
+        "latent": {"class_type": "EmptyQwenImageLayeredLatentImage",
+                   "inputs": {"width": width, "height": height,
+                              "layers": 1, "batch_size": 1}},
+        "sample": {"class_type": "KSampler",
+                   "inputs": {"model": ["unet", 0], "positive": ["pos", 0],
+                              "negative": ["neg", 0],
+                              "latent_image": ["latent", 0], "seed": seed,
+                              "steps": 20, "cfg": 2.5, "sampler_name": "euler",
+                              "scheduler": "simple", "denoise": 1.0}},
+        "decode": {"class_type": "VAEDecode",
+                   "inputs": {"samples": ["sample", 0], "vae": ["vae", 0]}},
+        "save": {"class_type": "SaveImage",
+                 "inputs": {"images": ["decode", 0],
+                            "filename_prefix": "mattebench-qwen"}},
     }

@@ -2,7 +2,7 @@ import random
 
 from matte_bench.corpus import Subject
 from matte_bench.pairing import (
-    judged_pairs, least_judged_bucket, next_sampled_comparison,
+    judged_pairs, least_judged_bucket, next_sampled_comparison, pick_class,
 )
 from matte_bench.store import Verdict
 
@@ -81,3 +81,72 @@ def test_sides_are_randomised_across_draws():
                                     repeat_every=0)
         seen.add((c.left, c.right))
     assert seen == {("a", "b"), ("b", "a")}
+
+
+def _cv(left, right, bucket="wispy", cls="A"):
+    return Verdict(subject="s1", bucket=bucket, left=left, right=right,
+                   winner="left", plate_hash="h", ts="t", cls=cls)
+
+
+def test_next_comparison_scopes_verdicts_to_class():
+    """B verdicts must not influence A pair counts. With one A pair already
+    judged and an unrelated B verdict logged, the A picker must still prefer
+    the unjudged A pair."""
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = [_cv("a1", "a2"), _cv("b1", "b2", cls="B"),
+                _cv("b1", "b2", cls="B"), _cv("b1", "b2", cls="B")]
+    rng = random.Random(7)
+    c = next_sampled_comparison(s, ["a1", "a2", "a3"], verdicts, rng,
+                                repeat_every=0, cls="A")
+    assert {c.left, c.right} != {"a1", "a2"}   # least-judged: an a3 pair
+
+
+def test_repeat_probe_stays_intra_class():
+    """With repeat certain to fire, candidates only come from same-class
+    verdicts of registered subjects."""
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = [_cv("b1", "b2", cls="B")]
+    rng = random.Random(7)
+    c = next_sampled_comparison(s, ["a1", "a2"], verdicts, rng,
+                                repeat_every=1, known=[s], cls="A")
+    assert c.repeat_of is None    # the only logged pair is class B
+
+
+def test_repeat_probe_skips_techniques_dropped_from_the_pool():
+    """A technique can be removed from rotation (RenderError) after verdicts
+    naming it were already logged. Re-serving that pair is unservable — the
+    caller would render a technique no longer in the pool — so the probe must
+    skip it even when forced to fire, falling back to the normal picker."""
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = [_cv("a1", "a2")]
+    rng = random.Random(7)
+    c = next_sampled_comparison(s, ["a1", "a3"], verdicts, rng,
+                                repeat_every=1, known=[s], cls="A")
+    assert c.repeat_of is None
+
+
+def test_pick_class_fewest_verdicts_first():
+    pools = {"A": ["a1", "a2"], "B": ["b1", "b2"]}
+    verdicts = [_cv("a1", "a2")] * 3 + [_cv("b1", "b2", cls="B")]
+    assert pick_class("wispy", verdicts, pools, playoff_open=False) == "B"
+
+
+def test_pick_class_tie_prefers_a():
+    pools = {"A": ["a1", "a2"], "B": ["b1", "b2"]}
+    assert pick_class("wispy", [], pools, playoff_open=False) == "A"
+
+
+def test_pick_class_skips_single_technique_pools():
+    pools = {"A": ["a1", "a2"], "B": ["b1"]}
+    verdicts = [_cv("a1", "a2")] * 5
+    assert pick_class("wispy", verdicts, pools, playoff_open=False) == "A"
+
+
+def test_pick_class_includes_open_playoff():
+    pools = {"A": ["a1", "a2"], "B": ["b1", "b2"]}
+    verdicts = [_cv("a1", "a2")] * 3 + [_cv("b1", "b2", cls="B")] * 3
+    assert pick_class("wispy", verdicts, pools, playoff_open=True) == "X"
+
+
+def test_pick_class_none_when_nothing_serveable():
+    assert pick_class("wispy", [], {"A": ["a1"], "B": []}, playoff_open=False) is None

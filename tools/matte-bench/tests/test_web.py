@@ -1,6 +1,7 @@
 import random
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from matte_bench import web
@@ -14,6 +15,17 @@ async def _noop_prepare(c, progress):
 
 
 def _client(tmp_path, monkeypatch=None):
+    # Drain any background prefetch thread a previous test left running
+    # before reassigning the state it reads/writes — otherwise it can still
+    # be alive (or race the reassignment) when the next test starts, which
+    # both flakes assertions and pollutes an unrelated test's temp dir.
+    if state.prefetch is not None:
+        state.prefetch.join(timeout=5)
+    state.prefetch = None
+    state.staged_subject = None
+    state.staged_rng_state = None
+    state.generation = 0
+    state.staged_generation = None
     state.root = tmp_path
     state.subjects = []
     state.templates = {"wispy": {"width": 8, "height": 8,
@@ -25,6 +37,9 @@ def _client(tmp_path, monkeypatch=None):
     state.techniques = ["a", "b"]
     state.technique_objs = {}
     state.technique_names = {}
+    # Both same-class so derive_cls resolves them like plain same-pixel
+    # comparisons, matching every pre-existing test's implicit cls="A".
+    state.technique_cls = {"a": "A", "b": "A"}
     state.comfy_url = "http://unused"
     state.unavailable = {}
     state.verdict_log = tmp_path / "verdicts.jsonl"
@@ -56,6 +71,26 @@ def _await_next(client, timeout=5.0):
         assert body["status"] == "pending", body
         time.sleep(0.01)
     raise AssertionError("job never resolved")
+
+
+@pytest.fixture
+def client_with_state(tmp_path):
+    """A client with a mix of A- and B-class techniques and a plated subject,
+    for the verdict-class / standings / techniques routes below. The verdict
+    log lives under tmp_path (via _client), so each test starts empty."""
+    client = _client(tmp_path)
+    state.techniques = ["a1x", "a2x", "b1x", "b2x"]
+    state.technique_cls = {"a1x": "A", "a2x": "A", "b1x": "B", "b2x": "B"}
+    state.plate_hashes = {"s1": "h"}
+    return client, state
+
+
+@pytest.fixture
+def bench_state(client_with_state):
+    """Alias for client_with_state: state.techniques holds the four hashes
+    {a1x, a2x, b1x, b2x} and state.technique_cls maps them to pools A/B, which
+    is exactly what the class-aware serving helpers below need."""
+    return client_with_state
 
 
 def test_health(tmp_path):
@@ -492,8 +527,9 @@ def test_progress_reports_totals_and_unseparated_bucket_without_winner(tmp_path)
         })
     body = client.get("/api/progress").json()
     assert body["total"] == 2
-    assert body["buckets"] == [
-        {"bucket": "wispy", "count": 2, "separated": False, "winner": None}]
+    assert body["classes"] == [
+        {"cls": "A", "total": 2, "buckets": [
+            {"bucket": "wispy", "count": 2, "separated": False, "winner": None}]}]
 
 
 def test_progress_names_the_winner_once_a_bucket_separates(tmp_path):
@@ -505,8 +541,8 @@ def test_progress_names_the_winner_once_a_bucket_separates(tmp_path):
             "winner": "left",
         })
     body = client.get("/api/progress").json()
-    assert body["buckets"][0]["separated"] is True
-    assert body["buckets"][0]["winner"] == "Node/BiRefNet_alpha"
+    assert body["classes"][0]["buckets"][0]["separated"] is True
+    assert body["classes"][0]["buckets"][0]["winner"] == "Node/BiRefNet_alpha"
 
 
 def test_progress_counts_only_fresh_verdicts(tmp_path):
@@ -521,9 +557,352 @@ def test_progress_counts_only_fresh_verdicts(tmp_path):
     state.plate_hashes["s1"] = "regenerated"  # invalidates both verdicts
     body = client.get("/api/progress").json()
     assert body["total"] == 0
-    assert body["buckets"] == []
+    assert body["classes"] == []
 
 
 def test_progress_is_served_with_no_store(tmp_path):
     assert (_client(tmp_path).get("/api/progress").headers.get("cache-control")
             == "no-store")
+
+
+def test_verdict_records_derived_class(client_with_state):
+    client, state = client_with_state
+    resp = client.post("/api/verdict", json={
+        "subject": "s1", "bucket": "wispy", "left": "b1x", "right": "b2x",
+        "winner": "left"})
+    assert resp.status_code == 200
+    from matte_bench.store import read_verdicts
+    [v] = read_verdicts(state.verdict_log)
+    assert v.cls == "B"
+
+
+def test_verdict_rejects_cross_class_non_champions(client_with_state):
+    client, state = client_with_state
+    resp = client.post("/api/verdict", json={
+        "subject": "s1", "bucket": "wispy", "left": "a1x", "right": "b1x",
+        "winner": "left"})
+    assert resp.status_code == 422
+    from matte_bench.store import read_verdicts
+    assert read_verdicts(state.verdict_log) == []
+
+
+def test_standings_route_takes_cls(client_with_state):
+    client, _ = client_with_state
+    assert client.get("/api/standings/wispy?cls=B").status_code == 200
+    assert client.get("/api/standings/wispy?cls=Z").status_code == 422
+
+
+def test_choose_comparison_serves_thinner_class(bench_state):
+    """With A well-fed and B starved, the next comparison is class B."""
+    from matte_bench.web import _choose_comparison, state
+    # bench_state installs pools A: [a1x, a2x], B: [b1x, b2x]
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = [Verdict(subject="s1", bucket="wispy", left="a1x", right="a2x",
+                        winner="left", plate_hash="h", ts="t")] * 4
+    c, cls = _choose_comparison(s, verdicts, random.Random(7))
+    assert cls == "B" and {c.left, c.right} == {"b1x", "b2x"}
+
+
+def test_choose_comparison_serves_playoff_when_open(bench_state):
+    from matte_bench.web import _choose_comparison
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = ([Verdict(subject="s1", bucket="wispy", left="a1x", right="a2x",
+                         winner="left", plate_hash="h", ts="t")] * 12
+                + [Verdict(subject="s1", bucket="wispy", left="b1x", right="b2x",
+                           winner="left", plate_hash="h", ts="t", cls="B")] * 12)
+    c, cls = _choose_comparison(s, verdicts, random.Random(7))
+    assert cls == "X" and {c.left, c.right} == {"a1x", "b1x"}
+
+
+def test_choose_comparison_ignores_playoff_when_a_champion_is_gone(bench_state):
+    """playoff_pair derives champions from the verdict LOG alone; if one has
+    since been dropped from the live registry (RenderError path removes it
+    from state.techniques, but its past verdicts stay logged), serving the
+    playoff would 422 forever at /api/verdict — losing votes and wedging the
+    bucket, since X never accumulates and stays the thinnest class."""
+    from matte_bench.web import _choose_comparison, state
+    s = Subject(id="s1", bucket="wispy", prompt="p", seed=1, width=64, height=64)
+    verdicts = ([Verdict(subject="s1", bucket="wispy", left="a1x", right="a2x",
+                         winner="left", plate_hash="h", ts="t")] * 12
+                + [Verdict(subject="s1", bucket="wispy", left="b1x", right="b2x",
+                           winner="left", plate_hash="h", ts="t", cls="B")] * 12)
+    # b1x is a champion per the verdict log, but no longer in the live
+    # registry (as if a RenderError had just dropped it).
+    state.techniques = ["a1x", "a2x", "a3x", "b2x"]
+    state.technique_cls = {"a1x": "A", "a2x": "A", "a3x": "A", "b2x": "B"}
+    c, cls = _choose_comparison(s, verdicts, random.Random(7))
+    assert cls != "X"
+    assert c is not None
+
+
+def test_sample_fresh_redraws_on_id_collision(tmp_path, monkeypatch):
+    """Simulates the race the RNG-clone prefetcher can create: the demand
+    fallback and the prefetch's rng clone independently mint the same
+    bucket-seed id for two genuinely different subjects (different prompts).
+    Colliding ids must never both land in state.subjects — a later bootstrap
+    would flap _plate_is_current between the two recipes and silently
+    invalidate whichever subject's verdicts lost the coin flip."""
+    import asyncio
+    from matte_bench import web
+
+    _client(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def fake_sample_subject(bucket, rng, templates):
+        calls["n"] += 1
+        prompt = "first prompt" if calls["n"] == 1 else "second prompt"
+        return Subject(id="wispy-999", bucket=bucket, prompt=prompt,
+                      seed=999, width=8, height=8)
+
+    monkeypatch.setattr(web, "sample_subject", fake_sample_subject)
+    first = asyncio.run(web._sample_fresh([], lambda *a, **k: None,
+                                          rng=random.Random(1)))
+    second = asyncio.run(web._sample_fresh([], lambda *a, **k: None,
+                                           rng=random.Random(2)))
+    assert first.id != second.id
+    assert {s.id for s in web.state.subjects} == {first.id, second.id}
+
+
+def test_techniques_route_includes_cls(client_with_state):
+    client, _ = client_with_state
+    body = client.get("/api/techniques").json()
+    assert all(set(v) == {"label", "cls"} for v in body.values())
+    assert body["a1x"]["cls"] == "A"
+    assert body["b1x"]["cls"] == "B"
+
+
+def test_predicted_verdicts_adds_winner_agnostic_tie():
+    from matte_bench.web import _predicted_verdicts
+    served = {"subject": "s1", "bucket": "wispy", "left": "a1x",
+              "right": "a2x", "cls": "A", "repeat_of": None}
+    got = _predicted_verdicts([], served)
+    [v] = got
+    assert v.winner == "tie" and v.cls == "A"
+    assert (v.left, v.right) == ("a1x", "a2x")
+    assert v.plate_hash == "prediction"   # never collides with a real hash
+
+
+def test_start_prefetch_is_single_flight(bench_state, monkeypatch):
+    from matte_bench import web
+    import threading
+
+    started = []
+    release = threading.Event()
+
+    def slow_run(served):
+        started.append(served)
+        release.wait(timeout=5)
+
+    monkeypatch.setattr(web, "_run_prefetch", slow_run)
+    served = {"subject": "s1", "bucket": "wispy", "left": "a1x",
+              "right": "a2x", "cls": "A", "repeat_of": None}
+    web._start_prefetch(served)
+    web._start_prefetch(served)     # second call must be a no-op
+    release.set()
+    web.state.prefetch.join(timeout=5)
+    assert len(started) == 1
+
+
+def test_prefetch_never_consumes_the_shared_rng(bench_state, monkeypatch):
+    """The spec's on/off equivalence guarantee at its mechanism: prediction
+    clones the rng stream, so real picks are identical with prefetch on.
+
+    Reuse-the-active-subject path: subjects must actually contain "s1" (a
+    vacuous version of this test let the else-branch subject lookup return
+    None and short-circuit before the rng clone ever ran) so _choose_comparison
+    and _prepare genuinely execute against the shared rng."""
+    import asyncio
+    from matte_bench import web
+
+    async def no_prepare(c, progress):
+        pass
+
+    monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
+                                  width=64, height=64)]
+    web.state.active_subject_id = "s1"
+    web.state.active_served = 0
+    before = web.state.rng.getstate()
+    asyncio.run(web._prefetch_async({"subject": "s1", "bucket": "wispy",
+                                     "left": "a1x", "right": "a2x",
+                                     "cls": "A", "repeat_of": None}))
+    assert web.state.rng.getstate() == before
+
+
+def test_prefetch_staging_never_touches_rng_then_advances_it_on_consumption(
+        bench_state, monkeypatch):
+    """Staging branch (the one vacuous-test #1 above never exercised):
+    _sample_fresh draws a bucket/template/LLM roll, all of which must come
+    from a clone, not state.rng. The shared stream only advances later, when
+    _pick_subject consumes the staged (subject, rng-state) pair — and it must
+    land exactly where the clone did, so a real draw at that point is
+    identical to what the prefetcher predicted."""
+    import asyncio
+    from matte_bench import web
+
+    async def no_prepare(c, progress):
+        pass
+
+    monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.active_subject_id = None      # forces the staging branch
+    web.state.staged_subject = None
+    web.state.staged_rng_state = None
+    before = web.state.rng.getstate()
+
+    asyncio.run(web._prefetch_async({"subject": "s1", "bucket": "wispy",
+                                     "left": "a1x", "right": "a2x",
+                                     "cls": "A", "repeat_of": None}))
+
+    # Staging happened, but the shared rng was not touched by it.
+    assert web.state.rng.getstate() == before
+    assert web.state.staged_subject is not None
+    staged = web.state.staged_subject
+    staged_rng_state = web.state.staged_rng_state
+    assert staged_rng_state is not None
+    assert staged_rng_state != before   # the clone actually advanced
+
+    # Consuming the staged subject is where the shared stream catches up.
+    got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert got is staged
+    assert web.state.rng.getstate() == staged_rng_state
+    assert web.state.staged_rng_state is None
+
+
+def test_prefetch_stages_only_at_the_rotation_boundary(bench_state, monkeypatch):
+    """active_served was already incremented by _compute_next for the served
+    comparison, so the NEXT demand pick rotates once active_served reaches
+    PAIRS_PER_SUBJECT, not PAIRS_PER_SUBJECT - 1. One shy of the boundary the
+    prefetcher must reuse the active subject (no staging); at the boundary it
+    must predict rotation and stage a fresh one."""
+    import asyncio
+    from matte_bench import web
+
+    async def no_prepare(c, progress):
+        pass
+
+    monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.subjects = [Subject(id="s1", bucket="wispy", prompt="p", seed=1,
+                                  width=64, height=64)]
+    served = {"subject": "s1", "bucket": "wispy", "left": "a1x",
+              "right": "a2x", "cls": "A", "repeat_of": None}
+
+    web.state.active_subject_id = "s1"
+    web.state.active_served = web.PAIRS_PER_SUBJECT - 1
+    web.state.staged_subject = None
+    asyncio.run(web._prefetch_async(served))
+    assert web.state.staged_subject is None
+
+    web.state.active_subject_id = "s1"
+    web.state.active_served = web.PAIRS_PER_SUBJECT
+    web.state.staged_subject = None
+    asyncio.run(web._prefetch_async(served))
+    assert web.state.staged_subject is not None
+
+
+def test_compute_next_joins_a_live_prefetch_before_preparing(tmp_path, monkeypatch):
+    """The deterministic failure this guards against: comparison N is served,
+    the prefetcher starts writing plate/render files for the staged subject
+    in the background, and the operator votes before it finishes. Without
+    synchronization the demand path's own ensure_plate/ensure_render would
+    see stale dest.exists()/_plate_is_current checks, kick off a SECOND
+    generation, and the plate write would rmtree the renders the prefetch
+    just produced. Pinned at the guard's mechanism (a blocking join on a
+    live prefetch thread before _prepare runs) rather than through the real
+    filesystem race, which isn't reproducible deterministically in a unit
+    test: real threads, not asyncio, drive both sides so the join provably
+    blocks the demand path rather than the two coroutines merely interleaving
+    within one event loop."""
+    import asyncio
+    import threading
+
+    order = []
+    release = threading.Event()
+
+    def fake_prefetch_body():
+        release.wait(timeout=5)
+        order.append("prefetch-done")
+
+    async def tracking_prepare(c, progress):
+        order.append("prepare")
+
+    _client(tmp_path, monkeypatch)
+    monkeypatch.setattr(web, "_prepare", tracking_prepare)
+
+    t = threading.Thread(target=fake_prefetch_body, daemon=True)
+    web.state.prefetch = t
+    t.start()
+
+    # A separate real thread (not asyncio) releases the fake prefetch shortly
+    # after _compute_next starts, proving _compute_next actually blocked on
+    # the join instead of racing ahead into _prepare.
+    threading.Timer(0.05, release.set).start()
+
+    asyncio.run(web._compute_next(lambda *a, **k: None))
+    assert order == ["prefetch-done", "prepare"]
+
+
+def test_pick_subject_consumes_staged_subject(bench_state):
+    import asyncio
+    from matte_bench import web
+    staged = Subject(id="staged-1", bucket="wispy", prompt="p", seed=9,
+                     width=64, height=64)
+    web.state.staged_subject = staged
+    # A freshly staged pair is stamped with the generation the prefetcher
+    # observed when it staged; matching state.generation here is what marks
+    # it fresh (see test_pick_subject_drops_a_stale_staged_subject for the
+    # mismatch case).
+    web.state.staged_generation = web.state.generation
+    web.state.active_subject_id = None   # forces rotation
+    got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert got.id == "staged-1"
+    assert web.state.staged_subject is None
+    assert web.state.staged_generation is None
+    assert web.state.active_subject_id == "staged-1"
+
+
+def test_pick_subject_drops_a_stale_staged_subject(bench_state):
+    """Task-13 review Finding 2 residual: a staged pair can go stale before
+    it's consumed. Concrete race: the prefetch thread hasn't finished writing
+    staged_subject when the next rotation happens, so _pick_subject takes the
+    _sample_fresh fallback and rotates on its own (bumping state.generation);
+    when the prefetch's staged_subject/staged_rng_state/staged_generation
+    eventually land, they're predictions for a rotation that already
+    happened. Consuming them on some LATER rotation would setstate() the
+    shared rng backward past every draw the intervening round(s) already
+    made — replaying already-used randomness. The generation stamp must
+    catch this: a staged pair whose staged_generation no longer matches
+    state.generation is dropped, not consumed, and state.rng is left alone."""
+    import asyncio
+    from matte_bench import web
+
+    web.state.active_subject_id = None
+    web.state.staged_subject = None
+
+    # Round 1: nothing staged yet -> fallback rotation. Bumps state.generation
+    # 0 -> 1 and advances state.rng for real.
+    first = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert web.state.generation == 1
+    rng_after_first_rotation = web.state.rng.getstate()
+
+    # The prefetch thread now (late) finishes writing its prediction — staged
+    # while generation was still 0, before the fallback rotation above ran.
+    stale = Subject(id="stale-staged", bucket="wispy", prompt="p", seed=9,
+                    width=64, height=64)
+    stale_rng_state = random.Random(999).getstate()   # any state != current
+    web.state.staged_subject = stale
+    web.state.staged_rng_state = stale_rng_state
+    web.state.staged_generation = 0   # stamped for the generation that ended
+
+    # Force a second rotation (simulating PAIRS_PER_SUBJECT exhausted on the
+    # subject the fallback picked) and confirm the stale pair is dropped, not
+    # consumed: a fresh subject is drawn instead (advancing state.rng further
+    # forward from where the first rotation left it), and state.rng is never
+    # rewound to stale_rng_state.
+    web.state.active_served = web.PAIRS_PER_SUBJECT
+    second = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert second.id != "stale-staged"
+    assert second.id != first.id
+    assert web.state.rng.getstate() != stale_rng_state
+    assert web.state.rng.getstate() != rng_after_first_rotation
+    assert web.state.staged_subject is None
+    assert web.state.staged_generation is None
