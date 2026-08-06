@@ -63,6 +63,9 @@ class State:
     rng: random.Random = field(default_factory=lambda: random.Random())
     job: "_NextJob | None" = None
     job_lock: threading.Lock = field(default_factory=threading.Lock)
+    staged_subject: Subject | None = None
+    prefetch: threading.Thread | None = None
+    prefetch_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 state = State()
@@ -164,16 +167,9 @@ PAIRS_PER_SUBJECT = 3
 TEMPLATE_MIX = 0.25
 
 
-async def _pick_subject(verdicts, progress) -> Subject:
-    """Reuse the active sampled subject for a few comparisons (its plate is
-    cached), then draw a fresh one from the thinnest bucket and register it.
-    Fresh draws are LLM-imagined when a provider is configured, template-
-    sampled otherwise or whenever the LLM output fails the isolation rules."""
-    if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
-        active = next((s for s in state.subjects
-                       if s.id == state.active_subject_id), None)
-        if active is not None:
-            return active
+async def _sample_fresh(verdicts, progress) -> Subject:
+    """Draw and register a fresh subject from the thinnest bucket. LLM-imagined
+    when a provider is configured, template-sampled otherwise."""
     buckets = [b for b in BUCKETS if b in state.templates]
     bucket = least_judged_bucket(buckets, verdicts, state.rng)
     subject = None
@@ -187,6 +183,23 @@ async def _pick_subject(verdicts, progress) -> Subject:
         subject = sample_subject(bucket, state.rng, state.templates)
     append_subject(state.subject_log, subject)
     state.subjects.append(subject)
+    return subject
+
+
+async def _pick_subject(verdicts, progress) -> Subject:
+    """Reuse the active sampled subject for a few comparisons (its plate is
+    cached), then rotate: to the prefetcher's staged subject when one is
+    ready, else to a fresh draw."""
+    if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
+        active = next((s for s in state.subjects
+                       if s.id == state.active_subject_id), None)
+        if active is not None:
+            return active
+    if state.staged_subject is not None:
+        subject = state.staged_subject
+        state.staged_subject = None
+    else:
+        subject = await _sample_fresh(verdicts, progress)
     state.active_subject_id = subject.id
     state.active_served = 0
     return subject
@@ -286,6 +299,59 @@ class _NextJob:
         self.stage = stage
 
 
+def _predicted_verdicts(verdicts: list[Verdict], served: dict) -> list[Verdict]:
+    """The verdict set after the operator votes on `served`, winner-agnostic:
+    a synthetic tie moves every pair count exactly like a real verdict, and
+    the winner only nudges the strength tie-break."""
+    return verdicts + [Verdict(
+        subject=served["subject"], bucket=served["bucket"],
+        left=served["left"], right=served["right"], winner="tie",
+        plate_hash="prediction", ts="", cls=served.get("cls", "A"))]
+
+
+async def _prefetch_async(served: dict) -> None:
+    verdicts = _predicted_verdicts(_live_verdicts(), served)
+    noop = lambda *a, **k: None                       # noqa: E731
+    # _compute_next already incremented active_served for `served` (it runs
+    # to completion before api_next hands off to us), so "the NEXT pick
+    # rotates" is active_served >= PAIRS_PER_SUBJECT, not +1.
+    rotation_next = (served["repeat_of"] is not None
+                     or state.active_served >= PAIRS_PER_SUBJECT)
+    if state.active_subject_id is None or (
+            rotation_next and served["repeat_of"] is None):
+        if state.staged_subject is None:
+            state.staged_subject = await _sample_fresh(verdicts, noop)
+        subject = state.staged_subject
+    else:
+        subject = next((s for s in state.subjects
+                        if s.id == state.active_subject_id), None)
+        if subject is None:
+            return
+    pred_rng = random.Random()
+    pred_rng.setstate(state.rng.getstate())
+    c, _cls = _choose_comparison(subject, verdicts, pred_rng)
+    if c is not None:
+        await _prepare(c, noop)
+
+
+def _run_prefetch(served: dict) -> None:
+    try:
+        asyncio.run(_prefetch_async(served))
+    except Exception:                                 # noqa: BLE001
+        # Prefetch is best-effort by contract: any failure here simply means
+        # the demand path pays the render and reports errors properly.
+        pass
+
+
+def _start_prefetch(served: dict) -> None:
+    with state.prefetch_lock:
+        if state.prefetch is not None and state.prefetch.is_alive():
+            return
+        t = threading.Thread(target=_run_prefetch, args=(served,), daemon=True)
+        state.prefetch = t
+        t.start()
+
+
 # A fully cached comparison resolves in milliseconds; waiting this long before
 # answering saves the client a poll round-trip without a perceptible stall.
 _NEXT_GRACE_SECONDS = 0.25
@@ -312,6 +378,7 @@ def api_next() -> dict:
         raise HTTPException(status_code=500, detail=job.error)
     if job.result is None:
         return {"status": "done"}
+    _start_prefetch(job.result)
     return {"status": "ready", "comparison": job.result}
 
 

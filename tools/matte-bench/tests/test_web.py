@@ -15,6 +15,14 @@ async def _noop_prepare(c, progress):
 
 
 def _client(tmp_path, monkeypatch=None):
+    # Drain any background prefetch thread a previous test left running
+    # before reassigning the state it reads/writes — otherwise it can still
+    # be alive (or race the reassignment) when the next test starts, which
+    # both flakes assertions and pollutes an unrelated test's temp dir.
+    if state.prefetch is not None:
+        state.prefetch.join(timeout=5)
+    state.prefetch = None
+    state.staged_subject = None
     state.root = tmp_path
     state.subjects = []
     state.templates = {"wispy": {"width": 8, "height": 8,
@@ -607,3 +615,67 @@ def test_techniques_route_includes_cls(client_with_state):
     client, _ = client_with_state
     body = client.get("/api/techniques").json()
     assert all(set(v) == {"label", "cls"} for v in body.values())
+
+
+def test_predicted_verdicts_adds_winner_agnostic_tie():
+    from matte_bench.web import _predicted_verdicts
+    served = {"subject": "s1", "bucket": "wispy", "left": "a1x",
+              "right": "a2x", "cls": "A", "repeat_of": None}
+    got = _predicted_verdicts([], served)
+    [v] = got
+    assert v.winner == "tie" and v.cls == "A"
+    assert (v.left, v.right) == ("a1x", "a2x")
+    assert v.plate_hash == "prediction"   # never collides with a real hash
+
+
+def test_start_prefetch_is_single_flight(bench_state, monkeypatch):
+    from matte_bench import web
+    import threading
+
+    started = []
+    release = threading.Event()
+
+    def slow_run(served):
+        started.append(served)
+        release.wait(timeout=5)
+
+    monkeypatch.setattr(web, "_run_prefetch", slow_run)
+    served = {"subject": "s1", "bucket": "wispy", "left": "a1x",
+              "right": "a2x", "cls": "A", "repeat_of": None}
+    web._start_prefetch(served)
+    web._start_prefetch(served)     # second call must be a no-op
+    release.set()
+    web.state.prefetch.join(timeout=5)
+    assert len(started) == 1
+
+
+def test_prefetch_never_consumes_the_shared_rng(bench_state, monkeypatch):
+    """The spec's on/off equivalence guarantee at its mechanism: prediction
+    clones the rng stream, so real picks are identical with prefetch on."""
+    import asyncio
+    from matte_bench import web
+
+    async def no_prepare(c, progress):
+        pass
+
+    monkeypatch.setattr(web, "_prepare", no_prepare)
+    web.state.active_subject_id = "s1"
+    web.state.active_served = 0
+    before = web.state.rng.getstate()
+    asyncio.run(web._prefetch_async({"subject": "s1", "bucket": "wispy",
+                                     "left": "a1x", "right": "a2x",
+                                     "cls": "A", "repeat_of": None}))
+    assert web.state.rng.getstate() == before
+
+
+def test_pick_subject_consumes_staged_subject(bench_state):
+    import asyncio
+    from matte_bench import web
+    staged = Subject(id="staged-1", bucket="wispy", prompt="p", seed=9,
+                     width=64, height=64)
+    web.state.staged_subject = staged
+    web.state.active_subject_id = None   # forces rotation
+    got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert got.id == "staged-1"
+    assert web.state.staged_subject is None
+    assert web.state.active_subject_id == "staged-1"
