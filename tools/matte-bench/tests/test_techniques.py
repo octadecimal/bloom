@@ -85,3 +85,24 @@ def test_qwen_techniques_gated_on_weights():
     assert t.cls == "B" and t.node == "qwen-layered"
     assert t.model == weights["unet"]
     assert t.params == {"clip": weights["clip"], "vae": weights["vae"]}
+
+
+from matte_bench.techniques import qwen_graph, qwen_techniques
+
+
+def test_qwen_graph_wires_layered_latent():
+    [t] = qwen_techniques({"unet": "u.safetensors", "clip": "c.safetensors",
+                           "vae": "v.safetensors"})
+    g = qwen_graph(t, "a glowing lantern", 768, 512, seed=7)
+    classes = {n["class_type"] for n in g.values()}
+    assert "EmptyQwenImageLayeredLatentImage" in classes
+    assert "UNETLoader" in classes and "CLIPLoader" in classes and "VAELoader" in classes
+    latent = next(n for n in g.values()
+                  if n["class_type"] == "EmptyQwenImageLayeredLatentImage")
+    assert latent["inputs"]["width"] == 768 and latent["inputs"]["height"] == 512
+    sampler = next(n for n in g.values() if n["class_type"] == "KSampler")
+    assert sampler["inputs"]["seed"] == 7
+    text = next(n for n in g.values()
+                if n["class_type"] == "CLIPTextEncode"
+                and n["inputs"]["text"])["inputs"]["text"]
+    assert text == "a glowing lantern"

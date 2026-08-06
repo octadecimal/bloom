@@ -122,3 +122,36 @@ def matting_graph(t: Technique, image_name: str) -> dict:
         "save": {"class_type": "SaveImage",
                  "inputs": {"images": ["matte", 0], "filename_prefix": "mattebench"}},
     }
+
+
+def qwen_graph(t: Technique, prompt: str, width: int, height: int,
+               seed: int) -> dict:
+    """Native-RGBA generation graph. Input names validated against the box's
+    live object_info before first use (see Task 15 verification step) — a
+    mismatch fails loudly at render time and the technique is dropped, so a
+    wrong guess cannot corrupt verdicts."""
+    return {
+        "unet": {"class_type": "UNETLoader",
+                 "inputs": {"unet_name": t.model, "weight_dtype": "default"}},
+        "clip": {"class_type": "CLIPLoader",
+                 "inputs": {"clip_name": t.params["clip"], "type": "qwen_image"}},
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": t.params["vae"]}},
+        "pos": {"class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["clip", 0], "text": prompt}},
+        "neg": {"class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["clip", 0], "text": ""}},
+        "latent": {"class_type": "EmptyQwenImageLayeredLatentImage",
+                   "inputs": {"width": width, "height": height,
+                              "layers": 1, "batch_size": 1}},
+        "sample": {"class_type": "KSampler",
+                   "inputs": {"model": ["unet", 0], "positive": ["pos", 0],
+                              "negative": ["neg", 0],
+                              "latent_image": ["latent", 0], "seed": seed,
+                              "steps": 20, "cfg": 2.5, "sampler_name": "euler",
+                              "scheduler": "simple", "denoise": 1.0}},
+        "decode": {"class_type": "VAEDecode",
+                   "inputs": {"samples": ["sample", 0], "vae": ["vae", 0]}},
+        "save": {"class_type": "SaveImage",
+                 "inputs": {"images": ["decode", 0],
+                            "filename_prefix": "mattebench-qwen"}},
+    }
