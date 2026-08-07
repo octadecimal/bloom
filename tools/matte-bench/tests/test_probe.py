@@ -1,3 +1,5 @@
+import httpx
+import matte_bench.probe as probe_mod
 from matte_bench.probe import available_models, checkpoint_installed, plate_checkpoint, qwen_weights
 
 OBJECT_INFO = {
@@ -65,3 +67,30 @@ def test_qwen_weights_requires_full_trio_and_node():
     no_node = {k: v for k, v in full.items()
                if k != "EmptyQwenImageLayeredLatentImage"}
     assert qwen_weights(no_node) is None
+
+
+def test_comfy_unreachable_is_none_when_box_answers(monkeypatch):
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(probe_mod.httpx, "get", lambda url, timeout: Resp())
+    assert probe_mod.comfy_unreachable("http://gpu:8188") is None
+
+
+def test_comfy_unreachable_reports_the_reason(monkeypatch):
+    def boom(url, timeout):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(probe_mod.httpx, "get", boom)
+    assert "refused" in probe_mod.comfy_unreachable("http://gpu:8188")
+
+
+def test_comfy_unreachable_never_returns_an_empty_reason(monkeypatch):
+    """str(exc) can be empty (e.g. bare timeout classes); the operator-facing
+    message must still name the failure."""
+    def boom(url, timeout):
+        raise httpx.ConnectTimeout("")
+
+    monkeypatch.setattr(probe_mod.httpx, "get", boom)
+    assert probe_mod.comfy_unreachable("http://gpu:8188") == "ConnectTimeout"
