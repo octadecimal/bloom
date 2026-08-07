@@ -8,10 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { expect, it, vi } from 'vitest';
 
-const HTML = readFileSync(
-  fileURLToPath(new URL('../matte_bench/static/index.html', import.meta.url)),
-  'utf8',
-);
+const HTML = readFileSync(fileURLToPath(new URL('../matte_bench/static/index.html', import.meta.url)), 'utf8');
 const SCRIPT = /<script>([\s\S]*?)<\/script>/.exec(HTML)![1];
 
 const json = (body: unknown) => ({
@@ -40,8 +37,7 @@ function boot(overrides: { next?: () => unknown } = {}) {
   });
   const fetch = vi.fn((url: string) => {
     if (url === '/api/techniques') return techniques;
-    if (url === '/api/next')
-      return Promise.resolve(overrides.next ? overrides.next() : json({ status: 'ready', comparison: COMPARISON }));
+    if (url === '/api/next') return Promise.resolve(overrides.next ? overrides.next() : json({ status: 'ready', comparison: COMPARISON }));
     if (url === '/api/progress') return Promise.resolve(json({ classes: [] }));
     if (url === '/api/verdict') return Promise.resolve(json({ recorded: true }));
     return Promise.resolve(json({}));
