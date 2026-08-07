@@ -343,6 +343,10 @@
     // plate it was never cut from. techniquesReady never rejects, so this
     // can't block judging.
     await techniquesReady;
+    // The wait may outlive the view that asked for it (o toggled back off,
+    // or a vote advanced the comparison) — painting then would put a stale
+    // original over whatever is current. Bail instead.
+    if (!originalMode || !current || current.subject !== subject) return;
     if (techniqueCls[technique] !== 'B') return paintPlate(el, subject);
     return new Promise((resolve) => {
       el.onload = () => resolve();

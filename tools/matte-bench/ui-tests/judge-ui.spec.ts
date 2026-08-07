@@ -12,7 +12,7 @@ const HTML = readFileSync(
   fileURLToPath(new URL('../matte_bench/static/index.html', import.meta.url)),
   'utf8',
 );
-const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)![1];
+const SCRIPT = /<script>([\s\S]*?)<\/script>/.exec(HTML)![1];
 
 const json = (body: unknown) => ({
   ok: true,
@@ -82,8 +82,8 @@ it('o-toggle before /api/techniques resolves shows own originals, not the plate'
   // misleading-original confusion the per-side originals were built to fix.
   p.key('o');
   await flush();
-  expect(p.src('imgL')).not.toBe('/plate/s1.png');
-  expect(p.src('imgR')).not.toBe('/plate/s1.png');
+  expect(p.src('imgL')).toBe(`/render/s1/${COMPARISON.left}.png`);
+  expect(p.src('imgR')).toBe(`/render/s1/${COMPARISON.right}.png`);
 
   p.resolveTechniques({
     [COMPARISON.left]: { label: 'backdrop-key/chroma-green', cls: 'B' },
@@ -95,13 +95,37 @@ it('o-toggle before /api/techniques resolves shows own originals, not the plate'
   });
 });
 
+it('an o-press abandoned before /api/techniques resolves paints nothing later', async () => {
+  const p = boot();
+  await firstComparisonOnScreen(p);
+
+  // Operator presses `o` with the techniques map still in flight, then
+  // changes their mind and toggles back to render mode. When the map
+  // finally lands, the abandoned original-paint must not fire — a stale
+  // original silently replacing the current render-mode view is the exact
+  // wrong-image failure a judging tool can least afford.
+  p.key('o');
+  await flush();
+  p.key('o');
+  await flush();
+  p.resolveTechniques({
+    [COMPARISON.left]: { label: 'backdrop-key/chroma-green', cls: 'B' },
+    [COMPARISON.right]: { label: 'backdrop-key/chroma-magenta', cls: 'B' },
+  });
+  await flush();
+  expect(p.src('imgL')).toBe(`/render/s1/${COMPARISON.left}.png`);
+  expect(p.src('imgR')).toBe(`/render/s1/${COMPARISON.right}.png`);
+});
+
 it('a repeat comparison with identical render URLs still finishes loading', async () => {
   const p = boot();
   await firstComparisonOnScreen(p);
 
   // Voting brings back the same comparison (repeat pairs do this). The src
   // assignments are byte-identical, so the browser fires no load event — the
-  // page must not hang on "loading images…" forever.
+  // page must not hang on "loading images…" forever. (The alpha re-toggle
+  // stalls the same way via identical canvas dataURLs, but jsdom has no
+  // canvas — that path shares the setSrc mechanism pinned here.)
   p.key('ArrowDown');
   await vi.waitFor(() => expect(p.fetch.mock.calls.filter(([u]) => u === '/api/next').length).toBe(2));
   await vi.waitFor(() => {
