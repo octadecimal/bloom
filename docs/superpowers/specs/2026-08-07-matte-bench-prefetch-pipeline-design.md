@@ -140,3 +140,53 @@ via the existing `_client` reset helper. New tests in `tests/test_web.py`:
 
 No keying params change → no hash retirement, no re-renders. `/api/next`
 contract unchanged. UI untouched.
+
+## V2 amendment (2026-08-07, same day): consume-or-wait
+
+Live testing at the operator's real judging cadence (~3 votes in 5-10s per
+subject) falsified two v1 design decisions — observed console sequence
+`miss (empty)`, `miss (empty)`, `miss (stale)` with waits WORSE than
+pre-pipeline (~90-140s):
+
+1. **Generation-strict consumption discards good work.** The worker's first
+   entry takes ~60-130s; the operator rotates every ~10-70s, so the first
+   rotation always misses. That fallback rotation bumps `state.generation`,
+   permanently staling every entry the worker later stages — the whole queue
+   is cleared on the next rotation and the worker restarts from scratch each
+   serve. Its GPU output is discarded forever.
+2. **Render-instead-of-wait fallback creates GPU contention.** Each empty
+   miss launches a demand render that queues behind the worker's speculative
+   renders on the serial GPU, stretching both. The pipeline actively
+   worsened the wait it was built to hide.
+
+### V2 design
+
+A rendered subject is always valid — the queue carries subjects, not
+predictions:
+
+- `StagedEntry` slims to `subject` + `predicted_pair` (the pair is kept only
+  so later worker runs can chain synthetic ties for entries already staged).
+  `consume_rng_state`, `chain_rng_state`, `generation`, and
+  `state.generation` are deleted along with all invalidation machinery.
+- The worker keeps a **private persistent rng** (`state.prefetch_rng`,
+  lazily cloned from `state.rng` on first run, never reset). The demand
+  path's rng is never fast-forwarded; the two streams are independent by
+  design. Divergence costs at most a render-cache miss on a pair choice
+  (Class B: impossible — two techniques; Class A: seconds).
+- **Consumption pops unconditionally.** On rotation with a non-empty queue:
+  pop head, `prefetch hit`. The stale-clear is gone — an entry that missed
+  one rotation serves the next.
+- **Consume-or-wait replaces render-a-rival.** On rotation with an empty
+  queue while the worker is alive, the demand path WAITS (bounded 300s,
+  progress text "waiting for pre-generated subject…", condition-notified on
+  append) for the worker's in-flight entry instead of sampling a fresh
+  subject and contending for the GPU. Fresh demand sampling happens only
+  when the worker is dead/absent or the wait times out — and it no longer
+  clears the queue.
+- `staged_lock` becomes a `threading.Condition` (`staged_cond`): appends
+  notify, the consume-or-wait waits on it. The per-subject render guard and
+  the single-worker gate are unchanged.
+
+Steady state at fast judging: the GPU does only pipeline work, in order;
+every subject is served from the queue the moment it exists; the operator
+wait converges to the true GPU floor instead of floor + contention + waste.
