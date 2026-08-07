@@ -507,15 +507,27 @@ async def _prefetch_async(served: dict) -> None:
     # value would tag an already-stale prediction as fresh again. Instead,
     # any mid-flight rotation is caught later, at consumption time
     # (_pick_subject drops the whole queue on a head generation mismatch).
-    if state.staged and state.staged[0].generation == state.generation:
-        pred_rng = _cloned_rng_state(state.staged[-1].chain_rng_state)
-        next_generation = state.staged[-1].generation + 1
-        for e in state.staged:
+    #
+    # Read state.staged into a local snapshot ONCE before any of the reads
+    # below: the demand thread's _pick_subject can pop(0) the head or
+    # .clear() the whole list concurrently — this worker holds no lock over
+    # it — and a multi-step read straight against the live list (check the
+    # head, then index the tail, then iterate) could observe a mutation
+    # mid-read. A clear() landing between the head check and the [-1] access
+    # would raise IndexError, which _run_prefetch's broad except swallows,
+    # silently discarding the whole fill attempt. Every read below (head
+    # validity, tail access, tie iteration) goes against this snapshot
+    # instead; only the append in step 4 touches state.staged itself.
+    staged = list(state.staged)
+    if staged and staged[0].generation == state.generation:
+        pred_rng = _cloned_rng_state(staged[-1].chain_rng_state)
+        next_generation = staged[-1].generation + 1
+        for e in staged:
             verdicts = _synthetic_ties(verdicts, e.subject.id,
                                        e.subject.bucket, e.predicted_pair,
                                        PAIRS_PER_SUBJECT)
     else:
-        if state.staged:
+        if staged:
             state.staged.clear()          # stale lineage — never extend it
         pred_rng = _cloned_rng(state.rng)
         next_generation = state.generation

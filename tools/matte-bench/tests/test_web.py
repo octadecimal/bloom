@@ -832,8 +832,17 @@ def test_prefetch_fills_queue_to_depth_after_first_serve(tmp_path, monkeypatch):
 
 
 def test_prefetch_tops_up_existing_queue_without_duplicates(tmp_path, monkeypatch):
-    """A second worker run with one entry already staged adds exactly one
-    more, chained after it — it must not re-sample or re-stage the head."""
+    """A second worker run with one VALID entry already staged — the
+    survivor of a real rotation, not a hand-built queue — tops the queue
+    back up to PREFETCH_DEPTH by chaining off that entry's tail state
+    (chain_rng_state, generation + 1), not by re-sampling or re-staging it.
+
+    Exercising this through a real _pick_subject rotation (rather than
+    stopping after the first fill, where the queue is already full and the
+    second call is a no-op) is what actually exercises the tail-chaining
+    branch in _prefetch_async — an off-by-one in the tail-resume generation
+    stamp or a chain-from-fresh-clone bug would not be caught by a call that
+    never needs to top anything up."""
     _client(tmp_path)
     prepared = []
 
@@ -847,11 +856,28 @@ def test_prefetch_tops_up_existing_queue_without_duplicates(tmp_path, monkeypatc
     state.active_served = 1
     served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
               "right": "b", "repeat_of": None, "cls": "A"}
-    asyncio.run(web._prefetch_async(served))
-    head_id = state.staged[0].subject.id
+
+    # Fill the queue to depth.
     asyncio.run(web._prefetch_async(served))
     assert len(state.staged) == web.PREFETCH_DEPTH
-    assert state.staged[0].subject.id == head_id
+
+    # Force a real rotation: active_served at the boundary makes
+    # _pick_subject consume the staged head instead of reusing the active
+    # subject, leaving exactly one entry behind — restamped fresh by the
+    # rotation it just survived, so its generation matches state.generation.
+    state.active_served = PAIRS_PER_SUBJECT
+    asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert len(state.staged) == web.PREFETCH_DEPTH - 1
+    head = state.staged[0]
+    assert head.generation == state.generation
+
+    # Top up again: the survivor must be chained off, not re-sampled.
+    asyncio.run(web._prefetch_async(served))
+    assert len(state.staged) == web.PREFETCH_DEPTH
+    assert state.staged[0] is head             # survivor untouched
+    assert state.staged[1].generation == head.generation + 1
+    staged_ids = [e.subject.id for e in state.staged]
+    assert staged_ids.count(head.subject.id) == 1   # no duplicate staging
 
 
 def test_consuming_pipeline_end_to_end_needs_no_demand_render(tmp_path, monkeypatch):
