@@ -937,13 +937,47 @@ def test_original_route_rejects_traversal(tmp_path):
 
 
 def test_outage_reads_as_error_and_drops_nothing(tmp_path, monkeypatch):
-    """A ComfyUI outage must NOT read as 'session done', and must not retire
-    the technique that happened to be rendering (observed live 2026-08-07:
-    chroma-magenta was dropped by a websocket handshake timeout)."""
+    """A ComfyUI outage must NOT read as 'session done'. This drives the
+    GENERIC `except Exception` branch in `_compute_next` (a bare RuntimeError
+    out of `_prepare`, not a RenderError) — the branch that would otherwise
+    write `state.unavailable[c.left]` and report done. See
+    test_render_error_outage_does_not_drop_the_technique below for the
+    RenderError branch, which is the one that actually drops a technique."""
     client = _client(tmp_path)
 
     async def down_prepare(c, progress):
         raise RuntimeError("timed out during opening handshake")
+
+    monkeypatch.setattr(web, "_prepare", down_prepare)
+    state.comfy_probe = lambda url: "timed out during opening handshake"
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        resp = client.get("/api/next")
+        if resp.status_code == 500:
+            break
+        assert resp.json()["status"] == "pending", resp.json()
+        time.sleep(0.01)
+    assert resp.status_code == 500
+    detail = resp.json()["detail"]
+    assert detail == ("ComfyUI unreachable at http://unused: "
+                      "timed out during opening handshake")
+    assert state.techniques == ["a", "b"]
+    assert state.unavailable == {}
+
+
+def test_render_error_outage_does_not_drop_the_technique(tmp_path, monkeypatch):
+    """The RenderError branch is the only place `_compute_next` actually
+    retires a technique from `state.techniques` (observed live 2026-08-07:
+    chroma-magenta was dropped by a websocket handshake timeout, when the
+    true cause was ComfyUI being unreachable, not a broken technique). When
+    the box is ALSO unreachable, the outage must win: report 500, and leave
+    the technique pool and `state.unavailable` untouched."""
+    from matte_bench.render import RenderError
+
+    client = _client(tmp_path)
+
+    async def down_prepare(c, progress):
+        raise RenderError("birefnet-hr", "timed out during opening handshake")
 
     monkeypatch.setattr(web, "_prepare", down_prepare)
     state.comfy_probe = lambda url: "timed out during opening handshake"
