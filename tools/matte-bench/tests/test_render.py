@@ -202,6 +202,58 @@ def test_backdrop_render_writes_pre_key_original(tmp_path, monkeypatch):
     assert Image.open(orig).getpixel((0, 0)) == (0, 177, 64)   # pre-key pixels
 
 
+def test_cached_render_and_orig_are_not_touched(tmp_path, monkeypatch):
+    """A cached dest short-circuits the whole render: no generation, and the
+    .orig.png sitting next to it keeps its exact bytes — re-running the bench
+    must never quietly regenerate what an operator already judged against."""
+    class ExplodingProvider:
+        def __init__(self, base_url):
+            raise AssertionError("cached render must not touch the provider")
+
+    monkeypatch.setattr("matte_bench.render.LiveComfyProvider", ExplodingProvider)
+    t = _b()
+    dest = render_path(tmp_path, "s1", t)
+    orig = orig_path(tmp_path, "s1", t)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(b"keyed-bytes")
+    orig.write_bytes(b"orig-bytes")
+    s = Subject(id="s1", bucket="wispy", prompt="a fern", seed=3,
+                width=16, height=16)
+    out = asyncio.run(ensure_render(s, t, tmp_path, "http://gpu:8188"))
+    assert out == dest
+    assert dest.read_bytes() == b"keyed-bytes"
+    assert orig.read_bytes() == b"orig-bytes"
+
+
+def _q(**over):
+    base = dict(id="qwen-layered", cls="B", node="qwen-layered",
+                model="qwen_unet.safetensors",
+                params={"clip": "qwen_clip.safetensors",
+                        "vae": "qwen_vae.safetensors"},
+                post=())
+    return Technique(**{**base, **over})
+
+
+def test_qwen_render_writes_no_original(tmp_path, monkeypatch):
+    """qwen-layered generates RGBA natively — there is no pre-key image, so
+    nothing may claim to be one. The UI's 'o' toggle relies on the missing
+    file to fall back to the dimmed keyed render."""
+    class FakeProvider:
+        def __init__(self, base_url):
+            pass
+
+        async def generate(self, graph):
+            from matte_bench.render import ImageEvent
+            yield ImageEvent(data=_flat_png((1, 2, 3)))
+
+    monkeypatch.setattr("matte_bench.render.LiveComfyProvider", FakeProvider)
+    s = Subject(id="s1", bucket="wispy", prompt="a fern", seed=3,
+                width=16, height=16)
+    dest = asyncio.run(ensure_render(s, _q(), tmp_path, "http://gpu:8188"))
+    assert dest.exists()
+    assert not orig_path(tmp_path, "s1", _q()).exists()
+
+
 def test_class_a_render_writes_no_original(tmp_path, monkeypatch):
     class FakeProvider:
         def __init__(self, base_url):
