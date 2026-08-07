@@ -23,10 +23,12 @@
 ### Task 1: `comfy_unreachable` probe helper
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/probe.py`
 - Test: `tools/matte-bench/tests/test_probe.py`
 
 **Interfaces:**
+
 - Produces: `comfy_unreachable(base_url: str, timeout: float = 3.0) -> str | None` — returns the failure-reason string when the ComfyUI box does not answer `GET {base_url}/system_stats`, or `None` when it does. Task 2 imports it into `web.py`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -103,10 +105,12 @@ git commit -m "feat(matte-bench): add comfy_unreachable probe helper"
 ### Task 2: outage classification in `_compute_next`
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/web.py` (State dataclass ~line 40-65, `_compute_next` ~line 295-330, imports ~line 15-31)
 - Test: `tools/matte-bench/tests/test_web.py` (`_client` helper ~line 17-58)
 
 **Interfaces:**
+
 - Consumes: `comfy_unreachable(base_url, timeout=3.0) -> str | None` from Task 1.
 - Produces: `state.comfy_probe` (callable `str -> str | None`, defaults to `comfy_unreachable`); `_raise_if_comfy_down()` raising `RuntimeError(f"ComfyUI unreachable at {state.comfy_url}: {reason}")`. The error string reaches clients as `/api/next` HTTP 500 `{"detail": ...}` via the existing `_NextJob.error` path — Task 3's client change relies on that `detail` wording.
 
@@ -250,10 +254,12 @@ git commit -m "feat(matte-bench): surface ComfyUI outages instead of done/drops"
 ### Task 3: client renders the server's error detail
 
 **Files:**
+
 - Modify: `tools/matte-bench/matte_bench/static/index.html` (`load()` error path, ~line 450-455)
 - Test: `tools/matte-bench/ui-tests/judge-ui.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `/api/next` 500 responses whose JSON body is `{"detail": "ComfyUI unreachable at <url>: <reason>"}` (Task 2).
 
 - [ ] **Step 1: Parameterize the harness's /api/next stub**
@@ -301,20 +307,20 @@ Expected: the new test FAILS (status shows `Error: 500 Internal Server Error`); 
 In `load()` in `tools/matte-bench/matte_bench/static/index.html`, replace the `!resp.ok` branch:
 
 ```js
-      if (!resp.ok) {
-        hideLoading();
-        // The server puts the human-readable story in the JSON detail
-        // (e.g. "ComfyUI unreachable at ..."); the bare status line is the
-        // fallback for non-JSON errors.
-        let detail = '';
-        try {
-          detail = (await resp.json()).detail || '';
-        } catch (err) {
-          /* non-JSON body */
-        }
-        setStatus(detail ? `Error: ${detail} — reload to retry` : `Error: ${resp.status} ${resp.statusText}`, true);
-        return;
-      }
+if (!resp.ok) {
+  hideLoading();
+  // The server puts the human-readable story in the JSON detail
+  // (e.g. "ComfyUI unreachable at ..."); the bare status line is the
+  // fallback for non-JSON errors.
+  let detail = '';
+  try {
+    detail = (await resp.json()).detail || '';
+  } catch (err) {
+    /* non-JSON body */
+  }
+  setStatus(detail ? `Error: ${detail} — reload to retry` : `Error: ${resp.status} ${resp.statusText}`, true);
+  return;
+}
 ```
 
 - [ ] **Step 5: Run both suites to verify green**
