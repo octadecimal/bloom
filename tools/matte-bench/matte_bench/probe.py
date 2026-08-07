@@ -63,3 +63,16 @@ def qwen_weights(object_info: dict) -> dict | None:
     if unet and clip and vae and "EmptyQwenImageLayeredLatentImage" in object_info:
         return {"unet": unet[0], "clip": clip[0], "vae": vae[0]}
     return None
+
+
+def comfy_unreachable(base_url: str, timeout: float = 3.0) -> str | None:
+    """Reason the ComfyUI box did not answer, or None when it did.
+
+    Cheap (GET /system_stats, short timeout) — used to tell an infra outage
+    apart from a genuinely broken technique before blaming the technique."""
+    try:
+        httpx.get(f"{base_url.rstrip('/')}/system_stats",
+                  timeout=timeout).raise_for_status()
+    except Exception as exc:                          # noqa: BLE001 - the reason IS the payload
+        return str(exc) or type(exc).__name__
+    return None

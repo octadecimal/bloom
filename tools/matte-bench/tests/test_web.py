@@ -41,6 +41,9 @@ def _client(tmp_path, monkeypatch=None):
     # comparisons, matching every pre-existing test's implicit cls="A".
     state.technique_cls = {"a": "A", "b": "A"}
     state.comfy_url = "http://unused"
+    # Reachable by default: outage classification is opt-in per test, and the
+    # probe must never hit the network from the suite.
+    state.comfy_probe = lambda url: None
     state.unavailable = {}
     state.verdict_log = tmp_path / "verdicts.jsonl"
     state.fault_log = tmp_path / "faults.jsonl"
@@ -931,3 +934,83 @@ def test_original_route_rejects_traversal(tmp_path):
     secret.write_bytes(b"\x89PNG top secret")
     resp = client.get("/original/%2e%2e/secret.png")
     assert resp.status_code == 404
+
+
+def test_outage_reads_as_error_and_drops_nothing(tmp_path, monkeypatch):
+    """A ComfyUI outage must NOT read as 'session done'. This drives the
+    GENERIC `except Exception` branch in `_compute_next` (a bare RuntimeError
+    out of `_prepare`, not a RenderError) — the branch that would otherwise
+    write `state.unavailable[c.left]` and report done. See
+    test_render_error_outage_does_not_drop_the_technique below for the
+    RenderError branch, which is the one that actually drops a technique."""
+    client = _client(tmp_path)
+
+    async def down_prepare(c, progress):
+        raise RuntimeError("timed out during opening handshake")
+
+    monkeypatch.setattr(web, "_prepare", down_prepare)
+    state.comfy_probe = lambda url: "timed out during opening handshake"
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        resp = client.get("/api/next")
+        if resp.status_code == 500:
+            break
+        assert resp.json()["status"] == "pending", resp.json()
+        time.sleep(0.01)
+    assert resp.status_code == 500
+    detail = resp.json()["detail"]
+    assert detail == ("ComfyUI unreachable at http://unused: "
+                      "timed out during opening handshake")
+    assert state.techniques == ["a", "b"]
+    assert state.unavailable == {}
+
+
+def test_render_error_outage_does_not_drop_the_technique(tmp_path, monkeypatch):
+    """The RenderError branch is the only place `_compute_next` actually
+    retires a technique from `state.techniques` (observed live 2026-08-07:
+    chroma-magenta was dropped by a websocket handshake timeout, when the
+    true cause was ComfyUI being unreachable, not a broken technique). When
+    the box is ALSO unreachable, the outage must win: report 500, and leave
+    the technique pool and `state.unavailable` untouched."""
+    from matte_bench.render import RenderError
+
+    client = _client(tmp_path)
+
+    async def down_prepare(c, progress):
+        raise RenderError("birefnet-hr", "timed out during opening handshake")
+
+    monkeypatch.setattr(web, "_prepare", down_prepare)
+    state.comfy_probe = lambda url: "timed out during opening handshake"
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        resp = client.get("/api/next")
+        if resp.status_code == 500:
+            break
+        assert resp.json()["status"] == "pending", resp.json()
+        time.sleep(0.01)
+    assert resp.status_code == 500
+    detail = resp.json()["detail"]
+    assert detail == ("ComfyUI unreachable at http://unused: "
+                      "timed out during opening handshake")
+    assert state.techniques == ["a", "b"]
+    assert state.unavailable == {}
+
+
+def test_done_while_comfy_down_reads_as_error(tmp_path, monkeypatch):
+    """With no comparison choosable (pool of one) the session would report
+    done; when the box is ALSO unreachable, the outage is the truer story —
+    this is what an operator sees when the bench booted while the box was
+    off."""
+    client = _client(tmp_path, monkeypatch)
+    state.techniques = ["a"]
+    state.technique_cls = {"a": "A"}
+    state.comfy_probe = lambda url: "connect timeout"
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        resp = client.get("/api/next")
+        if resp.status_code == 500:
+            break
+        assert resp.json()["status"] in ("pending", "done"), resp.json()
+        time.sleep(0.01)
+    assert resp.status_code == 500
+    assert resp.json()["detail"] == "ComfyUI unreachable at http://unused: connect timeout"

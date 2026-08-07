@@ -276,6 +276,14 @@
     for (const id of ['badgeL', 'badgeR']) document.getElementById(id).classList.toggle('dim', originalMode);
   }
 
+  // Assigning src its CURRENT value fires no load event, which would strand
+  // the paint promises forever (repeat comparisons, o/a re-toggles) — the
+  // page sticks on "loading images…". Synthesize the event instead.
+  function setSrc(el, url) {
+    if (el.getAttribute('src') === url) el.dispatchEvent(new Event('load'));
+    else el.src = url;
+  }
+
   // Alpha rendered as greyscale. Halo and haze are far easier to see as
   // luminance than as a fringe against art.
   function toAlpha(img, el) {
@@ -291,7 +299,7 @@
       d.data[i + 3] = 255;
     }
     g.putImageData(d, 0, 0);
-    el.src = c.toDataURL();
+    setSrc(el, c.toDataURL());
   }
 
   // Paints a technique render into `el`, resolving once it has actually
@@ -308,7 +316,7 @@
       el.onerror = () => resolve();
       const src = `/render/${subject}/${technique}.png`;
       if (!alphaOnly) {
-        el.src = src;
+        setSrc(el, src);
         return;
       }
       const probe = new Image();
@@ -322,14 +330,23 @@
     return new Promise((resolve) => {
       el.onload = () => resolve();
       el.onerror = () => resolve();
-      el.src = `/plate/${subject}.png`;
+      setSrc(el, `/plate/${subject}.png`);
     });
   }
 
   // Class B sides were not cut from the plate — each shows its OWN pre-key
   // generation. Falls back to the keyed render if no original exists
   // (legacy cache, native-RGBA techniques).
-  function paintSideOriginal(el, subject, technique) {
+  async function paintSideOriginal(el, subject, technique) {
+    // The class map loads async at startup; an early `o` press must wait for
+    // it rather than read an empty map and show a Class B side the shared
+    // plate it was never cut from. techniquesReady never rejects, so this
+    // can't block judging.
+    await techniquesReady;
+    // The wait may outlive the view that asked for it (o toggled back off,
+    // or a vote advanced the comparison) — painting then would put a stale
+    // original over whatever is current. Bail instead.
+    if (!originalMode || !current || current.subject !== subject) return;
     if (techniqueCls[technique] !== 'B') return paintPlate(el, subject);
     return new Promise((resolve) => {
       el.onload = () => resolve();
@@ -342,7 +359,7 @@
           resolve();
         });
       };
-      el.src = `/original/${subject}/${technique}.png`;
+      setSrc(el, `/original/${subject}/${technique}.png`);
     });
   }
 
@@ -449,7 +466,16 @@
       }
       if (!resp.ok) {
         hideLoading();
-        setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
+        // The server puts the human-readable story in the JSON detail
+        // (e.g. "ComfyUI unreachable at ..."); the bare status line is the
+        // fallback for non-JSON errors.
+        let detail = '';
+        try {
+          detail = (await resp.json()).detail || '';
+        } catch (err) {
+          /* non-JSON body */
+        }
+        setStatus(detail ? `Error: ${detail} — reload to retry` : `Error: ${resp.status} ${resp.statusText}`, true);
         return;
       }
       try {
@@ -550,7 +576,7 @@
       repaint();
     }
   });
-  fetch('/api/techniques')
+  const techniquesReady = fetch('/api/techniques')
     .then((r) => r.json())
     .then((m) => {
       for (const [h, v] of Object.entries(m)) techniqueCls[h] = v.cls;
