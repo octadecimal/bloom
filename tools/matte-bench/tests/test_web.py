@@ -27,6 +27,7 @@ def _client(tmp_path, monkeypatch=None):
     state.rendering = set()
     state.render_cond = threading.Condition()
     state.staged = []
+    state.staged_lock = threading.Lock()
     state.generation = 0
     state.root = tmp_path
     state.subjects = []
@@ -1226,7 +1227,7 @@ def test_done_while_comfy_down_reads_as_error(tmp_path, monkeypatch):
 def test_demand_waits_only_for_its_own_subject(tmp_path, monkeypatch):
     """The worker is mid-render on subject X: a demand for X waits until X is
     released; a demand for Y does not wait at all."""
-    client = _client(tmp_path)
+    _client(tmp_path)
     release = threading.Event()
     entered = threading.Event()
 

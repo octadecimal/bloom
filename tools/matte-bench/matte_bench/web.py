@@ -55,7 +55,7 @@ class StagedEntry:
                                 # becomes when this entry is consumed
     chain_rng_state: object     # clone state after this entry's comparison
                                 # draws: where the next entry's prediction resumes
-    predicted_pair: tuple
+    predicted_pair: tuple[str, str]
     generation: int             # consumable when == state.generation
 
 
@@ -88,6 +88,14 @@ class State:
     # entry k's prediction assumed entries 0..k-1 were consumed first, so a
     # stale head invalidates every entry behind it (see _pick_subject).
     staged: list = field(default_factory=list)
+    # Serializes every mutation of `staged` (pop/clear in _pick_subject,
+    # snapshot-and-maybe-clear in _prefetch_async, append in the fill loop).
+    # Without it, the worker's stale-branch clear() can race the demand
+    # thread's pop(0): either a valid rendered entry gets silently discarded,
+    # or the demand thread pops mid-clear and IndexErrors into a 500. Each
+    # holder does a short synchronous section only — never held across an
+    # `await`.
+    staged_lock: threading.Lock = field(default_factory=threading.Lock)
     # Bumped by _pick_subject every time it rotates to a new active subject
     # (whether from the staged queue or the fresh-draw fallback). Each
     # StagedEntry.generation records the value the prefetcher observed when it
@@ -292,23 +300,30 @@ async def _pick_subject(verdicts, progress) -> Subject:
                        if s.id == state.active_subject_id), None)
         if active is not None:
             return active
-    if state.staged and state.staged[0].generation == state.generation:
-        entry = state.staged.pop(0)
-        subject = entry.subject
-        # Catch the shared stream up to exactly where the prefetcher's clone
-        # landed after sampling this subject — as far as a real draw would
-        # have advanced it, no further.
-        state.rng.setstate(entry.consume_rng_state)
-        print(f"prefetch hit: {subject.id}")
-    else:
-        if state.staged:
-            # The head was predicted for a rotation that already happened
-            # some other way; every later entry chained off it — drop them
-            # all.
-            state.staged.clear()
-            print("prefetch miss (stale)")
+    # The head-generation check, the pop, and the stale-branch clear() must
+    # be one atomic decision — otherwise the worker's concurrent clear() (see
+    # _prefetch_async) can race this exact judgment. setstate/print stay
+    # inside the lock too; they're cheap and synchronous.
+    with state.staged_lock:
+        if state.staged and state.staged[0].generation == state.generation:
+            entry = state.staged.pop(0)
+            subject = entry.subject
+            # Catch the shared stream up to exactly where the prefetcher's
+            # clone landed after sampling this subject — as far as a real
+            # draw would have advanced it, no further.
+            state.rng.setstate(entry.consume_rng_state)
+            print(f"prefetch hit: {subject.id}")
         else:
-            print("prefetch miss (empty)")
+            if state.staged:
+                # The head was predicted for a rotation that already
+                # happened some other way; every later entry chained off
+                # it — drop them all.
+                state.staged.clear()
+                print("prefetch miss (stale)")
+            else:
+                print("prefetch miss (empty)")
+            entry = None
+    if entry is None:
         subject = await _sample_fresh(verdicts, progress)
     state.active_subject_id = subject.id
     state.active_served = 0
@@ -536,16 +551,26 @@ async def _prefetch_async(served: dict) -> None:
     #
     # Read state.staged into a local snapshot ONCE before any of the reads
     # below: the demand thread's _pick_subject can pop(0) the head or
-    # .clear() the whole list concurrently — this worker holds no lock over
-    # it — and a multi-step read straight against the live list (check the
-    # head, then index the tail, then iterate) could observe a mutation
-    # mid-read. A clear() landing between the head check and the [-1] access
-    # would raise IndexError, which _run_prefetch's broad except swallows,
-    # silently discarding the whole fill attempt. Every read below (head
-    # validity, tail access, tie iteration) goes against this snapshot
-    # instead; only the append in step 4 touches state.staged itself.
-    staged = list(state.staged)
-    if staged and staged[0].generation == state.generation:
+    # .clear() the whole list concurrently, and a multi-step read straight
+    # against the live list (check the head, then index the tail, then
+    # iterate) could observe a mutation mid-read. A clear() landing between
+    # the head check and the [-1] access would raise IndexError, which
+    # _run_prefetch's broad except swallows, silently discarding the whole
+    # fill attempt. Every read below (head validity, tail access, tie
+    # iteration) goes against this snapshot instead; only the append in step
+    # 4 touches state.staged itself.
+    #
+    # The snapshot AND the stale-branch clear() both happen under
+    # staged_lock, in one critical section, so the clear can never act on a
+    # judgment made against a queue the demand thread has since changed —
+    # re-validated here (staged[0].generation) rather than trusted from
+    # before the lock was taken.
+    with state.staged_lock:
+        staged = list(state.staged)
+        resume_valid = bool(staged) and staged[0].generation == state.generation
+        if not resume_valid and staged:
+            state.staged.clear()          # stale lineage — never extend it
+    if resume_valid:
         pred_rng = _cloned_rng_state(staged[-1].chain_rng_state)
         next_generation = staged[-1].generation + 1
         for e in staged:
@@ -553,8 +578,6 @@ async def _prefetch_async(served: dict) -> None:
                                        e.subject.bucket, e.predicted_pair,
                                        PAIRS_PER_SUBJECT)
     else:
-        if staged:
-            state.staged.clear()          # stale lineage — never extend it
         pred_rng = _cloned_rng(state.rng)
         next_generation = state.generation
 
@@ -570,10 +593,11 @@ async def _prefetch_async(served: dict) -> None:
         if c is None:
             return
         await _guarded_prepare(c, noop)
-        state.staged.append(StagedEntry(
-            subject=subject, consume_rng_state=consume_state,
-            chain_rng_state=pred_rng.getstate(),
-            predicted_pair=(c.left, c.right), generation=next_generation))
+        with state.staged_lock:
+            state.staged.append(StagedEntry(
+                subject=subject, consume_rng_state=consume_state,
+                chain_rng_state=pred_rng.getstate(),
+                predicted_pair=(c.left, c.right), generation=next_generation))
         next_generation += 1
         verdicts = _synthetic_ties(verdicts, subject.id, subject.bucket,
                                    (c.left, c.right), PAIRS_PER_SUBJECT)

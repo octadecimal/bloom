@@ -129,9 +129,9 @@ via the existing `_client` reset helper. New tests in `tests/test_web.py`:
 3. Two consecutive rotations consume entries 0 and 1 in order.
 4. A fallback rotation (queue invalidated by generation mismatch) clears the
    whole queue and logs a miss.
-5. In-flight guard: demand `_prepare` for subject X blocks until the worker
-   releases X, then proceeds without a duplicate `_prepare` call for cached
-   content; a demand for subject Y is not blocked by the worker rendering X.
+5. In-flight guard: demand blocks until the worker releases the same
+   subject; an unrelated subject is never blocked; the guard releases on a
+   prepare failure; the bounded timeout never wedges.
 6. Existing depth-1 behaviors that still hold (single worker at a time; a
    prefetch failure never drops a technique or touches `unavailable`) stay
    pinned by the existing suite, which must remain green throughout.
