@@ -41,6 +41,23 @@ _BENCH_DIR = Path(__file__).resolve().parents[1]   # tools/matte-bench
 _REPO_ROOT = _BENCH_DIR.parents[1]                 # repo root
 
 
+PREFETCH_DEPTH = 2
+
+
+@dataclass
+class StagedEntry:
+    """One fully-rendered future subject in the prefetch pipeline. Entries
+    form a single rng/verdict lineage: entry k was predicted assuming entries
+    0..k-1 get consumed first, so a stale head invalidates the whole queue."""
+    subject: Subject
+    consume_rng_state: object   # clone state post-sample: what state.rng
+                                # becomes when this entry is consumed
+    chain_rng_state: object     # clone state after this entry's comparison
+                                # draws: where the next entry's prediction resumes
+    predicted_pair: tuple
+    generation: int             # consumable when == state.generation
+
+
 @dataclass
 class State:
     root: Path = field(default_factory=lambda: _REPO_ROOT / "var" / "matte-bench")
@@ -66,22 +83,19 @@ class State:
     rng: random.Random = field(default_factory=lambda: random.Random())
     job: "_NextJob | None" = None
     job_lock: threading.Lock = field(default_factory=threading.Lock)
-    staged_subject: Subject | None = None
-    # The shared rng state right after the clone that sampled staged_subject
-    # finished drawing it — applied to state.rng only when _pick_subject
-    # consumes the staged subject, so the shared stream advances exactly as
-    # far as a real draw would have, never further (see _prefetch_async).
-    staged_rng_state: tuple | None = None
+    # A FIFO of fully-rendered future subjects, one rng/verdict lineage deep:
+    # entry k's prediction assumed entries 0..k-1 were consumed first, so a
+    # stale head invalidates every entry behind it (see _pick_subject).
+    staged: list = field(default_factory=list)
     # Bumped by _pick_subject every time it rotates to a new active subject
-    # (whether from a staged pair or the fresh-draw fallback). staged_generation
-    # records the value the prefetcher observed when it staged its prediction;
-    # a mismatch at consumption time means a rotation already happened via the
-    # fallback (the prefetch hadn't finished writing staged_subject in time),
-    # so the staged pair is stale and must be dropped, not consumed — applying
-    # its staged_rng_state would setstate() state.rng backward past draws that
-    # already happened in the intervening round(s).
+    # (whether from the staged queue or the fresh-draw fallback). Each
+    # StagedEntry.generation records the value the prefetcher observed when it
+    # staged that prediction; a mismatch at consumption time means a rotation
+    # already happened via the fallback (the prefetch hadn't finished writing
+    # the queue in time), so the staged entry is stale and must be dropped,
+    # not consumed — applying its consume_rng_state would setstate() state.rng
+    # backward past draws that already happened in the intervening round(s).
     generation: int = 0
-    staged_generation: int | None = None
     prefetch: threading.Thread | None = None
     prefetch_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -224,37 +238,44 @@ async def _sample_fresh(verdicts, progress, rng: random.Random | None = None) ->
 
 async def _pick_subject(verdicts, progress) -> Subject:
     """Reuse the active sampled subject for a few comparisons (its plate is
-    cached), then rotate: to the prefetcher's staged subject when one is
-    ready AND still fresh, else to a fresh draw.
+    cached), then rotate: to the head of the prefetcher's staged queue when
+    it's ready AND still fresh, else to a fresh draw.
 
-    "Still fresh" matters because the prefetch thread can still be writing
-    staged_subject when THIS rotation happens (the join in _compute_next only
+    "Still fresh" matters because the prefetch worker can still be writing
+    the queue when THIS rotation happens (the join in _compute_next only
     guards _prepare, not this call): if so, we fall back to a real draw here,
     and by the time the prefetch finally finishes staging, its prediction was
     for a rotation that already happened — stale. state.generation (bumped on
-    every rotation, whichever path produced it) versus staged_generation (the
-    generation the prefetcher staged against) is exactly that check: on a
-    mismatch we drop the stale pair instead of consuming it, since applying
-    its staged_rng_state would setstate() state.rng backward past draws that
-    already happened in the intervening round(s)."""
+    every rotation, whichever path produced it) versus the head entry's
+    generation (what the prefetcher staged against) is exactly that check: on
+    a mismatch the WHOLE queue is dropped instead of just the head, since
+    every later entry chained its rng/verdict prediction off the one ahead of
+    it — and applying a stale entry's consume_rng_state would setstate()
+    state.rng backward past draws that already happened in the intervening
+    round(s)."""
     if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
         active = next((s for s in state.subjects
                        if s.id == state.active_subject_id), None)
         if active is not None:
             return active
-    if (state.staged_subject is not None
-            and state.staged_generation == state.generation):
-        subject = state.staged_subject
-        if state.staged_rng_state is not None:
-            # Catch the shared stream up to exactly where the prefetcher's
-            # clone landed after sampling this subject — as far as a real
-            # draw would have advanced it, no further.
-            state.rng.setstate(state.staged_rng_state)
+    if state.staged and state.staged[0].generation == state.generation:
+        entry = state.staged.pop(0)
+        subject = entry.subject
+        # Catch the shared stream up to exactly where the prefetcher's clone
+        # landed after sampling this subject — as far as a real draw would
+        # have advanced it, no further.
+        state.rng.setstate(entry.consume_rng_state)
+        print(f"prefetch hit: {subject.id}")
     else:
+        if state.staged:
+            # The head was predicted for a rotation that already happened
+            # some other way; every later entry chained off it — drop them
+            # all.
+            state.staged.clear()
+            print("prefetch miss (stale)")
+        else:
+            print("prefetch miss (empty)")
         subject = await _sample_fresh(verdicts, progress)
-    state.staged_subject = None
-    state.staged_rng_state = None
-    state.staged_generation = None
     state.active_subject_id = subject.id
     state.active_served = 0
     state.generation += 1
@@ -404,8 +425,8 @@ async def _prefetch_async(served: dict) -> None:
     # the same clone rather than re-cloning state.rng per step (that would
     # replay the same prefix twice instead of continuing it). state.rng
     # itself is never read again after this line and never written to below;
-    # _pick_subject applies staged_rng_state on consumption instead (see
-    # State.staged_rng_state and _pick_subject).
+    # _pick_subject applies a staged entry's consume_rng_state on consumption
+    # instead (see StagedEntry and _pick_subject).
     pred_rng = random.Random()
     pred_rng.setstate(state.rng.getstate())
     # Snapshot state.generation at the SAME moment as the rng clone above,
@@ -420,24 +441,32 @@ async def _prefetch_async(served: dict) -> None:
     # rotates" is active_served >= PAIRS_PER_SUBJECT, not +1.
     rotation_next = (served["repeat_of"] is not None
                      or state.active_served >= PAIRS_PER_SUBJECT)
+    new_entry = False
     if state.active_subject_id is None or (
             rotation_next and served["repeat_of"] is None):
-        if (state.staged_subject is None
-                or state.staged_generation != predicted_generation):
+        if not state.staged or state.staged[0].generation != predicted_generation:
             # Nothing staged yet, or what's staged is itself already stale
             # (predicted for a rotation the fallback path already performed
             # before this call started) — draw a fresh prediction rather than
             # reuse or extend a stale one.
-            state.staged_subject = await _sample_fresh(verdicts, noop, rng=pred_rng)
-            state.staged_rng_state = pred_rng.getstate()
-            state.staged_generation = predicted_generation
-        subject = state.staged_subject
+            state.staged.clear()
+            subject = await _sample_fresh(verdicts, noop, rng=pred_rng)
+            consume_rng_state = pred_rng.getstate()
+            new_entry = True
+        else:
+            subject = state.staged[0].subject
     else:
         subject = next((s for s in state.subjects
                         if s.id == state.active_subject_id), None)
         if subject is None:
             return
     c, _cls = _choose_comparison(subject, verdicts, pred_rng)
+    if new_entry:
+        predicted_pair = (c.left, c.right) if c is not None else ("", "")
+        state.staged.append(StagedEntry(
+            subject=subject, consume_rng_state=consume_rng_state,
+            chain_rng_state=pred_rng.getstate(),
+            predicted_pair=predicted_pair, generation=predicted_generation))
     if c is not None:
         await _prepare(c, noop)
 
