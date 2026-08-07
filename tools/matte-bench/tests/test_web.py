@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from matte_bench import web
-from matte_bench.web import app, state, StagedEntry, PREFETCH_DEPTH
+from matte_bench.web import app, state, StagedEntry, PREFETCH_DEPTH, PAIRS_PER_SUBJECT
 from matte_bench.corpus import Subject
 from matte_bench.store import Verdict
 
@@ -754,9 +754,10 @@ def test_prefetch_staging_never_touches_rng_then_advances_it_on_consumption(
                                      "left": "a1x", "right": "a2x",
                                      "cls": "A", "repeat_of": None}))
 
-    # Staging happened, but the shared rng was not touched by it.
+    # Staging happened, but the shared rng was not touched by it. The worker
+    # now fills the WHOLE queue in one pass, not just one entry.
     assert web.state.rng.getstate() == before
-    assert len(web.state.staged) == 1
+    assert len(web.state.staged) == PREFETCH_DEPTH
     entry = web.state.staged[0]
     staged = entry.subject
     staged_rng_state = entry.consume_rng_state
@@ -767,15 +768,16 @@ def test_prefetch_staging_never_touches_rng_then_advances_it_on_consumption(
     got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
     assert got is staged
     assert web.state.rng.getstate() == staged_rng_state
-    assert web.state.staged == []
+    assert len(web.state.staged) == PREFETCH_DEPTH - 1
 
 
-def test_prefetch_stages_only_at_the_rotation_boundary(bench_state, monkeypatch):
-    """active_served was already incremented by _compute_next for the served
-    comparison, so the NEXT demand pick rotates once active_served reaches
-    PAIRS_PER_SUBJECT, not PAIRS_PER_SUBJECT - 1. One shy of the boundary the
-    prefetcher must reuse the active subject (no staging); at the boundary it
-    must predict rotation and stage a fresh one."""
+def test_prefetch_fills_queue_regardless_of_rotation_boundary(bench_state, monkeypatch):
+    """Formerly (#228) the prefetcher only staged a fresh subject once
+    rotation was imminent (active_served == PAIRS_PER_SUBJECT), giving the
+    next subject's render a ~2s head start. The depth-N pipeline drops that
+    gate entirely: the worker fills state.staged to PREFETCH_DEPTH the moment
+    a subject STARTS serving, one shy of the boundary or right at it alike —
+    that's the whole point of pipelining ahead of need."""
     import asyncio
     from matte_bench import web
 
@@ -792,13 +794,89 @@ def test_prefetch_stages_only_at_the_rotation_boundary(bench_state, monkeypatch)
     web.state.active_served = web.PAIRS_PER_SUBJECT - 1
     web.state.staged = []
     asyncio.run(web._prefetch_async(served))
-    assert web.state.staged == []
+    assert len(web.state.staged) == PREFETCH_DEPTH
 
     web.state.active_subject_id = "s1"
     web.state.active_served = web.PAIRS_PER_SUBJECT
     web.state.staged = []
     asyncio.run(web._prefetch_async(served))
-    assert web.state.staged != []
+    assert len(web.state.staged) == PREFETCH_DEPTH
+
+
+def test_prefetch_fills_queue_to_depth_after_first_serve(tmp_path, monkeypatch):
+    """The pipeline must start rendering future subjects the moment a subject
+    begins serving — not when its last pair goes out. Serve ONE comparison
+    (active_served=1 of PAIRS_PER_SUBJECT) and run the worker body directly:
+    the queue must reach PREFETCH_DEPTH with every staged comparison prepared."""
+    _client(tmp_path)
+    prepared = []
+
+    async def fake_prepare(c, progress):
+        prepared.append(c.subject)
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    state.active_subject_id = "wispy-active"
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_served = 1
+    served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
+              "right": "b", "repeat_of": None, "cls": "A"}
+    asyncio.run(web._prefetch_async(served))
+    assert len(state.staged) == web.PREFETCH_DEPTH
+    # every staged subject was rendered ahead of need
+    staged_ids = [e.subject.id for e in state.staged]
+    assert set(staged_ids) <= set(prepared)
+    # entries are stamped for consecutive future rotations
+    assert [e.generation for e in state.staged] == [state.generation,
+                                                    state.generation + 1]
+
+
+def test_prefetch_tops_up_existing_queue_without_duplicates(tmp_path, monkeypatch):
+    """A second worker run with one entry already staged adds exactly one
+    more, chained after it — it must not re-sample or re-stage the head."""
+    _client(tmp_path)
+    prepared = []
+
+    async def fake_prepare(c, progress):
+        prepared.append(c.subject)
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    state.active_subject_id = "wispy-active"
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_served = 1
+    served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
+              "right": "b", "repeat_of": None, "cls": "A"}
+    asyncio.run(web._prefetch_async(served))
+    head_id = state.staged[0].subject.id
+    asyncio.run(web._prefetch_async(served))
+    assert len(state.staged) == web.PREFETCH_DEPTH
+    assert state.staged[0].subject.id == head_id
+
+
+def test_consuming_pipeline_end_to_end_needs_no_demand_render(tmp_path, monkeypatch):
+    """Serve → worker fills queue → vote-equivalent rotation consumes the
+    head; the demand path's _prepare must find everything it needs already
+    prepared (same comparison object the worker prepared)."""
+    _client(tmp_path)
+    prepared = []
+
+    async def fake_prepare(c, progress):
+        prepared.append((c.subject, tuple(sorted((c.left, c.right)))))
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    state.active_subject_id = "wispy-active"
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_served = PAIRS_PER_SUBJECT      # next pick rotates
+    served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
+              "right": "b", "repeat_of": None, "cls": "A"}
+    asyncio.run(web._prefetch_async(served))
+    head = state.staged[0]
+    subject = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert subject.id == head.subject.id
+    c, _cls = web._choose_comparison(subject, [], state.rng)
+    assert (c.subject, tuple(sorted((c.left, c.right)))) in prepared
 
 
 def test_compute_next_joins_a_live_prefetch_before_preparing(tmp_path, monkeypatch):
