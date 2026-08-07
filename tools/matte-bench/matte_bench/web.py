@@ -6,6 +6,7 @@ unit-tested. This module wires them to HTTP and serves one static page.
 import asyncio
 import random
 import threading
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -98,6 +99,12 @@ class State:
     generation: int = 0
     prefetch: threading.Thread | None = None
     prefetch_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Subject ids the prefetch worker is currently preparing (plate/render
+    # writes in flight). Guards against the demand path racing the exact
+    # same subject's files, without blocking on subjects the worker isn't
+    # touching — see _await_subject_free / _guarded_prepare.
+    rendering: set = field(default_factory=set)
+    render_cond: threading.Condition = field(default_factory=threading.Condition)
 
 
 state = State()
@@ -185,6 +192,33 @@ async def _prepare(comparison, progress) -> None:
         await ensure_render(
             subject, technique, state.root, state.comfy_url,
             on_progress=lambda f, text=text, stage=stage: progress(text, f, stage))
+
+
+def _await_subject_free(subject_id: str, timeout: float = 300.0) -> None:
+    """Block while the prefetch worker is preparing this exact subject —
+    writing the same plate/renders from two threads races rmtree against
+    fresh files. Bounded: on timeout the caller proceeds and worst-case pays
+    a duplicate render (the pre-pipeline behavior), never a wedge."""
+    deadline = time.monotonic() + timeout
+    with state.render_cond:
+        while subject_id in state.rendering:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            state.render_cond.wait(remaining)
+
+
+async def _guarded_prepare(c, progress) -> None:
+    """The worker's _prepare wrapper: registers the subject as in-flight so
+    the demand path can wait for exactly this subject and nothing else."""
+    with state.render_cond:
+        state.rendering.add(c.subject)
+    try:
+        await _prepare(c, progress)
+    finally:
+        with state.render_cond:
+            state.rendering.discard(c.subject)
+            state.render_cond.notify_all()
 
 
 # How many comparisons each sampled subject serves before a fresh one is
@@ -333,15 +367,7 @@ async def _compute_next(progress):
         if c is None:
             _raise_if_comfy_down()
             return None
-        if state.prefetch is not None and state.prefetch.is_alive():
-            # An in-flight prefetch may be writing the very plate/renders
-            # this comparison needs. Without waiting, ensure_plate/
-            # ensure_render's start-time exists()/is-current checks race it:
-            # we'd queue a second generation, and the plate write's rmtree
-            # would delete the renders the prefetch just produced. Joining
-            # lets the speculative work land first, so the checks below hit
-            # cache instead.
-            state.prefetch.join()
+        _await_subject_free(c.subject)
         try:
             await _prepare(c, progress)
         except RenderError as exc:
@@ -481,7 +507,7 @@ async def _prefetch_async(served: dict) -> None:
     if active is not None and state.active_served < PAIRS_PER_SUBJECT:
         c, _cls = _choose_comparison(active, verdicts, _cloned_rng(state.rng))
         if c is not None:
-            await _prepare(c, noop)
+            await _guarded_prepare(c, noop)
 
     # 2. Account for the serves that will happen before the first rotation:
     # the active subject's remaining pairs vote as synthetic ties.
@@ -543,7 +569,7 @@ async def _prefetch_async(served: dict) -> None:
         c, _cls = _choose_comparison(subject, verdicts, pred_rng)
         if c is None:
             return
-        await _prepare(c, noop)
+        await _guarded_prepare(c, noop)
         state.staged.append(StagedEntry(
             subject=subject, consume_rng_state=consume_state,
             chain_rng_state=pred_rng.getstate(),

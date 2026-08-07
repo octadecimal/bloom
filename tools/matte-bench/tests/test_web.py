@@ -1,5 +1,6 @@
 import asyncio
 import random
+import threading
 import time
 
 import pytest
@@ -23,6 +24,8 @@ def _client(tmp_path, monkeypatch=None):
     if state.prefetch is not None:
         state.prefetch.join(timeout=5)
     state.prefetch = None
+    state.rendering = set()
+    state.render_cond = threading.Condition()
     state.staged = []
     state.generation = 0
     state.root = tmp_path
@@ -905,46 +908,59 @@ def test_consuming_pipeline_end_to_end_needs_no_demand_render(tmp_path, monkeypa
     assert (c.subject, tuple(sorted((c.left, c.right)))) in prepared
 
 
-def test_compute_next_joins_a_live_prefetch_before_preparing(tmp_path, monkeypatch):
+def test_compute_next_awaits_the_subject_guard_before_preparing(tmp_path, monkeypatch):
     """The deterministic failure this guards against: comparison N is served,
     the prefetcher starts writing plate/render files for the staged subject
     in the background, and the operator votes before it finishes. Without
     synchronization the demand path's own ensure_plate/ensure_render would
     see stale dest.exists()/_plate_is_current checks, kick off a SECOND
     generation, and the plate write would rmtree the renders the prefetch
-    just produced. Pinned at the guard's mechanism (a blocking join on a
-    live prefetch thread before _prepare runs) rather than through the real
-    filesystem race, which isn't reproducible deterministically in a unit
-    test: real threads, not asyncio, drive both sides so the join provably
-    blocks the demand path rather than the two coroutines merely interleaving
-    within one event loop."""
+    just produced. Pinned at the guard's actual mechanism post-#232 (a
+    bounded wait on state.rendering for the comparison's OWN subject id,
+    not a blanket join on the whole prefetch thread) rather than through the
+    real filesystem race, which isn't reproducible deterministically in a
+    unit test: real threads, not asyncio, drive both sides so the wait
+    provably blocks the demand path rather than the two coroutines merely
+    interleaving within one event loop."""
     import asyncio
     import threading
 
     order = []
     release = threading.Event()
 
-    def fake_prefetch_body():
+    def fake_render_body():
         release.wait(timeout=5)
-        order.append("prefetch-done")
+        with web.state.render_cond:
+            order.append("render-done")
+            web.state.rendering.discard("wispy-active")
+            web.state.render_cond.notify_all()
 
     async def tracking_prepare(c, progress):
         order.append("prepare")
 
     _client(tmp_path, monkeypatch)
     monkeypatch.setattr(web, "_prepare", tracking_prepare)
+    # A known active subject (already served-eligible) makes _pick_subject's
+    # choice deterministic — no fresh sample, no rng dependency — so the
+    # test only has to control state.rendering, not the sampler.
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_subject_id = "wispy-active"
+    state.active_served = 0
 
-    t = threading.Thread(target=fake_prefetch_body, daemon=True)
-    web.state.prefetch = t
+    with web.state.render_cond:
+        web.state.rendering.add("wispy-active")
+
+    t = threading.Thread(target=fake_render_body, daemon=True)
     t.start()
 
-    # A separate real thread (not asyncio) releases the fake prefetch shortly
+    # A separate real thread (not asyncio) releases the fake render shortly
     # after _compute_next starts, proving _compute_next actually blocked on
-    # the join instead of racing ahead into _prepare.
+    # the guard instead of racing ahead into _prepare.
     threading.Timer(0.05, release.set).start()
 
     asyncio.run(web._compute_next(lambda *a, **k: None))
-    assert order == ["prefetch-done", "prepare"]
+    assert order == ["render-done", "prepare"]
 
 
 def _staged_entry(subject, generation, rng_seed=99):
@@ -1187,3 +1203,67 @@ def test_done_while_comfy_down_reads_as_error(tmp_path, monkeypatch):
         time.sleep(0.01)
     assert resp.status_code == 500
     assert resp.json()["detail"] == "ComfyUI unreachable at http://unused: connect timeout"
+
+
+def test_demand_waits_only_for_its_own_subject(tmp_path, monkeypatch):
+    """The worker is mid-render on subject X: a demand for X waits until X is
+    released; a demand for Y does not wait at all."""
+    client = _client(tmp_path)
+    release = threading.Event()
+    entered = threading.Event()
+
+    def hold_x():
+        with state.render_cond:
+            state.rendering.add("wispy-x")
+        entered.set()
+        release.wait(timeout=5)
+        with state.render_cond:
+            state.rendering.discard("wispy-x")
+            state.render_cond.notify_all()
+
+    t = threading.Thread(target=hold_x, daemon=True)
+    t.start()
+    assert entered.wait(timeout=5)
+
+    t0 = time.time()
+    web._await_subject_free("wispy-y", timeout=5.0)
+    assert time.time() - t0 < 0.5          # Y never waits for X
+
+    waited = {}
+
+    def demand_x():
+        s = time.time()
+        web._await_subject_free("wispy-x", timeout=10.0)
+        waited["x"] = time.time() - s
+
+    d = threading.Thread(target=demand_x, daemon=True)
+    d.start()
+    time.sleep(0.3)
+    release.set()
+    d.join(timeout=10)
+    assert "x" in waited and waited["x"] >= 0.25
+
+
+def test_guard_timeout_never_wedges(tmp_path):
+    """A worker that never releases (crash, hang) must not deadlock the
+    demand path — the bounded wait expires and the caller proceeds."""
+    _client(tmp_path)
+    with state.render_cond:
+        state.rendering.add("wispy-stuck")
+    t0 = time.time()
+    web._await_subject_free("wispy-stuck", timeout=0.5)
+    assert 0.4 <= time.time() - t0 < 3.0
+
+
+def test_worker_prepare_registers_and_releases_subject(tmp_path, monkeypatch):
+    _client(tmp_path)
+    seen = {}
+
+    async def fake_prepare(c, progress):
+        seen["during"] = set(state.rendering)
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    c = web.Comparison(subject="wispy-g", bucket="wispy", left="a", right="b")
+    asyncio.run(web._guarded_prepare(c, lambda *a, **k: None))
+    assert seen["during"] == {"wispy-g"}
+    assert state.rendering == set()
