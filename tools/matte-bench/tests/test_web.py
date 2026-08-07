@@ -1,11 +1,13 @@
+import asyncio
 import random
+import threading
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 
 from matte_bench import web
-from matte_bench.web import app, state
+from matte_bench.web import app, state, StagedEntry, PREFETCH_DEPTH, PAIRS_PER_SUBJECT
 from matte_bench.corpus import Subject
 from matte_bench.store import Verdict
 
@@ -22,10 +24,11 @@ def _client(tmp_path, monkeypatch=None):
     if state.prefetch is not None:
         state.prefetch.join(timeout=5)
     state.prefetch = None
-    state.staged_subject = None
-    state.staged_rng_state = None
+    state.rendering = set()
+    state.render_cond = threading.Condition()
+    state.staged = []
+    state.staged_lock = threading.Lock()
     state.generation = 0
-    state.staged_generation = None
     state.root = tmp_path
     state.subjects = []
     state.templates = {"wispy": {"width": 8, "height": 8,
@@ -748,19 +751,20 @@ def test_prefetch_staging_never_touches_rng_then_advances_it_on_consumption(
 
     monkeypatch.setattr(web, "_prepare", no_prepare)
     web.state.active_subject_id = None      # forces the staging branch
-    web.state.staged_subject = None
-    web.state.staged_rng_state = None
+    web.state.staged = []
     before = web.state.rng.getstate()
 
     asyncio.run(web._prefetch_async({"subject": "s1", "bucket": "wispy",
                                      "left": "a1x", "right": "a2x",
                                      "cls": "A", "repeat_of": None}))
 
-    # Staging happened, but the shared rng was not touched by it.
+    # Staging happened, but the shared rng was not touched by it. The worker
+    # now fills the WHOLE queue in one pass, not just one entry.
     assert web.state.rng.getstate() == before
-    assert web.state.staged_subject is not None
-    staged = web.state.staged_subject
-    staged_rng_state = web.state.staged_rng_state
+    assert len(web.state.staged) == PREFETCH_DEPTH
+    entry = web.state.staged[0]
+    staged = entry.subject
+    staged_rng_state = entry.consume_rng_state
     assert staged_rng_state is not None
     assert staged_rng_state != before   # the clone actually advanced
 
@@ -768,15 +772,16 @@ def test_prefetch_staging_never_touches_rng_then_advances_it_on_consumption(
     got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
     assert got is staged
     assert web.state.rng.getstate() == staged_rng_state
-    assert web.state.staged_rng_state is None
+    assert len(web.state.staged) == PREFETCH_DEPTH - 1
 
 
-def test_prefetch_stages_only_at_the_rotation_boundary(bench_state, monkeypatch):
-    """active_served was already incremented by _compute_next for the served
-    comparison, so the NEXT demand pick rotates once active_served reaches
-    PAIRS_PER_SUBJECT, not PAIRS_PER_SUBJECT - 1. One shy of the boundary the
-    prefetcher must reuse the active subject (no staging); at the boundary it
-    must predict rotation and stage a fresh one."""
+def test_prefetch_fills_queue_regardless_of_rotation_boundary(bench_state, monkeypatch):
+    """Formerly (#228) the prefetcher only staged a fresh subject once
+    rotation was imminent (active_served == PAIRS_PER_SUBJECT), giving the
+    next subject's render a ~2s head start. The depth-N pipeline drops that
+    gate entirely: the worker fills state.staged to PREFETCH_DEPTH the moment
+    a subject STARTS serving, one shy of the boundary or right at it alike —
+    that's the whole point of pipelining ahead of need."""
     import asyncio
     from matte_bench import web
 
@@ -791,57 +796,262 @@ def test_prefetch_stages_only_at_the_rotation_boundary(bench_state, monkeypatch)
 
     web.state.active_subject_id = "s1"
     web.state.active_served = web.PAIRS_PER_SUBJECT - 1
-    web.state.staged_subject = None
+    web.state.staged = []
     asyncio.run(web._prefetch_async(served))
-    assert web.state.staged_subject is None
+    assert len(web.state.staged) == PREFETCH_DEPTH
 
     web.state.active_subject_id = "s1"
     web.state.active_served = web.PAIRS_PER_SUBJECT
-    web.state.staged_subject = None
+    web.state.staged = []
     asyncio.run(web._prefetch_async(served))
-    assert web.state.staged_subject is not None
+    assert len(web.state.staged) == PREFETCH_DEPTH
 
 
-def test_compute_next_joins_a_live_prefetch_before_preparing(tmp_path, monkeypatch):
+def test_prefetch_fills_queue_to_depth_after_first_serve(tmp_path, monkeypatch):
+    """The pipeline must start rendering future subjects the moment a subject
+    begins serving — not when its last pair goes out. Serve ONE comparison
+    (active_served=1 of PAIRS_PER_SUBJECT) and run the worker body directly:
+    the queue must reach PREFETCH_DEPTH with every staged comparison prepared."""
+    _client(tmp_path)
+    prepared = []
+
+    async def fake_prepare(c, progress):
+        prepared.append(c.subject)
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    state.active_subject_id = "wispy-active"
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_served = 1
+    served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
+              "right": "b", "repeat_of": None, "cls": "A"}
+    asyncio.run(web._prefetch_async(served))
+    assert len(state.staged) == web.PREFETCH_DEPTH
+    # every staged subject was rendered ahead of need
+    staged_ids = [e.subject.id for e in state.staged]
+    assert set(staged_ids) <= set(prepared)
+    # entries are stamped for consecutive future rotations
+    assert [e.generation for e in state.staged] == [state.generation,
+                                                    state.generation + 1]
+
+
+def test_prefetch_tops_up_existing_queue_without_duplicates(tmp_path, monkeypatch):
+    """A second worker run with one VALID entry already staged — the
+    survivor of a real rotation, not a hand-built queue — tops the queue
+    back up to PREFETCH_DEPTH by chaining off that entry's tail state
+    (chain_rng_state, generation + 1), not by re-sampling or re-staging it.
+
+    Exercising this through a real _pick_subject rotation (rather than
+    stopping after the first fill, where the queue is already full and the
+    second call is a no-op) is what actually exercises the tail-chaining
+    branch in _prefetch_async — an off-by-one in the tail-resume generation
+    stamp or a chain-from-fresh-clone bug would not be caught by a call that
+    never needs to top anything up."""
+    _client(tmp_path)
+    prepared = []
+
+    async def fake_prepare(c, progress):
+        prepared.append(c.subject)
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    state.active_subject_id = "wispy-active"
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_served = 1
+    served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
+              "right": "b", "repeat_of": None, "cls": "A"}
+
+    # Fill the queue to depth.
+    asyncio.run(web._prefetch_async(served))
+    assert len(state.staged) == web.PREFETCH_DEPTH
+
+    # Force a real rotation: active_served at the boundary makes
+    # _pick_subject consume the staged head instead of reusing the active
+    # subject, leaving exactly one entry behind — restamped fresh by the
+    # rotation it just survived, so its generation matches state.generation.
+    state.active_served = PAIRS_PER_SUBJECT
+    asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert len(state.staged) == web.PREFETCH_DEPTH - 1
+    head = state.staged[0]
+    assert head.generation == state.generation
+
+    # Top up again: the survivor must be chained off, not re-sampled.
+    asyncio.run(web._prefetch_async(served))
+    assert len(state.staged) == web.PREFETCH_DEPTH
+    assert state.staged[0] is head             # survivor untouched
+    assert state.staged[1].generation == head.generation + 1
+    staged_ids = [e.subject.id for e in state.staged]
+    assert staged_ids.count(head.subject.id) == 1   # no duplicate staging
+
+
+def test_consuming_pipeline_end_to_end_needs_no_demand_render(tmp_path, monkeypatch):
+    """Serve → worker fills queue → vote-equivalent rotation consumes the
+    head; the demand path's _prepare must find everything it needs already
+    prepared (same comparison object the worker prepared)."""
+    _client(tmp_path)
+    prepared = []
+
+    async def fake_prepare(c, progress):
+        prepared.append((c.subject, tuple(sorted((c.left, c.right)))))
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    state.active_subject_id = "wispy-active"
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_served = PAIRS_PER_SUBJECT      # next pick rotates
+    served = {"subject": "wispy-active", "bucket": "wispy", "left": "a",
+              "right": "b", "repeat_of": None, "cls": "A"}
+    asyncio.run(web._prefetch_async(served))
+    head = state.staged[0]
+    subject = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert subject.id == head.subject.id
+    c, _cls = web._choose_comparison(subject, [], state.rng)
+    assert (c.subject, tuple(sorted((c.left, c.right)))) in prepared
+
+
+def test_compute_next_awaits_the_subject_guard_before_preparing(tmp_path, monkeypatch):
     """The deterministic failure this guards against: comparison N is served,
     the prefetcher starts writing plate/render files for the staged subject
     in the background, and the operator votes before it finishes. Without
     synchronization the demand path's own ensure_plate/ensure_render would
     see stale dest.exists()/_plate_is_current checks, kick off a SECOND
     generation, and the plate write would rmtree the renders the prefetch
-    just produced. Pinned at the guard's mechanism (a blocking join on a
-    live prefetch thread before _prepare runs) rather than through the real
-    filesystem race, which isn't reproducible deterministically in a unit
-    test: real threads, not asyncio, drive both sides so the join provably
-    blocks the demand path rather than the two coroutines merely interleaving
-    within one event loop."""
-    import asyncio
-    import threading
-
+    just produced. Pinned at the guard's actual mechanism post-#232 (a
+    bounded wait on state.rendering for the comparison's OWN subject id,
+    not a blanket join on the whole prefetch thread) rather than through the
+    real filesystem race, which isn't reproducible deterministically in a
+    unit test: real threads, not asyncio, drive both sides so the wait
+    provably blocks the demand path rather than the two coroutines merely
+    interleaving within one event loop."""
     order = []
     release = threading.Event()
 
-    def fake_prefetch_body():
+    def fake_render_body():
         release.wait(timeout=5)
-        order.append("prefetch-done")
+        with web.state.render_cond:
+            order.append("render-done")
+            web.state.rendering.discard("wispy-active")
+            web.state.render_cond.notify_all()
 
     async def tracking_prepare(c, progress):
         order.append("prepare")
 
     _client(tmp_path, monkeypatch)
     monkeypatch.setattr(web, "_prepare", tracking_prepare)
+    # A known active subject (already served-eligible) makes _pick_subject's
+    # choice deterministic — no fresh sample, no rng dependency — so the
+    # test only has to control state.rendering, not the sampler.
+    state.subjects.append(Subject(id="wispy-active", bucket="wispy",
+                                  prompt="p", seed=5, width=8, height=8))
+    state.active_subject_id = "wispy-active"
+    state.active_served = 0
 
-    t = threading.Thread(target=fake_prefetch_body, daemon=True)
-    web.state.prefetch = t
+    with web.state.render_cond:
+        web.state.rendering.add("wispy-active")
+
+    t = threading.Thread(target=fake_render_body, daemon=True)
     t.start()
 
-    # A separate real thread (not asyncio) releases the fake prefetch shortly
+    # A separate real thread (not asyncio) releases the fake render shortly
     # after _compute_next starts, proving _compute_next actually blocked on
-    # the join instead of racing ahead into _prepare.
+    # the guard instead of racing ahead into _prepare.
     threading.Timer(0.05, release.set).start()
 
     asyncio.run(web._compute_next(lambda *a, **k: None))
-    assert order == ["prefetch-done", "prepare"]
+    assert order == ["render-done", "prepare"]
+
+
+def test_guarded_prepare_releases_subject_when_prepare_raises(tmp_path, monkeypatch):
+    """The finally-discard in _guarded_prepare IS the deadlock-safety
+    guarantee: no path may leave a subject registered in state.rendering. A
+    render failure (RenderError, the realistic case — a technique going
+    unreachable mid-prepare) must still release the subject, or every future
+    demand/worker touch on it wedges behind _await_subject_free's timeout
+    forever until that timeout, and repeatedly if the failure recurs."""
+    from matte_bench.render import RenderError
+
+    _client(tmp_path)
+
+    async def failing_prepare(c, progress):
+        raise RenderError("some-technique", "boom")
+
+    monkeypatch.setattr(web, "_prepare", failing_prepare)
+    c = web.Comparison(subject="wispy-r", bucket="wispy", left="a", right="b")
+    with pytest.raises(RenderError):
+        asyncio.run(web._guarded_prepare(c, lambda *a, **k: None))
+    assert state.rendering == set()
+
+
+def _staged_entry(subject, generation, rng_seed=99):
+    """A StagedEntry the way the worker would build one: consume state is a
+    clone advanced past the sampling draws."""
+    clone = random.Random(rng_seed)
+    return web.StagedEntry(subject=subject, consume_rng_state=clone.getstate(),
+                           chain_rng_state=clone.getstate(),
+                           predicted_pair=("a", "b"), generation=generation)
+
+
+def test_rotation_consumes_staged_queue_head(tmp_path, monkeypatch):
+    """A staged prediction for the current generation is consumed verbatim:
+    no fresh sample, rng fast-forwarded to the staged state."""
+    _client(tmp_path)
+    staged_subject = Subject(id="wispy-777", bucket="wispy", prompt="a tuft",
+                             seed=777, width=8, height=8)
+    state.subjects.append(staged_subject)
+    state.staged = [_staged_entry(staged_subject, generation=state.generation)]
+    state.active_subject_id = None    # forces rotation
+
+    async def fail_sample(*a, **k):
+        raise AssertionError("consumption must not draw a fresh subject")
+
+    monkeypatch.setattr(web, "_sample_fresh", fail_sample)
+    subject = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert subject.id == "wispy-777"
+    assert state.staged == []
+    assert state.active_subject_id == "wispy-777"
+
+
+def test_two_rotations_consume_entries_in_order(tmp_path, monkeypatch):
+    _client(tmp_path)
+    s1 = Subject(id="wispy-1", bucket="wispy", prompt="p1", seed=1, width=8, height=8)
+    s2 = Subject(id="wispy-2", bucket="wispy", prompt="p2", seed=2, width=8, height=8)
+    state.subjects += [s1, s2]
+    g = state.generation
+    state.staged = [_staged_entry(s1, generation=g),
+                    _staged_entry(s2, generation=g + 1)]
+    state.active_subject_id = None
+
+    async def fail_sample(*a, **k):
+        raise AssertionError("no fresh draws while the queue holds valid entries")
+
+    monkeypatch.setattr(web, "_sample_fresh", fail_sample)
+    first = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    state.active_subject_id = None    # force the next rotation immediately
+    second = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert [first.id, second.id] == ["wispy-1", "wispy-2"]
+    assert state.staged == []
+
+
+def test_stale_queue_is_cleared_whole(tmp_path, monkeypatch):
+    """One stale head invalidates the entire lineage — entry 2 chained its
+    rng and verdict predictions off entry 1, so it cannot survive alone."""
+    _client(tmp_path)
+    s1 = Subject(id="wispy-1", bucket="wispy", prompt="p1", seed=1, width=8, height=8)
+    s2 = Subject(id="wispy-2", bucket="wispy", prompt="p2", seed=2, width=8, height=8)
+    state.subjects += [s1, s2]
+    state.staged = [_staged_entry(s1, generation=state.generation + 5),
+                    _staged_entry(s2, generation=state.generation + 6)]
+    state.active_subject_id = None
+    sampled = Subject(id="wispy-fresh", bucket="wispy", prompt="f", seed=9,
+                      width=8, height=8)
+
+    async def fake_sample(*a, **k):
+        return sampled
+
+    monkeypatch.setattr(web, "_sample_fresh", fake_sample)
+    subject = asyncio.run(web._pick_subject([], lambda *a, **k: None))
+    assert subject.id == "wispy-fresh"
+    assert state.staged == []
 
 
 def test_pick_subject_consumes_staged_subject(bench_state):
@@ -849,37 +1059,35 @@ def test_pick_subject_consumes_staged_subject(bench_state):
     from matte_bench import web
     staged = Subject(id="staged-1", bucket="wispy", prompt="p", seed=9,
                      width=64, height=64)
-    web.state.staged_subject = staged
-    # A freshly staged pair is stamped with the generation the prefetcher
+    # A freshly staged entry is stamped with the generation the prefetcher
     # observed when it staged; matching state.generation here is what marks
     # it fresh (see test_pick_subject_drops_a_stale_staged_subject for the
     # mismatch case).
-    web.state.staged_generation = web.state.generation
+    web.state.staged = [_staged_entry(staged, generation=web.state.generation)]
     web.state.active_subject_id = None   # forces rotation
     got = asyncio.run(web._pick_subject([], lambda *a, **k: None))
     assert got.id == "staged-1"
-    assert web.state.staged_subject is None
-    assert web.state.staged_generation is None
+    assert web.state.staged == []
     assert web.state.active_subject_id == "staged-1"
 
 
 def test_pick_subject_drops_a_stale_staged_subject(bench_state):
     """Task-13 review Finding 2 residual: a staged pair can go stale before
     it's consumed. Concrete race: the prefetch thread hasn't finished writing
-    staged_subject when the next rotation happens, so _pick_subject takes the
-    _sample_fresh fallback and rotates on its own (bumping state.generation);
-    when the prefetch's staged_subject/staged_rng_state/staged_generation
-    eventually land, they're predictions for a rotation that already
-    happened. Consuming them on some LATER rotation would setstate() the
-    shared rng backward past every draw the intervening round(s) already
-    made — replaying already-used randomness. The generation stamp must
-    catch this: a staged pair whose staged_generation no longer matches
-    state.generation is dropped, not consumed, and state.rng is left alone."""
+    the staged queue when the next rotation happens, so _pick_subject takes
+    the _sample_fresh fallback and rotates on its own (bumping
+    state.generation); when the prefetch's StagedEntry eventually lands, it's
+    a prediction for a rotation that already happened. Consuming it on some
+    LATER rotation would setstate() the shared rng backward past every draw
+    the intervening round(s) already made — replaying already-used
+    randomness. The generation stamp must catch this: a staged entry whose
+    generation no longer matches state.generation is dropped, not consumed,
+    and state.rng is left alone."""
     import asyncio
     from matte_bench import web
 
     web.state.active_subject_id = None
-    web.state.staged_subject = None
+    web.state.staged = []
 
     # Round 1: nothing staged yet -> fallback rotation. Bumps state.generation
     # 0 -> 1 and advances state.rng for real.
@@ -892,23 +1100,23 @@ def test_pick_subject_drops_a_stale_staged_subject(bench_state):
     stale = Subject(id="stale-staged", bucket="wispy", prompt="p", seed=9,
                     width=64, height=64)
     stale_rng_state = random.Random(999).getstate()   # any state != current
-    web.state.staged_subject = stale
-    web.state.staged_rng_state = stale_rng_state
-    web.state.staged_generation = 0   # stamped for the generation that ended
+    web.state.staged = [web.StagedEntry(
+        subject=stale, consume_rng_state=stale_rng_state,
+        chain_rng_state=stale_rng_state, predicted_pair=("a", "b"),
+        generation=0)]   # stamped for the generation that ended
 
     # Force a second rotation (simulating PAIRS_PER_SUBJECT exhausted on the
-    # subject the fallback picked) and confirm the stale pair is dropped, not
-    # consumed: a fresh subject is drawn instead (advancing state.rng further
-    # forward from where the first rotation left it), and state.rng is never
-    # rewound to stale_rng_state.
+    # subject the fallback picked) and confirm the stale entry is dropped,
+    # not consumed: a fresh subject is drawn instead (advancing state.rng
+    # further forward from where the first rotation left it), and state.rng
+    # is never rewound to stale_rng_state.
     web.state.active_served = web.PAIRS_PER_SUBJECT
     second = asyncio.run(web._pick_subject([], lambda *a, **k: None))
     assert second.id != "stale-staged"
     assert second.id != first.id
     assert web.state.rng.getstate() != stale_rng_state
     assert web.state.rng.getstate() != rng_after_first_rotation
-    assert web.state.staged_subject is None
-    assert web.state.staged_generation is None
+    assert web.state.staged == []
 
 
 def test_original_route_serves_pre_key_image(tmp_path):
@@ -1014,3 +1222,67 @@ def test_done_while_comfy_down_reads_as_error(tmp_path, monkeypatch):
         time.sleep(0.01)
     assert resp.status_code == 500
     assert resp.json()["detail"] == "ComfyUI unreachable at http://unused: connect timeout"
+
+
+def test_demand_waits_only_for_its_own_subject(tmp_path, monkeypatch):
+    """The worker is mid-render on subject X: a demand for X waits until X is
+    released; a demand for Y does not wait at all."""
+    _client(tmp_path)
+    release = threading.Event()
+    entered = threading.Event()
+
+    def hold_x():
+        with state.render_cond:
+            state.rendering.add("wispy-x")
+        entered.set()
+        release.wait(timeout=5)
+        with state.render_cond:
+            state.rendering.discard("wispy-x")
+            state.render_cond.notify_all()
+
+    t = threading.Thread(target=hold_x, daemon=True)
+    t.start()
+    assert entered.wait(timeout=5)
+
+    t0 = time.time()
+    web._await_subject_free("wispy-y", timeout=5.0)
+    assert time.time() - t0 < 0.5          # Y never waits for X
+
+    waited = {}
+
+    def demand_x():
+        s = time.time()
+        web._await_subject_free("wispy-x", timeout=10.0)
+        waited["x"] = time.time() - s
+
+    d = threading.Thread(target=demand_x, daemon=True)
+    d.start()
+    time.sleep(0.3)
+    release.set()
+    d.join(timeout=10)
+    assert "x" in waited and waited["x"] >= 0.25
+
+
+def test_guard_timeout_never_wedges(tmp_path):
+    """A worker that never releases (crash, hang) must not deadlock the
+    demand path — the bounded wait expires and the caller proceeds."""
+    _client(tmp_path)
+    with state.render_cond:
+        state.rendering.add("wispy-stuck")
+    t0 = time.time()
+    web._await_subject_free("wispy-stuck", timeout=0.5)
+    assert 0.4 <= time.time() - t0 < 3.0
+
+
+def test_worker_prepare_registers_and_releases_subject(tmp_path, monkeypatch):
+    _client(tmp_path)
+    seen = {}
+
+    async def fake_prepare(c, progress):
+        seen["during"] = set(state.rendering)
+
+    monkeypatch.setattr(web, "_prepare", fake_prepare)
+    c = web.Comparison(subject="wispy-g", bucket="wispy", left="a", right="b")
+    asyncio.run(web._guarded_prepare(c, lambda *a, **k: None))
+    assert seen["during"] == {"wispy-g"}
+    assert state.rendering == set()
