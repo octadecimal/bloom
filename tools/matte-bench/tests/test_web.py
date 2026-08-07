@@ -922,9 +922,6 @@ def test_compute_next_awaits_the_subject_guard_before_preparing(tmp_path, monkey
     unit test: real threads, not asyncio, drive both sides so the wait
     provably blocks the demand path rather than the two coroutines merely
     interleaving within one event loop."""
-    import asyncio
-    import threading
-
     order = []
     release = threading.Event()
 
@@ -961,6 +958,27 @@ def test_compute_next_awaits_the_subject_guard_before_preparing(tmp_path, monkey
 
     asyncio.run(web._compute_next(lambda *a, **k: None))
     assert order == ["render-done", "prepare"]
+
+
+def test_guarded_prepare_releases_subject_when_prepare_raises(tmp_path, monkeypatch):
+    """The finally-discard in _guarded_prepare IS the deadlock-safety
+    guarantee: no path may leave a subject registered in state.rendering. A
+    render failure (RenderError, the realistic case — a technique going
+    unreachable mid-prepare) must still release the subject, or every future
+    demand/worker touch on it wedges behind _await_subject_free's timeout
+    forever until that timeout, and repeatedly if the failure recurs."""
+    from matte_bench.render import RenderError
+
+    _client(tmp_path)
+
+    async def failing_prepare(c, progress):
+        raise RenderError("some-technique", "boom")
+
+    monkeypatch.setattr(web, "_prepare", failing_prepare)
+    c = web.Comparison(subject="wispy-r", bucket="wispy", left="a", right="b")
+    with pytest.raises(RenderError):
+        asyncio.run(web._guarded_prepare(c, lambda *a, **k: None))
+    assert state.rendering == set()
 
 
 def _staged_entry(subject, generation, rng_seed=99):
