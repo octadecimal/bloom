@@ -466,7 +466,16 @@
       }
       if (!resp.ok) {
         hideLoading();
-        setStatus(`Error: ${resp.status} ${resp.statusText}`, true);
+        // The server puts the human-readable story in the JSON detail
+        // (e.g. "ComfyUI unreachable at ..."); the bare status line is the
+        // fallback for non-JSON errors.
+        let detail = '';
+        try {
+          detail = (await resp.json()).detail || '';
+        } catch (err) {
+          /* non-JSON body */
+        }
+        setStatus(detail ? `Error: ${detail} — reload to retry` : `Error: ${resp.status} ${resp.statusText}`, true);
         return;
       }
       try {

@@ -31,7 +31,7 @@ const COMPARISON = {
   repeat_of: null,
 };
 
-function boot() {
+function boot(overrides: { next?: () => unknown } = {}) {
   const dom = new JSDOM(HTML, { url: 'http://localhost:8400/', runScripts: 'outside-only' });
   const w = dom.window;
   let resolveTechniques: (m: unknown) => void = () => {};
@@ -40,7 +40,8 @@ function boot() {
   });
   const fetch = vi.fn((url: string) => {
     if (url === '/api/techniques') return techniques;
-    if (url === '/api/next') return Promise.resolve(json({ status: 'ready', comparison: COMPARISON }));
+    if (url === '/api/next')
+      return Promise.resolve(overrides.next ? overrides.next() : json({ status: 'ready', comparison: COMPARISON }));
     if (url === '/api/progress') return Promise.resolve(json({ classes: [] }));
     if (url === '/api/verdict') return Promise.resolve(json({ recorded: true }));
     return Promise.resolve(json({}));
@@ -131,5 +132,22 @@ it('a repeat comparison with identical render URLs still finishes loading', asyn
   await vi.waitFor(() => {
     expect(p.status()).toBe('');
     expect(p.meta()).toContain('s1');
+  });
+});
+
+it('a server error surfaces its detail in the status bar', async () => {
+  // The live failure this pins: ComfyUI outages used to render as a bare
+  // "Error: 500 Internal Server Error" (or worse, "No comparisons left").
+  const p = boot({
+    next: () => ({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => ({ detail: 'ComfyUI unreachable at http://gpu:8188: timed out' }),
+    }),
+  });
+  await vi.waitFor(() => {
+    expect(p.status()).toContain('ComfyUI unreachable at http://gpu:8188: timed out');
+    expect(p.status()).toContain('reload to retry');
   });
 });
