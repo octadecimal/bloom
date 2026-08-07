@@ -1062,7 +1062,11 @@ def test_pop_staged_or_wait_returns_entry_appended_while_waiting(tmp_path):
     _client(tmp_path)
     s1 = Subject(id="wispy-w", bucket="wispy", prompt="p", seed=1,
                  width=8, height=8)
-    worker = threading.Thread(target=lambda: time.sleep(2), daemon=True)
+    # The fake worker must outlive the wait but die promptly afterwards —
+    # a long-sleeping leftover thread makes the NEXT test's _client() pay
+    # for it in state.prefetch.join().
+    done = threading.Event()
+    worker = threading.Thread(target=lambda: done.wait(timeout=5), daemon=True)
     worker.start()
     state.prefetch = worker
     texts = []
@@ -1073,9 +1077,15 @@ def test_pop_staged_or_wait_returns_entry_appended_while_waiting(tmp_path):
             state.staged.append(_staged_entry(s1))
             state.staged_cond.notify_all()
 
-    threading.Thread(target=append_later, daemon=True).start()
-    entry = web._pop_staged_or_wait(
-        lambda text, *a, **k: texts.append(text), timeout=5.0)
+    appender = threading.Thread(target=append_later, daemon=True)
+    appender.start()
+    try:
+        entry = web._pop_staged_or_wait(
+            lambda text, *a, **k: texts.append(text), timeout=5.0)
+    finally:
+        done.set()
+        appender.join(timeout=5)
+        worker.join(timeout=5)
     assert entry is not None and entry.subject is s1
     assert any("waiting" in t for t in texts)
 
@@ -1092,12 +1102,17 @@ def test_pop_staged_or_wait_returns_none_without_a_worker(tmp_path):
 
 def test_pop_staged_or_wait_times_out_against_a_wedged_worker(tmp_path):
     _client(tmp_path)
-    worker = threading.Thread(target=lambda: time.sleep(10), daemon=True)
+    done = threading.Event()
+    worker = threading.Thread(target=lambda: done.wait(timeout=5), daemon=True)
     worker.start()
     state.prefetch = worker
     t0 = time.time()
-    assert web._pop_staged_or_wait(lambda *a, **k: None, timeout=0.5) is None
-    assert 0.4 <= time.time() - t0 < 3.0
+    try:
+        assert web._pop_staged_or_wait(lambda *a, **k: None, timeout=0.5) is None
+        assert 0.4 <= time.time() - t0 < 3.0
+    finally:
+        done.set()
+        worker.join(timeout=5)
 
 
 def test_original_route_serves_pre_key_image(tmp_path):
