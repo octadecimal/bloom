@@ -21,6 +21,7 @@ from matte_bench.pairing import (
     Comparison, least_judged_bucket, next_sampled_comparison, pick_class,
 )
 from matte_bench.playoff import derive_cls, playoff_pair
+from matte_bench.probe import comfy_unreachable
 from matte_bench.promptgen import sample_subject_llm
 from matte_bench.progress import progress
 from matte_bench.ranking import separated, standings
@@ -49,6 +50,8 @@ class State:
     technique_objs: dict = field(default_factory=dict)
     technique_cls: dict[str, str] = field(default_factory=dict)
     comfy_url: str = ""
+    # Injected so tests control reachability; production uses the real probe.
+    comfy_probe: object = comfy_unreachable
     unavailable: dict[str, str] = field(default_factory=dict)
     verdict_log: Path = field(default_factory=lambda: _BENCH_DIR / "verdicts.jsonl")
     fault_log: Path = field(default_factory=lambda: _BENCH_DIR / "faults.jsonl")
@@ -292,6 +295,14 @@ def _choose_comparison(subject, verdicts, rng):
     return c, cls
 
 
+def _raise_if_comfy_down() -> None:
+    """An infra outage must read as an outage — not as 'session done' and not
+    as a broken technique. Probe before blaming either."""
+    reason = state.comfy_probe(state.comfy_url)
+    if reason is not None:
+        raise RuntimeError(f"ComfyUI unreachable at {state.comfy_url}: {reason}")
+
+
 async def _compute_next(progress):
     for _ in range(8):
         progress("choosing comparison…")
@@ -299,6 +310,7 @@ async def _compute_next(progress):
         subject = await _pick_subject(verdicts, progress)
         c, cls = _choose_comparison(subject, verdicts, state.rng)
         if c is None:
+            _raise_if_comfy_down()
             return None
         if state.prefetch is not None and state.prefetch.is_alive():
             # An in-flight prefetch may be writing the very plate/renders
@@ -312,6 +324,7 @@ async def _compute_next(progress):
         try:
             await _prepare(c, progress)
         except RenderError as exc:
+            _raise_if_comfy_down()
             # Discovered lazily rather than by a pre-flight sweep: drop it and
             # move on, but never silently — the operator must be able to see
             # that they are judging fewer techniques than they think.
@@ -321,12 +334,14 @@ async def _compute_next(progress):
                                 or state.technique_objs[t].id != exc.technique_id]
             continue
         except Exception as exc:                  # noqa: BLE001 - reported, not swallowed
+            _raise_if_comfy_down()
             state.unavailable[c.left] = str(exc)
             return None
         if c.repeat_of is None and c.subject == state.active_subject_id:
             state.active_served += 1
         return {"subject": c.subject, "bucket": c.bucket, "left": c.left,
                 "right": c.right, "repeat_of": c.repeat_of, "cls": cls}
+    _raise_if_comfy_down()
     return None
 
 
