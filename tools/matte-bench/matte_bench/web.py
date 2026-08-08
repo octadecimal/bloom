@@ -47,16 +47,13 @@ PREFETCH_DEPTH = 2
 
 @dataclass
 class StagedEntry:
-    """One fully-rendered future subject in the prefetch pipeline. Entries
-    form a single rng/verdict lineage: entry k was predicted assuming entries
-    0..k-1 get consumed first, so a stale head invalidates the whole queue."""
+    """One fully-rendered future subject in the prefetch pipeline. v2: a
+    rendered subject is ALWAYS valid — there is no lineage bookkeeping and no
+    staleness. The pair is kept only so later worker runs can fold this
+    entry's predicted serves in as synthetic ties before predicting the
+    entries after it."""
     subject: Subject
-    consume_rng_state: object   # clone state post-sample: what state.rng
-                                # becomes when this entry is consumed
-    chain_rng_state: object     # clone state after this entry's comparison
-                                # draws: where the next entry's prediction resumes
     predicted_pair: tuple[str, str]
-    generation: int             # consumable when == state.generation
 
 
 @dataclass
@@ -84,27 +81,21 @@ class State:
     rng: random.Random = field(default_factory=lambda: random.Random())
     job: "_NextJob | None" = None
     job_lock: threading.Lock = field(default_factory=threading.Lock)
-    # A FIFO of fully-rendered future subjects, one rng/verdict lineage deep:
-    # entry k's prediction assumed entries 0..k-1 were consumed first, so a
-    # stale head invalidates every entry behind it (see _pick_subject).
+    # A FIFO of fully-rendered future subjects. Consumption pops the head
+    # unconditionally — entries never go stale (see StagedEntry). Guarded by
+    # staged_cond: pops and the consume-or-wait in _pick_subject, appends in
+    # the worker's fill loop (which notify), all in short synchronous
+    # sections, never held across an `await`.
     staged: list = field(default_factory=list)
-    # Serializes every mutation of `staged` (pop/clear in _pick_subject,
-    # snapshot-and-maybe-clear in _prefetch_async, append in the fill loop).
-    # Without it, the worker's stale-branch clear() can race the demand
-    # thread's pop(0): either a valid rendered entry gets silently discarded,
-    # or the demand thread pops mid-clear and IndexErrors into a 500. Each
-    # holder does a short synchronous section only — never held across an
-    # `await`.
-    staged_lock: threading.Lock = field(default_factory=threading.Lock)
-    # Bumped by _pick_subject every time it rotates to a new active subject
-    # (whether from the staged queue or the fresh-draw fallback). Each
-    # StagedEntry.generation records the value the prefetcher observed when it
-    # staged that prediction; a mismatch at consumption time means a rotation
-    # already happened via the fallback (the prefetch hadn't finished writing
-    # the queue in time), so the staged entry is stale and must be dropped,
-    # not consumed — applying its consume_rng_state would setstate() state.rng
-    # backward past draws that already happened in the intervening round(s).
-    generation: int = 0
+    staged_cond: threading.Condition = field(default_factory=threading.Condition)
+    # The worker's private, persistent rng stream (lazily cloned from
+    # state.rng on its first run, then never reset). The demand stream and
+    # this one are independent by design: v1 tried to keep them in lockstep
+    # via per-entry rng snapshots and generation stamps, which meant one
+    # fallback rotation permanently staled the whole queue and the worker's
+    # GPU output was discarded forever (measured live 2026-08-07). Divergence
+    # costs at most a render-cache miss on a pair choice.
+    prefetch_rng: "random.Random | None" = None
     prefetch: threading.Thread | None = None
     prefetch_lock: threading.Lock = field(default_factory=threading.Lock)
     # Subject ids the prefetch worker is currently preparing (plate/render
@@ -278,56 +269,57 @@ async def _sample_fresh(verdicts, progress, rng: random.Random | None = None) ->
     return subject
 
 
+def _pop_staged_or_wait(progress, timeout: float = 300.0):
+    """The staged head, waiting for the worker to produce one if it must.
+
+    v1 sampled a fresh subject the moment the queue was empty — which
+    launched a demand render that CONTENDED with the worker's speculative
+    renders on the serial GPU, stretching both (measured live: waits got
+    worse, not better). v2 waits: if the worker is alive it is already
+    rendering the very subject this rotation needs, and consuming it the
+    moment it lands is strictly faster than starting a rival. Falls back to
+    None (caller samples fresh) only when there is no worker to wait for or
+    the bounded wait expires — never a wedge."""
+    deadline = time.monotonic() + timeout
+    with state.staged_cond:
+        while True:
+            if state.staged:
+                return state.staged.pop(0)
+            worker = state.prefetch
+            if worker is None or not worker.is_alive():
+                return None
+            progress("waiting for pre-generated subject…")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            # Short slices so a worker death is noticed promptly even
+            # without a notify.
+            state.staged_cond.wait(min(remaining, 1.0))
+
+
 async def _pick_subject(verdicts, progress) -> Subject:
     """Reuse the active sampled subject for a few comparisons (its plate is
-    cached), then rotate: to the head of the prefetcher's staged queue when
-    it's ready AND still fresh, else to a fresh draw.
-
-    "Still fresh" matters because the prefetch worker can still be writing
-    the queue when THIS rotation happens (the join in _compute_next only
-    guards _prepare, not this call): if so, we fall back to a real draw here,
-    and by the time the prefetch finally finishes staging, its prediction was
-    for a rotation that already happened — stale. state.generation (bumped on
-    every rotation, whichever path produced it) versus the head entry's
-    generation (what the prefetcher staged against) is exactly that check: on
-    a mismatch the WHOLE queue is dropped instead of just the head, since
-    every later entry chained its rng/verdict prediction off the one ahead of
-    it — and applying a stale entry's consume_rng_state would setstate()
-    state.rng backward past draws that already happened in the intervening
-    round(s)."""
+    cached), then rotate to the next pre-rendered subject from the pipeline —
+    waiting for the worker when the queue is momentarily empty rather than
+    racing it to the GPU. A fresh demand draw is the last resort (no worker
+    alive, or the wait timed out). The shared rng is never touched by
+    consumption; the worker predicts on its own private stream
+    (state.prefetch_rng) and divergence between the two is acceptable by
+    design."""
     if state.active_subject_id is not None and state.active_served < PAIRS_PER_SUBJECT:
         active = next((s for s in state.subjects
                        if s.id == state.active_subject_id), None)
         if active is not None:
             return active
-    # The head-generation check, the pop, and the stale-branch clear() must
-    # be one atomic decision — otherwise the worker's concurrent clear() (see
-    # _prefetch_async) can race this exact judgment. setstate/print stay
-    # inside the lock too; they're cheap and synchronous.
-    with state.staged_lock:
-        if state.staged and state.staged[0].generation == state.generation:
-            entry = state.staged.pop(0)
-            subject = entry.subject
-            # Catch the shared stream up to exactly where the prefetcher's
-            # clone landed after sampling this subject — as far as a real
-            # draw would have advanced it, no further.
-            state.rng.setstate(entry.consume_rng_state)
-            print(f"prefetch hit: {subject.id}")
-        else:
-            if state.staged:
-                # The head was predicted for a rotation that already
-                # happened some other way; every later entry chained off
-                # it — drop them all.
-                state.staged.clear()
-                print("prefetch miss (stale)")
-            else:
-                print("prefetch miss (empty)")
-            entry = None
-    if entry is None:
+    entry = _pop_staged_or_wait(progress)
+    if entry is not None:
+        subject = entry.subject
+        print(f"prefetch hit: {subject.id}")
+    else:
+        print("prefetch miss (no pipeline output)")
         subject = await _sample_fresh(verdicts, progress)
     state.active_subject_id = subject.id
     state.active_served = 0
-    state.generation += 1
     return subject
 
 
@@ -479,44 +471,27 @@ def _cloned_rng(source: random.Random) -> random.Random:
     return clone
 
 
-def _cloned_rng_state(saved_state) -> random.Random:
-    """A fresh Random resumed from a previously captured getstate() tuple —
-    how the worker picks up a lineage from a staged entry's chain_rng_state."""
-    clone = random.Random()
-    clone.setstate(saved_state)
-    return clone
-
-
 async def _prefetch_async(served: dict) -> None:
     """Runs after every serve, in the background: tops state.staged up to
     PREFETCH_DEPTH so the GPU is always working a subject or two ahead of
-    what the operator is currently judging. #228's design only started that
-    work once the active subject's LAST pair went out (a single staged slot,
-    gated on imminent rotation); this loop starts immediately and keeps
-    filling regardless of where the active subject is in its rotation
-    window — see the depth-N pipeline spec for the wait-time math that
-    motivated dropping the gate.
+    what the operator is currently judging, starting the moment a subject
+    begins serving.
 
-    Every draw here runs on a CLONE of state.rng, never state.rng itself:
-    the demand path (_pick_subject / _choose_comparison) is the only thing
-    allowed to advance the shared stream, by applying a StagedEntry's
-    consume_rng_state on consumption — not by replaying these predictions.
-    Two clones are used because they answer two different questions with two
-    different lifetimes: a throwaway one for "what will the active subject
-    serve next" (used once below, never stored), and a persistent, CHAINED
-    one for "what subjects come after that" (the queue-filling loop): one
-    clone for the whole loop so its draws continue rather than replay the
-    same prefix — exactly why a staged entry's chain_rng_state is handed to
-    the NEXT entry's prediction instead of re-cloning state.rng per
-    iteration.
-    """
+    All prediction draws run on state.prefetch_rng — the worker's private,
+    persistent stream (lazily cloned from state.rng once, never reset).
+    v1 chained per-entry rng snapshots and generation stamps so the demand
+    stream could be fast-forwarded to match; live testing showed that
+    machinery discarding every entry the moment one fallback rotation
+    happened. v2 accepts stream divergence: subjects are consumed from the
+    queue, never re-derived, so divergence costs at most a render-cache miss
+    on a pair choice (Class B: impossible with two techniques; Class A:
+    seconds). The throwaway clone below answers only "what will the active
+    subject serve next" and is never stored."""
     verdicts = _predicted_verdicts(_live_verdicts(), served)
     noop = lambda *a, **k: None                       # noqa: E731
 
     # 1. The active subject's own next pair (usually a cache hit) keeps
-    # intra-subject serves instant, exactly as before. A short-lived clone:
-    # this prediction is used once, right here, and never chained into the
-    # queue below.
+    # intra-subject serves instant.
     active = next((s for s in state.subjects
                    if s.id == state.active_subject_id), None)
     if active is not None and state.active_served < PAIRS_PER_SUBJECT:
@@ -532,73 +507,37 @@ async def _prefetch_async(served: dict) -> None:
                                    (served["left"], served["right"]),
                                    remaining, served.get("cls", "A"))
 
-    # 3. Resume the lineage: the queue is a single rng/verdict chain, so
-    # continue predicting from the TAIL entry's chain_rng_state when the
-    # queue is still valid (its head hasn't gone stale — see _pick_subject's
-    # generation check), else start fresh from a clone of state.rng,
-    # snapshotting state.generation at the same moment. next_generation
-    # follows the queue's G + len(queue-at-append) stamping rule either way:
-    # the tail's generation + 1 when chaining, or a brand new G =
-    # state.generation when starting over.
-    #
-    # That snapshot happens HERE, before any of the (possibly slow,
-    # LLM-backed) awaits in the loop below — not after — because a real
-    # rotation can happen while this worker is mid-sample: state.generation
-    # would move on without it, and stamping entries with the post-await
-    # value would tag an already-stale prediction as fresh again. Instead,
-    # any mid-flight rotation is caught later, at consumption time
-    # (_pick_subject drops the whole queue on a head generation mismatch).
-    #
-    # Read state.staged into a local snapshot ONCE before any of the reads
-    # below: the demand thread's _pick_subject can pop(0) the head or
-    # .clear() the whole list concurrently, and a multi-step read straight
-    # against the live list (check the head, then index the tail, then
-    # iterate) could observe a mutation mid-read. A clear() landing between
-    # the head check and the [-1] access would raise IndexError, which
-    # _run_prefetch's broad except swallows, silently discarding the whole
-    # fill attempt. Every read below (head validity, tail access, tie
-    # iteration) goes against this snapshot instead; only the append in step
-    # 4 touches state.staged itself.
-    #
-    # The snapshot AND the stale-branch clear() both happen under
-    # staged_lock, in one critical section, so the clear can never act on a
-    # judgment made against a queue the demand thread has since changed —
-    # re-validated here (staged[0].generation) rather than trusted from
-    # before the lock was taken.
-    with state.staged_lock:
-        staged = list(state.staged)
-        resume_valid = bool(staged) and staged[0].generation == state.generation
-        if not resume_valid and staged:
-            state.staged.clear()          # stale lineage — never extend it
-    if resume_valid:
-        pred_rng = _cloned_rng_state(staged[-1].chain_rng_state)
-        next_generation = staged[-1].generation + 1
-        for e in staged:
-            verdicts = _synthetic_ties(verdicts, e.subject.id,
-                                       e.subject.bucket, e.predicted_pair,
-                                       PAIRS_PER_SUBJECT)
-    else:
-        pred_rng = _cloned_rng(state.rng)
-        next_generation = state.generation
+    # 3. Fold in the predicted serves of everything already staged, so the
+    # bucket-balance and pair-count predictions for NEW entries assume the
+    # queue ahead of them gets judged first. Snapshot under the condition:
+    # the demand thread pops concurrently.
+    if state.prefetch_rng is None:
+        state.prefetch_rng = _cloned_rng(state.rng)
+    pred_rng = state.prefetch_rng
+    with state.staged_cond:
+        staged_snapshot = list(state.staged)
+    for e in staged_snapshot:
+        verdicts = _synthetic_ties(verdicts, e.subject.id, e.subject.bucket,
+                                   e.predicted_pair, PAIRS_PER_SUBJECT)
 
-    # 4. Fill to depth. Each iteration mirrors one future demand rotation:
-    # sample a subject, choose its first comparison, render it ahead of
-    # need, stage it, then fold its own predicted serves in as ties before
-    # predicting the entry after it. A queue already at depth makes this a
-    # no-op.
-    while len(state.staged) < PREFETCH_DEPTH:
+    # 4. Fill to depth. Each iteration: sample a subject on the private
+    # stream, choose its first comparison, render it fully, then stage it —
+    # append-after-prepare, so the queue only ever holds served-ready
+    # entries. The notify wakes a demand thread blocked in
+    # _pop_staged_or_wait.
+    while True:
+        with state.staged_cond:
+            if len(state.staged) >= PREFETCH_DEPTH:
+                return
         subject = await _sample_fresh(verdicts, noop, rng=pred_rng)
-        consume_state = pred_rng.getstate()
         c, _cls = _choose_comparison(subject, verdicts, pred_rng)
         if c is None:
             return
         await _guarded_prepare(c, noop)
-        with state.staged_lock:
+        with state.staged_cond:
             state.staged.append(StagedEntry(
-                subject=subject, consume_rng_state=consume_state,
-                chain_rng_state=pred_rng.getstate(),
-                predicted_pair=(c.left, c.right), generation=next_generation))
-        next_generation += 1
+                subject=subject, predicted_pair=(c.left, c.right)))
+            state.staged_cond.notify_all()
         verdicts = _synthetic_ties(verdicts, subject.id, subject.bucket,
                                    (c.left, c.right), PAIRS_PER_SUBJECT)
 
